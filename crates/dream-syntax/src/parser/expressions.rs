@@ -286,7 +286,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         base: ExpressionNode<'a>,
     ) -> Result<ExpressionNode<'a>, Error> {
         self.match_token(TokenKind::DotToken);
-        let member = self.match_token(TokenKind::IdentifierToken);
+        let member = self.match_member_name();
 
         let mut generic_args = None;
         if self.current_token().kind == TokenKind::SmallerThanToken {

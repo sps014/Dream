@@ -53,6 +53,17 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
         return true;
     }
 
+    // The dynamic `js` type: any primitive/`string`/`null` boxes into `js`, and a `js` value
+    // unboxes into any primitive/`string`. The actual box/unbox conversion is materialized by the
+    // analyzer's coercion pass; here we only permit the assignment to type-check. `js <-> js` is the
+    // identity handled above.
+    if matches!(tk, TyKind::Js) {
+        return matches!(vk, TyKind::Prim(_)) || is_null_literal(interner, value);
+    }
+    if matches!(vk, TyKind::Js) {
+        return matches!(tk, TyKind::Prim(_));
+    }
+
     // Enum <-> int both directions.
     if is_enum_int_pair(tk, vk) {
         return true;

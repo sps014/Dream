@@ -80,7 +80,7 @@ nav:
     - Memory Management: language/memory.md
     - Interop:
       - Overview: language/interop.md
-      - JS References: language/references.md
+      - The js type: language/references.md
       - Callbacks: language/callbacks.md
   - Standard Library:
     - Built-ins: stdlib/builtins.md

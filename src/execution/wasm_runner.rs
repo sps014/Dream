@@ -59,7 +59,7 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     linker.func_wrap("env", "strlen", |_: i32| -> i32 { 0 })?;
     linker.func_wrap("env", "debug_get_free_list_head", || -> i32 { 0 })?;
 
-    // JS-interop externs (e.g. the `Dream` host module behind `JsRef`/regex/fetch, or any
+    // JS-interop externs (e.g. the `Dream` host module behind the dynamic `js` type/regex/fetch, or any
     // user `@js(...)` import) have no native implementation. Stub every still-unresolved import
     // as a trap so modules that merely *declare* them still instantiate and run under wasmtime;
     // calling one without a JS host traps, matching `runtime/dream.js`'s thrower stubs.

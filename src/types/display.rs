@@ -16,6 +16,7 @@ pub fn display_name(interner: &TypeInterner, defs: &DefTable, id: TypeId) -> Str
         TyKind::Array(e) => format!("{}[]", display_name(interner, defs, *e)),
         TyKind::Nullable(inner) => format!("{}?", display_name(interner, defs, *inner)),
         TyKind::Enum(def) => defs.name(*def).to_string(),
+        TyKind::Js => "js".to_string(),
         TyKind::Struct(def, args) | TyKind::Union(def, args) | TyKind::Interface(def, args) => {
             let base = defs.name(*def);
             if args.is_empty() {

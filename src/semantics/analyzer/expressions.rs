@@ -71,6 +71,21 @@ impl<'a> Analyzer<'a> {
                 )?;
                 let array_hir = self.hir_take();
 
+                // A `js`-typed receiver indexes dynamically (`obj[key]`), with a string or numeric
+                // key. Must precede the class/string indexer desugar, which would look for a `get`.
+                if self.is_js_type(&array_type) {
+                    let key_type = self.analyze_expression(
+                        index_expr,
+                        parent_function,
+                        symbol_table,
+                        diagnostics,
+                    )?;
+                    let key_hir = self.hir_take();
+                    let _ = key_type;
+                    self.desugar_js_index_get(array_hir, key_hir, index_expr.position(), diagnostics);
+                    return Ok(Self::js_type());
+                }
+
                 // Class/string indexer: `obj[i]` on a struct or `string` receiver desugars to
                 // `obj.get(i)` when an eligible `get` exists (`string` exposes one via `extend
                 // string`, yielding a `char`). Arrays keep the built-in index path; `Unknown` is a
@@ -451,6 +466,12 @@ impl<'a> Analyzer<'a> {
         if obj_type.is_unknown() {
             self.hir_none();
             return Ok(Type::Unknown);
+        }
+
+        // A `js`-typed receiver has no static fields: `obj.name` reads a JS property dynamically.
+        if self.is_js_type(&obj_type) {
+            self.desugar_js_get(obj_hir, &member.text);
+            return Ok(Self::js_type());
         }
 
         let (base_name, generic_args) = match Self::resolve_struct_parts(&obj_type) {

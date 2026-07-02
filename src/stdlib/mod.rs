@@ -12,7 +12,7 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
     ("<std>/core/option.dream", include_str!("core/option.dream")),
     ("<std>/core/result.dream", include_str!("core/result.dream")),
     ("<std>/core/promise.dream", include_str!("core/promise.dream")),
-    ("<std>/core/jsref.dream", include_str!("core/jsref.dream")),
+    ("<std>/core/js.dream", include_str!("core/js.dream")),
     ("<std>/core/math.dream", include_str!("core/math.dream")),
     // Collections (`List`/`Map` and their cursors), one class per file under `collections/`.
     ("<std>/collections/list.dream", include_str!("collections/list.dream")),

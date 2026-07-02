@@ -71,7 +71,7 @@ function jsToWasm(inst, t, value) {
   const base = stripSuffix(t);
   if (base === "string") return inst.writeString(value == null ? "" : String(value));
   if (base === "bool") return value ? 1 : 0;
-  if (base === "JsRef") return inst.registerHandle(value);
+  if (base === "js") return inst.registerHandle(value);
   if (base === "void") return 0;
   // `long`/`ulong` are wasm i64, which the JS-WASM boundary represents as BigInt.
   if (base === "long" || base === "ulong") return BigInt(value == null ? 0 : value);
@@ -83,7 +83,7 @@ function wasmToJs(inst, t, raw) {
   const base = stripSuffix(t);
   if (base === "string") return inst.readString(raw);
   if (base === "bool") return raw !== 0;
-  if (base === "JsRef") return inst.derefHandle(raw);
+  if (base === "js") return inst.derefHandle(raw);
   if (base === "void") return undefined;
   return raw;
 }
@@ -97,15 +97,19 @@ export class DreamInstance {
     this.instance = instance;
     this.exports = instance.exports;
     this.memory = instance.exports.memory;
-    // JS-object handle registry backing the Dream `JsRef` type. A `JsRef` crosses the boundary
+    // JS-object handle registry backing the Dream `js` type. A `js` value crosses the boundary
     // as a small i32 id; the host keeps the real JS value here. Id 0 is reserved for null.
     this._jsHandles = new Map(); // id -> JS value
     this._jsIds = new Map(); // JS value -> id (identity for objects, value for primitives)
     this._jsNextId = 1;
     this._jsFreeIds = [];
+    // Cache of JS callables wrapping Dream funcrefs, keyed by `${index}|${typeStr}`. Funcrefs are
+    // captureless table indices, so index identity == function identity: returning the *same* JS
+    // callable for the same funcref lets `addEventListener`/`removeEventListener` pair correctly.
+    this._callbackWrappers = new Map();
   }
 
-  /** Registers a JS value, returning its `JsRef` id (0 for null/undefined). Idempotent per value. */
+  /** Registers a JS value, returning its `js` handle id (0 for null/undefined). Idempotent per value. */
   registerHandle(value) {
     if (value === null || value === undefined) return 0;
     const existing = this._jsIds.get(value);
@@ -116,7 +120,7 @@ export class DreamInstance {
     return id;
   }
 
-  /** Resolves a `JsRef` id back to its JS value (null for id 0 / unknown). */
+  /** Resolves a `js` handle id back to its JS value (null for id 0 / unknown). */
   derefHandle(id) {
     if (!id) return null;
     return this._jsHandles.has(id) ? this._jsHandles.get(id) : null;
@@ -328,16 +332,21 @@ export class DreamInstance {
     if (index < 0) return null;
     const table = this.exports.__indirect_function_table;
     if (!table) throw new Error("module does not export its function table; cannot build a callback");
+    const cacheKey = `${index}|${typeStr}`;
+    const cached = this._callbackWrappers.get(cacheKey);
+    if (cached) return cached;
     const fn = table.get(index);
     if (typeof fn !== "function") {
       throw new Error(`no Dream function at table index ${index}`);
     }
     const { params, result } = parseFunType(typeStr);
-    return (...jsArgs) => {
+    const wrapper = (...jsArgs) => {
       const raw = params.map((p, i) => jsToWasm(this, p, jsArgs[i]));
       const out = fn(...raw);
       return wasmToJs(this, result, out);
     };
+    this._callbackWrappers.set(cacheKey, wrapper);
+    return wrapper;
   }
 
   /** Calls the exported `main`, if present. Returns its result (if any). */
@@ -357,7 +366,7 @@ function marshalArgs(inst, params, rawArgs) {
     if (isFunType(rawType)) return inst.callback(arg, rawType); // Dream fn index -> JS callable
     const t = stripSuffix(rawType);
     if (t === "string") return inst.readString(arg);
-    if (t === "JsRef") return inst.derefHandle(arg); // i32 handle id -> live JS value
+    if (t === "js") return inst.derefHandle(arg); // i32 handle id -> live JS value
     if (t.endsWith("[]")) return inst.readArray(arg, t.slice(0, -2));
     if (t === "bool") return arg !== 0;
     return arg; // numeric primitive or opaque pointer
@@ -368,7 +377,7 @@ function marshalArgs(inst, params, rawArgs) {
 function marshalResult(inst, result, ret) {
   if (result === "string") return inst.writeString(ret == null ? "" : String(ret));
   if (result === "bool") return ret ? 1 : 0;
-  if (result === "JsRef") return inst.registerHandle(ret); // live JS value -> i32 handle id
+  if (result === "js") return inst.registerHandle(ret); // live JS value -> i32 handle id
   if (typeof result === "string" && result.endsWith("[]")) {
     return inst.writeArray(ret == null ? [] : ret, result.slice(0, -2)); // e.g. char[] file bytes
   }
@@ -468,39 +477,45 @@ async function httpDo(url, method, headersJson, body) {
 }
 
 /**
- * The built-in `Dream` host module backing the stdlib interop layer (`JsRef`, regex, fetch).
- * These run *after* argument marshaling, so a `JsRef` parameter arrives as the live JS value and
- * a `JsRef`/`string`/number result is marshaled back automatically. Only `jsRelease` needs the
+ * The built-in `Dream` host module backing the stdlib interop layer (the dynamic `js` type, regex,
+ * fetch). These run *after* argument marshaling, so a `js` parameter arrives as the live JS value
+ * and a `js`/`string`/number result is marshaled back automatically. Only `jsRelease` needs the
  * instance, to drop the handle for the value it was given.
  */
 function defaultDreamModule(getInstance) {
-  const prop = (target, name) => (target == null ? undefined : target[name]);
+  // Dynamic-call args arrive as a Dream `js[]`: an array of raw handle ids. Deref each to the live
+  // JS value before applying (top-level `js` params are already deref'd by `marshalArgs`).
+  const derefArgs = (ids) => (ids || []).map((id) => getInstance().derefHandle(id));
   return {
-    // Value/handle constructors.
+    // --- entry points / value constructors --------------------------------
     jsGlobal: (name) => globalThis[name],
+    jsObject: () => ({}),
+    jsArray: () => [],
+    // Boxing: a Dream primitive/string -> a `js` handle (marshalResult registers the return value).
     jsString: (value) => value,
     jsInt: (value) => value,
+    jsLong: (value) => value,
     jsDouble: (value) => value,
     jsBool: (value) => value,
-    // Property reads (coerced to the requested primitive, or another handle).
-    jsGetProp: (target, name) => prop(target, name),
-    jsGetString: (target, name) => { const v = prop(target, name); return v == null ? "" : String(v); },
-    jsGetInt: (target, name) => { const v = prop(target, name); return v == null ? 0 : (Number(v) | 0); },
-    jsGetDouble: (target, name) => { const v = prop(target, name); return v == null ? 0 : Number(v); },
-    jsGetBool: (target, name) => !!prop(target, name),
-    jsSetProp: (target, name, value) => { if (target != null) target[name] = value; },
-    // Method invocation with 0/1/2 reference arguments.
-    jsCall0: (target, name) => target[name](),
-    jsCall1: (target, name, a) => target[name](a),
-    jsCall2: (target, name, a, b) => target[name](a, b),
-    // Misc.
-    jsToString: (target) => (target == null ? "null" : String(target)),
+    // --- dynamic operations (deferred binding happens right here in JS) ----
+    jsGetV: (target, name) => (target == null ? undefined : target[name]),
+    jsSetV: (target, name, value) => { if (target != null) target[name] = value; },
+    jsCallV: (target, name, argIds) => target[name](...derefArgs(argIds)),
+    jsInvokeV: (target, argIds) => target(...derefArgs(argIds)),
+    jsIndexGetV: (target, key) => (target == null ? undefined : target[key]),
+    jsIndexSetV: (target, key, value) => { if (target != null) target[key] = value; },
+    // Unboxing: a `js` handle (already deref'd) -> a Dream primitive/string.
+    jsAsInt: (target) => (target == null ? 0 : (Number(target) | 0)),
+    jsAsDouble: (target) => (target == null ? 0 : Number(target)),
+    jsAsBool: (target) => !!target,
+    jsAsString: (target) => (target == null ? "" : String(target)),
     jsIsNull: (target) => target === null || target === undefined,
     jsRelease: (target) => getInstance().releaseValue(target),
-    // Invoke a JS function held as a JsRef (a JS -> Dream callback that Dream calls back).
-    jsInvoke0: (fn) => fn(),
-    jsInvoke1: (fn, a) => fn(a),
-    jsInvoke2: (fn, a, b) => fn(a, b),
+    // Callback wrappers: a Dream `fun` handed to a JS API arrives already wrapped as a JS callable
+    // (with stable per-funcref identity, so add/removeEventListener pair correctly); returning it
+    // registers it as a `js` handle.
+    jsFunc: (handler) => handler,
+    jsFunc0: (handler) => handler,
     // Regex helpers (string-in/string-out; see src/stdlib/text/regex.dream). Mirrored natively in
     // src/execution/host.rs so `Regex` works the same under wasmtime, Node, and the browser.
     regexTest: (pattern, flags, input) => new RegExp(pattern, flags).test(input),
@@ -768,7 +783,7 @@ export async function load(source, options = {}) {
   const sigByName = new Map();
   if (abi) for (const e of abi.externs) sigByName.set(e.name, e);
 
-  // Built-in `Dream` host module (JsRef / regex / fetch helpers). User-supplied imports still win.
+  // Built-in `Dream` host module (dynamic `js` / regex / fetch helpers). User-supplied imports still win.
   const builtinDream = defaultDreamModule(getInstance);
 
   const wrapFor = (fn, sig) =>

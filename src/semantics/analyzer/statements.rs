@@ -519,6 +519,20 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(Type::Unknown);
         let array_hir = self.hir_take();
 
+        // A `js`-typed receiver: `obj[key] = v` sets a JS property/element dynamically.
+        if self.is_js_type(&array_type) {
+            let _key_type = self
+                .analyze_expression(index, parent_function, symbol_table, diagnostics)
+                .unwrap_or(Type::Unknown);
+            let key_hir = self.hir_take();
+            let _value_type = self
+                .analyze_expression(right, parent_function, symbol_table, diagnostics)
+                .unwrap_or(Type::Unknown);
+            let value_hir = self.hir_take();
+            self.desugar_js_index_set(array_hir, key_hir, value_hir, index.position(), diagnostics);
+            return Ok(());
+        }
+
         // Class index-assignment: `obj[i] = v` on a struct receiver desugars to `obj.set(i, v)`
         // when an eligible `set` exists. Arrays keep the built-in path.
         if !matches!(array_type, Type::Array(_) | Type::Unknown)
@@ -672,6 +686,16 @@ impl<'a> Analyzer<'a> {
             .analyze_expression(obj, parent_function, symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
         let obj_hir = self.hir_take();
+
+        // A `js`-typed receiver: `obj.name = v` sets a JS property dynamically.
+        if self.is_js_type(&obj_type) {
+            let _value_type = self
+                .analyze_expression(right, parent_function, symbol_table, diagnostics)
+                .unwrap_or(Type::Unknown);
+            let value_hir = self.hir_take();
+            self.desugar_js_set(obj_hir, &member.text, value_hir, Some(member.position), diagnostics);
+            return Ok(());
+        }
 
         let (base_name, generic_args) = match Self::resolve_struct_parts(&obj_type) {
             Some(parts) => parts,

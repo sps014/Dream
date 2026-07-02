@@ -59,6 +59,7 @@ impl TypeInterner {
         interner.intern(TyKind::Object);
         interner.intern(TyKind::Void);
         interner.intern(TyKind::Error);
+        interner.intern(TyKind::Js);
         interner
     }
 
@@ -142,6 +143,10 @@ impl TypeInterner {
     }
     pub fn error(&self) -> TypeId {
         self.find(&TyKind::Error)
+    }
+    /// The dynamic JS-interop type `js` (a non-reference `i32` handle).
+    pub fn js(&self) -> TypeId {
+        self.find(&TyKind::Js)
     }
 
     fn find(&self, kind: &TyKind) -> TypeId {

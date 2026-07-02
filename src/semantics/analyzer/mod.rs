@@ -25,6 +25,7 @@ mod declarations;
 mod expressions;
 mod generics;
 mod hir_emit;
+mod js_interop;
 mod statements;
 mod switch_unions;
 mod type_checker;

@@ -120,6 +120,35 @@ impl<'a, 'b> Parser<'a, 'b> {
             SyntaxToken::new(kind, err_pos, "".to_string())
         }
     }
+    /// Matches a member/method *name*: an identifier, or any identifier-shaped reserved word
+    /// (`object`, `type`, `default`, `in`, ... — all keyword/data-type tokens whose text is a valid
+    /// identifier). Reserved words are re-tagged as `IdentifierToken` so downstream analysis treats
+    /// them uniformly. This lets dynamic `js` interop access JS members named like Dream keywords
+    /// (`el.type`, `x.default`, `js.object()`) and lets such names be declared as methods.
+    fn match_member_name(&mut self) -> SyntaxToken {
+        let token = self.current_token();
+        if token.kind == TokenKind::IdentifierToken {
+            return self.next_token();
+        }
+        let is_word = !token.text.is_empty()
+            && token
+                .text
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && token
+                .text
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if is_word && token.kind != TokenKind::EndOfFileToken {
+            let mut t = self.next_token();
+            t.kind = TokenKind::IdentifierToken;
+            t
+        } else {
+            // Not a name: fall back to the standard identifier error/recovery path.
+            self.match_token(TokenKind::IdentifierToken)
+        }
+    }
     /// True if the current token can close a generic argument list: either a plain `>` or the
     /// first half of a `>>` (`ShiftRightToken`), which appears when two generic lists end
     /// together, e.g. the `>>` in `Box<Box<int>>`.

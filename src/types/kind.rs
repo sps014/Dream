@@ -106,6 +106,11 @@ pub enum TyKind {
     Enum(DefId),
     /// A first-class function value `fun(params...): ret`, an `i32` table index at runtime.
     Func(Vec<TypeId>, TypeId),
+    /// The dynamic JavaScript-interop type `js`: an opaque `i32` handle into the host's live-value
+    /// registry (see `runtime/dream.js`). Member/method/index access on a `js` value binds
+    /// dynamically at runtime, so the compiler performs no member resolution. It is *not* a heap
+    /// object, so it is never reference-counted (like an enum, it lowers to a bare `i32`).
+    Js,
 }
 
 impl TyKind {

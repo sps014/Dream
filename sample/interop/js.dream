@@ -1,0 +1,29 @@
+// The dynamic `js` type: a live JavaScript value crosses into Dream as an opaque handle and is
+// read, called, and mutated with native syntax. The compiler performs no member resolution on a
+// `js` value - `config.title`, `title.toUpperCase()`, `config.touched = true` bind at runtime in
+// the JS host.
+//
+//   cargo run -- sample/interop/js.dream
+//   node sample/interop/js.mjs sample/interop/js.wasm
+
+fun main(): void {
+    // `appConfig` is a plain JS object provided by the host (see js.mjs / interop.html).
+    let config = js.global("appConfig");
+
+    // Property reads yield `js`; unbox at the typed binding.
+    let title: string = config.title;
+    let count: int = config.count;
+    let enabled: bool = config.enabled;
+    System.println("title = " + title);
+    System.println("count = " + count);
+    System.println("enabled = " + enabled);
+
+    // Read a nested value, then call a method on it - any arity, one boundary crossing.
+    let shout: string = config.title.toUpperCase();
+    System.println("shout = " + shout);
+
+    // Mutate the object back on the JS side (bool auto-marshals into `js`).
+    config.touched = true;
+
+    config.release();
+}

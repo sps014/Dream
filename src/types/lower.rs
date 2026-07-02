@@ -181,6 +181,9 @@ impl TypeCtx {
         match name {
             "object" => return self.interner.object(),
             "void" => return self.interner.void(),
+            // The dynamic JS-interop type is a distinguished non-reference i32 handle, not a nominal
+            // struct, so recognize its bare name here before the nominal fallback.
+            "js" => return self.interner.js(),
             _ => {}
         }
         if let Some(&id) = self.instances.get(name) {

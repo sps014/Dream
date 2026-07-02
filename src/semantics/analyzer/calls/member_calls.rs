@@ -68,6 +68,13 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
+        // A `js`-typed receiver binds dynamically: a declared `js` helper (e.g. `to_int`) dispatches
+        // normally, any other name is a runtime JS method call. This must run before the builtin/
+        // instance resolution below, which has no notion of dynamic members.
+        if self.is_js_type(&obj_type) {
+            return self.analyze_js_member_call(obj_hir, method, params, ctx, diagnostics);
+        }
+
         // Builtin methods: `size()` lowers to `ArrayLen`; the rest (`to_string`/`char_at`/`hash_code`)
         // need runtime defs and stay on the legacy path (they clear HIR inside the helper). The
         // receiver is threaded in so `len` can wrap it; it is left intact when no builtin matches.

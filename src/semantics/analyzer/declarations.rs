@@ -1295,7 +1295,7 @@ impl<'a> Analyzer<'a> {
                 | "bool"
                 | "char"
                 | "object"
-                | "JsRef"
+                | "js"
                 | "long"
                 | "uint"
                 | "ulong"

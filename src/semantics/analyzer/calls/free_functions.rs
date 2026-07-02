@@ -35,6 +35,17 @@ impl<'a> Analyzer<'a> {
             arg_hirs.push(self.hir_take());
             params_types.push(t.get_type());
         }
+        // Calling a `js`-typed local (`cb(a, b)`) invokes the underlying JS value dynamically.
+        let name_sym = (*symbol_table).as_ref().borrow().get_symbol(name);
+        if let Ok(sym_ty) = name_sym {
+            if self.is_js_type(&sym_ty) {
+                self.hir_set_var(&name.text);
+                let recv = self.hir_take();
+                self.desugar_js_invoke(recv, arg_hirs, Some(name.position), diagnostics);
+                return Ok(Self::js_type());
+            }
+        }
+
         // Default: no call HIR. Only the plain free-function tail below opts back in; every other
         // path (indirect, constructor, generic, async, overload/arity errors) leaves `last` cleared.
         self.hir_none();

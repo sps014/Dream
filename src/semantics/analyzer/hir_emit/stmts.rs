@@ -96,14 +96,29 @@ impl<'a> Analyzer<'a> {
     /// Inserts an implicit boxing cast when a primitive `value` is stored into an `object`-typed
     /// slot (`let o: object = 42`), so the backend boxes it rather than storing a raw scalar. All
     /// other conversions (reference→object, numeric widening) are left to the backend / call sites.
-    fn coerce_to(&self, value: HExpr, target: TypeId) -> HExpr {
+    fn coerce_to(&mut self, value: HExpr, target: TypeId) -> HExpr {
         use crate::types::{PrimTy, TyKind};
-        let interner = &self.type_ctx.interner;
-        let target_k = interner.kind(interner.strip_nullable(target));
-        let val_k = interner.kind(interner.strip_nullable(value.ty));
+        // Snapshot the (nullable-stripped) kinds so the interner borrow does not outlive the branches
+        // below that need `&mut self` (the `js` box/unbox helpers).
+        let (target_k, val_k) = {
+            let i = &self.type_ctx.interner;
+            (
+                i.kind(i.strip_nullable(target)).clone(),
+                i.kind(i.strip_nullable(value.ty)).clone(),
+            )
+        };
         // Boxing a primitive into `object`.
         if matches!(target_k, TyKind::Object) && matches!(val_k, TyKind::Prim(_)) {
             return HExpr::new(target, HExprKind::Cast(Box::new(value)));
+        }
+        // Dynamic `js`: box a primitive/`string` into a `js` handle, or unbox a `js` value into a
+        // primitive/`string`, at this typed binding boundary (so `let x: js = 5` and
+        // `let n: int = el.count` work without an explicit conversion).
+        if matches!(target_k, TyKind::Js) && matches!(val_k, TyKind::Prim(_)) {
+            return self.box_to_js(value).unwrap_or_else(|| HExpr::new(target, HExprKind::IntLit(0)));
+        }
+        if matches!(val_k, TyKind::Js) && matches!(target_k, TyKind::Prim(_)) {
+            return self.unbox_from_js(value, target);
         }
         // Implicit numeric widening (e.g. `let w: long = 5;`, `let d: double = someLong;`). The two
         // primitives have different WASM representations (i32/i64/f64), so an explicit conversion must
@@ -121,8 +136,8 @@ impl<'a> Analyzer<'a> {
             )
         };
         if let (TyKind::Prim(tp), TyKind::Prim(vp)) = (target_k, val_k) {
-            if tp != vp && is_num(*tp) && is_num(*vp) {
-                let target_prim = interner.strip_nullable(target);
+            if tp != vp && is_num(tp) && is_num(vp) {
+                let target_prim = self.type_ctx.interner.strip_nullable(target);
                 return HExpr::new(target_prim, HExprKind::Cast(Box::new(value)));
             }
         }

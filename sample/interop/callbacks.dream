@@ -11,12 +11,12 @@ fun on_tick(n: int): void {
 
 extern fun run_callback(cb: fun(int): void, times: int): void;
 
-// JS -> Dream: a JS function handed to Dream arrives as a JsRef; Dream invokes it via `.invoke1`.
-// (`js_global` and `js_string` come from the stdlib `jsref` prelude.)
+// JS -> Dream: a JS function handed to Dream is just a `js` value; call it directly with native
+// syntax. Arguments auto-marshal into JS, so no manual boxing is needed.
 
 fun main(): void {
     run_callback(on_tick, 3);
 
-    let logger = JsRef.global("logger");
-    logger.invoke1(JsRef.from_string("hello from Dream"));
+    let logger = js.global("logger");
+    logger("hello from Dream");
 }

@@ -223,6 +223,22 @@ impl<'a> Analyzer<'a> {
         self.hir.last = None;
     }
 
+    /// True while HIR is being collected for an emittable function. Lets sibling analyzer modules
+    /// (e.g. the `js` interop desugar) skip emission work for non-candidate functions.
+    pub(in crate::semantics::analyzer) fn hir_active(&self) -> bool {
+        self.active()
+    }
+
+    /// Records `expr` as the most-recently-analyzed expression's HIR (or clears it when inactive).
+    /// Used by desugars that build an [`HExpr`] directly rather than through a dedicated `hir_set_*`.
+    pub(in crate::semantics::analyzer) fn hir_set_last(&mut self, expr: Option<HExpr>) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        self.hir.last = expr;
+    }
+
     /// Flags the current function as not emittable (an unsupported construct was reached).
     pub(in crate::semantics::analyzer) fn hir_fail(&mut self) {
         if self.hir.collecting {

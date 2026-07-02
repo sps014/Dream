@@ -150,7 +150,7 @@ fn run_test_case(dream_file: &Path) {
         .unwrap();
 
     // 5. Instantiate and Run
-    // JS-interop externs (the `Dream` host module behind `JsRef`/regex/fetch, plus any user
+    // JS-interop externs (the `Dream` host module behind the dynamic `js` type/regex/fetch, plus any user
     // `@js(...)` imports) are merged in via the prelude but have no native host here. Stub every
     // unresolved import as a trap so pure-Dream cases still instantiate; they never call them.
     linker

@@ -1,0 +1,102 @@
+// `js` - the dynamic JavaScript-interop type.
+//
+// A `js` value is an opaque handle to a live JavaScript value held by the runtime (see
+// `runtime/dream.js`). Member access, method calls, indexing, and calling a `js` value all bind
+// *dynamically* at runtime - the compiler performs no member resolution, so `doc.getElementById("app")`
+// or `el.title = "x"` compile as-is and are dispatched by the JS host. Every dynamic operation
+// yields another `js`; convert back to a Dream value at a typed boundary (e.g. `let n: int = el.x`)
+// or with the explicit `.to_int()` / `.to_str()` / ... helpers below.
+//
+// The compiler desugars dynamic operations into the `__*` bridges declared here, marshaling
+// arguments through a single host call. These bridges are an implementation detail; user code uses
+// native syntax.
+
+extend js {
+    // --- entry points ----------------------------------------------------------------------
+
+    // A handle to a value on the JS global scope (e.g. `js.global("document")`).
+    @js("Dream", "jsGlobal")
+    static extern fun global(name: string): js;
+    // A fresh empty JS object (`{}`) to populate and hand to a JS API.
+    @js("Dream", "jsObject")
+    static extern fun object(): js;
+    // A fresh empty JS array (`[]`).
+    @js("Dream", "jsArray")
+    static extern fun array(): js;
+
+    // Wraps a Dream function as a JS callable (e.g. an event handler). The wrapper has stable
+    // identity per function, so a handler registered with `addEventListener` can be removed with
+    // `removeEventListener`. A one-argument handler receives the JS argument (e.g. the event) as a
+    // `js`. Passing a bare `fun(js): void` / `fun(): void` to a dynamic `js` call auto-wraps it, so
+    // `el.addEventListener("click", onClick)` also works directly.
+    @js("Dream", "jsFunc")
+    static extern fun func(handler: fun(js): void): js;
+    @js("Dream", "jsFunc0")
+    static extern fun func0(handler: fun(): void): js;
+
+    // --- boxing: Dream value -> js handle (used by the compiler when marshaling arguments) ---
+    @js("Dream", "jsInt")
+    static extern fun __box_int(value: int): js;
+    @js("Dream", "jsLong")
+    static extern fun __box_long(value: long): js;
+    @js("Dream", "jsDouble")
+    static extern fun __box_double(value: double): js;
+    @js("Dream", "jsBool")
+    static extern fun __box_bool(value: bool): js;
+    @js("Dream", "jsString")
+    static extern fun __box_string(value: string): js;
+
+    // --- dynamic operations (variadic call/invoke args are carried in a `js[]`) --------------
+    @js("Dream", "jsGetV")
+    static extern fun __get(target: js, name: string): js;
+    @js("Dream", "jsSetV")
+    static extern fun __set(target: js, name: string, value: js): void;
+    @js("Dream", "jsCallV")
+    static extern fun __call(target: js, name: string, args: js[]): js;
+    @js("Dream", "jsInvokeV")
+    static extern fun __invoke(target: js, args: js[]): js;
+    @js("Dream", "jsIndexGetV")
+    static extern fun __index_get(target: js, key: js): js;
+    @js("Dream", "jsIndexSetV")
+    static extern fun __index_set(target: js, key: js, value: js): void;
+
+    // --- unboxing: js handle -> Dream value (used by the compiler + the helpers below) -------
+    @js("Dream", "jsAsInt")
+    static extern fun __as_int(target: js): int;
+    @js("Dream", "jsAsDouble")
+    static extern fun __as_double(target: js): double;
+    @js("Dream", "jsAsBool")
+    static extern fun __as_bool(target: js): bool;
+    @js("Dream", "jsAsString")
+    static extern fun __as_string(target: js): string;
+    @js("Dream", "jsIsNull")
+    static extern fun __is_null(target: js): bool;
+    @js("Dream", "jsRelease")
+    static extern fun __release(target: js): void;
+
+    // --- ergonomic instance API (resolved before dynamic dispatch, so these names are safe) --
+
+    // Explicit conversions back to Dream values.
+    public fun to_int(): int {
+        return js.__as_int(this);
+    }
+    public fun to_double(): double {
+        return js.__as_double(this);
+    }
+    public fun to_bool(): bool {
+        return js.__as_bool(this);
+    }
+    public fun to_str(): string {
+        return js.__as_string(this);
+    }
+
+    // True if the referenced value is `null` or `undefined`.
+    public fun is_null(): bool {
+        return js.__is_null(this);
+    }
+
+    // Releases the host-side handle. Use for long-lived references to avoid leaking them.
+    public fun release(): void {
+        js.__release(this);
+    }
+}

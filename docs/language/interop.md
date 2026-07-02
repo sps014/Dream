@@ -108,11 +108,12 @@ mod.readStruct(ptr, [         // class by field schema (declaration order)
 
 To hand a string back to Dream from a JS implementation, the runtime calls the exported `malloc` for you (or you can call `mod.writeString(str)` directly).
 
-## JavaScript object references
+## Dynamic JavaScript values
 
-A real JavaScript object (a `RegExp`, a fetch `Response`, a DOM node) crosses into Dream as an
-opaque [`JsRef`](references.md) handle rather than being flattened to a string. See
-[References](references.md) for the full `JsRef` API.
+A real JavaScript object (a `RegExp`, a fetch `Response`, a DOM node, a function) crosses into Dream
+as a dynamic [`js`](references.md) value rather than being flattened to a string. Member access,
+method calls, indexing, and calling bind at runtime, so you write them with native syntax
+(`doc.getElementById("app")`, `el.title = "x"`). See [The js type](references.md) for the full API.
 
 ## Callbacks
 

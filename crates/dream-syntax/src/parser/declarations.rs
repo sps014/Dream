@@ -723,7 +723,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         //eat the fun keyword
         self.match_token(TokenKind::FunToken);
-        let mut function_name = self.match_token(TokenKind::IdentifierToken);
+        let mut function_name = self.match_member_name();
         Self::splice_leading_trivia(&mut function_name, first_trivia);
 
         let (generic_parameters, generic_constraints) = self.take_generic_params();

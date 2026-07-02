@@ -36,14 +36,35 @@ await run("callbacks.wasm", {
 
 The compiler exports the function table as `__indirect_function_table`, and the `*.abi.json` marks `fun(...)` parameters so the runtime knows to wrap the incoming index.
 
+### Registering DOM handlers
+
+Passing a Dream `fun(js): void` / `fun(): void` directly to a dynamic [`js`](references.md) call
+auto-wraps it as a JS callable, so event handlers read natively:
+
+```dream
+fun on_click(ev: js): void {
+    println("clicked: " + ev.type.to_str());
+}
+
+fun main(): void {
+    let el = js.global("document").getElementById("app");
+    el.addEventListener("click", on_click);
+}
+```
+
+The wrapper has **stable identity per function** - the runtime caches it by funcref table index - so
+the same handler registered with `addEventListener` can be removed with `removeEventListener`. When
+you need an explicit `js` callable value, use `js.func(handler)` / `js.func0(handler)`.
+
 ## JS → Dream
 
-A JavaScript function handed to Dream arrives as a [`JsRef`](references.md). Dream calls it back with `invoke` / `invoke1` / `invoke2`:
+A JavaScript function handed to Dream is just a [`js`](references.md) value; call it directly with
+native syntax. Arguments auto-marshal, so no manual boxing is needed:
 
 ```dream
 fun main(): void {
-    let logger = JsRef.global("logger");          // a JS function on the global scope
-    logger.invoke1(JsRef.from_string("hello from Dream"));
+    let logger = js.global("logger");          // a JS function on the global scope
+    logger("hello from Dream");
 }
 ```
 
@@ -54,6 +75,6 @@ await run("callbacks.wasm");
 
 ## Marshaling
 
-Callback arguments and results are marshaled with the same rules as ordinary externs (see [JS Interop](interop.md#value-marshaling)): primitives and `string` convert automatically, and reference values travel as `JsRef` handles.
+Callback arguments and results are marshaled with the same rules as ordinary externs (see [JS Interop](interop.md#value-marshaling)): primitives and `string` convert automatically, and JS values travel as `js` handles.
 
 A complete runnable example lives in [`sample/interop/callbacks.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/callbacks.dream) with its Node runner `callbacks.mjs`.

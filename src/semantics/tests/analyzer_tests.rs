@@ -577,6 +577,57 @@ const SYSTEM_STUB: &str = "
     }
 ";
 
+/// The dynamic-`js` bridge surface (mirrors `stdlib/core/js.dream`), inlined so the interop tests do
+/// not depend on the full prelude being merged by the unit-test harness. `js` itself is a built-in
+/// type; these `extend js` declarations provide the entry points and `@js` bridge externs the
+/// analyzer desugars dynamic operations into.
+const JS_STUB: &str = "
+    extend js {
+        @js(\"Dream\", \"jsGlobal\")
+        static extern fun global(name: string): js;
+        @js(\"Dream\", \"jsObject\")
+        static extern fun object(): js;
+        @js(\"Dream\", \"jsArray\")
+        static extern fun array(): js;
+        @js(\"Dream\", \"jsFunc\")
+        static extern fun func(handler: fun(js): void): js;
+        @js(\"Dream\", \"jsFunc0\")
+        static extern fun func0(handler: fun(): void): js;
+        @js(\"Dream\", \"jsInt\")
+        static extern fun __box_int(value: int): js;
+        @js(\"Dream\", \"jsLong\")
+        static extern fun __box_long(value: long): js;
+        @js(\"Dream\", \"jsDouble\")
+        static extern fun __box_double(value: double): js;
+        @js(\"Dream\", \"jsBool\")
+        static extern fun __box_bool(value: bool): js;
+        @js(\"Dream\", \"jsString\")
+        static extern fun __box_string(value: string): js;
+        @js(\"Dream\", \"jsGetV\")
+        static extern fun __get(target: js, name: string): js;
+        @js(\"Dream\", \"jsSetV\")
+        static extern fun __set(target: js, name: string, value: js): void;
+        @js(\"Dream\", \"jsCallV\")
+        static extern fun __call(target: js, name: string, args: js[]): js;
+        @js(\"Dream\", \"jsInvokeV\")
+        static extern fun __invoke(target: js, args: js[]): js;
+        @js(\"Dream\", \"jsIndexGetV\")
+        static extern fun __index_get(target: js, key: js): js;
+        @js(\"Dream\", \"jsIndexSetV\")
+        static extern fun __index_set(target: js, key: js, value: js): void;
+        @js(\"Dream\", \"jsAsInt\")
+        static extern fun __as_int(target: js): int;
+        @js(\"Dream\", \"jsAsDouble\")
+        static extern fun __as_double(target: js): double;
+        @js(\"Dream\", \"jsAsBool\")
+        static extern fun __as_bool(target: js): bool;
+        @js(\"Dream\", \"jsAsString\")
+        static extern fun __as_string(target: js): string;
+        public fun to_int(): int { return js.__as_int(this); }
+        public fun to_str(): string { return js.__as_string(this); }
+    }
+";
+
 /// `System` + `Time.sleep` for async tests (mirrors `stdlib/system/time.dream` + `system.dream`).
 const ASYNC_STUB: &str = "
     class System {
@@ -2206,4 +2257,88 @@ fn test_default_param_rejected_after_required_at_analysis() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
+}
+
+// --- dynamic `js` interop -----------------------------------------------------------------------
+
+#[test]
+fn test_js_unknown_member_and_method_compile() {
+    // `js` uses deferred binding: unknown members/methods of arbitrary arity are legal by
+    // construction (no member resolution), so this compiles without error.
+    let code = format!(
+        "{JS_STUB}
+        fun main(): void {{
+            let doc = js.global(\"document\");
+            let el = doc.getElementById(\"app\");
+            el.classList.add(\"a\", \"b\", \"c\");
+            el.totallyMadeUpMethod();
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_js_property_set_auto_marshals_primitives() {
+    // Writing a Dream primitive/string into a `js` property type-checks (auto-box), and reading a
+    // `js` value into a typed binding type-checks (auto-unbox) - no manual conversion needed.
+    let code = format!(
+        "{JS_STUB}
+        fun main(): void {{
+            let el = js.global(\"document\").getElementById(\"app\");
+            el.textContent = \"hello\";
+            el.tabIndex = 3;
+            el.hidden = true;
+            let n: int = el.childNodes.length;
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_js_call_expression_invokes_value() {
+    // A `js`-typed value is callable directly (`cb(...)`), desugaring to the invoke bridge.
+    let code = format!(
+        "{JS_STUB}
+        fun main(): void {{
+            let cb = js.global(\"logger\");
+            cb(\"done\");
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_js_index_access() {
+    // Indexing a `js` value with either a string or int key is legal and yields `js`.
+    let code = format!(
+        "{JS_STUB}
+        fun main(): void {{
+            let obj = js.global(\"data\");
+            let first = obj[\"items\"];
+            obj[0] = \"x\";
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_js_desugars_to_host_bridges() {
+    // The dynamic operations lower to the `Dream` host-module bridge imports, so the emitted WAT
+    // references them by their import field names.
+    let code = format!(
+        "{JS_STUB}
+        fun entry(): void {{
+            let doc = js.global(\"document\");
+            let el = doc.getElementById(\"app\");
+            el.textContent = \"hello\";
+        }}"
+    );
+    let (wat, _count) = emit_hir_to_wat(&code);
+    assert!(wat.contains("$js_global"), "js.global lowers to the global bridge:\n{}", wat);
+    assert!(wat.contains("$js___call"), "method call lowers to the __call bridge:\n{}", wat);
+    assert!(wat.contains("$js___set"), "property set lowers to the __set bridge:\n{}", wat);
 }
