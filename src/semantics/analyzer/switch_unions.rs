@@ -101,37 +101,8 @@ impl<'a> Analyzer<'a> {
             arg_types.push(t);
         }
 
-        if args.len() != field_types.len() {
-            diagnostics.report_error(
-                format!(
-                    "Variant '{}.{}' expects {} argument(s), but {} were given",
-                    enum_name,
-                    variant.text,
-                    field_types.len(),
-                    args.len()
-                ),
-                Some(variant.position),
-            );
-        }
-
         if !is_generic {
-            for (i, ft) in field_types.iter().enumerate() {
-                if let Some(at) = arg_types.get(i) {
-                    if !self.type_str_assignable(&ft.get_type(), &at.get_type()) {
-                        diagnostics.report_error(
-                            format!(
-                                "Variant '{}.{}' expects argument {} to be '{}', got '{}'",
-                                enum_name,
-                                variant.text,
-                                i + 1,
-                                ft.get_type(),
-                                at.get_type()
-                            ),
-                            Some(variant.position),
-                        );
-                    }
-                }
-            }
+            self.validate_variant_payload(enum_name, &variant.text, &field_types, &arg_types, variant.position.clone(), diagnostics);
             let result_ty =
                 Type::Struct(synthetic_token(TokenKind::IdentifierToken, enum_name), None);
             // Construct the union value: resolve its `DefId` and the variant's discriminant.
@@ -200,24 +171,8 @@ impl<'a> Analyzer<'a> {
             template.generic_parameters.as_deref().unwrap_or(&[]),
             &concrete_args,
         );
-        for (i, ft) in field_types.iter().enumerate() {
-            let expected = substitute_generic_type(ft, &bindings);
-            if let Some(at) = arg_types.get(i) {
-                if !self.type_str_assignable(&expected.get_type(), &at.get_type()) {
-                    diagnostics.report_error(
-                        format!(
-                            "Variant '{}.{}' expects argument {} to be '{}', got '{}'",
-                            enum_name,
-                            variant.text,
-                            i + 1,
-                            expected.get_type(),
-                            at.get_type()
-                        ),
-                        Some(variant.position),
-                    );
-                }
-            }
-        }
+        let expected_fields: Vec<Type> = field_types.iter().map(|ft| substitute_generic_type(ft, &bindings)).collect();
+        self.validate_variant_payload(enum_name, &variant.text, &expected_fields, &arg_types, variant.position.clone(), diagnostics);
 
         self.ensure_union_instantiated(enum_name, &concrete_args, &variant.position, diagnostics);
         // Construct the monomorphized union value. Its interned type (`union_ty(def, args)`) matches
@@ -1040,35 +995,15 @@ impl<'a> Analyzer<'a> {
             self.hir_switch(subject_hir, hir_arms, hir_default, hir_ok);
         }
 
-        // Exhaustiveness: every union variant must be covered, or a catch-all arm present.
-        if !has_catch_all {
-            if let Some(info) = &union_info {
-                let missing: Vec<String> = info
-                    .variants
-                    .iter()
-                    .filter(|v| !covered.contains(&v.name))
-                    .map(|v| v.name.clone())
-                    .collect();
-                if !missing.is_empty() {
-                    diagnostics.report_error(
-                        format!(
-                            "Non-exhaustive switch on '{}': missing variant(s) {}. Add the missing arm(s) or a `_` arm",
-                            subject_base,
-                            missing.join(", ")
-                        ),
-                        subject.position(),
-                    );
-                }
-            } else if !subject_type.is_unknown() {
-                diagnostics.report_error(
-                    format!(
-                        "Non-exhaustive switch on '{}': add a `_` arm to cover all cases",
-                        subject_base
-                    ),
-                    subject.position(),
-                );
-            }
-        }
+        self.check_exhaustiveness(
+            &subject_base,
+            &subject_type,
+            &union_info,
+            has_catch_all,
+            &covered,
+            subject.position(),
+            diagnostics,
+        );
 
         if is_expression {
             Ok(arm_value_type.unwrap_or(Type::Void))
@@ -1223,6 +1158,80 @@ impl<'a> Analyzer<'a> {
                     },
                 })
             }
+        }
+    }
+    fn validate_variant_payload(
+        &mut self,
+        enum_name: &str,
+        variant_name: &str,
+        field_types: &[Type],
+        arg_types: &[Type],
+        position: crate::text::text_span::TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if arg_types.len() != field_types.len() {
+            diagnostics.report_error(
+                format!(
+                    "Variant '{}.{}' expects {} argument(s), but {} were given",
+                    enum_name,
+                    variant_name,
+                    field_types.len(),
+                    arg_types.len()
+                ),
+                Some(position.clone()),
+            );
+        }
+
+        let expected_strs: Vec<String> = field_types.iter().map(|t| t.get_type()).collect();
+        let given_strs: Vec<String> = arg_types.iter().map(|t| t.get_type()).collect();
+
+        self.validate_arguments(
+            &format!("Variant '{}.{}'", enum_name, variant_name),
+            &expected_strs,
+            &given_strs,
+            position,
+            diagnostics,
+        );
+    }
+
+    fn check_exhaustiveness(
+        &self,
+        subject_base: &str,
+        subject_type: &Type,
+        union_info: &Option<UnionInfo>,
+        has_catch_all: bool,
+        covered: &HashSet<String>,
+        position: Option<crate::text::text_span::TextSpan>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if has_catch_all {
+            return;
+        }
+        if let Some(info) = union_info {
+            let missing: Vec<String> = info
+                .variants
+                .iter()
+                .filter(|v| !covered.contains(&v.name))
+                .map(|v| v.name.clone())
+                .collect();
+            if !missing.is_empty() {
+                diagnostics.report_error(
+                    format!(
+                        "Non-exhaustive switch on '{}': missing variant(s) {}. Add the missing arm(s) or a `_` arm",
+                        subject_base,
+                        missing.join(", ")
+                    ),
+                    position.clone(),
+                );
+            }
+        } else if !subject_type.is_unknown() {
+            diagnostics.report_error(
+                format!(
+                    "Non-exhaustive switch on '{}': add a `_` arm to cover all cases",
+                    subject_base
+                ),
+                position.clone(),
+            );
         }
     }
 }

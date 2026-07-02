@@ -64,7 +64,11 @@ impl Lexer {
                 continue;
             }
 
-            last_token_line = self.line_text.get_point(span.end).0;
+            last_token_line = if span.end > span.start {
+                self.line_text.get_point(span.end - 1).0
+            } else {
+                self.line_text.get_point(span.end).0
+            };
             let mut token = SyntaxToken::new(
                 kind,
                 TextSpan::new((span.start, span.end), &self.line_text),

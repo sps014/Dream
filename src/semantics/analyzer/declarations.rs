@@ -298,13 +298,6 @@ impl<'a> Analyzer<'a> {
             .copied()
     }
 
-    /// Enum-typed values are integers at runtime, so an enum type and `int` are mutually
-    /// assignable/comparable (C-style). Used to relax type checks involving enums.
-    pub(super) fn enum_int_compatible(&self, a: &str, b: &str) -> bool {
-        (self.enum_table.contains_key(a) && b == "int")
-            || (self.enum_table.contains_key(b) && a == "int")
-    }
-
     /// Pass: register every interface's `DefId` and its method signatures. Interfaces declare
     /// method signatures only (no fields, no default bodies) in v1; generic interfaces are rejected.
     /// The declaration order of methods is their local index (used later for itable slots).
