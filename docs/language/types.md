@@ -152,7 +152,7 @@ User-defined reference types. See [Classes](classes.md).
 ## Value structs
 
 User-defined value types: stored inline with copy-on-assignment semantics, but otherwise sharing all
-class features. See [Value Structs](value-structs.md).
+class features. See [Value Structs](classes-structs.md).
 
 ## The `object` type
 
@@ -174,3 +174,4 @@ let unboxed = (int)o;    // unboxing — traps if wrong type at runtime
 Supported conversions: any numeric type ↔ any numeric type (`int`, `uint`, `long`, `ulong`, `byte`, `float`, `double`), `char ↔ int`, `char ↔ byte`, and any type ↔ `object`. Widening conversions are implicit; narrowing (and same-width sign changes) require an explicit cast. Casting into `byte` keeps only the low 8 bits.
 
 The cast target may be a generic type, including nested type arguments — for example `(Container<int>)b` or `(Pair<Box<int>, int>)b`. This is how you explicitly upcast to a generic interface (see [Interfaces](interfaces.md#generic-interfaces)).
+es)).

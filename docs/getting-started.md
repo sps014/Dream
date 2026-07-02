@@ -12,9 +12,9 @@ cd Dream
 cargo build --release
 ```
 
-The binary ends up at `target/release/dream`. You can run it directly from that path, or just use `cargo run --` as shown throughout this guide.
+The binary ends up at `target/release/dream`. You can run it directly from that path, or use `cargo run --` as shown below.
 
-## Your first program
+## Your First Program
 
 Create a file called `hello.dream`:
 
@@ -36,9 +36,7 @@ Output:
 Hello, world!
 ```
 
-That's it. The `run` subcommand compiles your file and executes it immediately using Wasmtime.
-
-If you want to inspect the generated WebAssembly, drop the `run` subcommand:
+The `run` subcommand compiles your file and executes it immediately using Wasmtime. To inspect the generated WebAssembly instead, drop the `run` subcommand:
 
 ```bash
 cargo run -- hello.dream
@@ -46,7 +44,7 @@ cargo run -- hello.dream
 
 This writes a `hello.wat` file next to your source.
 
-## A slightly bigger example
+## A Slightly Bigger Example
 
 ```dream
 fun factorial(n: int): int {
@@ -68,14 +66,14 @@ fun main() {
 Things to notice:
 
 - `fun` declares a function. The return type comes after `:`.
-- `let` declares a local variable. The type is inferred from the initializer.
-- `print` writes a value with no newline; `println` appends one. Both work on any type — int, float, string, bool, char, classes.
+- `let` declares a local variable. The type is inferred.
+- `print` and `println` work on any type — int, float, string, bool, char, classes.
 - The return type is optional when a function returns nothing (`fun main()`).
-- Conditions need parentheses: `if (n <= 1)`, not `if n <= 1`.
+- Conditions need parentheses: `if (n <= 1)`.
 
-## Next steps
+## Next Steps
 
 - [Variables](language/variables.md) — declaration, inference, and assignment rules.
-- [Types](language/types.md) — the full type system including nullable and arrays.
-- [Classes](language/classes.md) — define your own data types with methods.
-- [List](stdlib/list.md) and [Map](stdlib/map.md) — the standard collections.
+- [Types & Data](language/primitives.md) — primitives, collections, and unions.
+- [Classes & Structs](language/classes-structs.md) — define your own data types with methods.
+- [Collections](stdlib/collections.md) — `List<T>` and `Map<K, V>`.

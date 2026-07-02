@@ -60,42 +60,35 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
-  - Language:
+  - Basics:
     - Variables: language/variables.md
     - Operators: language/operators.md
     - Control Flow: language/control-flow.md
     - Functions: language/functions.md
-    - Imports: language/imports.md
-    - Generics: language/generics.md
-    - Async/Await: language/async.md
-  - Types:
-    - Overview: language/types.md
-    - string: stdlib/string.md
-    - int: stdlib/int.md
-    - float: stdlib/float.md
-    - double: stdlib/double.md
-    - char: stdlib/char.md
-    - bool: stdlib/bool.md
+  - Types & Data:
+    - Primitives: language/primitives.md
     - Arrays: language/arrays.md
-    - Enums: language/enums.md
-    - Classes: language/classes.md
-    - Value Structs: language/value-structs.md
-    - Interfaces: language/interfaces.md
-    - Discriminated Unions: language/discriminated-unions.md
+    - Enums & Unions: language/enums-unions.md
+    - Classes & Structs: language/classes-structs.md
     - The object Type: language/objects.md
+  - Advanced Features:
+    - Generics: language/generics.md
+    - Interfaces: language/interfaces.md
+    - Async/Await: language/async.md
+    - Imports & Modules: language/imports.md
+    - Memory Management: language/memory.md
+    - Interop:
+      - Overview: language/interop.md
+      - JS References: language/references.md
+      - Callbacks: language/callbacks.md
   - Standard Library:
-    - Builtins: stdlib/builtins.md
-    - Option: stdlib/option.md
-    - Result: stdlib/result.md
-    - List: stdlib/list.md
-    - Map: stdlib/map.md
-    - JSON: stdlib/json.md
-    - File I/O: stdlib/file.md
-    - HTTP: stdlib/http.md
-    - Regex: stdlib/regex.md
-    - DateTime: stdlib/datetime.md
-  - Memory Model: memory.md
-  - Interop:
-    - JS Interop: language/interop.md
-    - JS References: language/references.md
-    - Callbacks: language/callbacks.md
+    - Built-ins: stdlib/builtins.md
+    - Strings: stdlib/string.md
+    - Option & Result: stdlib/option-result.md
+    - Collections (List & Map): stdlib/collections.md
+    - System & IO:
+      - JSON: stdlib/json.md
+      - File I/O: stdlib/file.md
+      - HTTP: stdlib/http.md
+      - Regex: stdlib/regex.md
+      - DateTime: stdlib/datetime.md
