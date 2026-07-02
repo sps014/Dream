@@ -1,14 +1,5 @@
-// The public JSON API (`JSON.parse` / `JSON.stringify`), backed by the `JsonValue` tree
-// (`json_value.dream`) and the recursive-descent `JsonParser` (`json_parser.dream`). Auto-imported
-// into every program.
-//
-//   let v = JSON.parse("{\"name\":\"Ada\",\"age\":36}");
-//   println(v.get("name").as_string());        // Ada
-//   println(to_string(v.get("age").as_int()));  // 36
-//   println(JSON.stringify(v));
+// The public JSON API.
 
-// `serialize`/`deserialize<T>` (the @json auto-derive surface) are recognized directly by the
-// compiler; `parse`/`stringify` are ordinary static methods defined here.
 class JSON {
     @intrinsic("json_serialize")
     static extern fun serialize<T>(value: T): string;

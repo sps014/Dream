@@ -98,11 +98,7 @@ impl StdlibFunction {
         imports
     }
 
-    /// User-callable stdlib *free* functions registered in the function table. There are none: the
-    /// former string/array/debug primitives are now class members (`String.alloc`/`String.set`,
-    /// `Array.new`, `Debug.free_list_head`) or builtin pseudo-methods (`s.char_at(i)`), lowered by
-    /// the compiler to their `RUNTIME_STRINGS` helpers (`$string_alloc`/`$char_at`/...). The runtime
-    /// bodies themselves are still emitted unconditionally from `RUNTIME_STRINGS`.
+    /// User-callable stdlib *free* functions.
     pub fn get_all() -> Vec<StdlibFunction> {
         vec![]
     }

@@ -131,9 +131,7 @@ class List<T> {
         return ListIterator<T>(this);
     }
 
-    // Sorts the list in place with the supplied comparator (a stable, O(n log n) bottom-up merge
-    // sort). `cmp(a, b)` returns a negative number, zero, or a positive number when `a` sorts before,
-    // equal to, or after `b`. Works for any element type via the callback.
+    // Sorts the list in place with the supplied comparator.
     public fun sort_by(cmp: fun(T, T): int): void {
         let n = this.count;
         if (n < 2) {

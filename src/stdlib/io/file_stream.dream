@@ -1,8 +1,4 @@
-// FileStream: a buffered, seekable cursor over a file's bytes, opened via `File.open`. The file's
-// bytes are read once into `data` (a single bulk copy from the host) and the cursor then slices
-// them in pure Dream. Buffering as raw bytes is binary-safe and means `read_bytes` needs no
-// conversion; `read`/`read_all` materialize a text view only when text is requested. Random access
-// via `seek` is cheap and allocation-free. Auto-imported into every program.
+// FileStream: a buffered, seekable cursor over a file's bytes.
 class FileStream {
     data: byte[];
     pos: int;

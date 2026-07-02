@@ -1,25 +1,10 @@
-// `Result<T, E>` - the outcome of an operation that may fail: a success value (`Ok`) or an error
-// (`Err`). A discriminated union, matched exhaustively with `switch`. Auto-imported into every
-// program.
-//
-//   fun safe_div(a: int, b: int): Result<int, string> {
-//       if (b == 0) {
-//           return Result.Err("divide by zero");
-//       }
-//       return Result.Ok(a / b);
-//   }
-//
-//   switch (safe_div(10, 2)) {
-//       Ok(v)  => System.println(v),
-//       Err(e) => System.println(e),
-//   }
+// `Result<T, E>` - the outcome of an operation that may fail.
 enum Result<T, E> {
     Ok(value: T),
     Err(error: E),
 }
 
-// Ergonomic accessors so callers can read a `Result` without writing a full `switch` each time.
-// These are ordinary methods (made possible by generic `extend` blocks) and never panic.
+// Ergonomic accessors.
 extend Result<T, E> {
     // True when this is `Ok`.
     public fun is_ok(): bool {

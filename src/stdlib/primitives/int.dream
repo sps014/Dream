@@ -72,9 +72,7 @@ extend int : Comparable<int> {
         return 0;
     }
 
-    // Parses a (possibly signed) decimal integer from `text`. Returns `Err` for an empty string,
-    // a bare sign, or any non-digit character; otherwise `Ok` with the value. Called as
-    // `int.parse("42")`.
+    // Parses a (possibly signed) decimal integer from `text`.
     public static fun parse(text: string): Result<int, string> {
         let n = text.size();
         if (n == 0) {

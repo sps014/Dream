@@ -1,6 +1,4 @@
-// Cursor produced by `List.iterator()`. `next()` yields `Some(element)` in order until the list is
-// exhausted, then `None` — the enumerator protocol consumed by `for (let x in list)`. Uses only the
-// list's public `size()`/`get()`, so it needs no access to the list's private buffer.
+// Cursor produced by `List.iterator()`.
 class ListIterator<T> {
     list: List<T>;
     idx: int;

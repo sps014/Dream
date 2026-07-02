@@ -1,16 +1,4 @@
-// `JsRef` - an opaque handle to a live JavaScript value held by the host runtime
-// (`runtime/dream.js`). It lets a real JS object (a DOM node, a `Response`, a `RegExp`, ...)
-// cross into Dream and be read/called through generic interop helpers, instead of flattening
-// everything to strings.
-//
-// At runtime a `JsRef` is just an `i32` id into the host's handle registry; it is NOT a Dream
-// heap object, so it is never reference-counted. The host registers a JS value when an interop
-// function returns one (producing an id) and looks it up when an id is passed back in. Because
-// Dream does not auto-release these, call `.release()` when you are done with a long-lived
-// handle to avoid leaking the JS-side entry.
-//
-//   let win = JsRef.global("window");
-//   let title = win.get("document").get_string("title");
+// `JsRef` - an opaque handle to a live JavaScript value.
 
 extend JsRef {
     // --- value constructors (host module `Dream` in runtime/dream.js) -----------------------

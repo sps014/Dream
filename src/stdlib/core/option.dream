@@ -1,21 +1,10 @@
-// `Option<T>` - a value that is either present (`Some`) or absent (`None`). A discriminated union,
-// so it is matched exhaustively with `switch` and destructured to read the contained value.
-// Auto-imported into every program.
-//
-//   let o = Option.Some(42);          // inferred Option<int>
-//   let n: Option<int> = Option.None; // annotation needed for the unit variant
-//
-//   let label = switch (o) {
-//       Some(v) => v,
-//       None    => 0,
-//   };
+// `Option<T>` - a value that is either present (`Some`) or absent (`None`).
 enum Option<T> {
     Some(value: T),
     None,
 }
 
-// Ergonomic accessors so callers can read an `Option` without writing a full `switch` each time.
-// These are ordinary methods (made possible by generic `extend` blocks) and never panic.
+// Ergonomic accessors.
 extend Option<T> {
     // True when this is `Some`.
     public fun is_some(): bool {

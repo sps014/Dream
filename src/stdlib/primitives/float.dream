@@ -1,8 +1,7 @@
-// The `float` primitive as an extensible class (a 32-bit IEEE float at runtime).
-// Auto-imported into every program.
+// The `float` primitive as an extensible class.
 
 extend float : Comparable<float> {
-    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<float>`.
+    // Orders this value against `other` (negative/zero/positive).
     public fun compare(other: float): int {
         if (this < other) {
             return 0 - 1;

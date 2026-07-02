@@ -1,10 +1,7 @@
-// `Array` - low-level array allocation, backing a compiler intrinsic (no Dream body; the
-// `@intrinsic` static method is lowered directly by the codegen backend, so it works identically on
-// every runtime). Auto-imported into every program.
-//
-// `Array.new<T>(n)` returns a fresh, zero-initialized `T[]` of length `n` (the backing primitive
-// used by `List`/`Map` growth and by code that needs an array whose size is only known at runtime).
+// `Array` - low-level array allocation, backing a compiler intrinsic.
+
 class Array {
+    // `Array.new<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
     @intrinsic("array_new")
     static extern fun new<T>(len: int): T[];
 }

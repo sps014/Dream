@@ -1,23 +1,11 @@
-// Core comparison interfaces. A type implements the closed form over itself (e.g.
-// `class Money : Comparable<Money>`); the type argument names the "other" operand so the
-// signatures stay fully typed with no `Self` type needed.
-//
-//   struct Vec2 : Equatable<Vec2> {
-//       public x: int;
-//       public y: int;
-//       public fun equals(other: Vec2): bool { return this.x == other.x && this.y == other.y; }
-//   }
-//
-// A generic function/type can require a type parameter to be comparable and then call `compare`
-// on it without boxing (`fun min<T : Comparable<T>>(a: T, b: T): T`).
+// Core comparison interfaces.
 
 // Value equality. `a == b` / `a != b` on a type that implements `Equatable<T>` dispatch here.
 interface Equatable<T> {
     fun equals(other: T): bool;
 }
 
-// Total ordering. `compare` returns a negative number when `this < other`, zero when equal, and a
-// positive number when `this > other` (the usual three-way comparison used by sorting).
+// Total ordering. `compare` returns a negative number when `this < other`, zero when equal, and a positive number otherwise.
 interface Comparable<T> {
     fun compare(other: T): int;
 }

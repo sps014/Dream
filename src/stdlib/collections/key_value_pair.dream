@@ -1,4 +1,4 @@
-// One key/value entry, produced while iterating a `Map` with `for (let pair in map)`.
+// One key/value entry.
 class KeyValuePair<K, V> {
     public key: K;
     public value: V;

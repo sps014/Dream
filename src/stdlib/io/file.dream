@@ -1,21 +1,5 @@
-// `File` - a small cross-runtime filesystem API. The host capability is a set of *synchronous*
-// externs (implemented natively in `src/execution/host/file.rs` for the wasmtime CLI and in
-// `runtime/dream.js` for Node); the `async` surface is built in Dream by wrapping those calls in
-// `async fun`s. Because Dream's async scheduler is compiled into the module itself, calling
-// `File.read(...)` returns a `Future<T>` that resolves on the first poll on *every* host - no
-// host-side promise bridge is required. This is what lets the same `.dream` run fast and natively.
-// Buffered reads go through `FileStream` (`file_stream.dream`). Auto-imported into every program.
-//
-//   async fun main(): void {
-//       await File.write("notes.txt", "hello\nworld\n");
-//       let text = await File.read("notes.txt");        // whole file as text
-//       System.print(text);
-//
-//       let stream = await File.open("notes.txt");        // buffered cursor
-//       while (stream.has_more()) {
-//           System.print(stream.read(8));                 // 8 chars at a time
-//       }
-//   }
+// `File` - a small cross-runtime filesystem API.
+
 class File {
     // --- host bridge: synchronous externs (real WASM imports; no @intrinsic) -------------------
     @js("Dream", "fileRead")

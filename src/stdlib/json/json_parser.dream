@@ -1,4 +1,4 @@
-// A cursor over the input text used by the recursive-descent JSON parser (driven by `JSON.parse`).
+// A cursor over the input text used by the recursive-descent JSON parser.
 class JsonParser {
     src: string;
     pos: int;

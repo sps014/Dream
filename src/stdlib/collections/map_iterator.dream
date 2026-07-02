@@ -1,5 +1,4 @@
-// Cursor produced by `Map.iterator()`. `next()` yields `Some(KeyValuePair(k, v))` for each entry,
-// then `None`. It walks parallel key/value snapshots taken at construction time.
+// Cursor produced by `Map.iterator()`.
 class MapIterator<K, V> {
     keys: K[];
     values: V[];
