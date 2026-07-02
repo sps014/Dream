@@ -59,6 +59,13 @@ fn remove_dead_assignments(func: &mut MirFunction) -> bool {
         let before = block.stmts.len();
         block.stmts.retain(|stmt| match stmt {
             Statement::Nop => false,
+            // A self-copy `x = x` is always dead (produced by CSE/copy-prop collapsing a redundant
+            // expression into its own source).
+            Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s))))
+                if d == s =>
+            {
+                false
+            }
             Statement::Assign(Place::Local(d), rvalue) => read.contains(d) || !is_pure(rvalue),
             _ => true,
         });
@@ -71,7 +78,7 @@ fn remove_dead_assignments(func: &mut MirFunction) -> bool {
 
 /// An rvalue with no observable effect beyond producing its value; safe to drop if the result is
 /// unused. Calls and allocations are conservatively impure.
-fn is_pure(rvalue: &Rvalue) -> bool {
+pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
     matches!(
         rvalue,
         Rvalue::Use(_)

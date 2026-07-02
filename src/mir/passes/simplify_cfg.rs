@@ -1,10 +1,12 @@
 //! CFG simplification: fold branches with constant conditions into unconditional jumps, resolve
-//! constant `switch`es, and thread jumps through empty forwarding blocks. Subsumes the codegen-time
+//! constant `switch`es, collapse branches whose arms all target the same block, thread jumps through
+//! empty forwarding blocks, and merge a block into its sole predecessor. Subsumes the codegen-time
 //! `is`-folding the old backend did inline.
 
 use super::MirPass;
 use crate::mir::{BlockId, Const, MirFunction, Operand, Terminator};
 use crate::types::TypeInterner;
+use std::collections::HashMap;
 
 pub struct SimplifyCfg;
 
@@ -15,19 +17,92 @@ impl MirPass for SimplifyCfg {
 
     fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
         let mut changed = fold_constant_branches(func);
+        changed |= collapse_same_target_branches(func);
         changed |= thread_empty_jumps(func);
+        changed |= merge_single_pred_blocks(func);
         changed
     }
+}
+
+/// Collapses a branch whose outcomes all jump to the same block into an unconditional `Goto` (the
+/// condition/scrutinee then becomes dead and is removed by DCE).
+fn collapse_same_target_branches(func: &mut MirFunction) -> bool {
+    let mut changed = false;
+    for block in &mut func.blocks {
+        let new_term = match &block.terminator {
+            Terminator::If {
+                then_blk, else_blk, ..
+            } if then_blk == else_blk => Some(Terminator::Goto(*then_blk)),
+            Terminator::Switch {
+                targets, default, ..
+            } if targets.iter().all(|(_, b)| b == default) => Some(Terminator::Goto(*default)),
+            _ => None,
+        };
+        if let Some(t) = new_term {
+            block.terminator = t;
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Merges a block `t` into its unique predecessor `i` when `i` ends in `goto t` and `t` has exactly
+/// one predecessor: `t`'s statements and terminator are appended to `i`, and `t` is left empty for
+/// DCE to drop. Recomputes predecessors after each merge (identities shift) until a fixpoint.
+fn merge_single_pred_blocks(func: &mut MirFunction) -> bool {
+    let mut any = false;
+    loop {
+        let preds = predecessor_counts(func);
+        let mut merged = false;
+        for i in 0..func.blocks.len() {
+            let Terminator::Goto(t) = func.blocks[i].terminator else {
+                continue;
+            };
+            let ti = t.0 as usize;
+            if ti == i || t == func.entry || preds.get(&t).copied().unwrap_or(0) != 1 {
+                continue;
+            }
+            let t_stmts = std::mem::take(&mut func.blocks[ti].stmts);
+            let t_term =
+                std::mem::replace(&mut func.blocks[ti].terminator, Terminator::Unreachable);
+            func.blocks[i].stmts.extend(t_stmts);
+            func.blocks[i].terminator = t_term;
+            merged = true;
+            any = true;
+            break;
+        }
+        if !merged {
+            break;
+        }
+    }
+    any
+}
+
+/// Counts how many terminators name each block as a successor (its in-degree).
+fn predecessor_counts(func: &MirFunction) -> HashMap<BlockId, usize> {
+    let mut counts: HashMap<BlockId, usize> = HashMap::new();
+    for block in &func.blocks {
+        for succ in block.terminator.successors() {
+            *counts.entry(succ).or_default() += 1;
+        }
+    }
+    counts
 }
 
 fn fold_constant_branches(func: &mut MirFunction) -> bool {
     let mut changed = false;
     for block in &mut func.blocks {
         let new_term = match &block.terminator {
-            Terminator::If { cond: Operand::Const(Const::Bool(b)), then_blk, else_blk } => {
-                Some(Terminator::Goto(if *b { *then_blk } else { *else_blk }))
-            }
-            Terminator::Switch { value: Operand::Const(Const::Int(v)), targets, default } => {
+            Terminator::If {
+                cond: Operand::Const(Const::Bool(b)),
+                then_blk,
+                else_blk,
+            } => Some(Terminator::Goto(if *b { *then_blk } else { *else_blk })),
+            Terminator::Switch {
+                value: Operand::Const(Const::Int(v)),
+                targets,
+                default,
+            } => {
                 let target = targets
                     .iter()
                     .find(|(k, _)| k == v)

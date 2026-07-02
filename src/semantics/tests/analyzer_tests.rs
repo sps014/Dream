@@ -174,6 +174,32 @@ fn emit_hir_to_module(code: &str) -> String {
     crate::mir::emit::emit_module(&mir, interner, false)
 }
 
+/// Like [`emit_hir_to_module`] but runs `RcInsertion` first (no other passes), matching the
+/// production pipeline where reference-counting is always inserted before emission. Needed for tests
+/// that assert on the deep-release runtime: those helper functions are only *reachable* — and so
+/// retained by the module's dead-function elimination — once a `Release` call site references them.
+fn emit_hir_to_module_rc_only(code: &str) -> String {
+    let mut diagnostics = DiagnosticBag::new(None);
+    let lexer = Lexer::new(code.to_string());
+    let parse_arena = bumpalo::Bump::new();
+    let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
+    let tree = parser.parse().expect("parse should succeed");
+    let arena = bumpalo::Bump::new();
+    let mut analyzer = Analyzer::new(&tree, &arena);
+    let hir = analyzer
+        .analyze(&mut diagnostics)
+        .expect("analysis should succeed")
+        .hir;
+    assert!(!diagnostics.has_errors(), "unexpected analysis errors");
+    let interner = &analyzer.type_ctx.interner;
+    let mut mir = crate::mir::lower::lower_program(&hir, interner);
+    use crate::mir::passes::MirPass;
+    for f in &mut mir.functions {
+        crate::mir::passes::RcInsertion.run(f, interner);
+    }
+    crate::mir::emit::emit_module(&mir, interner, false)
+}
+
 #[test]
 fn test_hir_emission_arithmetic_function() {
     // A plain free function over arithmetic on parameters is fully representable in HIR, so the
@@ -373,9 +399,12 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
             del() {{ System.print(0); }}
             constructor(v: int) {{ this.v = v; }}
         }}
-        fun main(): void {{ let n: Node = Node(1); }}"
+        fun main(): void {{ let n: Node = Node(1); let o: object = n; }}"
     );
-    let wat = emit_hir_to_module(&code);
+    // RC insertion is required so `main`'s scope-exit `Release`s reference the deep-release runtime;
+    // dead-function elimination otherwise (correctly) drops those uncalled helpers. Binding to an
+    // `object` local forces a statically-untyped release, exercising the tag-dispatch router.
+    let wat = emit_hir_to_module_rc_only(&code);
     assert!(wat.contains("(func $release_Node"), "per-type release missing:\n{}", wat);
     assert!(wat.contains("(call $Node_del)"), "destructor not invoked from release:\n{}", wat);
     // The reference field `next` is deep-released; the scalar `v` is not.

@@ -61,7 +61,10 @@ pub(super) fn func_table(mir: &crate::mir::Mir) -> HashMap<(DefId, Vec<TypeId>),
 /// The canonical `call_indirect` type name + `(param …)`/`(result …)` WASM types for a function-typed
 /// `ty` (nullable stripped). Named by its *WASM* signature (so `fun(int)` and `fun(bool)` share one),
 /// which is all `call_indirect` distinguishes. `None` if `ty` is not a function type.
-pub(super) fn func_sig(interner: &TypeInterner, ty: TypeId) -> Option<(String, Vec<&'static str>, Option<&'static str>)> {
+pub(super) fn func_sig(
+    interner: &TypeInterner,
+    ty: TypeId,
+) -> Option<(String, Vec<&'static str>, Option<&'static str>)> {
     match interner.kind(interner.strip_nullable(ty)) {
         TyKind::Func(params, ret) => {
             let ptys: Vec<&'static str> = params.iter().map(|p| wasm_ty_of(interner, *p)).collect();
@@ -116,7 +119,11 @@ pub(super) fn emit_func_table(out: &mut String, mir: &crate::mir::Mir) {
         return;
     }
     let _ = writeln!(out, "(table $__ft {} funcref)", n);
-    let mut syms: Vec<String> = mir.functions.iter().map(|f| format!("${}", func_symbol(f))).collect();
+    let mut syms: Vec<String> = mir
+        .functions
+        .iter()
+        .map(|f| format!("${}", func_symbol(f)))
+        .collect();
     for f in mir.functions.iter().filter(|f| f.is_async) {
         syms.push(format!("${}", poll_symbol(f)));
     }
@@ -155,6 +162,49 @@ pub(super) struct InterfaceDispatch {
     pub heap_start: u32,
 }
 
+/// The set of `(iface_id, method_slot)` pairs that some surviving function actually dispatches
+/// through. Interface calls appear explicitly as `InterfaceCall` statements/rvalues (sync) or in the
+/// preserved HIR body (async), so this is a complete accounting — dispatch trampolines for pairs not
+/// listed here are dead and can be skipped.
+pub(super) fn used_iface_slots(mir: &crate::mir::Mir) -> std::collections::HashSet<(usize, usize)> {
+    use crate::mir::{Rvalue, Statement};
+    let mut used = std::collections::HashSet::new();
+    for f in &mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::InterfaceCall {
+                        iface_id,
+                        method_slot,
+                        ..
+                    } => {
+                        used.insert((*iface_id, *method_slot));
+                    }
+                    Statement::Assign(
+                        _,
+                        Rvalue::InterfaceCall {
+                            iface_id,
+                            method_slot,
+                            ..
+                        },
+                    ) => {
+                        used.insert((*iface_id, *method_slot));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if f.is_async {
+            if let Some(hir_fn) = &f.hir_fn {
+                let mut edges = crate::mir::HirEdges::default();
+                crate::mir::hir_body_edges(&hir_fn.body, &mut edges);
+                used.extend(edges.iface_calls);
+            }
+        }
+    }
+    used
+}
+
 /// Builds the interface dispatch machinery: a dense, tag-indexed method table per interface plus a
 /// dispatch trampoline per interface method slot.
 ///
@@ -167,6 +217,7 @@ pub(super) fn emit_interface_dispatch(
     mir: &crate::mir::Mir,
     interner: &TypeInterner,
     itab_base: u32,
+    used_slots: &std::collections::HashSet<(usize, usize)>,
 ) -> InterfaceDispatch {
     let ifaces = &mir.interfaces.interfaces;
     if ifaces.is_empty() {
@@ -190,8 +241,10 @@ pub(super) fn emit_interface_dispatch(
         .collect();
 
     // One dense [num_tags * method_count] table per interface, filled from each class's impl.
-    let mut tables: Vec<Vec<i32>> =
-        ifaces.iter().map(|inf| vec![0i32; num_tags * inf.method_count]).collect();
+    let mut tables: Vec<Vec<i32>> = ifaces
+        .iter()
+        .map(|inf| vec![0i32; num_tags * inf.method_count])
+        .collect();
     for imp in &mir.interfaces.impls {
         let tag = match tags.get(&imp.class_ty) {
             Some(t) => *t as usize,
@@ -234,6 +287,12 @@ pub(super) fn emit_interface_dispatch(
     for (iid, inf) in ifaces.iter().enumerate() {
         let k = inf.method_count;
         for slot in 0..k {
+            // Skip trampolines for method slots no surviving call site dispatches through: they are
+            // dead code (nothing references the symbol). The itable data above keeps its full layout
+            // so runtime indexing of the *used* slots stays correct.
+            if !used_slots.contains(&(iid, slot)) {
+                continue;
+            }
             let (signame, ptys, rty) = match func_sig(interner, inf.sigs[slot]) {
                 Some(s) => s,
                 None => continue,
@@ -263,5 +322,9 @@ pub(super) fn emit_interface_dispatch(
         }
     }
 
-    InterfaceDispatch { data, trampolines, heap_start }
+    InterfaceDispatch {
+        data,
+        trampolines,
+        heap_start,
+    }
 }

@@ -41,7 +41,8 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
 
     // Interface dispatch tables live in linear memory just past the interned strings; the heap bump
     // pointer then starts past those. Its trampolines/data are emitted below.
-    let iface = emit_interface_dispatch(mir, interner, heap_base(&strings));
+    let used_slots = used_iface_slots(mir);
+    let iface = emit_interface_dispatch(mir, interner, heap_base(&strings), &used_slots);
 
     // Linear memory + allocator runtime state. The heap bump pointer starts above the itable region.
     let _ = writeln!(out, "(memory {})", MEMORY_PAGES);
@@ -139,7 +140,9 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
         out.push_str("(export \"__dream_new_future\" (func $dream_new_future))\n");
     }
     out.push_str(")\n");
-    out
+    // Whole-module dead-function elimination: drop embedded runtime helpers (and any other funcs)
+    // not reachable from the module's exports / start / function table.
+    strip_dead_functions(&out)
 }
 
 /// Emits the module's `(import ...)` declarations: the fixed host `print_*` builtins (which

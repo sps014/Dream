@@ -116,14 +116,13 @@ impl Compiler {
             let crate::semantics::analyzer::SemanticInfo { hir, .. } = symbol_info;
             let interner = analyzer.interner();
             let mut mir = crate::mir::lower::lower_program(&hir, interner);
-            // Drop unused prelude helpers before optimizing/emitting so the module only carries code
-            // reachable from `main` (see `mir::prune_unreachable`).
-            crate::mir::prune_unreachable(&mut mir);
-            let rc = crate::mir::passes::RcInsertion;
+            // Whole-module optimization: tree-shaking + reference-counting insertion + function
+            // inlining (see `mir::passes::optimize_module`). RC is inserted there, before inlining,
+            // so callee destruction stays deterministic; the per-function pipeline below only cleans
+            // up the merged bodies.
+            crate::mir::passes::optimize_module(&mut mir, interner);
             let pipeline = crate::mir::passes::PassManager::default_pipeline();
             for f in &mut mir.functions {
-                use crate::mir::passes::MirPass;
-                rc.run(f, interner);
                 pipeline.run(f, interner);
             }
             match self.target {

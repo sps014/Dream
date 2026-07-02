@@ -78,6 +78,7 @@ mod strings;
 mod tables;
 mod types;
 mod valuetype;
+mod wat_dce;
 
 // Flat internal re-exports so each submodule can `use super::*` and call sibling helpers
 // exactly as it did when this was one file. Kept private (not part of the crate API).
@@ -89,6 +90,7 @@ use strings::*;
 use tables::*;
 use types::*;
 use valuetype::*;
+use wat_dce::*;
 
 // The external API of the backend, at the historical `crate::mir::emit::…` paths.
 pub use emitter::emit_function;
