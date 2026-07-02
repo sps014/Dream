@@ -13,8 +13,8 @@ const TAG_STRING: i32 = 5;
 /// `char[]` (byte array) is laid out as `[count: i32][bytes...]` at the data pointer.
 const TAG_ARRAY: i32 = 6;
 
-/// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout: `[len: i32][utf8...][\0]`,
-/// so the length prefix gives the byte count directly (the trailing NUL is ignored).
+/// Reads a Dream `string` from `memory` at data pointer `ptr`. Layout: `[len: i32][utf8...]`,
+/// so the length prefix gives the byte count directly (no NUL terminator).
 pub fn read_string_from_memory(memory: &Memory, store: impl AsContext, ptr: i32) -> String {
     let data = memory.data(&store);
     let base = ptr as usize;
@@ -25,7 +25,7 @@ pub fn read_string_from_memory(memory: &Memory, store: impl AsContext, ptr: i32)
     String::from_utf8_lossy(&data[start..end]).into_owned()
 }
 
-/// Reads the caller's exported `memory` and returns the NUL-terminated string at `ptr`.
+/// Reads the caller's exported `memory` and returns the length-prefixed string at `ptr`.
 pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> String {
     let memory = caller
         .get_export("memory")
@@ -35,9 +35,9 @@ pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> String {
 }
 
 /// Allocates `s` as a Dream `string` inside the module's linear memory by calling its exported
-/// `malloc`, storing the length prefix, copying the UTF-8 bytes at `ptr+4`, and NUL-terminating.
-/// Returns the data pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`). Used by host
-/// functions that return strings. Layout: `[len: i32][utf8...][\0]`.
+/// `malloc`, storing the length prefix, and copying the UTF-8 bytes at `ptr+4`. Returns the data
+/// pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`). Used by host functions that
+/// return strings. Layout: `[len: i32][utf8...]` (no NUL terminator).
 pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> i32 {
     let malloc = caller
         .get_export("malloc")
@@ -47,7 +47,7 @@ pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> i32 {
         .expect("unexpected `malloc` signature");
     let bytes = s.as_bytes();
     let ptr = malloc
-        .call(&mut *caller, (4 + bytes.len() as i32 + 1, TAG_STRING))
+        .call(&mut *caller, (4 + bytes.len() as i32, TAG_STRING))
         .expect("malloc call failed");
     let memory = caller
         .get_export("memory")
@@ -57,7 +57,6 @@ pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> i32 {
     let data = memory.data_mut(&mut *caller);
     data[start..start + 4].copy_from_slice(&(bytes.len() as i32).to_le_bytes());
     data[start + 4..start + 4 + bytes.len()].copy_from_slice(bytes);
-    data[start + 4 + bytes.len()] = 0;
     ptr
 }
 

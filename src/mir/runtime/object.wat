@@ -140,11 +140,6 @@
         local.get $d
         i32.const 48
         i32.store8
-        local.get $d
-        i32.const 1
-        i32.add
-        i32.const 0
-        i32.store8
         local.get $p
         i32.const 1
         i32.store
@@ -205,11 +200,6 @@
         i32.add
         local.set $i
     ))
-    local.get $d
-    local.get $i
-    i32.add
-    i32.const 0
-    i32.store8
     local.get $p
     local.get $i
     i32.store
@@ -273,7 +263,8 @@
 )
 (func $char_to_string (param $v i32) (result i32)
     (local $p i32)
-    i32.const 6
+    ;; 4-byte length prefix + 1 char byte
+    i32.const 5
     i32.const {TAG_STRING}
     call $malloc
     local.set $p
@@ -286,12 +277,6 @@
     i32.const 4
     i32.add
     local.get $v
-    i32.store8
-    ;; null terminator at p+5
-    local.get $p
-    i32.const 5
-    i32.add
-    i32.const 0
     i32.store8
     local.get $p
 )
@@ -403,11 +388,6 @@
         local.get $d
         i32.const 48
         i32.store8
-        local.get $d
-        i32.const 1
-        i32.add
-        i32.const 0
-        i32.store8
         local.get $p
         i32.const 1
         i32.store
@@ -469,11 +449,6 @@
         i32.add
         local.set $i
     ))
-    local.get $d
-    local.get $i
-    i32.add
-    i32.const 0
-    i32.store8
     local.get $p
     local.get $i
     i32.store
@@ -543,11 +518,6 @@
         local.get $d
         i32.const 48
         i32.store8
-        local.get $d
-        i32.const 1
-        i32.add
-        i32.const 0
-        i32.store8
         local.get $p
         i32.const 1
         i32.store
@@ -584,11 +554,6 @@
             br $gen
         )
     )
-    local.get $d
-    local.get $i
-    i32.add
-    i32.const 0
-    i32.store8
     local.get $p
     local.get $i
     i32.store

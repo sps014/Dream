@@ -1,6 +1,6 @@
 # string
 
-`string` is a built-in reference type (heap-allocated, null-terminated UTF-8). It is available in every program with no import. These methods are available on any string value.
+`string` is a built-in reference type (heap-allocated, length-prefixed UTF-8, so `size()` is O(1)). It is available in every program with no import. These methods are available on any string value.
 
 Strings can be built with `+` concatenation or [string interpolation](../language/operators.md#string-interpolation) (`$"hi {name}"`).
 

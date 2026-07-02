@@ -154,8 +154,8 @@ export class DreamInstance {
   }
 
   /**
-   * Reads a Dream string at `ptr` (a data pointer). Layout: `[len: i32][utf8...][\0]`, so the
-   * length prefix gives the byte count directly; the trailing NUL is ignored.
+   * Reads a Dream string at `ptr` (a data pointer). Layout: `[len: i32][utf8...]`, so the length
+   * prefix gives the byte count directly (no NUL terminator).
    */
   readString(ptr) {
     if (!ptr) return "";
@@ -168,18 +168,17 @@ export class DreamInstance {
   /**
    * Allocates a Dream string block for `str` and returns its data pointer, so JS-implemented
    * extern functions can return strings back into Dream. Requires the module to export `malloc`.
-   * Layout: `[len: i32][utf8...][\0]`.
+   * Layout: `[len: i32][utf8...]` (no NUL terminator).
    */
   writeString(str) {
     if (typeof this.exports.malloc !== "function") {
       throw new Error("module does not export `malloc`; cannot allocate a string");
     }
     const encoded = new TextEncoder().encode(str);
-    const ptr = this.exports.malloc(4 + encoded.length + 1, TAGS.STRING);
+    const ptr = this.exports.malloc(4 + encoded.length, TAGS.STRING);
     const bytes = this.bytes;
     this.view.setInt32(ptr, encoded.length, true); // length prefix
     bytes.set(encoded, ptr + 4);
-    bytes[ptr + 4 + encoded.length] = 0; // null terminator
     return ptr;
   }
 

@@ -692,7 +692,7 @@ fn exec_println_int_appends_newline() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_print_string_literal() {
-    // Validates the reconciled string ABI: the interned literal's data pointer is a NUL-terminated
+    // Validates the reconciled string ABI: the interned literal's data pointer is a length-prefixed
     // heap string the host reads correctly.
     let code = format!("{SYSTEM_STUB} fun main(): void {{ System.println(\"hello\"); }}");
     assert_eq!(run_and_capture(&code, "main"), "hello\n");
@@ -702,7 +702,7 @@ fn exec_print_string_literal() {
 #[test]
 fn exec_print_bool_via_to_string() {
     // Exercises the bundled `*_to_string` runtime: `bool` renders through `$bool_to_string`, whose
-    // interned "true"/"false" are printed as NUL-terminated strings.
+    // interned "true"/"false" are printed as length-prefixed strings.
     let code = format!(
         "{SYSTEM_STUB}
         fun main(): void {{
@@ -716,7 +716,7 @@ fn exec_print_bool_via_to_string() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_string_len_via_strlen() {
-    // `str.size()` runs the `$strlen` scan over the reconciled NUL-terminated string.
+    // `str.size()` calls `$strlen`, an O(1) load of the length-prefixed string's length word.
     let code = format!(
         "{SYSTEM_STUB}
         fun main(): void {{
@@ -1104,12 +1104,12 @@ fn test_hir_emission_generic_function_instances() {
 fn test_hir_emission_string_literal() {
     // A string literal resolves to its interned data pointer. The runtime constants are interned
     // first (`true`/`false`/`-` then the object-protocol `null`/`<object>`/`[`/`]`/`, `), so the
-    // user's `"hi"` follows them at 1216 (each block now carries a 4-byte length prefix).
+    // user's `"hi"` follows them at 1204 (each block carries a 4-byte length prefix, no NUL).
     let code = "fun greet(): string { return \"hi\"; }";
     let (wat, count) = emit_hir_to_wat(code);
     assert_eq!(count, 1, "the string-returning function should be emitted as HIR");
     assert!(wat.contains("(func $greet"), "missing emitted function:\n{}", wat);
-    assert!(wat.contains("(i32.const 1216)"), "string literal should resolve to its data pointer:\n{}", wat);
+    assert!(wat.contains("(i32.const 1204)"), "string literal should resolve to its data pointer:\n{}", wat);
 }
 
 #[test]
@@ -1280,8 +1280,8 @@ fn test_hir_emission_switch_statement_with_variant_binding() {
 
 #[test]
 fn test_hir_emission_len_builtin() {
-    // `arr.size()` reads the array's stored length word; `str.size()` scans via the runtime `$strlen`
-    // (strings are NUL-terminated heap objects, not length-prefixed).
+    // `arr.size()` reads the array's stored length word; `str.size()` calls the runtime `$strlen`
+    // (both are O(1) loads now that strings are length-prefixed heap objects).
     let code = "
         fun count(xs: int[]): int { return xs.size(); }
         fun slen(s: string): int { return s.size(); }

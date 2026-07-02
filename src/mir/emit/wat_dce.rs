@@ -317,12 +317,9 @@ mod tests {
                  (func (export \"main\") (result i32) call $used)\n\
                  )\n";
         let out = strip_dead_functions(m);
-        assert!(out.contains("$used"), "used func kept:\n{out}");
-        assert!(
-            out.contains("export \"main\""),
-            "exported shim kept:\n{out}"
-        );
-        assert!(!out.contains("$dead"), "dead func removed:\n{out}");
+        assert!(out.contains("$used"), "used func kept:\n{}", out);
+        assert!(out.contains("export \"main\""), "exported shim kept:\n{}", out);
+        assert!(!out.contains("$dead"), "dead func removed:\n{}", out);
     }
 
     #[test]
@@ -334,11 +331,8 @@ mod tests {
                  (export \"a\" (func $a))\n\
                  )\n";
         let out = strip_dead_functions(m);
-        assert!(
-            out.contains("$a") && out.contains("$b"),
-            "closure kept:\n{out}"
-        );
-        assert!(!out.contains("$c"), "dead func removed:\n{out}");
+        assert!(out.contains("$a") && out.contains("$b"), "closure kept:\n{}", out);
+        assert!(!out.contains("$c"), "dead func removed:\n{}", out);
     }
 
     #[test]
@@ -350,7 +344,7 @@ mod tests {
                  (func $dead (result i32) i32.const 6)\n\
                  )\n";
         let out = strip_dead_functions(m);
-        assert!(out.contains("$indirect"), "table entry kept:\n{out}");
-        assert!(!out.contains("$dead"), "dead func removed:\n{out}");
+        assert!(out.contains("$indirect"), "table entry kept:\n{}", out);
+        assert!(!out.contains("$dead"), "dead func removed:\n{}", out);
     }
 }

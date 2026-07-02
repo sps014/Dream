@@ -1,9 +1,10 @@
 ;; String payload layout (at the data pointer `ptr`, i.e. heap block + 12):
 ;;   [ptr+0]        length : i32
 ;;   [ptr+4 .. +len] utf8 bytes
-;;   [ptr+4+len]    NUL (kept as a redundant sentinel for host/C interop)
-;; The 12-byte heap header ([size][tag][ref_count]) still lives at ptr-12 and is unchanged, so
-;; malloc/free/retain/release/object_tag are unaffected. Length is O(1): a single load at `ptr`.
+;; There is no NUL terminator: the length prefix makes it redundant, and every consumer (strlen,
+;; string_eq, hashing, host interop) is length-driven. The 12-byte heap header ([size][tag][ref_count])
+;; still lives at ptr-12 and is unchanged, so malloc/free/retain/release/object_tag are unaffected.
+;; Length is O(1): a single load at `ptr`.
 (func $strlen (param $ptr i32) (result i32)
     local.get $ptr
     i32.load
@@ -20,11 +21,11 @@
     local.get $str2
     call $strlen
     local.set $len2
-    ;; size = 4 (length prefix) + len1 + len2 + 1 (null terminator)
+    ;; size = 4 (length prefix) + len1 + len2
     local.get $len1
     local.get $len2
     i32.add
-    i32.const 5
+    i32.const 4
     i32.add
     i32.const 5
     call $malloc
@@ -93,16 +94,6 @@
             br $start2
         )
     )
-    ;; null terminator at new_ptr + 4 + len1 + len2
-    local.get $new_ptr
-    i32.const 4
-    i32.add
-    local.get $len1
-    local.get $len2
-    i32.add
-    i32.add
-    i32.const 0
-    i32.store8
     local.get $new_ptr
 )
 
@@ -140,8 +131,8 @@
 )
 
 (func $string_eq (param $a i32) (param $b i32) (result i32)
-    (local $ca i32)
-    (local $cb i32)
+    (local $len i32)
+    (local $i i32)
     ;; identical pointers (covers the both-null case) are trivially equal
     local.get $a
     local.get $b
@@ -166,6 +157,8 @@
     ;; O(1) length mismatch check before comparing bytes
     local.get $a
     i32.load
+    local.set $len
+    local.get $len
     local.get $b
     i32.load
     i32.ne
@@ -173,48 +166,40 @@
         i32.const 0
         return
     end
-    ;; advance both past the 4-byte length prefix to the char data
-    local.get $a
-    i32.const 4
-    i32.add
-    local.set $a
-    local.get $b
-    i32.const 4
-    i32.add
-    local.set $b
+    ;; compare the $len char bytes at a+4+i / b+4+i (no NUL sentinel needed)
+    i32.const 0
+    local.set $i
     (block $done
         (loop $cmp
+            local.get $i
+            local.get $len
+            i32.ge_u
+            br_if $done
             local.get $a
+            i32.const 4
+            i32.add
+            local.get $i
+            i32.add
             i32.load8_u
-            local.set $ca
             local.get $b
+            i32.const 4
+            i32.add
+            local.get $i
+            i32.add
             i32.load8_u
-            local.set $cb
-            local.get $ca
-            local.get $cb
             i32.ne
             if
                 i32.const 0
                 return
             end
-            local.get $ca
-            i32.eqz
-            if
-                i32.const 1
-                return
-            end
-            local.get $a
+            local.get $i
             i32.const 1
             i32.add
-            local.set $a
-            local.get $b
-            i32.const 1
-            i32.add
-            local.set $b
+            local.set $i
             br $cmp
         )
     )
-    i32.const 0
+    i32.const 1
 )
 
 (func $char_at (param $ptr i32) (param $i i32) (result i32)
@@ -228,9 +213,9 @@
 
 (func $string_alloc (param $n i32) (result i32)
     (local $p i32)
-    ;; 4-byte length prefix + n data bytes + 1 null terminator
+    ;; 4-byte length prefix + n data bytes (the caller fills the bytes via $string_set)
     local.get $n
-    i32.const 5
+    i32.const 4
     i32.add
     i32.const 5
     call $malloc
@@ -239,15 +224,6 @@
     local.get $p
     local.get $n
     i32.store
-    ;; write the null terminator at [p + 4 + n]; the n data bytes are filled by the caller via
-    ;; $string_set
-    local.get $p
-    i32.const 4
-    i32.add
-    local.get $n
-    i32.add
-    i32.const 0
-    i32.store8
     local.get $p
 )
 

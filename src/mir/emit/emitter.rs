@@ -1111,7 +1111,7 @@ impl Emitter<'_> {
             }
             Rvalue::StrLen(o) => {
                 self.emit_operand(o);
-                self.line("     (call $strlen) ;; strings are NUL-terminated");
+                self.line("     (call $strlen) ;; O(1): length is stored at the string's data pointer");
             }
             Rvalue::Cast(o, from, to) => self.emit_cast(o, *from, *to),
             Rvalue::IsType(o, target) => {

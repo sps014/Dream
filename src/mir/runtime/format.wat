@@ -112,14 +112,6 @@
     i32.const 1
     i32.eq
     (if (then i32.const 0 local.set $i))
-    ;; null terminator at (buf+4)[$i]
-    local.get $buf
-    i32.const 4
-    i32.add
-    local.get $i
-    i32.add
-    i32.const 0
-    i32.store8
     ;; store fractional-part length ($i) at [buf] so $concat_strings sees a valid string
     local.get $buf
     local.get $i

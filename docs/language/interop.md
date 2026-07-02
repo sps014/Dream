@@ -97,7 +97,7 @@ With the ABI loaded, arguments and return values are converted between Dream's h
 For reference types you can read the underlying data with the instance helpers:
 
 ```javascript
-mod.readString(ptr);          // null-terminated UTF-8 string
+mod.readString(ptr);          // length-prefixed UTF-8 string
 mod.readArray(ptr, "int");    // -> number[]
 mod.readList(ptr, "string");  // List<string> -> string[]
 mod.readStruct(ptr, [         // class by field schema (declaration order)

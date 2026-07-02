@@ -647,7 +647,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records `recv.size()` (typed `int`): an array reads its stored length word (`ArrayLen`), while a
-    /// string scans for its NUL terminator at runtime (`StrLen`), since the two have different layouts.
+    /// string reads its length word via `StrLen` (both are O(1) length-prefixed loads, but they remain
+    /// distinct rvalues because the element layouts differ).
     pub(in crate::semantics::analyzer) fn hir_set_array_len(&mut self, recv: Option<HExpr>) {
         if !self.active() {
             self.hir.last = None;
