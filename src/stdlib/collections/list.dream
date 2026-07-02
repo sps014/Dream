@@ -6,6 +6,13 @@
 //
 //   let xs = List<int>();
 
+// Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
+// so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
+// `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
+fun __compare_ascending<T : Comparable<T>>(a: T, b: T): int {
+    return a.compare(b);
+}
+
 class List<T> {
     items: T[];
     count: int;
@@ -182,57 +189,13 @@ class List<T> {
 // unless `int` is made `Comparable`, while `List<Money>.sort()` (with `Money : Comparable<Money>`)
 // works and dispatches `compare` statically (no boxing).
 extend List<T : Comparable<T>> {
-    // Sorts the list in place into ascending order using each element's `compare` method (the same
-    // stable, O(n log n) merge sort as `sort_by`, but with `compare` dispatched statically — no
-    // boxing and no per-comparison allocation). This is why primitives ship a `Comparable` impl:
-    // `List<int>().sort()`, `List<string>().sort()`, etc. work out of the box.
+    // Sorts the list in place into ascending order using each element's `compare` method. This just
+    // hands the natural-order comparator to `sort_by`, so there is a single merge-sort
+    // implementation. This is why primitives ship a `Comparable` impl: `List<int>().sort()`,
+    // `List<string>().sort()`, etc. work out of the box.
     public fun sort(): void {
-        let n = this.count;
-        let buf = Array.new<T>(n);
-        let width = 1;
-        while (width < n) {
-            let i = 0;
-            while (i < n) {
-                let mid = i + width;
-                if (mid > n) {
-                    mid = n;
-                }
-                let right = mid + width;
-                if (right > n) {
-                    right = n;
-                }
-                let a = i;
-                let b = mid;
-                let k = i;
-                while ((a < mid) && (b < right)) {
-                    if (this.items[a].compare(this.items[b]) <= 0) {
-                        buf[k] = this.items[a];
-                        a = a + 1;
-                    } else {
-                        buf[k] = this.items[b];
-                        b = b + 1;
-                    }
-                    k = k + 1;
-                }
-                while (a < mid) {
-                    buf[k] = this.items[a];
-                    a = a + 1;
-                    k = k + 1;
-                }
-                while (b < right) {
-                    buf[k] = this.items[b];
-                    b = b + 1;
-                    k = k + 1;
-                }
-                i = right;
-            }
-            let j = 0;
-            while (j < n) {
-                this.items[j] = buf[j];
-                j = j + 1;
-            }
-            width = width + width;
-        }
+        let cmp: fun(T, T): int = __compare_ascending;
+        this.sort_by(cmp);
     }
 
     // Binary search over a list that is already sorted ascending (by `compare`). Returns the index

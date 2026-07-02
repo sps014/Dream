@@ -1,0 +1,16 @@
+// A bare `return;` exits a `void` function early (an explicit `: void` return annotation is
+// semantically the same as an unannotated function).
+
+fun log_positive(n: int): void {
+    if (n < 0) {
+        return;
+    }
+    System.println(n);
+}
+
+fun main(): void {
+    log_positive(0 - 5);   // no output
+    log_positive(7);       // 7
+    log_positive(0 - 1);   // no output
+    log_positive(42);      // 42
+}

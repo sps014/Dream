@@ -125,9 +125,9 @@ names.sort();            // apple, pear  (lexicographic)
 ```
 
 `sort()` is a [constrained extension](../language/generics.md#generic-constraints) (`T : Comparable<T>`),
-so a user type sorts once it implements `Comparable` — including a value [`struct`](../language/value-structs.md),
-whose `compare` is dispatched statically with no boxing. Calling `sort()` on a type that is *not*
-`Comparable` is a compile error.
+so a user type sorts once it implements `Comparable` — including a value [`struct`](../language/value-structs.md).
+Internally `sort()` just hands a natural-order comparator to `sort_by`, so there is a single merge-sort
+implementation. Calling `sort()` on a type that is *not* `Comparable` is a compile error.
 
 ```dream
 class Money : Comparable<Money> {

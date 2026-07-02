@@ -29,6 +29,26 @@ fun swap<A, B>(a: A, b: B): A {
 }
 ```
 
+### As a first-class value
+
+A generic function can be used as a [first-class function value](functions.md). Its type arguments are
+inferred from the expected function type at the use site, then that instance is monomorphized like any
+other. This is how `List<T>.sort()` reuses the single merge sort in `sort_by`:
+
+```dream
+fun natural_order<T : Comparable<T>>(a: T, b: T): int {
+    return a.compare(b);
+}
+
+fun main(): void {
+    let cmp: fun(int, int): int = natural_order;   // inferred as natural_order<int>
+    // cmp can now be passed anywhere a `fun(int, int): int` is expected.
+}
+```
+
+Because inference needs a target type, a generic function used as a value requires a known function
+type in context (an annotation or a matching parameter); a bare `let f = natural_order;` is an error.
+
 ## Generic classes
 
 Classes can be generic too:

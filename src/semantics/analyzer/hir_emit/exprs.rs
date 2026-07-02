@@ -298,6 +298,33 @@ impl<'a> Analyzer<'a> {
         ));
     }
 
+    /// Like [`hir_set_func_value`], but for a *generic* function used as a value: the target is the
+    /// base template's shared `DefId` plus the concrete `instance` type-args (in binding order), so it
+    /// resolves to the same function-table slot the monomorphized instance body emits. Drops coverage
+    /// if the base name is unregistered.
+    pub(in crate::semantics::analyzer) fn hir_set_generic_func_value(
+        &mut self,
+        base_name: &str,
+        instance: Vec<TypeId>,
+        func_ty: &Type,
+        ret: &Type,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, base_name) else {
+            self.hir.last = None;
+            return;
+        };
+        let tid = self.type_ctx.lower(func_ty);
+        let ret_ty = self.type_ctx.lower(ret);
+        self.hir.last = Some(HExpr::new(
+            tid,
+            HExprKind::Var(Binding::Func(Callee { def, instance, ret: ret_ty })),
+        ));
+    }
+
     /// Records an indirect call `f(args)` where `f` is a function-typed local: the target reads the
     /// local (whose value is a function-table index) and the call dispatches through it. Drops coverage
     /// if the name is not a known local or any argument is not representable.

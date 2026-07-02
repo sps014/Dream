@@ -412,6 +412,14 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         self.check_reserved_name(left, "variable", diagnostics);
+        // Inside a monomorphized generic body, substitute the type parameters in the annotation with
+        // their concrete types (e.g. `let cmp: fun(T, T): int` becomes `fun(int, int): int`), so the
+        // published expected type, the initializer check, and the recorded variable type are all
+        // concrete. Outside a generic body the bindings are empty and this just clones.
+        let mono_annotation = type_annotation
+            .as_ref()
+            .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
+        let type_annotation = &mono_annotation;
         // Empty array literals carry no element type, so the declaration must supply one via an
         // array-typed annotation (e.g. `let xs: int[] = [];`). With a valid annotation the literal is
         // handled on the normal path below (the annotation is published as the expected type, which
@@ -948,6 +956,10 @@ impl<'a> Analyzer<'a> {
                 )?;
                 self.hir_return_value(value);
             }
+            // A bare `return;` is allowed in a `void` function (an explicit `: void` annotation
+            // parses to `Some(Type::Void)`, which is semantically the same as an unannotated
+            // function); it exits early with no value.
+            (None, Some(Type::Void)) => self.hir_return_void(),
             (None, &Some(_)) => {
                 self.hir_fail();
                 diagnostics.report_error(

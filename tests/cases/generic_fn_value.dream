@@ -1,0 +1,18 @@
+// A generic function can be used as a first-class value: its type arguments are inferred from the
+// expected function type at the use site, and the instance is monomorphized like any other generic
+// call. Constraints (`T : Comparable<T>`) are enforced against the inferred type.
+
+fun natural_order<T : Comparable<T>>(a: T, b: T): int {
+    return a.compare(b);
+}
+
+fun apply_cmp(cmp: fun(int, int): int, a: int, b: int): int {
+    return cmp(a, b);
+}
+
+fun main(): void {
+    let f: fun(int, int): int = natural_order;
+    System.println(apply_cmp(f, 3, 9));   // -1
+    System.println(apply_cmp(f, 9, 3));   // 1
+    System.println(apply_cmp(f, 4, 4));   // 0
+}

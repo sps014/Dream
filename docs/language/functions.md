@@ -86,6 +86,15 @@ fun clamp(value: int, lo: int, hi: int): int {
 
 The compiler checks that all code paths return a value when the return type is not `void`.
 
+In a `void` function, a bare `return;` exits early with no value:
+
+```dream
+fun log_positive(n: int): void {
+    if (n < 0) { return; }   // early exit, nothing returned
+    println(n);
+}
+```
+
 ## Recursion
 
 Functions can call themselves:
