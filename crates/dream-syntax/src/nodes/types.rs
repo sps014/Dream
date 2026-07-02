@@ -137,12 +137,7 @@ pub fn foreach_array_local(n: usize) -> String {
 /// the async machinery keys on (the structured `Future<T>` type and its `Future_<inner>` mangling).
 pub const FUTURE_TYPE: &str = "Future";
 
-/// Returns true if a type name denotes a heap-allocated, reference-counted value
-/// (strings, arrays, and structs). `known_struct` decides whether a bare name is a struct.
-pub fn is_reference_type_name(type_name: &str, known_struct: impl Fn(&str) -> bool) -> bool {
-    let base = strip_nullable(type_name);
-    base == "string" || base == "object" || base.ends_with("[]") || known_struct(base)
-}
+
 
 /// Represents a data type in the language
 #[derive(Debug, Clone, PartialEq)]

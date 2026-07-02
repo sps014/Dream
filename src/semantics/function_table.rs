@@ -23,10 +23,14 @@ pub enum OverloadResolution {
 /// parameter type, joined with `.` — a valid WAT identifier character, distinct from the `_`
 /// used by generic monomorphization so the two schemes never collide. E.g. base `add` with
 /// `[int, int]` becomes `add.int.int`; a zero-parameter overload becomes `add.`.
-pub fn overload_key(base: &str, parameters: &[String]) -> String {
+pub fn overload_key(base: &str, parameters: &[String], type_ctx: &mut crate::types::TypeCtx) -> String {
     let mut key = String::from(base);
     key.push('.');
-    key.push_str(&parameters.join("."));
+    let mut parts = Vec::new();
+    for p in parameters {
+        parts.push(type_ctx.lower_str(p).0.to_string());
+    }
+    key.push_str(&parts.join("."));
     key
 }
 
@@ -79,6 +83,7 @@ impl FunctionTable {
         &mut self,
         base: &str,
         mut info: FunctionTableInfo,
+        type_ctx: &mut crate::types::TypeCtx,
     ) -> Result<String, SymbolError> {
         let existing = self.overloads.entry(base.to_string()).or_default();
         if existing.is_empty() {
@@ -114,13 +119,13 @@ impl FunctionTable {
         // Promote a lone bare singleton to its mangled key the moment a second overload appears.
         if existing.len() == 1 && existing[0] == base {
             if let Some(mut first) = self.functions.remove(base) {
-                let first_key = overload_key(base, &first.parameters);
+                let first_key = overload_key(base, &first.parameters, type_ctx);
                 first.name = first_key.clone();
                 self.functions.insert(first_key.clone(), first);
                 existing[0] = first_key;
             }
         }
-        let key = overload_key(base, &info.parameters);
+        let key = overload_key(base, &info.parameters, type_ctx);
         if self.functions.contains_key(&key) {
             return Err(SymbolError::new(format!(
                 "Duplicate overload: '{}' with the same parameter types is already defined",
@@ -143,9 +148,9 @@ impl FunctionTable {
 
     /// The emitted name of the declaration of `base` whose parameter list is `parameters`: the
     /// bare base when `base` is not overloaded, otherwise the signature-mangled key.
-    pub fn resolve_emitted_name(&self, base: &str, parameters: &[String]) -> String {
+    pub fn resolve_emitted_name(&self, base: &str, parameters: &[String], type_ctx: &mut crate::types::TypeCtx) -> String {
         if self.is_overloaded(base) {
-            overload_key(base, parameters)
+            overload_key(base, parameters, type_ctx)
         } else {
             base.to_string()
         }

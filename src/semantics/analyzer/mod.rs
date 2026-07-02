@@ -390,20 +390,6 @@ impl<'a> Analyzer<'a> {
             _ => None,
         }
     }
-
-    /// Splits a mangled generic struct name (e.g. `Box_int`) into its base name and
-    /// concrete type argument, choosing the split so the base is a registered generic
-    /// struct. This tolerates underscores in both the base name and the concrete type.
-    fn demangle_generic_struct(&self, mangled: &str) -> Option<(String, String)> {
-        let parts: Vec<&str> = mangled.split('_').collect();
-        for split in 1..parts.len() {
-            let base = parts[..split].join("_");
-            if self.generic_structs.contains_key(&base) {
-                return Some((base, parts[split..].join("_")));
-            }
-        }
-        None
-    }
     fn analyze_pgm(
         &mut self,
         node: &'a ProgramNode<'a>,

@@ -80,7 +80,16 @@ impl<'a> Analyzer<'a> {
                 }
             }
         } else {
-            let info = self.union_table.get(enum_name).unwrap();
+            let info = match self.union_table.get(enum_name) {
+                Some(info) => info,
+                None => {
+                    return Err(report(
+                        diagnostics,
+                        format!("Enum '{}' could not be resolved", enum_name),
+                        Some(variant.position.clone()),
+                    ));
+                }
+            };
             match info.variant(&variant.text) {
                 Some(v) => v.fields.iter().map(|f| f.type_.clone()).collect(),
                 None => {

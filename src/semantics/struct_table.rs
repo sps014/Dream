@@ -135,12 +135,4 @@ impl StructTable {
     pub fn get_struct(&self, name: &str) -> Option<&StructInfo> {
         self.structs.get(name)
     }
-
-    /// Returns true if `type_name` is a heap-allocated reference type known to this table
-    /// (a string, an array, or a registered struct).
-    pub fn is_reference_type(&self, type_name: &str) -> bool {
-        crate::syntax::nodes::types::is_reference_type_name(type_name, |name| {
-            self.get_struct(name).is_some()
-        })
-    }
 }

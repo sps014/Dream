@@ -279,13 +279,21 @@ impl<'a> Analyzer<'a> {
                 Self::substitute_generic_signature(&mut specialized, &bindings);
                 let specialized_ref: &'a FunctionNode<'a> = self.arena.alloc(specialized);
                 let info = FunctionTableInfo::from(specialized_ref);
-                self.function_table
-                    .add_function(mangled_name.clone(), info)
-                    .unwrap();
+                let _ = self.function_table
+                    .add_function(mangled_name.clone(), info);
                 self.instantiated_generics
                     .insert(mangled_name.clone(), (bindings, specialized_ref));
             }
-            let info = self.function_table.get_function(&mangled_name).unwrap();
+            let info = match self.function_table.get_function(&mangled_name) {
+                Ok(info) => info,
+                Err(_) => {
+                    diagnostics.report_error(
+                        format!("Function '{}' could not be instantiated", mangled_name),
+                        Some(method.position.clone()),
+                    );
+                    return Ok(Some(Type::Unknown));
+                }
+            };
             if info.is_async {
                 return Ok(Some(Type::Unknown));
             }

@@ -26,7 +26,12 @@ impl<'a> Analyzer<'a> {
             crate::types::overload_compatible(&type_ctx.interner, p, a)
         };
         match self.function_table.select_overload(base, arg_types, compat) {
-            OverloadResolution::Unique(key) => Ok(self.function_table.get_function(&key).unwrap()),
+            OverloadResolution::Unique(key) => {
+                match self.function_table.get_function(&key) {
+                    Ok(info) => Ok(info),
+                    Err(_) => Err(format!("Could not resolve function '{}'", key)),
+                }
+            },
             OverloadResolution::None => Err(format!(
                 "No overload of '{}' matches argument types ({})",
                 base,

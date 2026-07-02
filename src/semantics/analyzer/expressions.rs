@@ -799,15 +799,6 @@ impl<'a> Analyzer<'a> {
         ordered.sort_by_key(|(_, f)| f.offset);
         ordered.iter().position(|(n, _)| n.as_str() == field)
     }
-
-    pub fn is_reference_type(&self, type_name: &str) -> bool {
-        if self.struct_table.is_reference_type(type_name) {
-            return true;
-        }
-        // A not-yet-instantiated generic struct instance (e.g. `Box_int`) is also a reference type.
-        let base_name = strip_nullable(type_name);
-        self.demangle_generic_struct(base_name).is_some()
-    }
     pub(super) fn analyze_identifier(
         &mut self,
         id: &SyntaxToken,

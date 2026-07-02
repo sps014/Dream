@@ -902,9 +902,10 @@ impl<'a> Analyzer<'a> {
             if function.is_public {
                 self.check_public_visibility(function, diagnostics);
             }
+            let info = FunctionTableInfo::from(function);
             if let Err(e) = self
                 .function_table
-                .add_overload(&function.name.text, FunctionTableInfo::from(function))
+                .add_overload(&function.name.text, info, &mut self.type_ctx)
             {
                 diagnostics.report_error(e.to_string(), Some(function.name.position));
             }
@@ -923,7 +924,7 @@ impl<'a> Analyzer<'a> {
                 .collect();
             let emitted = self
                 .function_table
-                .resolve_emitted_name(&function.name.text, &param_types);
+                .resolve_emitted_name(&function.name.text, &param_types, &mut self.type_ctx);
             self.type_ctx.register(DefKind::Function, &emitted, vec![]);
         }
         // The entry point is exported under the fixed name `main`. It may be declared as `main()`
@@ -996,7 +997,7 @@ impl<'a> Analyzer<'a> {
                 .collect();
             let key = self
                 .function_table
-                .resolve_emitted_name(&function.name.text, &param_types);
+                .resolve_emitted_name(&function.name.text, &param_types, &mut self.type_ctx);
             symbol_table_map.insert(key, table);
         }
         Ok(())
@@ -1057,7 +1058,7 @@ impl<'a> Analyzer<'a> {
                     .collect();
                 let key = self
                     .function_table
-                    .resolve_emitted_name(&method.name.text, &param_types);
+                    .resolve_emitted_name(&method.name.text, &param_types, &mut self.type_ctx);
                 symbol_table_map.insert(key, table);
                 progressed = true;
             }
@@ -1258,9 +1259,10 @@ impl<'a> Analyzer<'a> {
             let method_ref = self.arena.alloc(new_method);
             self.struct_methods.push((method_ref, bindings.clone()));
 
+            let info = FunctionTableInfo::from(method_ref);
             if let Err(e) = self
                 .function_table
-                .add_overload(&mangled_name, FunctionTableInfo::from(method_ref))
+                .add_overload(&mangled_name, info, &mut self.type_ctx)
             {
                 diagnostics.report_error(e.to_string(), Some(method.name.position));
             }
@@ -1273,7 +1275,7 @@ impl<'a> Analyzer<'a> {
         for (mangled_name, param_types) in registered {
             let emitted = self
                 .function_table
-                .resolve_emitted_name(&mangled_name, &param_types);
+                .resolve_emitted_name(&mangled_name, &param_types, &mut self.type_ctx);
             if emitted != mangled_name {
                 self.type_ctx
                     .register(DefKind::Function, &emitted, vec![]);
@@ -1494,7 +1496,7 @@ impl<'a> Analyzer<'a> {
                 if method.parameters.len() != 1 {
                     diagnostics.report_error(
                         format!("setter '{}' must declare exactly one parameter", prop),
-                        Some(method.name.position),
+                        Some(method.name.position.clone()),
                     );
                 }
             }

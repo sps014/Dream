@@ -126,7 +126,7 @@ impl<'a> Analyzer<'a> {
             .collect();
         let lookup_name = self
             .function_table
-            .resolve_emitted_name(&function.name.text, &param_types);
+            .resolve_emitted_name(&function.name.text, &param_types, &mut self.type_ctx);
         let def = self
             .type_ctx
             .defs

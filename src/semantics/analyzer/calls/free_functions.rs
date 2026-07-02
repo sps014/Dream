@@ -142,7 +142,16 @@ impl<'a> Analyzer<'a> {
         // Monomorphization: bind every generic parameter to a concrete type, then register
         // (once) a specialized signature under the mangled name.
         if self.generic_functions.contains_key(&function_name) {
-            let template = *self.generic_functions.get(&function_name).unwrap();
+            let template = match self.generic_functions.get(&function_name) {
+                Some(template) => *template,
+                None => {
+                    diagnostics.report_error(
+                        format!("Generic function '{}' could not be resolved", function_name),
+                        Some(name.position.clone()),
+                    );
+                    return Ok(Type::Unknown);
+                }
+            };
             let bindings = self.infer_generic_bindings(
                 template,
                 generic_args,
