@@ -75,7 +75,9 @@ println(JSON.stringify_pretty(v, 2));
 ## Auto-derive with `@json`
 
 Mark a class `@json` and the compiler generates its `to_json` / `from_json` converters, so the
-class round-trips with no boilerplate:
+class round-trips with no boilerplate. This works for a value [`struct`](../language/value-structs.md)
+too — `@json struct Point { public x: int; public y: int; constructor(x: int, y: int) { ... } }`
+serializes and deserializes exactly like a class:
 
 ```dream
 @json

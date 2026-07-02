@@ -635,7 +635,14 @@ impl<'a> Analyzer<'a> {
                 validated.push(iface_name);
             }
         }
-        self.implements.insert(class_name.to_string(), validated);
+        // Merge into any interfaces already recorded for this type (a class may gain further
+        // interfaces through an `extend : Iface` block) rather than replacing them.
+        let entry = self.implements.entry(class_name.to_string()).or_default();
+        for iface in validated {
+            if !entry.contains(&iface) {
+                entry.push(iface);
+            }
+        }
     }
 
     /// Pass 0: register every (non-generic) struct and its methods; stash generic templates.
@@ -1340,6 +1347,20 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
             self.register_methods_for(&target, &ext.methods, &GenericBindings::new(), diagnostics);
+            // An `extend Type : Iface { ... }` block records that its target implements the
+            // interface(s), so the target (including a primitive like `int`) participates in
+            // interface dispatch and satisfies generic constraints (`T : Comparable<T>`). The
+            // block's own methods supply the required signatures.
+            if !ext.implements.is_empty() {
+                self.validate_implements(
+                    &target,
+                    &ext.implements,
+                    &ext.methods,
+                    &GenericBindings::new(),
+                    ext.target.position,
+                    diagnostics,
+                );
+            }
         }
     }
 

@@ -104,6 +104,10 @@ pub struct ExtendNode<'a> {
     /// unconstrained.
     pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
     pub methods: Vec<FunctionNode<'a>>,
+    /// Interfaces this `extend` block declares its target satisfies (`extend int : Comparable<int>`).
+    /// Validated in analysis, which records the implementation so the target participates in
+    /// interface dispatch and generic constraints. Empty for a plain `extend`.
+    pub implements: Vec<Type>,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,
@@ -120,6 +124,7 @@ impl<'a> ExtendNode<'a> {
             generic_parameters,
             generic_constraints: Vec::new(),
             methods,
+            implements: Vec::new(),
             file_path: None,
         }
     }

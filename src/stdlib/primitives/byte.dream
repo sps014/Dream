@@ -2,7 +2,18 @@
 // representation (a stack `i32` holding a value in [0, 255], one byte in memory). Auto-imported
 // into every program.
 
-extend byte {
+extend byte : Comparable<byte> {
+    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<byte>`.
+    public fun compare(other: byte): int {
+        if (this < other) {
+            return 0 - 1;
+        }
+        if (this > other) {
+            return 1;
+        }
+        return 0;
+    }
+
     // The smaller of this and `other`.
     public fun min(other: byte): byte {
         if (this < other) {

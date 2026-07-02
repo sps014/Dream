@@ -102,27 +102,32 @@ for (let x in nums) {
 
 ## Sorting
 
-A list sorts in place, ascending. There are two forms:
-
-### sort_by
-
-`sort_by(cmp)` takes a comparator function `fun(T, T): int` that returns a negative number, zero, or a
-positive number when the first argument is ordered before, equal to, or after the second. This works
-for any element type.
-
-```dream
-fun by_desc(a: int, b: int): int { return b - a; }
-
-nums.sort_by(by_desc);   // largest first
-```
+A list sorts in place, ascending, with a **stable, O(n log n) merge sort**. There are two forms.
 
 ### sort
 
-`sort()` is available when the element type implements [`Comparable<T>`](../language/interfaces.md#built-in-equatable-and-comparable),
-ordering elements with their `compare` method. It is a [constrained extension](../language/generics.md#generic-constraints):
-`List<int>.sort()` is a compile error unless `int` is made `Comparable`, while a user type that
-implements `Comparable` (including a value [`struct`](../language/value-structs.md)) sorts with no
-boxing.
+`sort()` orders the list using each element's [`Comparable<T>`](../language/interfaces.md#built-in-equatable-and-comparable)
+`compare` method. **Every primitive** (`int`, `long`, `uint`, `ulong`, `byte`, `char`, `float`,
+`double`, `string`) ships a `Comparable` implementation, so `List<int>().sort()`,
+`List<string>().sort()`, etc. work out of the box:
+
+```dream
+let nums = List<int>();
+nums.push(5);
+nums.push(1);
+nums.push(3);
+nums.sort();             // 1, 3, 5
+
+let names = List<string>();
+names.push("pear");
+names.push("apple");
+names.sort();            // apple, pear  (lexicographic)
+```
+
+`sort()` is a [constrained extension](../language/generics.md#generic-constraints) (`T : Comparable<T>`),
+so a user type sorts once it implements `Comparable` — including a value [`struct`](../language/value-structs.md),
+whose `compare` is dispatched statically with no boxing. Calling `sort()` on a type that is *not*
+`Comparable` is a compile error.
 
 ```dream
 class Money : Comparable<Money> {
@@ -135,6 +140,30 @@ let prices = List<Money>();
 prices.push(Money(300));
 prices.push(Money(100));
 prices.sort();           // ascending by cents: 100, 300
+```
+
+### sort_by
+
+`sort_by(cmp)` takes a comparator function `fun(T, T): int` that returns a negative number, zero, or a
+positive number when the first argument is ordered before, equal to, or after the second. Use it for
+custom orderings or element types that are not `Comparable`.
+
+```dream
+fun by_desc(a: int, b: int): int { return b - a; }
+
+nums.sort_by(by_desc);   // largest first
+```
+
+### binary_search
+
+`binary_search(value)` looks for `value` in a list that is **already sorted ascending** (by `compare`),
+returning `Some(index)` of a match or `None` if absent, in O(log n). Like `sort()`, it requires
+`T : Comparable<T>`.
+
+```dream
+nums.sort();
+let at = nums.binary_search(3);   // Some(index) if present, else None
+println(at.unwrap_or(0 - 1));
 ```
 
 ## Indexing and iteration

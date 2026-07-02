@@ -221,6 +221,24 @@ fn test_parse_generic_constraints() {
 }
 
 #[test]
+fn test_parse_extend_implements() {
+    // `extend Type : Iface { ... }` records the interface(s) in `ExtendNode::implements`, letting a
+    // primitive or other non-class type declare it satisfies an interface.
+    let code = "extend int : Comparable<int> { public fun compare(other: int): int { return 0; } }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false, "extend implements should parse cleanly");
+    assert_eq!(program.extends.len(), 1);
+    let ext = &program.extends[0];
+    assert_eq!(ext.target.text, "int");
+    assert_eq!(ext.implements.len(), 1);
+    assert_eq!(ext.implements[0].get_type(), "Comparable_int");
+    assert_eq!(ext.methods.len(), 1);
+    assert_eq!(ext.methods[0].name.text, "compare");
+}
+
+#[test]
 fn test_parse_switch_expression_with_patterns() {
     let code = "fun f(s: Shape): int { return switch (s) { Circle(r) => r, Empty => 0, _ => 1 }; }";
     let arena = bumpalo::Bump::new();

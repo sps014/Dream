@@ -406,6 +406,25 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let (generic_parameters, generic_constraints) = self.take_generic_params();
 
+        // Optional `: Iface1, Comparable<int>, ...` implements clause: an `extend` block may declare
+        // that its target satisfies one or more interfaces (e.g. `extend int : Comparable<int>`),
+        // making primitives and other non-class types participate in interface dispatch. The block
+        // must provide a matching method for every interface method (validated in analysis).
+        let mut implements = Vec::new();
+        if self.current_token().kind == TokenKind::ColonToken {
+            self.match_token(TokenKind::ColonToken);
+            loop {
+                let iter = self.current_token_index;
+                implements.push(self.parse_type()?);
+                if self.current_token().kind == TokenKind::CommaToken {
+                    self.match_token(TokenKind::CommaToken);
+                } else {
+                    break;
+                }
+                self.ensure_progress(iter);
+            }
+        }
+
         self.match_token(TokenKind::CurlyOpenBracketToken);
 
         let mut methods = Vec::new();
@@ -437,6 +456,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::CurlyCloseBracketToken);
         let mut node = crate::nodes::ExtendNode::new(target, generic_parameters, methods);
         node.generic_constraints = generic_constraints;
+        node.implements = implements;
         Ok(node)
     }
 

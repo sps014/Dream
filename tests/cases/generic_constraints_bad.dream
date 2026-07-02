@@ -1,11 +1,17 @@
-// `List<T>.sort()` is a constrained extension requiring `T : Comparable<T>`. `int` does not
-// implement `Comparable<int>`, so calling `sort()` on a `List<int>` is a compile-time constraint
-// violation.
+// `List<T>.sort()` is a constrained extension requiring `T : Comparable<T>`. `Widget` does not
+// implement `Comparable<Widget>`, so calling `sort()` on a `List<Widget>` is a compile-time
+// constraint violation. (Primitives like `int` now ship a `Comparable` impl, so `List<int>.sort()`
+// works — this checks the failure path for a type that does not.)
+
+class Widget {
+    public id: int;
+    constructor(id: int) { this.id = id; }
+}
 
 fun main(): void {
-    let xs = List<int>();
-    xs.push(3);
-    xs.push(1);
+    let xs = List<Widget>();
+    xs.push(Widget(3));
+    xs.push(Widget(1));
     xs.sort();
     System.println(xs.size());
 }

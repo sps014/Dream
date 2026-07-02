@@ -1,7 +1,18 @@
 // The `ulong` primitive (unsigned 64-bit) as an extensible class. `ulong` keeps its runtime
 // representation (a stack `i64` with unsigned operations). Auto-imported into every program.
 
-extend ulong {
+extend ulong : Comparable<ulong> {
+    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<ulong>`.
+    public fun compare(other: ulong): int {
+        if (this < other) {
+            return 0 - 1;
+        }
+        if (this > other) {
+            return 1;
+        }
+        return 0;
+    }
+
     // The smaller of this and `other`.
     public fun min(other: ulong): ulong {
         if (this < other) {

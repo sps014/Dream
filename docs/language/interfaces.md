@@ -47,6 +47,25 @@ class Robot : Animal, Serializable {
 If a class declares `: Animal` but omits one of the interface's methods (or declares it with the
 wrong signature), compilation fails with a clear error.
 
+## Implementing an interface with `extend`
+
+An `extend` block may also carry an `implements` clause, letting you make an **existing** type —
+including a primitive — satisfy an interface. The block must provide the interface's methods:
+
+```dream
+extend int : Comparable<int> {
+    public fun compare(other: int): int {
+        if (this < other) { return 0 - 1; }
+        if (this > other) { return 1; }
+        return 0;
+    }
+}
+```
+
+This is exactly how the prelude makes primitives `Comparable` so `List<int>().sort()` works. The
+implementation is validated the same way as a class's `implements` clause, and the type then
+satisfies [generic constraints](generics.md#generic-constraints) (`T : Comparable<T>`).
+
 ## Using an interface-typed value
 
 A class value is accepted anywhere its interface is expected — this implicit **upcast** needs no
@@ -217,6 +236,11 @@ interface Comparable<T> { fun compare(other: T): int; }
 A type implements them against itself (`class Money : Comparable<Money>, Equatable<Money>`). By
 convention `compare` returns a negative number, zero, or a positive number when `this` is ordered
 before, equal to, or after `other`.
+
+Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude
+`extend` blocks — see [Implementing an interface with `extend`](#implementing-an-interface-with-extend)),
+so `List<int>().sort()`, `List<string>().binary_search(x)`, and comparisons on primitives in generic
+code all work without any extra code.
 
 - **`==` / `!=` route to `equals`.** When both operands are the same user type that implements
   `Equatable<Self>`, `a == b` lowers to `a.equals(b)` (and `a != b` to its negation). Primitives and

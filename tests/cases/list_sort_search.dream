@@ -1,0 +1,43 @@
+// `List<T>.sort()` works for any primitive out of the box (primitives ship a `Comparable` impl),
+// `sort_by` takes an explicit comparator, and `binary_search` finds elements in a sorted list.
+
+fun desc(a: int, b: int): int {
+    return b - a;
+}
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(5);
+    xs.push(3);
+    xs.push(8);
+    xs.push(1);
+    xs.push(9);
+    xs.push(2);
+    xs.push(7);
+
+    xs.sort();
+    let i = 0;
+    while (i < xs.size()) {
+        System.print(xs.get(i).unwrap_or(0 - 1));
+        System.print(" ");
+        i = i + 1;
+    }
+    System.println("");
+
+    System.println(xs.binary_search(8).unwrap_or(0 - 1));   // 5 (index of 8)
+    System.println(xs.binary_search(4).is_none());          // true (absent)
+
+    xs.sort_by(desc);
+    System.println(xs.get(0).unwrap_or(0 - 1));             // 9
+
+    let ws = List<string>();
+    ws.push("pear");
+    ws.push("apple");
+    ws.push("banana");
+    ws.sort();
+    let j = 0;
+    while (j < ws.size()) {
+        System.println(ws.get(j).unwrap_or("?"));
+        j = j + 1;
+    }
+}

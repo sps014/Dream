@@ -2,7 +2,19 @@
 // `i32`); these are ordinary methods dispatched on the receiver via `this`, plus a `static`
 // factory that parses text. Auto-imported into every program.
 
-extend int {
+extend int : Comparable<int> {
+    // Orders this value against `other`: negative when less, zero when equal, positive when greater.
+    // Implementing `Comparable<int>` lets `List<int>.sort()` / `binary_search` work out of the box.
+    public fun compare(other: int): int {
+        if (this < other) {
+            return 0 - 1;
+        }
+        if (this > other) {
+            return 1;
+        }
+        return 0;
+    }
+
     // Absolute value of this integer.
     public fun abs(): int {
         if (this < 0) {
