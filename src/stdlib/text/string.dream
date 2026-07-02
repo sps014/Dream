@@ -1,11 +1,7 @@
-// The `string` primitive as an extensible class. A `string` is a heap-allocated, null-terminated
-// byte buffer (reference type); these methods read and derive new strings from it using the
-// low-level `char_at` / `string_alloc` / `string_set` builtins. Auto-imported into every program.
+// The `string` primitive.
 
 extend string : Comparable<string> {
-    // Orders this string against `other` lexicographically by character code point: negative when
-    // this sorts first, zero when equal, positive otherwise. Implements `Comparable<string>` so
-    // `List<string>.sort()` / `binary_search` work out of the box.
+    // Orders this string against `other` lexicographically.
     public fun compare(other: string): int {
         let n = this.size();
         let m = other.size();
@@ -30,11 +26,11 @@ extend string : Comparable<string> {
         return 0;
     }
 
-    // Low-level buffer primitives (lowered to the `$string_alloc` / `$string_set` runtime helpers).
-    // `String.alloc(n)` reserves an n-char buffer; `String.set(s, i, c)` writes char `c` at index
-    // `i`. The read side is the builtin pseudo-method `s.char_at(i)`.
+    // Low-level string allocation.
     @intrinsic("string_alloc")
     static extern fun alloc(n: int): string;
+
+    // Low-level string character assignment.
     @intrinsic("string_set")
     static extern fun set(s: string, i: int, c: char): void;
 
@@ -43,19 +39,17 @@ extend string : Comparable<string> {
         return this.size() == 0;
     }
 
-    // Indexer: `s[i]` reads the character at position `i` (a `char`), the same value as the
-    // low-level `s.char_at(i)`. Out-of-range access is undefined, exactly like array indexing.
+    // Gets the character at the specified index.
     public fun get(index: int): char {
         return this.char_at(index);
     }
 
-    // Enumerator for `for (let c in s)`. Returns a fresh cursor over this string's characters.
+    // Gets an iterator for the string's characters.
     public fun iterator(): StringIterator {
         return StringIterator(this);
     }
 
-    // A new string containing the characters in the half-open range [start, end). A non-positive
-    // length yields the empty string.
+    // Gets a substring from start to end.
     public fun substring(start: int, end: int): string {
         let len = end - start;
         if (len < 0) {
@@ -70,7 +64,7 @@ extend string : Comparable<string> {
         return result;
     }
 
-    // The index of the first occurrence of character `target`, or `None` if absent.
+    // The index of the first occurrence of `target`, or `None`.
     public fun index_of(target: char): Option<int> {
         let n = this.size();
         let i = 0;
@@ -83,7 +77,7 @@ extend string : Comparable<string> {
         return Option.None;
     }
 
-    // True if `sub` occurs anywhere in this string (the empty string is always contained).
+    // True if `sub` occurs anywhere in this string.
     public fun contains(sub: string): bool {
         let n = this.size();
         let m = sub.size();
@@ -120,7 +114,7 @@ extend string : Comparable<string> {
         return this._matches_at(suffix, offset);
     }
 
-    // A new string with every ASCII uppercase letter lowercased.
+    // A new string with every uppercase letter lowercased.
     public fun to_lower(): string {
         let n = this.size();
         let result = String.alloc(n);
@@ -133,7 +127,7 @@ extend string : Comparable<string> {
         return result;
     }
 
-    // A new string with every ASCII lowercase letter uppercased.
+    // A new string with every lowercase letter uppercased.
     public fun to_upper(): string {
         let n = this.size();
         let result = String.alloc(n);
@@ -146,7 +140,7 @@ extend string : Comparable<string> {
         return result;
     }
 
-    // A new string with leading and trailing ASCII whitespace removed.
+    // A new string with leading and trailing whitespace removed.
     public fun trim(): string {
         let n = this.size();
         let start = 0;
@@ -160,7 +154,7 @@ extend string : Comparable<string> {
         return this.substring(start, end);
     }
 
-    // A new string consisting of this string repeated `times` times (<= 0 yields the empty string).
+    // A new string repeated `times` times.
     public fun repeat(times: int): string {
         let n = this.size();
         let total = n * times;
@@ -185,8 +179,7 @@ extend string : Comparable<string> {
         return this == other;
     }
 
-    // Splits this string on the single character `sep`, returning every piece between separators
-    // (including empty pieces). A string with no separators yields a one-element array.
+    // Splits this string on the single character `sep`.
     public fun split(sep: char): string[] {
         let n = this.size();
         let parts = 1;
@@ -213,8 +206,7 @@ extend string : Comparable<string> {
         return result;
     }
 
-    // A new string with every occurrence of `old` replaced by `replacement`. An empty `old`
-    // returns the string unchanged.
+    // A new string with every occurrence of `old` replaced by `replacement`.
     public fun replace(old: string, replacement: string): string {
         let m = old.size();
         if (m == 0) {
@@ -235,13 +227,11 @@ extend string : Comparable<string> {
         return result;
     }
 
-    // Private helper: true if the character at `index` is ASCII whitespace.
     fun _is_space_at(index: int): bool {
         let c = this.char_at(index);
         return c.is_whitespace();
     }
 
-    // Private helper: true if `sub` matches this string starting at byte `offset`.
     fun _matches_at(sub: string, offset: int): bool {
         let m = sub.size();
         let j = 0;

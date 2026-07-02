@@ -1,15 +1,4 @@
-// Native JSON for Dream: a kind-tagged `JsonValue` tree. Auto-imported into every program.
-//
-// Dream has no tagged unions, so `JsonValue` carries an `int kind` tag and a field per shape;
-// only the field matching the active kind is meaningful. Containers (`items` / `obj_*`) are
-// allocated lazily and stay empty for scalars.
-//
-// JsonValue.kind values:
-//   0 = null, 1 = bool, 2 = number, 3 = string, 4 = array, 5 = object
-//
-// Backed by the standard generic `List`: `items` holds array elements, while `obj_keys` and the
-// parallel `obj_vals` hold object entries as an insertion-ordered association list (so stringify
-// is deterministic). Using `List<T>` fields keeps the value tree free of raw-array bookkeeping.
+// Native JSON value tree.
 class JsonValue {
     public kind: int;
     public bool_val: bool;
@@ -29,74 +18,91 @@ class JsonValue {
         this.obj_vals = obj_vals;
     }
 
-    // --- builders ---------------------------------------------------------------------------
-
-    // Allocates a fresh JsonValue of kind `k` with empty backing lists.
+    // Allocates a fresh JsonValue.
     static fun _new(k: int): JsonValue {
         return JsonValue(k, false, 0.0d, "", List<JsonValue>(), List<string>(), List<JsonValue>());
     }
 
+    // A new null JSON value.
     public static fun none(): JsonValue {
         return JsonValue._new(0);
     }
+
+    // A new boolean JSON value.
     public static fun boolean(b: bool): JsonValue {
         let v = JsonValue._new(1);
         v.bool_val = b;
         return v;
     }
+
+    // A new number JSON value.
     public static fun number(n: double): JsonValue {
         let v = JsonValue._new(2);
         v.num_val = n;
         return v;
     }
+
+    // A new number JSON value from int.
     public static fun from_int(n: int): JsonValue {
         return JsonValue.number((double)n);
     }
+
+    // A new string JSON value.
     public static fun from_string(s: string): JsonValue {
         let v = JsonValue._new(3);
         v.str_val = s;
         return v;
     }
-    // A new, empty JSON array. (`object`/`string` are reserved type names, so the object builder
-    // is named `dict`.)
+
+    // A new empty JSON array.
     public static fun array(): JsonValue {
         return JsonValue._new(4);
     }
+
+    // A new empty JSON object.
     public static fun dict(): JsonValue {
         return JsonValue._new(5);
     }
 
-    // --- inspection -------------------------------------------------------------------------
-
+    // The kind of JSON value.
     public fun kind_of(): int {
         return this.kind;
     }
+
+    // True if the value is null.
     public fun is_null(): bool {
         return this.kind == 0;
     }
+
+    // True if the value is an array.
     public fun is_array(): bool {
         return this.kind == 4;
     }
+
+    // True if the value is an object.
     public fun is_object(): bool {
         return this.kind == 5;
     }
 
-    // --- scalar accessors -------------------------------------------------------------------
-
+    // Returns the value as a boolean.
     public fun as_bool(): bool {
         return this.bool_val;
     }
+
+    // Returns the value as a double.
     public fun as_double(): double {
         return this.num_val;
     }
+
+    // Returns the value as an integer.
     public fun as_int(): int {
         return (int)this.num_val;
     }
+
+    // Returns the value as a string.
     public fun as_string(): string {
         return this.str_val;
     }
-
-    // --- object accessors -------------------------------------------------------------------
 
     fun _find_key(key: string): int {
         let i = 0;
@@ -109,10 +115,12 @@ class JsonValue {
         return 0 - 1;
     }
 
+    // True if the object has the given key.
     public fun has(key: string): bool {
         return this._find_key(key) >= 0;
     }
-    // The value for `key`, or `None` if this object has no such key.
+
+    // The value for `key`, or `None`.
     public fun get(key: string): Option<JsonValue> {
         let idx = this._find_key(key);
         if (idx >= 0) {
@@ -120,6 +128,8 @@ class JsonValue {
         }
         return Option.None;
     }
+
+    // Sets the value for `key`.
     public fun set(key: string, value: JsonValue): void {
         let idx = this._find_key(key);
         if (idx >= 0) {
@@ -129,25 +139,28 @@ class JsonValue {
             this.obj_vals.push(value);
         }
     }
-    // The object key at insertion index `index`, or `None` if out of range.
+
+    // The object key at `index`, or `None`.
     public fun key_at(index: int): Option<string> {
         return this.obj_keys.get(index);
     }
+
+    // The keys of the object.
     public fun keys(): List<string> {
         return this.obj_keys;
     }
 
-    // --- array accessors --------------------------------------------------------------------
-
-    // The array element at `index`, or `None` if out of range.
+    // The array element at `index`, or `None`.
     public fun at(index: int): Option<JsonValue> {
         return this.items.get(index);
     }
+
+    // Appends a value to the array.
     public fun push(value: JsonValue): void {
         this.items.push(value);
     }
 
-    // Element count for arrays/objects (0 for scalars).
+    // Element count for arrays/objects.
     public fun size(): int {
         if (this.kind == 5) {
             return this.obj_keys.size();

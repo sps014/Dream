@@ -1,8 +1,7 @@
-// The `double` primitive as an extensible class (a 64-bit IEEE float at runtime).
-// Auto-imported into every program.
+// The `double` primitive as an extensible class.
 
 extend double : Comparable<double> {
-    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<double>`.
+    // Orders this value against `other`.
     public fun compare(other: double): int {
         if (this < other) {
             return 0 - 1;
@@ -37,10 +36,7 @@ extend double : Comparable<double> {
         return other;
     }
 
-    // Parses a decimal double from `text`, supporting an optional sign, a fractional part, and a
-    // `e`/`E` exponent (e.g. "-3.14", "1.5e-3"). Parsing stops at the first character that does not
-    // fit the grammar. Returns `Err` for an empty string or one containing no digits; otherwise
-    // `Ok` with the value.
+    // Parses a decimal double from `text`.
     public static fun parse(text: string): Result<double, string> {
         let n = text.size();
         if (n == 0) {

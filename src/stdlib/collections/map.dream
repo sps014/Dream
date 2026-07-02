@@ -1,13 +1,4 @@
-// Dream standard Map<K, V>, auto-imported into every program.
-//
-// An open-addressing hash map (linear probing with tombstones), monomorphized per concrete
-// key/value type so `Map<string, int>` compiles to dedicated WASM.
-//   `states`:   0 = empty, 1 = occupied, 2 = tombstone.
-//   `defaults`: a one-slot, never-written buffer whose [0] is the zero value of V,
-//               returned by `get` on a miss.
-//
-//   let m = Map<string, int>();
-
+// A generic open-addressing hash map.
 class Map<K, V> {
     keys: K[];
     values: V[];
@@ -17,8 +8,7 @@ class Map<K, V> {
     used: int;
     cap: int;
 
-    // Allocates an empty map with a small initial capacity, e.g. `let m = Map<string, int>();`.
-    // The backing arrays must be allocated up front, so construction always goes through here.
+    // Allocates an empty map.
     constructor() {
         this.keys = Array.new<K>(8);
         this.values = Array.new<V>(8);
@@ -34,7 +24,7 @@ class Map<K, V> {
         return this.count;
     }
 
-    // Initial probe index for a key, normalized into [0, cap).
+    // Initial probe index for a key.
     public fun home(key: K): int {
         let h = key.hash_code();
         let idx = h % this.cap;
@@ -44,7 +34,7 @@ class Map<K, V> {
         return idx;
     }
 
-    // Index of an occupied slot holding `key`, or -1.
+    // Index of an occupied slot holding a key, or -1.
     public fun find(key: K): int {
         let idx = this.home(key);
         let result = -1;
@@ -71,7 +61,7 @@ class Map<K, V> {
         return result;
     }
 
-    // Grows and rehashes when the table gets too full (load factor ~0.75).
+    // Grows and rehashes the map when it gets too full.
     public fun rehash(): void {
         let old_keys = this.keys;
         let old_values = this.values;
@@ -96,12 +86,12 @@ class Map<K, V> {
         }
     }
 
-    // Index-assignment support (`map[key] = value`), an alias for `put`.
+    // Sets the value for a key.
     public fun set(key: K, value: V): void {
         this.put(key, value);
     }
 
-    // Inserts or updates the value for `key`.
+    // Inserts or updates the value for a key.
     public fun put(key: K, value: V): void {
         if ((this.used + 1) * 4 >= this.cap * 3) {
             this.rehash();
@@ -145,12 +135,12 @@ class Map<K, V> {
         }
     }
 
-    // True if `key` has an associated value.
+    // True if the map contains the key.
     public fun contains(key: K): bool {
         return this.find(key) >= 0;
     }
 
-    // Value for `key`, or `None` if the key is absent.
+    // Gets the value for a key, or None.
     public fun get(key: K): Option<V> {
         let i = this.find(key);
         if (i >= 0) {
@@ -159,7 +149,7 @@ class Map<K, V> {
         return Option.None;
     }
 
-    // Value for `key`, or `fallback` if absent.
+    // Gets the value for a key, or a fallback.
     public fun get_or(key: K, fallback: V): V {
         let i = this.find(key);
         if (i >= 0) {
@@ -168,7 +158,7 @@ class Map<K, V> {
         return fallback;
     }
 
-    // Removes `key` if present, returning true if a value was removed.
+    // Removes a key and returns true if it was removed.
     public fun remove(key: K): bool {
         let i = this.find(key);
         if (i >= 0) {
@@ -180,12 +170,12 @@ class Map<K, V> {
         return false;
     }
 
-    // True when the map holds no key/value pairs.
+    // True if the map is empty.
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
-    // Removes every entry, resetting the map to its initial empty capacity.
+    // Removes all entries.
     public fun clear(): void {
         this.keys = Array.new<K>(8);
         this.values = Array.new<V>(8);
@@ -195,7 +185,7 @@ class Map<K, V> {
         this.cap = 8;
     }
 
-    // A freshly allocated array of every stored key, in unspecified order.
+    // Gets all keys.
     public fun keys(): K[] {
         let result = Array.new<K>(this.count);
         let i = 0;
@@ -210,8 +200,7 @@ class Map<K, V> {
         return result;
     }
 
-    // A freshly allocated array of every stored value, in unspecified order (key-aligned with
-    // `keys()` when the map is not mutated between calls).
+    // Gets all values.
     public fun values(): V[] {
         let result = Array.new<V>(this.count);
         let i = 0;
@@ -226,9 +215,7 @@ class Map<K, V> {
         return result;
     }
 
-    // Enumerator for `for (let pair in map)`, yielding one `KeyValuePair<K, V>` per entry (in
-    // unspecified order). Built from snapshots of the public `keys()`/`values()` arrays, so it never
-    // touches the map's private hash-table slots.
+    // Gets an iterator for the map.
     public fun iterator(): MapIterator<K, V> {
         return MapIterator<K, V>(this.keys(), this.values());
     }
