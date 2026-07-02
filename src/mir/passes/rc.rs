@@ -66,6 +66,7 @@ impl MirPass for RcInsertion {
                 };
                 match ref_dest {
                     Some((dest, retain, true)) => {
+                        assert!(is_owned_ref(dest.0), "RC insertion on non-owned reference local");
                         // Old value is read by the rvalue: save it, evaluate, then release it.
                         let tmp = Local(temp_base + extra_locals.len() as u32);
                         extra_locals.push(LocalDecl { ty: local_types[dest.0 as usize], name: None });

@@ -427,8 +427,7 @@ impl Emitter<'_> {
                     self.retain_stored_rvalue(fty, rvalue);
                     self.release_stash(fty, stash);
                 } else {
-                    self.emit_rvalue(rvalue);
-                    self.line("     (drop) ;; TODO(layout): store to field");
+                    unreachable!("Missing field layout for store");
                 }
             }
             Place::Index { base, index } => {
@@ -446,8 +445,7 @@ impl Emitter<'_> {
                     self.retain_stored_rvalue(ety, rvalue);
                     self.release_stash(ety, stash);
                 } else {
-                    self.emit_rvalue(rvalue);
-                    self.line("     (drop) ;; TODO(layout): store to index");
+                    unreachable!("Missing array element type for store");
                 }
             }
         }
@@ -958,10 +956,7 @@ impl Emitter<'_> {
                         self.line("     (local.get $__obj)");
                     }
                 } else {
-                    for a in args {
-                        self.emit_operand(a);
-                    }
-                    self.line(&format!("     (call $def{}_constructor) ;; TODO(layout): alloc", def.0));
+                    unreachable!("Missing layout for struct allocation");
                 }
             }
             Rvalue::UnionNew { def, ty, variant, args } => {
@@ -1151,7 +1146,7 @@ impl Emitter<'_> {
                         self.line(&format!("     ({})", self.load_instr(fty)));
                     }
                 } else {
-                    self.line("     (i32.const 0) ;; TODO(layout): union payload");
+                    unreachable!("Missing layout for union payload");
                 }
             }
         }
@@ -1476,10 +1471,7 @@ impl Emitter<'_> {
                         self.line(&format!("     ({})", self.load_instr(fty)));
                     }
                 } else {
-                    self.line(&format!(
-                        "     (local.get ${}) (i32.load) ;; TODO(layout): field {}",
-                        base.0, field
-                    ));
+                    unreachable!("Missing field layout for read");
                 }
             }
             Operand::Copy(Place::Index { base, index }) => {
@@ -1489,10 +1481,7 @@ impl Emitter<'_> {
                         self.line(&format!("     ({})", self.load_instr(ety)));
                     }
                 } else {
-                    self.line(&format!(
-                        "     (local.get ${}) (i32.load) ;; TODO(layout): index",
-                        base.0
-                    ));
+                    unreachable!("Missing array element type for read");
                 }
             }
         }
@@ -1509,7 +1498,7 @@ impl Emitter<'_> {
             Const::Null => self.line("     (i32.const 0)"),
             Const::Str(s) => match self.strings.get(s) {
                 Some(addr) => self.line(&format!("     (i32.const {})", addr)),
-                None => self.line("     (i32.const 0) ;; TODO(strings): interned pointer"),
+                None => unreachable!("Missing interned string: {}", s),
             },
         }
     }
