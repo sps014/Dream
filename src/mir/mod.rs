@@ -228,7 +228,8 @@ pub enum Rvalue {
     Use(Operand),
     Binary(BinOp, Operand, Operand),
     Unary(UnOp, Operand),
-    /// `string.len()` via a runtime `$strlen` scan.
+    /// `string.len()` via a runtime `$strlen` call (O(1): the length word is stored at the string's
+    /// data pointer).
     StrLen(Operand),
     /// `string.char_at(i)` via the runtime `$char_at` helper: `.0` is the string, `.1` the index.
     CharAt(Operand, Operand),

@@ -34,8 +34,9 @@ const STRING_TAG: i32 = super::abi::TAG_STRING;
 const HEAP_HEADER_SIZE: u32 = 12;
 
 /// Base address (block start) of the interned string data segment. Each string is a heap-object
-/// block `[size=0][tag=STRING][ref_count=1][utf8][\0]`; the mapped address points at the utf8 bytes
-/// (block start + header), matching the runtime's null-terminated string ABI. The heap starts above.
+/// block `[size=0][tag=STRING][ref_count=1][len: i32][utf8][\0]`; the mapped address points at the
+/// length word (block start + header), with utf8 bytes at `ptr+4`. `$strlen` is a single load at
+/// `ptr`; the trailing NUL is kept as a redundant sentinel for host/C interop. The heap starts above.
 const STRING_BASE: u32 = 1024;
 
 /// Linear-memory size, in 64 KiB WASM pages.

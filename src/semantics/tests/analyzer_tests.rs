@@ -135,11 +135,17 @@ fn run_wat(wat: &str, entry: &str) -> String {
             |mut c: Caller<'_, Arc<Mutex<String>>>, ptr: i32| {
                 let mem = c.get_export("memory").unwrap().into_memory().unwrap();
                 let data = mem.data(&c);
-                let mut end = ptr as usize;
-                while end < data.len() && data[end] != 0 {
-                    end += 1;
-                }
-                let s = String::from_utf8_lossy(&data[ptr as usize..end]).into_owned();
+                // Length-prefixed string: `[len: i32][utf8...][\0]` at the data pointer.
+                let base = ptr as usize;
+                let len = i32::from_le_bytes([
+                    data[base],
+                    data[base + 1],
+                    data[base + 2],
+                    data[base + 3],
+                ]) as usize;
+                let start = base + 4;
+                let end = (start + len).min(data.len());
+                let s = String::from_utf8_lossy(&data[start..end]).into_owned();
                 c.data().lock().unwrap().push_str(&s);
             },
         )
@@ -1098,12 +1104,12 @@ fn test_hir_emission_generic_function_instances() {
 fn test_hir_emission_string_literal() {
     // A string literal resolves to its interned data pointer. The runtime constants are interned
     // first (`true`/`false`/`-` then the object-protocol `null`/`<object>`/`[`/`]`/`, `), so the
-    // user's `"hi"` follows them at 1184.
+    // user's `"hi"` follows them at 1216 (each block now carries a 4-byte length prefix).
     let code = "fun greet(): string { return \"hi\"; }";
     let (wat, count) = emit_hir_to_wat(code);
     assert_eq!(count, 1, "the string-returning function should be emitted as HIR");
     assert!(wat.contains("(func $greet"), "missing emitted function:\n{}", wat);
-    assert!(wat.contains("(i32.const 1184)"), "string literal should resolve to its data pointer:\n{}", wat);
+    assert!(wat.contains("(i32.const 1216)"), "string literal should resolve to its data pointer:\n{}", wat);
 }
 
 #[test]

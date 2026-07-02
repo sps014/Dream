@@ -153,28 +153,33 @@ export class DreamInstance {
     return this.view.getFloat64(ptr, true);
   }
 
-  /** Reads a null-terminated UTF-8 string at `ptr` (a Dream string data pointer). */
+  /**
+   * Reads a Dream string at `ptr` (a data pointer). Layout: `[len: i32][utf8...][\0]`, so the
+   * length prefix gives the byte count directly; the trailing NUL is ignored.
+   */
   readString(ptr) {
     if (!ptr) return "";
     const bytes = this.bytes;
-    let end = ptr;
-    while (end < bytes.length && bytes[end] !== 0) end++;
-    return new TextDecoder("utf-8").decode(bytes.subarray(ptr, end));
+    const len = this.view.getInt32(ptr, true);
+    const start = ptr + 4;
+    return new TextDecoder("utf-8").decode(bytes.subarray(start, start + len));
   }
 
   /**
    * Allocates a Dream string block for `str` and returns its data pointer, so JS-implemented
    * extern functions can return strings back into Dream. Requires the module to export `malloc`.
+   * Layout: `[len: i32][utf8...][\0]`.
    */
   writeString(str) {
     if (typeof this.exports.malloc !== "function") {
       throw new Error("module does not export `malloc`; cannot allocate a string");
     }
     const encoded = new TextEncoder().encode(str);
-    const ptr = this.exports.malloc(encoded.length + 1, TAGS.STRING);
+    const ptr = this.exports.malloc(4 + encoded.length + 1, TAGS.STRING);
     const bytes = this.bytes;
-    bytes.set(encoded, ptr);
-    bytes[ptr + encoded.length] = 0; // null terminator
+    this.view.setInt32(ptr, encoded.length, true); // length prefix
+    bytes.set(encoded, ptr + 4);
+    bytes[ptr + 4 + encoded.length] = 0; // null terminator
     return ptr;
   }
 

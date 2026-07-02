@@ -143,13 +143,14 @@
         let mir = crate::mir::Mir { functions: vec![b.finish()], ..Default::default() };
         let wat = emit_module(&mir, &i, false);
         // The runtime constants are interned first (`true`/`false`/`-` then the object-protocol
-        // `null`/`<object>`/`[`/`]`/`, `), so the user's "hi" follows at block 1172 / data pointer 1184.
-        assert!(wat.contains("(i32.const 1184)"), "string data pointer:\n{}", wat);
+        // `null`/`<object>`/`[`/`]`/`, `), so the user's "hi" follows at block 1204 / data pointer
+        // 1216. Each block is now 4 bytes larger than before (the length prefix).
+        assert!(wat.contains("(i32.const 1216)"), "string data pointer:\n{}", wat);
         // Its data segment (at the block start) is the heap-object block: header `size=0`, `tag=5`,
-        // `ref_count=1`, then the bytes 'h','i', then the NUL terminator.
+        // `ref_count=1`, then the length prefix `2`, then the bytes 'h','i', then the NUL terminator.
         assert!(
             wat.contains(
-                "(data (i32.const 1172) \"\\00\\00\\00\\00\\05\\00\\00\\00\\01\\00\\00\\00\\68\\69\\00\")"
+                "(data (i32.const 1204) \"\\00\\00\\00\\00\\05\\00\\00\\00\\01\\00\\00\\00\\02\\00\\00\\00\\68\\69\\00\")"
             ),
             "string data segment:\n{}",
             wat

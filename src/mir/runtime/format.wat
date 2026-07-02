@@ -38,14 +38,17 @@
     local.get $ip
     call $long_to_string
     local.set $ipstr
-    i32.const 16
+    i32.const 20
     i32.const {TAG_STRING}
     call $malloc
     local.set $buf
+    ;; chars live at buf+4 (past the 4-byte length prefix); write '.' at [buf+4]
     local.get $buf
+    i32.const 4
+    i32.add
     i32.const 46
     i32.store8
-    ;; write the 6 fractional digits into buf[1..6], least-significant last
+    ;; write the 6 fractional digits into (buf+4)[1..6], least-significant last
     i32.const 6
     local.set $i
     (block $wdone
@@ -55,6 +58,8 @@
             i32.lt_s
             br_if $wdone
             local.get $buf
+            i32.const 4
+            i32.add
             local.get $i
             i32.add
             local.get $fr
@@ -85,6 +90,8 @@
             i32.le_s
             br_if $tdone
             local.get $buf
+            i32.const 4
+            i32.add
             local.get $i
             i32.const 1
             i32.sub
@@ -105,11 +112,18 @@
     i32.const 1
     i32.eq
     (if (then i32.const 0 local.set $i))
+    ;; null terminator at (buf+4)[$i]
     local.get $buf
+    i32.const 4
+    i32.add
     local.get $i
     i32.add
     i32.const 0
     i32.store8
+    ;; store fractional-part length ($i) at [buf] so $concat_strings sees a valid string
+    local.get $buf
+    local.get $i
+    i32.store
     local.get $ipstr
     local.get $buf
     call $concat_strings

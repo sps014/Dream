@@ -51,12 +51,12 @@ pub(super) fn to_string_runtime(strings: &IndexMap<String, u32>) -> String {
 }
 
 /// The heap starts (8-byte aligned) above the interned string segment, never below the string base.
-/// Each interned string's mapped address points at its data bytes; its block extends `len + 1` bytes
-/// beyond that (the utf8 + NUL terminator).
+/// Each interned string's mapped address points at its length word; its block extends `4 + len + 1`
+/// bytes beyond that (the length prefix + utf8 + NUL terminator).
 pub(super) fn heap_base(strings: &IndexMap<String, u32>) -> u32 {
     let end = strings
         .iter()
-        .map(|(s, addr)| addr + s.len() as u32 + 1)
+        .map(|(s, addr)| addr + 4 + s.len() as u32 + 1)
         .max()
         .unwrap_or(STRING_BASE);
     (end.max(STRING_BASE) + 7) & !7

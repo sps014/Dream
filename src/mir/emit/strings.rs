@@ -41,8 +41,9 @@ pub(super) fn union_variant_pieces(v: &crate::hir::UnionVariant) -> (String, Vec
 }
 
 /// Interns every string constant in the program to a data pointer, in first-appearance order
-/// (deterministic). Each string is a heap-object block `[size=0][tag=STRING][ref_count=1][utf8][\0]`;
-/// the mapped address points at the utf8 bytes (block start + [`HEAP_HEADER_SIZE`]), so it is a valid
+/// (deterministic). Each string is a heap-object block
+/// `[size=0][tag=STRING][ref_count=1][len: i32][utf8][\0]`; the mapped address points at the length
+/// word (block start + [`HEAP_HEADER_SIZE`]), with the utf8 bytes at `ptr+4`, so it is a valid
 /// runtime string pointer. Blocks are laid out consecutively, 4-byte aligned.
 pub(super) fn string_table(mir: &crate::mir::Mir) -> IndexMap<String, u32> {
     let mut found = Vec::new();
@@ -75,7 +76,8 @@ pub(super) fn string_table(mir: &crate::mir::Mir) -> IndexMap<String, u32> {
         .chain(found);
     for s in found {
         if !map.contains_key(&s) {
-            let total = HEAP_HEADER_SIZE + s.len() as u32 + 1;
+            // 12-byte heap header + 4-byte length prefix + utf8 bytes + NUL terminator.
+            let total = HEAP_HEADER_SIZE + 4 + s.len() as u32 + 1;
             map.insert(s, block + HEAP_HEADER_SIZE);
             block += (total + 3) & !3;
         }
@@ -160,11 +162,12 @@ pub(super) fn strings_in_terminator(t: &Terminator, out: &mut Vec<String>) {
 }
 
 /// Escapes an interned string's full heap-block bytes as `\HH` pairs: the 12-byte header
-/// (`size=0`, `tag=STRING`, `ref_count=1`, little-endian i32s), the utf8 bytes, then a NUL
-/// terminator. Written at the block start (the mapped address minus [`HEAP_HEADER_SIZE`]).
+/// (`size=0`, `tag=STRING`, `ref_count=1`, little-endian i32s), the length prefix (`len` as a
+/// little-endian i32), the utf8 bytes, then a NUL terminator. Written at the block start (the mapped
+/// address minus [`HEAP_HEADER_SIZE`]); the mapped address itself points at the length word.
 pub(super) fn escape_data(s: &str) -> String {
     let mut out = String::new();
-    for word in [0_i32, STRING_TAG, 1] {
+    for word in [0_i32, STRING_TAG, 1, s.len() as i32] {
         for b in word.to_le_bytes() {
             let _ = write!(out, "\\{:02x}", b);
         }
