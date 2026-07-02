@@ -1179,7 +1179,9 @@ fn test_hir_emission_global_read_and_write() {
 
 #[test]
 fn test_hir_emission_union_construction() {
-    // Constructing a (non-generic) discriminated-union variant lowers to a `UnionNew`.
+    // Constructing a (non-generic) discriminated-union variant lowers to a `UnionNew`. `Shape` has
+    // only primitive payloads, so it is inferred as a *value union*: constructed inline into the
+    // return slot (its first word is the discriminant) rather than heap-allocated.
     let code = "
         enum Shape { Circle(radius: int), Empty }
         fun mk(): Shape { return Shape.Circle(2); }
@@ -1189,8 +1191,12 @@ fn test_hir_emission_union_construction() {
     assert_eq!(count, 2, "both union constructors should be emitted:\n{}", wat);
     assert!(wat.contains("(func $mk"), "missing data-variant constructor:\n{}", wat);
     assert!(wat.contains("(func $nil"), "missing unit-variant constructor:\n{}", wat);
-    // A union value is a heap block whose first word is the variant discriminant.
-    assert!(wat.contains("(call $malloc)"), "union construction should allocate:\n{}", wat);
+    // A value union is written inline (no `$malloc`), and its first word is the variant discriminant.
+    assert!(
+        !wat.contains("(call $malloc)"),
+        "value-union construction should not allocate on the heap:\n{}",
+        wat
+    );
     assert!(
         wat.contains(";; discriminant"),
         "union block should store its discriminant:\n{}",

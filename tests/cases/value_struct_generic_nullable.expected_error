@@ -1,0 +1,1 @@
+field 'inner' cannot be a nullable value struct ('Point'); value structs are non-nullable in this version

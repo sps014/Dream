@@ -24,6 +24,8 @@ pub struct StructDeclarationNode<'a> {
     pub attributes: Vec<crate::nodes::AttributeNode>,
     pub name: SyntaxToken,
     pub generic_parameters: Option<Vec<SyntaxToken>>,
+    /// Bounds on the generic parameters (`class Sorted<T : Comparable<T>>`). Empty when unconstrained.
+    pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
     pub fields: Vec<StructFieldNode>,
     pub methods: Vec<crate::nodes::function::FunctionNode<'a>>,
     /// The interfaces this class declares it implements (`class Cat : Animal, Container<int>`).
@@ -55,6 +57,7 @@ impl<'a> StructDeclarationNode<'a> {
             attributes,
             name,
             generic_parameters,
+            generic_constraints: Vec::new(),
             fields,
             methods,
             implements: Vec::new(),

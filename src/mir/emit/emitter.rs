@@ -357,8 +357,18 @@ impl Emitter<'_> {
                         self.line(&format!("     (call {})", array_to_string_sym(*elem)));
                         self.line("     (call $print_string)");
                     }
-                    // Structs, unions, and `object` render through the tag-dispatching `$print_object`
-                    // (which routes to each type's `to_string`).
+                    // A value struct/union has no heap tag header, so it is rendered by its concrete
+                    // `$<Type>_to_string` (chosen statically from the operand's type) and printed.
+                    _ if self.interner.is_value_type(*ty) => {
+                        if let Some(name) = self.value_name(*ty) {
+                            self.line(&format!("     (call ${}_to_string)", name));
+                            self.line("     (call $print_string)");
+                        } else {
+                            self.line("     (call $print_object)");
+                        }
+                    }
+                    // Reference structs, unions, and `object` render through the tag-dispatching
+                    // `$print_object` (which routes to each type's `to_string`).
                     _ => self.line("     (call $print_object)"),
                 }
                 if *newline {
@@ -638,11 +648,14 @@ impl Emitter<'_> {
         self.value_glue.contains(&self.interner.strip_nullable(ty))
     }
 
-    /// The layout name of value struct `ty`, if laid out.
+    /// The layout name of value type `ty` (a value struct or value union), if laid out. Used to name
+    /// its retain/drop glue.
     fn value_name(&self, ty: TypeId) -> Option<String> {
-        self.layouts
-            .get(self.interner.strip_nullable(ty))
-            .map(|l| l.name.clone())
+        let stripped = self.interner.strip_nullable(ty);
+        if let Some(l) = self.layouts.get(stripped) {
+            return Some(l.name.clone());
+        }
+        self.layouts.union(stripped).map(|u| u.name.clone())
     }
 
     /// Pushes the address of value place `p` (a value struct is addressed, never loaded).
@@ -744,14 +757,65 @@ impl Emitter<'_> {
         self.line(&format!("     (call ${})", self.callee_symbol(callee)));
     }
 
-    /// Stores a value struct produced by `rvalue` into the destination at the `dst` address (a local
-    /// slot, a container field/element, or a union payload): the old contents are dropped, then the
-    /// new value is constructed / sret-called / copied in place.
+    /// Constructs a value union in place at the `dst` address: zero the block, write the variant
+    /// discriminant at offset 0, then store each payload argument at its variant field offset (a
+    /// value payload is copied inline; a reference payload is stored and retained).
+    fn construct_value_union(
+        &mut self,
+        dst: impl Fn(&mut Self),
+        ty: TypeId,
+        variant: usize,
+        args: &[Operand],
+    ) {
+        let size = self.value_size(ty);
+        dst(self);
+        self.line("     (i32.const 0)");
+        self.line(&format!("     (i32.const {})", size));
+        self.line("     (memory.fill)");
+        dst(self);
+        self.line(&format!("     (i32.const {}) ;; discriminant", variant));
+        self.line("     (i32.store)");
+        let fields: Vec<(u32, TypeId)> = self
+            .layouts
+            .union(ty)
+            .and_then(|u| {
+                u.variants
+                    .iter()
+                    .find(|v| v.discriminant as usize == variant)
+                    .map(|v| v.fields.iter().map(|f| (f.offset, f.ty)).collect())
+            })
+            .unwrap_or_default();
+        for (i, arg) in args.iter().enumerate() {
+            let Some(&(off, fty)) = fields.get(i) else { continue };
+            let field_addr = |s: &mut Self| {
+                dst(s);
+                if off > 0 {
+                    s.line(&format!("     (i32.const {}) (i32.add)", off));
+                }
+            };
+            if self.interner.is_value_type(fty) {
+                let arg = arg.clone();
+                self.emit_value_copy(&field_addr, |s| s.emit_operand_addr(&arg), fty);
+            } else {
+                field_addr(self);
+                self.emit_operand(arg);
+                self.line(&format!("     ({})", self.store_instr(fty)));
+                self.retain_container_value(fty, arg);
+            }
+        }
+    }
+
+    /// Stores a value struct or value union produced by `rvalue` into the destination at the `dst`
+    /// address (a local slot, a container field/element, or a union payload): the old contents are
+    /// dropped, then the new value is constructed / sret-called / copied in place.
     fn emit_value_store(&mut self, dst: impl Fn(&mut Self), ty: TypeId, rvalue: &Rvalue) {
         self.emit_value_drop(&dst, ty);
         match rvalue {
             Rvalue::New { ctor, args, ty: nty, .. } => {
                 self.construct_value_new(&dst, *ctor, args, *nty)
+            }
+            Rvalue::UnionNew { ty: uty, variant, args, .. } => {
+                self.construct_value_union(&dst, *uty, *variant, args)
             }
             Rvalue::Call { callee, args } => self.emit_value_sret_call(&dst, callee, args),
             Rvalue::Use(Operand::Copy(src)) => {
@@ -994,8 +1058,18 @@ impl Emitter<'_> {
             }
             Rvalue::ToString(o) => {
                 self.emit_operand(o);
+                let oty = self.operand_ty(o);
+                // A value struct/union is addressed inline (no heap tag header), so its `to_string`
+                // is dispatched statically to the concrete `$<Type>_to_string` rather than routed
+                // through the tag-dispatching `$object_to_string`.
+                if self.interner.is_value_type(oty) {
+                    if let Some(name) = self.value_name(oty) {
+                        self.line(&format!("     (call ${}_to_string)", name));
+                        return;
+                    }
+                }
                 // A `string` is already its own `to_string`; every other type has a formatter.
-                if let Some(call) = value_to_string_call(self.interner, self.operand_ty(o)) {
+                if let Some(call) = value_to_string_call(self.interner, oty) {
                     self.line(&format!("     (call {})", call));
                 }
             }
@@ -1020,7 +1094,14 @@ impl Emitter<'_> {
             }
             Rvalue::HashCode(o) => {
                 self.emit_operand(o);
-                match self.interner.kind(self.interner.strip_nullable(self.operand_ty(o))) {
+                let oty = self.operand_ty(o);
+                if self.interner.is_value_type(oty) {
+                    if let Some(name) = self.value_name(oty) {
+                        self.line(&format!("     (call ${}_hash_code)", name));
+                        return;
+                    }
+                }
+                match self.interner.kind(self.interner.strip_nullable(oty)) {
                     // Integer-family values (and enums) are their own hash.
                     TyKind::Prim(
                         PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte,

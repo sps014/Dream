@@ -1,0 +1,30 @@
+// A generic function constrained with `T : Comparable<T>` may call the interface's `compare` on its
+// type parameter. Because Dream monomorphizes generics, the constrained call binds to the concrete
+// type's method (static dispatch, no boxing).
+
+class Money : Comparable<Money> {
+    public cents: int;
+
+    constructor(cents: int) {
+        this.cents = cents;
+    }
+
+    public fun compare(other: Money): int {
+        return this.cents - other.cents;
+    }
+}
+
+fun max_of<T : Comparable<T>>(a: T, b: T): T {
+    if (a.compare(b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+fun main(): void {
+    let bigger = max_of(Money(100), Money(250));
+    System.println(bigger.cents);          // 250
+
+    let smaller = max_of(Money(40), Money(15));
+    System.println(smaller.cents);         // 40
+}

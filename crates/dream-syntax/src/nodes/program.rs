@@ -99,6 +99,10 @@ pub struct ExtendNode<'a> {
     /// The canonical name of the type being extended (e.g. `int`, `string`, `Point`).
     pub target: SyntaxToken,
     pub generic_parameters: Option<Vec<SyntaxToken>>,
+    /// Bounds on the generic parameters (`extend List<T : Comparable<T>> { ... }`): the extension's
+    /// methods only attach to a monomorphized target whose argument satisfies them. Empty when
+    /// unconstrained.
+    pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
     pub methods: Vec<FunctionNode<'a>>,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
@@ -114,6 +118,7 @@ impl<'a> ExtendNode<'a> {
         ExtendNode {
             target,
             generic_parameters,
+            generic_constraints: Vec::new(),
             methods,
             file_path: None,
         }

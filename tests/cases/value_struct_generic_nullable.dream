@@ -1,0 +1,23 @@
+// Value-struct soundness is enforced per generic instantiation: `Wrapper<Point>` substitutes its
+// field to `Point?`, a nullable value struct, which is rejected only once `T` is concrete.
+
+struct Point {
+    public x: int;
+
+    constructor(x: int) {
+        this.x = x;
+    }
+}
+
+struct Wrapper<T> {
+    public inner: T?;
+
+    constructor(inner: T?) {
+        this.inner = inner;
+    }
+}
+
+fun main(): void {
+    let w = Wrapper<Point>(Point(1));
+    System.println(w.inner.x);
+}

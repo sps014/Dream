@@ -155,6 +155,19 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(e, None);
             return;
         }
+
+        // A data enum instance becomes a *value* union (stored inline, copy semantics, no heap
+        // allocation) when every variant payload is itself value/primitive. Decided here, per
+        // (monomorphized) instance, because `Option<int>` (value) and `Option<string>` (heap) share
+        // one `DefId`. The inline layout is finalized later in `hir_build_layouts` (value-aware sizes).
+        let all_value = variant_infos
+            .iter()
+            .all(|v| v.fields.iter().all(|f| self.payload_type_is_value(&f.type_)));
+        if all_value {
+            let union_tid = self.type_ctx.lower_str(union_name);
+            self.type_ctx.interner.mark_value_union(union_tid);
+        }
+
         self.union_table.insert(
             union_name.to_string(),
             UnionInfo {
@@ -163,6 +176,21 @@ impl<'a> Analyzer<'a> {
                 size,
             },
         );
+    }
+
+    /// True when a union payload field of type `ty` is stored by value: a non-string primitive, a
+    /// value (`struct`) type, or an already-registered value union. Strings, classes, arrays, and
+    /// heap unions are references (which force the enclosing union onto the heap).
+    fn payload_type_is_value(&mut self, ty: &Type) -> bool {
+        let tid = self.type_ctx.lower(ty);
+        let stripped = self.type_ctx.interner.strip_nullable(tid);
+        if self.type_ctx.interner.is_value_type(stripped) {
+            return true;
+        }
+        matches!(
+            self.type_ctx.interner.kind(stripped),
+            crate::types::TyKind::Prim(p) if *p != crate::types::PrimTy::String
+        )
     }
 
     /// Ensures a generic union instantiation (e.g. `Option<int>` -> `Option_int`) is registered,
@@ -212,11 +240,38 @@ impl<'a> Analyzer<'a> {
         args: &[Type],
         diagnostics: &mut DiagnosticBag,
     ) {
-        if let Some(ext) = self.generic_extends.get(base_name).copied() {
+        let exts: Vec<&'a ExtendNode<'a>> = match self.generic_extends.get(base_name) {
+            Some(list) => list.clone(),
+            None => return,
+        };
+        for ext in exts {
             let ext_params = ext.generic_parameters.as_deref().unwrap_or(&[]);
             let ext_bindings = generic_bindings(ext_params, args);
+            // A constrained extension (`extend List<T : Comparable<T>>`) only applies to instances
+            // whose argument satisfies the bound; skip attaching its methods otherwise (so e.g.
+            // `List<int>.sort()` is simply "no such method" unless `int` is made `Comparable`).
+            if !self.extension_constraints_satisfied(&ext.generic_constraints, &ext_bindings) {
+                continue;
+            }
             self.register_methods_for(mangled, &ext.methods, &ext_bindings, diagnostics);
         }
+    }
+
+    /// True when every generic constraint on an `extend` block is satisfied by the concrete
+    /// bindings of one instantiation. Unlike class/function constraints, an unsatisfied extension
+    /// constraint is not an error — the extension's methods simply do not attach to that instance.
+    fn extension_constraints_satisfied(
+        &self,
+        constraints: &[crate::syntax::nodes::GenericConstraint],
+        bindings: &GenericBindings,
+    ) -> bool {
+        constraints.iter().all(|c| {
+            bindings.get(&c.param.text).is_some_and(|concrete| {
+                c.bounds
+                    .iter()
+                    .all(|bound| self.type_satisfies_bound(concrete, bound, bindings))
+            })
+        })
     }
 
     /// Instantiates whichever generic container `base_name` denotes (a generic class or a generic
@@ -453,7 +508,15 @@ impl<'a> Analyzer<'a> {
             return false;
         }
         let val = strip_nullable(&value.get_type()).to_string();
-        self.class_implements(&val, &iface)
+        self.implements_as_interface_ref(&val, &iface)
+    }
+
+    /// True when `class_name` may be implicitly/explicitly widened to an interface *reference*
+    /// (`iface_name`). A value (`struct`) type implements interfaces for *static* dispatch (direct
+    /// calls, generic constraints, `==`), but cannot become an interface reference because that
+    /// requires boxing to a tagged heap object (a deferred feature), so such an upcast is rejected.
+    pub(super) fn implements_as_interface_ref(&self, class_name: &str, iface_name: &str) -> bool {
+        self.class_implements(class_name, iface_name) && !self.is_value_type_name(class_name)
     }
 
     /// True when `iface_method` and `class_method` have matching signatures (same parameter types
@@ -593,17 +656,10 @@ impl<'a> Analyzer<'a> {
             if struct_decl.is_value {
                 self.type_ctx.defs.mark_value(def);
                 self.type_ctx.interner.mark_value_def(def);
-                // v1 restriction: value structs cannot participate in interface dispatch (that would
-                // require boxing to a tagged heap object, which is a deferred feature).
-                if !struct_decl.implements.is_empty() {
-                    diagnostics.report_error(
-                        format!(
-                            "value struct '{}' cannot implement interfaces in this version; use a reference type ('class') for interface dispatch",
-                            struct_decl.name.text
-                        ),
-                        Some(struct_decl.name.position),
-                    );
-                }
+                // A value struct may implement interfaces (e.g. `Comparable`/`Equatable`): its methods
+                // are dispatched *statically* through direct calls and generic constraints, so no
+                // boxing is required. Widening it to an interface *reference* (a dynamic upcast that
+                // would box) remains unsupported — see `implements_as_interface_ref`.
             }
             if struct_decl.generic_parameters.is_some() {
                 // A generic class may implement a (generic or non-generic) interface; the
@@ -681,7 +737,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when the (unadorned) type name resolves to a declared value (`struct`) type.
-    fn is_value_type_name(&self, name: &str) -> bool {
+    pub(super) fn is_value_type_name(&self, name: &str) -> bool {
         self.struct_table.get_struct(name).map(|s| s.is_value).unwrap_or(false)
     }
 
@@ -1047,6 +1103,15 @@ impl<'a> Analyzer<'a> {
         }
         let bindings = generic_bindings(params, args);
 
+        // A constrained class/struct parameter (`class Sorted<T : Comparable<T>>`) must be satisfied
+        // by the concrete argument at this instantiation.
+        self.verify_generic_constraints(
+            &template.generic_constraints,
+            &bindings,
+            position,
+            diagnostics,
+        );
+
         let new_fields: Vec<StructFieldNode> = template
             .fields
             .iter()
@@ -1075,6 +1140,33 @@ impl<'a> Analyzer<'a> {
 
         if let Err(e) = self.struct_table.add_struct(new_decl_ref) {
             diagnostics.report_error(e, Some(*position));
+        }
+
+        // Value-struct soundness is checked per instantiation (the template's fields are generic, so
+        // whether this monomorphization embeds itself by value or carries a nullable value field is
+        // only decidable once `T` is concrete).
+        if new_decl_ref.is_value {
+            if self.value_struct_contains_self(&mangled_name) {
+                diagnostics.report_error(
+                    format!(
+                        "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
+                        mangled_name
+                    ),
+                    Some(*position),
+                );
+            }
+            for field in &new_decl_ref.fields {
+                let base = field.field_type.base_name();
+                if field.field_type.is_nullable() && self.is_value_type_name(&base) {
+                    diagnostics.report_error(
+                        format!(
+                            "field '{}' cannot be a nullable value struct ('{}'); value structs are non-nullable in this version",
+                            field.name.text, base
+                        ),
+                        Some(field.name.position),
+                    );
+                }
+            }
         }
 
         self.register_struct_methods(new_decl_ref, &mangled_name, &bindings, diagnostics);
@@ -1258,7 +1350,13 @@ impl<'a> Analyzer<'a> {
     pub(super) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
         for ext in node.extends.iter() {
             if ext.generic_parameters.is_some() {
-                self.generic_extends.insert(ext.target.text.clone(), ext);
+                // A generic type may have several `extend` blocks (e.g. a base `extend List<T>` plus a
+                // constrained `extend List<T : Comparable<T>>`); keep them all and attach each whose
+                // constraints the concrete instance satisfies.
+                self.generic_extends
+                    .entry(ext.target.text.clone())
+                    .or_default()
+                    .push(ext);
             }
         }
     }

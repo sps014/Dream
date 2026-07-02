@@ -239,7 +239,7 @@ pub struct Analyzer<'a> {
     /// Generic `extend Type<...> { ... }` templates (e.g. `extend Option<T> { ... }`), keyed by
     /// the extended type's name. Their methods are monomorphized alongside each concrete
     /// instantiation of the target generic union or struct (see `ensure_*_instantiated`).
-    generic_extends: HashMap<String, &'a ExtendNode<'a>>,
+    generic_extends: HashMap<String, Vec<&'a ExtendNode<'a>>>,
     /// Interface name -> its method signatures in declaration order (the order is the interface's
     /// local method index, used for itable slot assignment). Each entry is a body-less
     /// [`FunctionNode`] (no implicit `this`).

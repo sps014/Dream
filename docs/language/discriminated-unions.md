@@ -13,8 +13,9 @@ enum Shape {
 }
 ```
 
-A union is heap-allocated and reference counted, just like a class, so it interoperates with
-generics, `is`, and `to_string`.
+A union interoperates with generics, `is`, and `to_string`. By default it is heap-allocated and
+reference counted like a class, but a union whose payloads are all value/primitive is stored inline on
+the stack — see [Stack (value) unions](#stack-value-unions) below.
 
 ## Constructing values
 
@@ -191,6 +192,25 @@ println(o.to_string());            // Circle(radius: 5)
 
 Provide an `@override public fun to_string(): string` (or `hash_code`) in an `extend` block to
 replace the default.
+
+## Stack (value) unions
+
+A union becomes a **value type** — stored inline with no heap allocation and no reference counting —
+whenever *every* variant payload is itself a value or primitive type (`int`, `bool`, `float`, a value
+[`struct`](value-structs.md), another value union, …). A payload that is a `string`, class, array, or
+other reference keeps the union on the heap.
+
+This is decided **per monomorphization**, so the same generic union can be a value type for one type
+argument and a heap type for another:
+
+```dream
+let a: Option<int> = Option.Some(42);       // value union — entirely on the stack, no allocation
+let b: Option<string> = Option.Some("hi");  // reference payload — heap-allocated as before
+```
+
+Value unions copy by value (like value structs), match and render identically to heap unions, and
+allocate nothing — an `Option<int>` threaded through your program never touches the heap. No syntax or
+annotation is required; the inference is automatic.
 
 ## JSON with `@json`
 

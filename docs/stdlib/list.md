@@ -100,6 +100,43 @@ for (let x in nums) {
 }
 ```
 
+## Sorting
+
+A list sorts in place, ascending. There are two forms:
+
+### sort_by
+
+`sort_by(cmp)` takes a comparator function `fun(T, T): int` that returns a negative number, zero, or a
+positive number when the first argument is ordered before, equal to, or after the second. This works
+for any element type.
+
+```dream
+fun by_desc(a: int, b: int): int { return b - a; }
+
+nums.sort_by(by_desc);   // largest first
+```
+
+### sort
+
+`sort()` is available when the element type implements [`Comparable<T>`](../language/interfaces.md#built-in-equatable-and-comparable),
+ordering elements with their `compare` method. It is a [constrained extension](../language/generics.md#generic-constraints):
+`List<int>.sort()` is a compile error unless `int` is made `Comparable`, while a user type that
+implements `Comparable` (including a value [`struct`](../language/value-structs.md)) sorts with no
+boxing.
+
+```dream
+class Money : Comparable<Money> {
+    public cents: int;
+    constructor(cents: int) { this.cents = cents; }
+    public fun compare(other: Money): int { return this.cents - other.cents; }
+}
+
+let prices = List<Money>();
+prices.push(Money(300));
+prices.push(Money(100));
+prices.sort();           // ascending by cents: 100, 300
+```
+
 ## Indexing and iteration
 
 `List` supports the class [indexer and enumerator conventions](../language/classes.md#indexers-and-enumerators).

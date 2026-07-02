@@ -442,6 +442,14 @@ impl<'a> Analyzer<'a> {
                 &name.position,
                 diagnostics,
             );
+            // A constrained type parameter (`fun sort<T : Comparable<T>>(...)`) must be satisfied by
+            // the concrete argument; report a clear error at the call site otherwise.
+            self.verify_generic_constraints(
+                &template.generic_constraints,
+                &bindings,
+                &name.position,
+                diagnostics,
+            );
             let mangled_name = mangle_bindings(&function_name, &bindings);
             generic_instance = Some((
                 function_name.clone(),
@@ -558,7 +566,10 @@ impl<'a> Analyzer<'a> {
                 // Implicit upcast: a class argument is accepted where an interface it implements is
                 // expected (e.g. passing a `Cat` to a `fun(a: Animal)` parameter).
                 if self.is_interface_name(strip_nullable(expected))
-                    && self.class_implements(strip_nullable(given), strip_nullable(expected))
+                    && self.implements_as_interface_ref(
+                        strip_nullable(given),
+                        strip_nullable(expected),
+                    )
                 {
                     continue;
                 }
@@ -712,7 +723,7 @@ impl<'a> Analyzer<'a> {
         let iface = crate::syntax::nodes::types::strip_nullable(expected);
         if self.is_interface_name(iface) {
             let given_class = crate::syntax::nodes::types::strip_nullable(given);
-            return self.class_implements(given_class, iface);
+            return self.implements_as_interface_ref(given_class, iface);
         }
         false
     }

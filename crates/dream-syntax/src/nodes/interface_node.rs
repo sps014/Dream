@@ -11,6 +11,8 @@ pub struct InterfaceDeclarationNode<'a> {
     pub attributes: Vec<crate::nodes::AttributeNode>,
     pub name: SyntaxToken,
     pub generic_parameters: Option<Vec<SyntaxToken>>,
+    /// Bounds on the generic parameters. Empty when unconstrained.
+    pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
     /// The interface's method signatures. Each is a body-less [`FunctionNode`] (parsed like an
     /// `extern fun ...;`); only the name/params/return type are meaningful.
     pub methods: Vec<crate::nodes::function::FunctionNode<'a>>,
@@ -33,6 +35,7 @@ impl<'a> InterfaceDeclarationNode<'a> {
             attributes,
             name,
             generic_parameters,
+            generic_constraints: Vec::new(),
             methods,
             is_public,
             file_path: None,

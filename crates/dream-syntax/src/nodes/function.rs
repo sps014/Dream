@@ -76,6 +76,8 @@ pub struct FunctionNode<'a> {
     pub attributes: Vec<crate::nodes::AttributeNode>,
     pub name: SyntaxToken,
     pub generic_parameters: Option<Vec<SyntaxToken>>,
+    /// Bounds on the generic parameters (`fun min<T : Comparable<T>>(...)`). Empty when unconstrained.
+    pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
     pub return_type: Option<Type>,
     pub parameters: Vec<ParameterNode>,
     pub body: &'a [StatementNode<'a>],
@@ -115,6 +117,7 @@ impl<'a> FunctionNode<'a> {
             attributes,
             name,
             generic_parameters,
+            generic_constraints: Vec::new(),
             return_type,
             parameters,
             body,

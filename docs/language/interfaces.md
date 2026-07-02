@@ -205,9 +205,34 @@ like `a.speak()` reads the object's tag, looks up the right function in the inte
 calls it indirectly. Because Dream compiles the whole program at once, these tables are computed
 entirely at compile time.
 
+## Built-in `Equatable` and `Comparable`
+
+Two generic interfaces are built into the prelude:
+
+```dream
+interface Equatable<T> { fun equals(other: T): bool; }
+interface Comparable<T> { fun compare(other: T): int; }
+```
+
+A type implements them against itself (`class Money : Comparable<Money>, Equatable<Money>`). By
+convention `compare` returns a negative number, zero, or a positive number when `this` is ordered
+before, equal to, or after `other`.
+
+- **`==` / `!=` route to `equals`.** When both operands are the same user type that implements
+  `Equatable<Self>`, `a == b` lowers to `a.equals(b)` (and `a != b` to its negation). Primitives and
+  strings keep their built-in equality. The ordering operators (`<`, `>`, `<=`, `>=`) are *not*
+  overloaded — use `compare` directly for custom ordering.
+- **`compare` powers sorting.** `List<T : Comparable<T>>.sort()` orders a list using `compare`, and
+  `List<T>.sort_by(cmp)` takes an explicit comparator. See [List sorting](../stdlib/list.md#sorting).
+
+Both interfaces work with [value structs](value-structs.md): when the concrete type is known (a direct
+call or a [generic constraint](generics.md#generic-constraints)), dispatch is static with no boxing.
+
 ## Limits (current version)
 
 - Interfaces declare method signatures only — no fields and no default method bodies.
+- A [value struct](value-structs.md) can implement an interface and be dispatched statically, but it
+  cannot yet be stored in a bare interface-typed variable (dynamic upcast / boxing is deferred).
 
 ## See also
 

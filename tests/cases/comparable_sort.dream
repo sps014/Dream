@@ -1,0 +1,81 @@
+// `Comparable`/`Equatable` in action: a reference `class` and a value `struct` both implement the
+// built-in interfaces. `==` routes to `equals`, `List.sort()` uses `compare` (dispatched statically,
+// no boxing), and `sort_by` takes an explicit comparator. The value-struct path allocates nothing.
+
+class Money : Comparable<Money>, Equatable<Money> {
+    public cents: int;
+
+    constructor(cents: int) {
+        this.cents = cents;
+    }
+
+    public fun compare(other: Money): int {
+        return this.cents - other.cents;
+    }
+
+    public fun equals(other: Money): bool {
+        return this.cents == other.cents;
+    }
+}
+
+struct Vec2 : Comparable<Vec2>, Equatable<Vec2> {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    // Order by magnitude (x*x + y*y).
+    public fun compare(other: Vec2): int {
+        return (this.x * this.x + this.y * this.y)
+             - (other.x * other.x + other.y * other.y);
+    }
+
+    public fun equals(other: Vec2): bool {
+        return (this.x == other.x) && (this.y == other.y);
+    }
+}
+
+// Explicit comparator for `sort_by`: descending by cents.
+fun by_cents_desc(a: Money, b: Money): int {
+    return b.cents - a.cents;
+}
+
+fun main(): void {
+    // `==` on user types dispatches to `equals`.
+    System.println(Money(100) == Money(100));   // true
+    System.println(Money(100) != Money(250));   // true
+    System.println(Vec2(3, 4) == Vec2(3, 4));   // true
+    System.println(Vec2(1, 0) == Vec2(0, 1));   // false
+
+    // `List<Money>.sort()` uses `compare` (constrained extension).
+    let prices = List<Money>();
+    prices.push(Money(300));
+    prices.push(Money(100));
+    prices.push(Money(200));
+    prices.sort();
+    let i = 0;
+    while (i < prices.size()) {
+        System.println(prices.get(i).unwrap_or(Money(-1)).cents);
+        i = i + 1;
+    }
+
+    // A value struct satisfies `Comparable` and sorts via statically-dispatched `compare`.
+    let vs = List<Vec2>();
+    vs.push(Vec2(3, 4));   // magnitude 25
+    vs.push(Vec2(1, 1));   // magnitude 2
+    vs.push(Vec2(0, 2));   // magnitude 4
+    vs.sort();
+    let j = 0;
+    while (j < vs.size()) {
+        let v = vs.get(j).unwrap_or(Vec2(0, 0));
+        System.println(v.x * v.x + v.y * v.y);
+        j = j + 1;
+    }
+
+    // `sort_by` with an explicit comparator (descending by cents).
+    prices.sort_by(by_cents_desc);
+    System.println(prices.get(0).unwrap_or(Money(-1)).cents);   // 300
+}

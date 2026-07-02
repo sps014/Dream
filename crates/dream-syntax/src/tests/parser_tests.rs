@@ -195,6 +195,32 @@ fn test_parse_data_enum_with_generics() {
 }
 
 #[test]
+fn test_parse_generic_constraints() {
+    // `<T : Iface (+ Iface)*>` on a struct/class and a function records each bound as a
+    // `GenericConstraint`; the parameter still appears in `generic_parameters`.
+    let code = "\
+        struct Sorted<T : Comparable<T> + Equatable<T>> { public v: T; }\n\
+        fun max_of<U : Comparable<U>>(a: U, b: U): U { return a; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false, "constraint syntax should parse cleanly");
+
+    let s = &program.structs[0];
+    let params = s.generic_parameters.as_ref().expect("generic params");
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].text, "T");
+    assert_eq!(s.generic_constraints.len(), 1);
+    assert_eq!(s.generic_constraints[0].param.text, "T");
+    assert_eq!(s.generic_constraints[0].bounds.len(), 2, "T has two interface bounds");
+
+    let f = program.functions.iter().find(|f| f.name.text == "max_of").expect("max_of");
+    assert_eq!(f.generic_constraints.len(), 1);
+    assert_eq!(f.generic_constraints[0].param.text, "U");
+    assert_eq!(f.generic_constraints[0].bounds.len(), 1);
+}
+
+#[test]
 fn test_parse_switch_expression_with_patterns() {
     let code = "fun f(s: Shape): int { return switch (s) { Circle(r) => r, Empty => 0, _ => 1 }; }";
     let arena = bumpalo::Bump::new();

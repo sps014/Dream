@@ -1,6 +1,7 @@
 use super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::syntax::nodes::function::ParameterNode;
+use crate::syntax::nodes::types::mangle_generic;
 use crate::syntax::nodes::{FunctionNode, Type};
 use crate::text::text_span::TextSpan;
 use crate::syntax::token::token_kind::TokenKind;
@@ -112,8 +113,70 @@ impl<'a> Analyzer<'a> {
             Type::Nullable(inner) => {
                 Type::Nullable(Box::new(Self::monomorphize_type(inner, bindings)))
             }
+            // First-class function types (`fun(T, T): int`) must substitute inside their parameter
+            // and return types so a monomorphized callback param (e.g. `sort_by`'s comparator)
+            // type-checks against concrete arguments.
+            Type::Function(params, ret) => Type::Function(
+                params
+                    .iter()
+                    .map(|p| Self::monomorphize_type(p, bindings))
+                    .collect(),
+                Box::new(Self::monomorphize_type(ret, bindings)),
+            ),
             _ => ty.clone(),
         }
+    }
+
+    /// Verifies that each concrete type bound by `bindings` satisfies its declared generic
+    /// `constraints` (`T : Comparable<T>` etc.), reporting a clear error otherwise. Each bound is
+    /// substituted with the same bindings so `Comparable<T>` becomes `Comparable<int>` before the
+    /// `implements` lookup; the concrete argument must implement that (mangled) interface.
+    pub(super) fn verify_generic_constraints(
+        &self,
+        constraints: &[crate::syntax::nodes::GenericConstraint],
+        bindings: &GenericBindings,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        for constraint in constraints {
+            let Some(concrete) = bindings.get(&constraint.param.text) else {
+                continue;
+            };
+            for bound in &constraint.bounds {
+                if !self.type_satisfies_bound(concrete, bound, bindings) {
+                    diagnostics.report_error(
+                        format!(
+                            "type '{}' does not satisfy the constraint '{}' on generic parameter '{}' (it does not implement that interface)",
+                            concrete.get_type(),
+                            bound.get_type(),
+                            constraint.param.text
+                        ),
+                        Some(*position),
+                    );
+                }
+            }
+        }
+    }
+
+    /// True when `concrete` implements the interface named by `bound` (after substituting the
+    /// monomorphization `bindings` into `bound`, e.g. `Comparable<T>` -> `Comparable<int>`).
+    pub(super) fn type_satisfies_bound(
+        &self,
+        concrete: &Type,
+        bound: &Type,
+        bindings: &GenericBindings,
+    ) -> bool {
+        let bound = substitute_generic_type(bound, bindings);
+        let iface = match Self::resolve_struct_parts(&bound) {
+            Some((base, args)) if args.is_empty() => base,
+            Some((base, args)) => mangle_generic(&base, &args),
+            None => return false,
+        };
+        let concrete_name = match Self::resolve_struct_parts(concrete) {
+            Some((base, args)) => mangle_generic(&base, &args),
+            None => crate::syntax::nodes::types::strip_nullable(&concrete.get_type()).to_string(),
+        };
+        self.class_implements(&concrete_name, &iface)
     }
 
     /// Builds the implicit `this` parameter injected as the first argument of every method.

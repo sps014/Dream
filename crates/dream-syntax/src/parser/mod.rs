@@ -192,27 +192,64 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(items)
     }
 
-    /// Parses an optional generic *parameter* declaration list `<T, U, ...>` of bare identifiers
-    /// (the declaration side; [`parse_generic_args`] parses concrete type *arguments*). Returns
-    /// `None` when no `<` follows. Shared by enum/struct/extend/function declarations.
-    fn parse_identifier_generic_params(&mut self) -> Option<Vec<SyntaxToken>> {
+    /// Parses an optional generic *parameter* declaration list `<T, U, ...>` of bare identifiers,
+    /// each optionally carrying interface bounds `T : Iface (+ Iface)*` (the declaration side;
+    /// [`parse_generic_args`] parses concrete type *arguments*). Returns `None` when no `<` follows.
+    /// Shared by enum/struct/interface/extend/function declarations. The bounds are returned
+    /// separately so the caller can attach them (only class/struct, interface, function, and
+    /// `extend` carry a `generic_constraints` list).
+    fn parse_identifier_generic_params(
+        &mut self,
+    ) -> Option<(Vec<SyntaxToken>, Vec<crate::nodes::GenericConstraint>)> {
         if self.current_token().kind != TokenKind::SmallerThanToken {
             return None;
         }
         self.match_token(TokenKind::SmallerThanToken);
         let mut params = Vec::new();
+        let mut constraints = Vec::new();
         while self.current_token().kind != TokenKind::GreaterThanToken
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
             let iter = self.current_token_index;
-            params.push(self.match_token(TokenKind::IdentifierToken));
+            let param = self.match_token(TokenKind::IdentifierToken);
+            // Optional bounds: `T : Comparable<T>` or `T : Equatable<T> + Comparable<T>`.
+            if self.current_token().kind == TokenKind::ColonToken {
+                self.match_token(TokenKind::ColonToken);
+                let mut bounds = Vec::new();
+                if let Ok(first) = self.parse_type() {
+                    bounds.push(first);
+                }
+                while self.current_token().kind == TokenKind::PlusToken {
+                    self.match_token(TokenKind::PlusToken);
+                    if let Ok(next) = self.parse_type() {
+                        bounds.push(next);
+                    }
+                }
+                constraints.push(crate::nodes::GenericConstraint {
+                    param: param.clone(),
+                    bounds,
+                });
+            }
+            params.push(param);
             if self.current_token().kind == TokenKind::CommaToken {
                 self.match_token(TokenKind::CommaToken);
             }
             self.ensure_progress(iter);
         }
         self.match_token(TokenKind::GreaterThanToken);
-        Some(params)
+        Some((params, constraints))
+    }
+
+    /// Convenience over [`Self::parse_identifier_generic_params`] that splits the result into the
+    /// param-name list (`None` when no `<` follows) and the constraint list (empty otherwise), the
+    /// two shapes the declaration nodes store.
+    fn take_generic_params(
+        &mut self,
+    ) -> (Option<Vec<SyntaxToken>>, Vec<crate::nodes::GenericConstraint>) {
+        match self.parse_identifier_generic_params() {
+            Some((params, constraints)) => (Some(params), constraints),
+            None => (None, Vec::new()),
+        }
     }
 
     /// Recovery guard for token-consuming loops: if no token has been consumed since `mark`,

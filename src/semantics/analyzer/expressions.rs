@@ -597,7 +597,7 @@ impl<'a> Analyzer<'a> {
             // pointer); only the static type changes.
             let src = strip_nullable(&expr_type_str);
             if self.is_interface_name(src)
-                || self.class_implements(src, strip_nullable(&target_type_str))
+                || self.implements_as_interface_ref(src, strip_nullable(&target_type_str))
             {
                 Ok(target_type.clone())
             } else {
@@ -686,6 +686,21 @@ impl<'a> Analyzer<'a> {
             (_, _) => {}
         };
 
+        // User-defined value equality: for `==`/`!=` where the operand's static type is a user type
+        // that implements `Equatable<Self>`, dispatch to its `equals` method (a static call),
+        // negating the result for `!=`. Primitives, strings, and null comparisons keep the built-in
+        // behavior handled above/below.
+        if matches!(opr.kind, TokenKind::EqualEqualToken | TokenKind::NotEqualToken) {
+            if let Some(equals_fn) = self.equatable_equals_fn(&left_value) {
+                let bool_ty = Type::Boolean(opr.clone());
+                self.hir_set_method_call(left_hir, &equals_fn, vec![right_hir], &bool_ty);
+                if opr.kind == TokenKind::NotEqualToken {
+                    self.hir_negate_last();
+                }
+                return Ok(bool_ty);
+            }
+        }
+
         let is_bool_result = matches!(
             opr.kind,
             TokenKind::EqualEqualToken
@@ -705,6 +720,27 @@ impl<'a> Analyzer<'a> {
         self.hir_set_binary(left_hir, opr, right_hir, &result_type);
         Ok(result_type)
     }
+
+    /// If `==`/`!=` on a value of type `left` should dispatch to a user-defined `equals`, returns
+    /// the mangled method symbol (e.g. `Money_equals`). Applies when `left`'s concrete (non-nullable)
+    /// type is a class/struct that implements `Equatable<Self>`; the caller has already verified the
+    /// operands are type-compatible.
+    fn equatable_equals_fn(&self, left: &Type) -> Option<String> {
+        let (base, args) = Self::resolve_struct_parts(left)?;
+        let recv = mangle_generic(&base, &args);
+        // The interface argument is the receiver type itself (the `Equatable<Self>` convention),
+        // mangled exactly as `validate_implements` recorded it.
+        let self_ty = match left {
+            Type::Nullable(inner) => (**inner).clone(),
+            other => other.clone(),
+        };
+        let iface = mangle_generic("Equatable", std::slice::from_ref(&self_ty));
+        if self.class_implements(&recv, &iface) {
+            return Some(method_fn(&recv, "equals"));
+        }
+        None
+    }
+
     pub(super) fn compare_data_type(
         &mut self,
         left: &Type,

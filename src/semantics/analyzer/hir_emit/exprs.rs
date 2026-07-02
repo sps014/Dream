@@ -492,6 +492,21 @@ impl<'a> Analyzer<'a> {
         ));
     }
 
+    /// Wraps the last-emitted expression in a logical negation (`!expr`), preserving its type. Used
+    /// to lower `a != b` after it has been rewritten to the `equals` call `a.equals(b)`.
+    pub(in crate::semantics::analyzer) fn hir_negate_last(&mut self) {
+        if let Some(expr) = self.hir.last.take() {
+            let ty = expr.ty;
+            self.hir.last = Some(HExpr::new(
+                ty,
+                HExprKind::Unary {
+                    op: crate::hir::UnOp::Not,
+                    operand: Box::new(expr),
+                },
+            ));
+        }
+    }
+
     /// Records a dynamically-dispatched interface method call. `iface` is the interface's `DefId`
     /// and `method_slot` the method's local index within the interface; the backend uses the
     /// receiver's runtime tag to select the concrete implementation. Drops out of coverage if the

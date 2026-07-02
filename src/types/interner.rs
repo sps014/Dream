@@ -20,6 +20,10 @@ pub struct TypeInterner {
     /// interned id. Populated once layouts are computed; consulted by `scalar_size` so a value struct
     /// stored as a field/element/local occupies its full inline footprint rather than a 4-byte pointer.
     value_layouts: HashMap<TypeId, (u32, u32)>,
+    /// Interned ids of value *unions* (a data `enum` instance every one of whose variant payloads is
+    /// value/primitive, e.g. `Option<int>`). Unlike value structs (marked per-`DefId`) value-ness is
+    /// per-`TypeId`, because `Option<int>` (value) and `Option<string>` (heap) share one `DefId`.
+    value_unions: HashSet<TypeId>,
 }
 
 impl Default for TypeInterner {
@@ -35,6 +39,7 @@ impl TypeInterner {
             dedup: IndexMap::new(),
             value_defs: HashSet::new(),
             value_layouts: HashMap::new(),
+            value_unions: HashSet::new(),
         };
         // Pre-intern the nullary types so their ids are stable and cheap to reach.
         for prim in [
@@ -174,9 +179,25 @@ impl TypeInterner {
         self.value_defs.contains(&def)
     }
 
-    /// True if `id` names a value (`struct`) type (after stripping any nullable wrapper).
+    /// Records `id` (after stripping any nullable wrapper) as a value *union* type. Idempotent.
+    pub fn mark_value_union(&mut self, id: TypeId) {
+        let id = self.strip_nullable(id);
+        self.value_unions.insert(id);
+    }
+
+    /// True when `id` names a value union (after stripping any nullable wrapper).
+    pub fn is_value_union(&self, id: TypeId) -> bool {
+        self.value_unions.contains(&self.strip_nullable(id))
+    }
+
+    /// True if `id` names a value type — a value (`struct`) type or a value union — after stripping
+    /// any nullable wrapper. Both are stored inline with copy semantics rather than as heap references.
     pub fn is_value_type(&self, id: TypeId) -> bool {
-        matches!(self.kind(self.strip_nullable(id)), TyKind::Struct(def, _) if self.value_defs.contains(def))
+        let stripped = self.strip_nullable(id);
+        if self.value_unions.contains(&stripped) {
+            return true;
+        }
+        matches!(self.kind(stripped), TyKind::Struct(def, _) if self.value_defs.contains(def))
     }
 
     /// Records the inline `(size, align)` of a value (`struct`) type. Keyed by the nullable-stripped
@@ -196,6 +217,10 @@ impl TypeInterner {
     /// `struct` (value) type is *not* a reference even though it is a `TyKind::Struct`.
     pub fn is_reference(&self, id: TypeId) -> bool {
         let stripped = self.strip_nullable(id);
+        // A value union is stored inline (not a heap reference) even though it is a `TyKind::Union`.
+        if self.value_unions.contains(&stripped) {
+            return false;
+        }
         if let TyKind::Struct(def, _) = self.kind(stripped) {
             if self.value_defs.contains(def) {
                 return false;

@@ -146,17 +146,25 @@ pub(super) fn vs_drop_sym(name: &str) -> String {
 pub(super) fn value_glue_types(mir: &crate::mir::Mir, interner: &TypeInterner) -> HashSet<TypeId> {
     let fn_names: HashSet<&str> = mir.functions.iter().map(|f| f.name.as_str()).collect();
     let mut out = HashSet::new();
-    let keys: Vec<TypeId> = mir.layouts.structs.keys().copied().collect();
-    for ty in keys {
+    let struct_keys: Vec<TypeId> = mir.layouts.structs.keys().copied().collect();
+    for ty in struct_keys {
         if interner.is_value_type(ty) {
+            needs_glue(ty, mir, interner, &fn_names, &mut out, &mut HashSet::new());
+        }
+    }
+    // Value unions can also embed references (via a value-struct payload), so they too may need glue.
+    let union_keys: Vec<TypeId> = mir.layouts.unions.keys().copied().collect();
+    for ty in union_keys {
+        if interner.is_value_union(ty) {
             needs_glue(ty, mir, interner, &fn_names, &mut out, &mut HashSet::new());
         }
     }
     out
 }
 
-/// Determines whether value struct `ty` needs glue, memoizing the answer into `out` (the set of
-/// glue-requiring types). `visiting` guards the recursion (value-type cycles are a rejected error).
+/// Determines whether value type `ty` (a value struct or value union) needs glue, memoizing the
+/// answer into `out` (the set of glue-requiring types). `visiting` guards the recursion (value-type
+/// cycles are a rejected error).
 fn needs_glue(
     ty: TypeId,
     mir: &crate::mir::Mir,
@@ -171,6 +179,28 @@ fn needs_glue(
     }
     if !visiting.insert(ty) {
         return false;
+    }
+    // A value union needs glue when any variant payload is a reference or a glue-needing value type.
+    if interner.is_value_union(ty) {
+        let mut needs = false;
+        if let Some(u) = mir.layouts.unions.get(&ty) {
+            for v in &u.variants {
+                for f in &v.fields {
+                    if interner.is_reference(f.ty) {
+                        needs = true;
+                    } else if interner.is_value_type(f.ty)
+                        && needs_glue(f.ty, mir, interner, fn_names, out, visiting)
+                    {
+                        needs = true;
+                    }
+                }
+            }
+        }
+        visiting.remove(&ty);
+        if needs {
+            out.insert(ty);
+        }
+        return needs;
     }
     let Some(layout) = mir.layouts.structs.get(&ty) else {
         visiting.remove(&ty);
@@ -224,6 +254,45 @@ pub(super) fn emit_value_glue(
         }
         out.push_str(")\n");
     }
+
+    // Value-union glue is variant-aware: the discriminant at offset 0 selects which payload fields
+    // are live, so each retain/drop guards its field work on `discriminant == variant`.
+    for (ty, layout) in &mir.layouts.unions {
+        if !glue.contains(ty) {
+            continue;
+        }
+        for op in [GlueOp::Retain, GlueOp::Drop] {
+            let sym = match op {
+                GlueOp::Retain => vs_retain_sym(&layout.name),
+                GlueOp::Drop => vs_drop_sym(&layout.name),
+            };
+            let _ = writeln!(out, "(func {} (param $ptr i32)", sym);
+            for v in &layout.variants {
+                let live: Vec<&crate::hir::FieldLayout> = v
+                    .fields
+                    .iter()
+                    .filter(|f| {
+                        interner.is_reference(f.ty)
+                            || (interner.is_value_type(f.ty)
+                                && glue.contains(&interner.strip_nullable(f.ty)))
+                    })
+                    .collect();
+                if live.is_empty() {
+                    continue;
+                }
+                let _ = writeln!(
+                    out,
+                    "  (local.get $ptr) (i32.load) (i32.const {}) (i32.eq) (if (then",
+                    v.discriminant
+                );
+                for f in live {
+                    emit_field_glue(out, mir, interner, glue, f, op);
+                }
+                out.push_str("  ))\n");
+            }
+            out.push_str(")\n");
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -262,14 +331,24 @@ fn emit_field_glue(
             }
         }
     } else if interner.is_value_type(f.ty) && glue.contains(&interner.strip_nullable(f.ty)) {
-        let name = &mir.layouts.structs[&interner.strip_nullable(f.ty)].name;
-        addr(out);
-        match op {
-            GlueOp::Retain => {
-                let _ = writeln!(out, " (call {})", vs_retain_sym(name));
-            }
-            GlueOp::Drop => {
-                let _ = writeln!(out, " (call {})", vs_drop_sym(name));
+        let stripped = interner.strip_nullable(f.ty);
+        // A nested value field is either a value struct or a value union; resolve its glue name from
+        // whichever layout table holds it.
+        let name = mir
+            .layouts
+            .structs
+            .get(&stripped)
+            .map(|l| l.name.clone())
+            .or_else(|| mir.layouts.unions.get(&stripped).map(|u| u.name.clone()));
+        if let Some(name) = name {
+            addr(out);
+            match op {
+                GlueOp::Retain => {
+                    let _ = writeln!(out, " (call {})", vs_retain_sym(&name));
+                }
+                GlueOp::Drop => {
+                    let _ = writeln!(out, " (call {})", vs_drop_sym(&name));
+                }
             }
         }
     }

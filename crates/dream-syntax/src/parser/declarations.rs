@@ -80,8 +80,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut name, doc_trivia);
 
-        // Optional generic parameters: `enum Option<T> { ... }`.
-        let generic_parameters = self.parse_identifier_generic_params();
+        // Optional generic parameters: `enum Option<T> { ... }`. Enums carry no constraint list.
+        let (generic_parameters, _generic_constraints) = self.take_generic_params();
 
         self.match_token(TokenKind::CurlyOpenBracketToken);
 
@@ -181,7 +181,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut struct_name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut struct_name, first_trivia);
 
-        let generic_parameters = self.parse_identifier_generic_params();
+        let (generic_parameters, generic_constraints) = self.take_generic_params();
 
         // Optional `: Iface1, Container<int>, ...` implements clause. Each entry is a (possibly
         // generic) interface type the class declares it satisfies; the class must provide a matching
@@ -282,6 +282,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         );
         decl.implements = implements;
         decl.is_value = is_value;
+        decl.generic_constraints = generic_constraints;
         Ok(decl)
     }
 
@@ -305,7 +306,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut name, doc_trivia);
 
-        let generic_parameters = self.parse_identifier_generic_params();
+        let (generic_parameters, generic_constraints) = self.take_generic_params();
 
         self.match_token(TokenKind::CurlyOpenBracketToken);
 
@@ -320,13 +321,15 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         self.match_token(TokenKind::CurlyCloseBracketToken);
-        Ok(crate::nodes::InterfaceDeclarationNode::new(
+        let mut decl = crate::nodes::InterfaceDeclarationNode::new(
             attributes,
             name,
             generic_parameters,
             methods,
             is_public,
-        ))
+        );
+        decl.generic_constraints = generic_constraints;
+        Ok(decl)
     }
 
     /// Parses one interface method signature: `[public] [static] fun Name[<T>](params)[: ret] ;`.
@@ -345,7 +348,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         self.match_token(TokenKind::FunToken);
         let function_name = self.match_token(TokenKind::IdentifierToken);
-        let generic_parameters = self.parse_identifier_generic_params();
+        let (generic_parameters, generic_constraints) = self.take_generic_params();
         let params = self.parse_formal_parameters()?;
         let mut return_type: Option<Type> = None;
         if self.current_token().kind == TokenKind::ColonToken {
@@ -379,6 +382,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         );
         node.is_static = is_static;
         node.is_async = is_async;
+        node.generic_constraints = generic_constraints;
         Ok(node)
     }
 
@@ -400,7 +404,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             target.text = canonical.to_string();
         }
 
-        let generic_parameters = self.parse_identifier_generic_params();
+        let (generic_parameters, generic_constraints) = self.take_generic_params();
 
         self.match_token(TokenKind::CurlyOpenBracketToken);
 
@@ -431,11 +435,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         self.match_token(TokenKind::CurlyCloseBracketToken);
-        Ok(crate::nodes::ExtendNode::new(
-            target,
-            generic_parameters,
-            methods,
-        ))
+        let mut node = crate::nodes::ExtendNode::new(target, generic_parameters, methods);
+        node.generic_constraints = generic_constraints;
+        Ok(node)
     }
 
     /// Parses an import statement of the form `import a.b.c;`, mapping each dotted segment to a
@@ -704,7 +706,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut function_name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut function_name, first_trivia);
 
-        let generic_parameters = self.parse_identifier_generic_params();
+        let (generic_parameters, generic_constraints) = self.take_generic_params();
 
         let params = self.parse_formal_parameters()?;
         let mut return_type: Option<Type> = None;
@@ -741,6 +743,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_extern = true;
             node.is_static = is_static;
             node.is_async = is_async;
+            node.generic_constraints = generic_constraints;
             return Ok(node);
         }
 
@@ -756,6 +759,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         );
         node.is_static = is_static;
         node.is_async = is_async;
+        node.generic_constraints = generic_constraints;
         Ok(node)
     }
 

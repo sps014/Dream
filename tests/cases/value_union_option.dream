@@ -1,0 +1,35 @@
+// A data `enum` whose payloads are all value/primitive becomes a stack value union: `Option<int>`
+// lives inline (no heap allocation, RC balance unchanged), while `Option<string>` keeps a reference
+// payload and stays on the heap. Matching, accessors, and copies work identically for both.
+
+fun classify(o: Option<int>): int {
+    return switch (o) {
+        Some(v) => v,
+        None    => -1,
+    };
+}
+
+fun main(): void {
+    let base = Debug.live_objects();
+
+    let some: Option<int> = Option.Some(42);
+    let none: Option<int> = Option.None;
+
+    System.println(some.is_some());        // true
+    System.println(none.is_none());        // true
+    System.println(classify(some));        // 42
+    System.println(classify(none));        // -1
+    System.println(some.unwrap_or(0));     // 42
+    System.println(none.unwrap_or(7));     // 7
+
+    // Copying a value union copies its bytes inline (no shared heap object).
+    let copy = some;
+    System.println(classify(copy));        // 42
+
+    // A value union allocates nothing on the heap.
+    System.println("int_delta=" + (Debug.live_objects() - base).to_string());
+
+    // `Option<string>` carries a reference payload, so it stays a heap union.
+    let s: Option<string> = Option.Some("hi");
+    System.println(s.unwrap_or("none"));   // hi
+}

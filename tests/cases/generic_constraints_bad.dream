@@ -1,0 +1,11 @@
+// `List<T>.sort()` is a constrained extension requiring `T : Comparable<T>`. `int` does not
+// implement `Comparable<int>`, so calling `sort()` on a `List<int>` is a compile-time constraint
+// violation.
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(3);
+    xs.push(1);
+    xs.sort();
+    System.println(xs.size());
+}

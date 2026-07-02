@@ -110,6 +110,36 @@ fun main() {
 }
 ```
 
+## Implementing interfaces
+
+A value struct may `implements` an interface, including the built-in [`Equatable`/`Comparable`](interfaces.md)
+protocols. Because Dream monomorphizes generics, an interface method is dispatched **statically** with
+**zero boxing** wherever the concrete type is known — a direct call, or inside generic code whose type
+parameter is [constrained](generics.md#generic-constraints) to the interface.
+
+```dream
+struct Money : Comparable<Money>, Equatable<Money> {
+    public cents: int;
+    constructor(cents: int) { this.cents = cents; }
+
+    public fun compare(other: Money): int { return this.cents - other.cents; }
+    public fun equals(other: Money): bool { return this.cents == other.cents; }
+}
+
+fun main() {
+    println(Money(100) == Money(100));   // true — `==` routes to `equals`
+
+    let prices = List<Money>();
+    prices.push(Money(300));
+    prices.push(Money(100));
+    prices.sort();                        // uses `compare`, dispatched statically (no allocation)
+}
+```
+
+Storing a value struct in a bare interface-typed or `object` variable — a true *dynamic* upcast that
+would heap-copy (box) the value — is not yet supported. Direct calls and generic constraints cover
+`==`, `compare`, and `sort` without any boxing.
+
 ## When to use a `struct`
 
 Reach for a `struct` when a type is a small, copyable bundle of data with value identity — points,
@@ -122,7 +152,8 @@ Value structs currently exclude features that are inherent to reference types:
 
 - **No `T?` nullability** — a value struct has no null representation, so a field cannot be a
   nullable value struct.
-- **No `implements`** — value structs do not participate in interface dispatch (that would require
-  boxing to a tagged heap object). Use a `class` when you need an interface.
+- **No dynamic upcast (boxing)** — a value struct may `implements` an interface and be dispatched
+  statically (see above), but it cannot be stored in a bare interface-typed or `object` variable,
+  which would require boxing to a tagged heap object.
 - **No self-containment by value** — a value struct cannot contain itself by value (that would need
   infinite storage). Break the cycle with a reference (`class`) field or an array.

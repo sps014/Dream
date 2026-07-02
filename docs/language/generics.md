@@ -80,6 +80,33 @@ fun main(): void {
 }
 ```
 
+## Generic constraints
+
+A type parameter can be **constrained** to one or more interfaces with `T : Iface`. Inside the body,
+a constrained parameter exposes the interface's methods, so you can call them on values of that type.
+Constraints apply to generic functions, classes, structs, interfaces, and `extend` blocks.
+
+```dream
+fun max_of<T : Comparable<T>>(a: T, b: T): T {
+    if (a.compare(b) > 0) {   // `compare` is available because T : Comparable<T>
+        return a;
+    }
+    return b;
+}
+```
+
+Combine several bounds with `+`:
+
+```dream
+struct Sorted<T : Comparable<T> + Equatable<T>> { /* ... */ }
+```
+
+At every instantiation the compiler checks that the concrete type actually satisfies the constraint,
+reporting an error otherwise (e.g. `List<int>.sort()` fails unless `int` implements `Comparable<int>`).
+Because generics are monomorphized, a constrained call binds to the concrete type's method — ordinary
+**static dispatch, with no boxing**, even for [value structs](value-structs.md). This is what lets a
+value struct satisfy `Comparable`/`Equatable` and be sorted or compared without ever allocating.
+
 ## Type checking inside generic bodies
 
 Use `is` to branch on the concrete type at compile time. The compiler eliminates dead branches entirely:
