@@ -1061,3 +1061,30 @@ fun main(): void {
         );
     }
 }
+
+#[test]
+fn test_incremental_change_re_indexes_document() {
+    use dream_lsp::index::Index;
+
+    let src = "
+fun main(): void {
+    let old_var = 10;
+}
+";
+    // Simulate first edit
+    let index1 = Index::build(None, src);
+    let has_old = index1.decls.iter().any(|d| d.name == "old_var");
+    assert!(has_old, "Expected old_var to be indexed");
+
+    // Apply incremental text edit directly to string, as happens in `backend.rs`
+    let mut text = src.to_string();
+    let old_len = "old_var".len();
+    let offset = text.find("old_var").unwrap();
+    text.replace_range(offset..(offset + old_len), "new_var");
+
+    let index2 = Index::build(None, &text);
+    let has_old = index2.decls.iter().any(|d| d.name == "old_var");
+    let has_new = index2.decls.iter().any(|d| d.name == "new_var");
+    assert!(!has_old, "Expected old_var to be removed");
+    assert!(has_new, "Expected new_var to be indexed");
+}

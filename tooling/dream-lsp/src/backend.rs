@@ -71,17 +71,21 @@ impl Backend {
     /// Returns the symbol index for a document, rebuilding it only when the cached version is
     /// stale (or absent). The result is shared via [`Arc`] so callers never clone the model.
     fn index_for(&self, uri: &str, file_path: Option<&str>) -> Option<Arc<Index>> {
-        let doc = self.documents.get(uri)?;
-        if let Some(cached) = self.index_cache.get(uri) {
-            if cached.version == doc.version {
-                return Some(cached.index.clone());
+        let (text, version) = {
+            let doc = self.documents.get(uri)?;
+            if let Some(cached) = self.index_cache.get(uri) {
+                if cached.version == doc.version {
+                    return Some(cached.index.clone());
+                }
             }
-        }
-        let index = Arc::new(Index::build(file_path, &doc.text));
+            (doc.text.clone(), doc.version)
+        };
+
+        let index = Arc::new(Index::build(file_path, &text));
         self.index_cache.insert(
             uri.to_string(),
             CachedIndex {
-                version: doc.version,
+                version,
                 index: index.clone(),
             },
         );
@@ -225,18 +229,19 @@ impl LanguageServer for Backend {
         let version = params.text_document.version;
         let key = uri.to_string();
 
-        let mut text = self.document_text(&key).unwrap_or_default();
-        for change in params.content_changes {
-            apply_change(&mut text, change.range, &change.text);
-        }
+        let text = {
+            let mut entry = self.documents.entry(key.clone()).or_insert_with(|| Document {
+                text: String::new(),
+                version: 0,
+            });
 
-        self.documents.insert(
-            key,
-            Document {
-                text: text.clone(),
-                version,
-            },
-        );
+            for change in params.content_changes {
+                apply_change(&mut entry.text, change.range, &change.text);
+            }
+            entry.version = version;
+            entry.text.clone()
+        };
+
         self.schedule_diagnostics(uri, text, version);
     }
 
@@ -614,4 +619,41 @@ fn active_parameter_at(text: &str, offset: usize) -> u32 {
         }
     }
     active_parameter
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tower_lsp::lsp_types::{Position, Range};
+
+    #[test]
+    fn test_apply_change_full_document() {
+        let mut text = "hello world".to_string();
+        apply_change(&mut text, None, "goodbye");
+        assert_eq!(text, "goodbye");
+    }
+
+    #[test]
+    fn test_apply_change_incremental() {
+        let mut text = "hello world\nnew line".to_string();
+        // Replace "world" with "there"
+        let range = Range {
+            start: Position { line: 0, character: 6 },
+            end: Position { line: 0, character: 11 },
+        };
+        apply_change(&mut text, Some(range), "there");
+        assert_eq!(text, "hello there\nnew line");
+    }
+
+    #[test]
+    fn test_apply_change_multi_line() {
+        let mut text = "line 1\nline 2\nline 3".to_string();
+        // Replace from end of line 1 to start of line 3
+        let range = Range {
+            start: Position { line: 0, character: 6 },
+            end: Position { line: 2, character: 0 },
+        };
+        apply_change(&mut text, Some(range), " inserted ");
+        assert_eq!(text, "line 1 inserted line 3");
+    }
 }

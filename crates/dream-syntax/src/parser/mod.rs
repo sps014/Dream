@@ -105,6 +105,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                     err_pos.start = err_pos.end;
                     err_pos.col_no += err_pos.end - prev_token.position.start;
                 }
+            } else {
+                err_pos.end = err_pos.start;
             }
 
             self.diagnostics.report_error(
