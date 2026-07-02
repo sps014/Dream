@@ -75,7 +75,7 @@ let first = nums[0];   // 10
 nums[1] = 99;
 ```
 
-Arrays are fixed-size once created from a literal. For a growable list, use [`List<T>`](../stdlib/list.md).
+Arrays are fixed-size once created from a literal. For a growable list, use [`List<T>`](../stdlib/collections.md).
 
 ## Nullable types
 
@@ -130,7 +130,7 @@ let b2: byte = (byte)ch;        // back to 72
 ## Enums
 
 A set of named integer constants, or — when a variant carries a payload — a discriminated union.
-See [Enums](enums.md) and [Discriminated Unions](discriminated-unions.md).
+See [Enums](enums-unions.md) and [Discriminated Unions](enums-unions.md).
 
 ## Type aliases
 
@@ -147,7 +147,7 @@ fun add(a: Number, b: Number): Number {
 
 ## Classes
 
-User-defined reference types. See [Classes](classes.md).
+User-defined reference types. See [Classes](classes-structs.md).
 
 ## Value structs
 

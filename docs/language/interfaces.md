@@ -247,18 +247,21 @@ code all work without any extra code.
   strings keep their built-in equality. The ordering operators (`<`, `>`, `<=`, `>=`) are *not*
   overloaded — use `compare` directly for custom ordering.
 - **`compare` powers sorting.** `List<T : Comparable<T>>.sort()` orders a list using `compare`, and
-  `List<T>.sort_by(cmp)` takes an explicit comparator. See [List sorting](../stdlib/list.md#sorting).
+  `List<T>.sort_by(cmp)` takes an explicit comparator. See [List sorting](../stdlib/collections.md#sorting).
 
-Both interfaces work with [value structs](value-structs.md): when the concrete type is known (a direct
+Both interfaces work with [value structs](classes-structs.md): when the concrete type is known (a direct
 call or a [generic constraint](generics.md#generic-constraints)), dispatch is static with no boxing.
 
 ## Limits (current version)
 
 - Interfaces declare method signatures only — no fields and no default method bodies.
-- A [value struct](value-structs.md) can implement an interface and be dispatched statically, but it
+- A [value struct](classes-structs.md) can implement an interface and be dispatched statically, but it
   cannot yet be stored in a bare interface-typed variable (dynamic upcast / boxing is deferred).
 
 ## See also
 
-- [Classes](classes.md) — defining types, methods, and visibility.
+- [Classes](classes-structs.md) — defining types, methods, and visibility.
 - [The `object` Type](objects.md) — the universal container and the `is` operator.
+tor.
+
+tor.

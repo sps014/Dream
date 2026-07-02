@@ -66,6 +66,7 @@ nav:
     - Control Flow: language/control-flow.md
     - Functions: language/functions.md
   - Types & Data:
+    - Overview: language/types.md
     - Primitives: language/primitives.md
     - Arrays: language/arrays.md
     - Enums & Unions: language/enums-unions.md

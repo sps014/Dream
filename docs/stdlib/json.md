@@ -75,7 +75,7 @@ println(JSON.stringify_pretty(v, 2));
 ## Auto-derive with `@json`
 
 Mark a class `@json` and the compiler generates its `to_json` / `from_json` converters, so the
-class round-trips with no boilerplate. This works for a value [`struct`](../language/value-structs.md)
+class round-trips with no boilerplate. This works for a value [`struct`](../language/classes-structs.md)
 too — `@json struct Point { public x: int; public y: int; constructor(x: int, y: int) { ... } }`
 serializes and deserializes exactly like a class:
 
@@ -136,7 +136,7 @@ class Profile { name: string; nickname: string?; address: Address?; }
 
 ### Unions
 
-`@json` also works on [discriminated unions](../language/discriminated-unions.md). A value is
+`@json` also works on [discriminated unions](../language/enums-unions.md). A value is
 serialized as an object tagged with a `"type"` key naming the active variant, followed by that
 variant's payload fields; a unit variant becomes just `{ "type": "<Variant>" }`:
 

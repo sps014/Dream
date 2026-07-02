@@ -47,7 +47,7 @@ fun fill_zeros(arr: int[]): void {
 
 Arrays created from literals are fixed-size. You cannot push or pop from them.
 
-If you need a growable array, use [`List<T>`](../stdlib/list.md):
+If you need a growable array, use [`List<T>`](../stdlib/collections.md):
 
 ```dream
 let xs = List<int>();

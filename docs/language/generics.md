@@ -124,7 +124,7 @@ struct Sorted<T : Comparable<T> + Equatable<T>> { /* ... */ }
 At every instantiation the compiler checks that the concrete type actually satisfies the constraint,
 reporting an error otherwise (e.g. `List<int>.sort()` fails unless `int` implements `Comparable<int>`).
 Because generics are monomorphized, a constrained call binds to the concrete type's method — ordinary
-**static dispatch, with no boxing**, even for [value structs](value-structs.md). This is what lets a
+**static dispatch, with no boxing**, even for [value structs](classes-structs.md). This is what lets a
 value struct satisfy `Comparable`/`Equatable` and be sorted or compared without ever allocating.
 
 ## Type checking inside generic bodies
