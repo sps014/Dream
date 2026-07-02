@@ -1,0 +1,49 @@
+// A value `struct` that embeds a reference field must keep reference counting balanced: copying the
+// struct retains the embedded reference, and dropping a value struct at scope exit (or on overwrite)
+// releases it. The `Debug.live_objects()` delta proves nothing leaks, and the destructor prints show
+// the embedded `Tracked` is freed exactly once.
+
+class Tracked {
+    public id: int;
+
+    constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+struct Holder {
+    public item: Tracked;
+
+    constructor(item: Tracked) {
+        this.item = item;
+    }
+
+    public fun id(): int {
+        return this.item.id;
+    }
+}
+
+// Copies a value struct twice (arg copy + local copy); every copy retains, every drop releases.
+fun use_holder(h: Holder): int {
+    let h2 = h;
+    return h2.id();
+}
+
+// All allocations are confined here, so everything is released at scope exit.
+fun run() {
+    let t = Tracked(7);
+    let h = Holder(t);
+    System.println(use_holder(h));   // 7
+    System.println(h.id());          // 7 (h still valid; the copy inside use_holder did not free t)
+}
+
+fun main() {
+    let base = Debug.live_objects();
+    run();
+    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+}

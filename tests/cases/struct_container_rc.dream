@@ -1,0 +1,69 @@
+// Reference-counting stays balanced when a value `struct` that owns a reference is embedded in each
+// kind of container. Releasing the container runs the value struct's drop-glue in place, releasing
+// the embedded reference exactly once (proven by the `del()` prints and a zero `live_objects` delta).
+
+class Tracked {
+    public id: int;
+
+    constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+struct Ref {
+    public t: Tracked;
+
+    constructor(t: Tracked) {
+        this.t = t;
+    }
+
+    public fun id(): int {
+        return this.t.id;
+    }
+}
+
+class Wrap {
+    public r: Ref;
+
+    constructor(r: Ref) {
+        this.r = r;
+    }
+}
+
+enum OptRef {
+    Some(v: Ref),
+    None,
+}
+
+fun in_class() {
+    let w = Wrap(Ref(Tracked(1)));
+    System.println(w.r.id());
+}
+
+fun in_array() {
+    let xs = [Ref(Tracked(2)), Ref(Tracked(3))];
+    System.println(xs[0].id());
+    System.println(xs[1].id());
+}
+
+fun in_union() {
+    let o = OptRef.Some(Ref(Tracked(4)));
+    let r = switch (o) {
+        Some(rf) => rf.id(),
+        None => 0,
+    };
+    System.println(r);
+}
+
+fun main() {
+    let base = Debug.live_objects();
+    in_class();
+    in_array();
+    in_union();
+    System.println("live_delta=" + (Debug.live_objects() - base).to_string());
+}

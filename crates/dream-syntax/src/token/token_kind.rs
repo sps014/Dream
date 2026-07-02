@@ -148,6 +148,8 @@ pub enum TokenKind {
     ExternToken,
     #[token("class")]
     ClassToken,
+    #[token("struct")]
+    StructToken,
     #[token("interface")]
     InterfaceToken,
     #[token("extend")]
@@ -258,6 +260,7 @@ impl TokenKind {
             TokenKind::PublicToken => "'public'",
             TokenKind::ExternToken => "'extern'",
             TokenKind::ClassToken => "'class'",
+            TokenKind::StructToken => "'struct'",
             TokenKind::InterfaceToken => "'interface'",
             TokenKind::ExtendToken => "'extend'",
             TokenKind::NullToken => "'null'",

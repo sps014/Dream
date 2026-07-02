@@ -1,0 +1,50 @@
+// Value `struct`s are stored inline wherever they live: as array elements (stride = full size), as
+// fields embedded directly inside a heap `class`, and as union payloads. Each is read/written and
+// mutated in place.
+
+struct Pair {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+class Box {
+    public p: Pair;
+
+    constructor(p: Pair) {
+        this.p = p;
+    }
+}
+
+enum Opt {
+    Some(v: Pair),
+    None,
+}
+
+fun main() {
+    // Array of value structs.
+    let arr = [Pair(1, 2), Pair(3, 4)];
+    System.println(arr[0].a);   // 1
+    System.println(arr[1].b);   // 4
+    arr[0].a = 100;
+    System.println(arr[0].a);   // 100
+    System.println(arr[1].a);   // 3 (independent element)
+
+    // Value field embedded inline in a heap class.
+    let box = Box(Pair(5, 6));
+    System.println(box.p.a);    // 5
+    box.p.b = 60;
+    System.println(box.p.b);    // 60
+
+    // Value payload carried inline in a union variant.
+    let o = Opt.Some(Pair(7, 8));
+    let r = switch (o) {
+        Some(pr) => pr.a + pr.b,
+        None => 0,
+    };
+    System.println(r);          // 15
+}

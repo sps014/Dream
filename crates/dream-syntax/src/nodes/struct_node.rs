@@ -34,6 +34,9 @@ pub struct StructDeclarationNode<'a> {
     /// True when the class is marked `public`: visible to other modules and emitted as a
     /// WebAssembly export. Private (the default) classes are module-internal.
     pub is_public: bool,
+    /// True when declared with the `struct` keyword (a value type): stored inline with copy
+    /// semantics rather than as a heap-allocated, reference-counted `class`.
+    pub is_value: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,
@@ -56,6 +59,7 @@ impl<'a> StructDeclarationNode<'a> {
             methods,
             implements: Vec::new(),
             is_public,
+            is_value: false,
             file_path: None,
         }
     }

@@ -23,6 +23,9 @@ pub struct DefInfo {
     pub kind: DefKind,
     pub name: String,
     pub generic_params: Vec<String>,
+    /// True for `struct` (value) declarations: instances are stored inline with copy semantics
+    /// rather than as heap-allocated, reference-counted objects. Always `false` for non-structs.
+    pub is_value: bool,
 }
 
 /// Interns nominal declarations to [`DefId`]s. Lookups by `(kind, name)` are deduplicated so a base
@@ -51,9 +54,20 @@ impl DefTable {
             kind,
             name: name.to_string(),
             generic_params,
+            is_value: false,
         });
         self.by_name.insert(key, id);
         id
+    }
+
+    /// Marks a definition as a value (`struct`) type. Idempotent.
+    pub fn mark_value(&mut self, id: DefId) {
+        self.defs[id.0 as usize].is_value = true;
+    }
+
+    /// True when `id` names a value (`struct`) type.
+    pub fn is_value(&self, id: DefId) -> bool {
+        self.defs[id.0 as usize].is_value
     }
 
     pub fn get(&self, id: DefId) -> &DefInfo {

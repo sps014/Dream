@@ -4,6 +4,7 @@
 
 use super::{DefId, PrimTy, TyKind, TypeId};
 use indexmap::IndexMap;
+use std::collections::{HashMap, HashSet};
 
 /// Interns [`TyKind`]s to [`TypeId`]s. Structural equality of types reduces to `TypeId` equality
 /// because identical kinds always intern to the same id.
@@ -11,6 +12,14 @@ use indexmap::IndexMap;
 pub struct TypeInterner {
     kinds: Vec<TyKind>,
     dedup: IndexMap<TyKind, TypeId>,
+    /// `DefId`s of `struct` (value) types. Consulted by [`Self::is_reference`] so a `Struct(def, _)`
+    /// whose def is a value type is classified as a non-reference (stored inline, copy semantics).
+    /// The interner has no access to the `DefTable`, so the value-ness is mirrored here.
+    value_defs: HashSet<DefId>,
+    /// Inline `(size, align)` in bytes of each value (`struct`) type, keyed by its (nullable-stripped)
+    /// interned id. Populated once layouts are computed; consulted by `scalar_size` so a value struct
+    /// stored as a field/element/local occupies its full inline footprint rather than a 4-byte pointer.
+    value_layouts: HashMap<TypeId, (u32, u32)>,
 }
 
 impl Default for TypeInterner {
@@ -24,6 +33,8 @@ impl TypeInterner {
         let mut interner = TypeInterner {
             kinds: Vec::new(),
             dedup: IndexMap::new(),
+            value_defs: HashSet::new(),
+            value_layouts: HashMap::new(),
         };
         // Pre-intern the nullary types so their ids are stable and cheap to reach.
         for prim in [
@@ -152,9 +163,45 @@ impl TypeInterner {
         self.unwrap_nullable(id).unwrap_or(id)
     }
 
-    /// True if a value of `id` is a heap reference (after stripping any nullable wrapper).
+    /// Records `def` as a value (`struct`) type so [`Self::is_reference`] treats its instances as
+    /// inline values rather than heap references. Idempotent.
+    pub fn mark_value_def(&mut self, def: DefId) {
+        self.value_defs.insert(def);
+    }
+
+    /// True when `def` names a value (`struct`) type.
+    pub fn is_value_def(&self, def: DefId) -> bool {
+        self.value_defs.contains(&def)
+    }
+
+    /// True if `id` names a value (`struct`) type (after stripping any nullable wrapper).
+    pub fn is_value_type(&self, id: TypeId) -> bool {
+        matches!(self.kind(self.strip_nullable(id)), TyKind::Struct(def, _) if self.value_defs.contains(def))
+    }
+
+    /// Records the inline `(size, align)` of a value (`struct`) type. Keyed by the nullable-stripped
+    /// id so a `T?` value struct resolves to the same footprint as `T`. Idempotent.
+    pub fn set_value_layout(&mut self, id: TypeId, size: u32, align: u32) {
+        let id = self.strip_nullable(id);
+        self.value_layouts.insert(id, (size, align));
+    }
+
+    /// The recorded inline `(size, align)` of a value (`struct`) type, or `None` for reference types
+    /// and value structs whose layout has not been computed yet.
+    pub fn value_layout(&self, id: TypeId) -> Option<(u32, u32)> {
+        self.value_layouts.get(&self.strip_nullable(id)).copied()
+    }
+
+    /// True if a value of `id` is a heap reference (after stripping any nullable wrapper). A
+    /// `struct` (value) type is *not* a reference even though it is a `TyKind::Struct`.
     pub fn is_reference(&self, id: TypeId) -> bool {
-        self.kind(self.strip_nullable(id)).is_reference()
+        let stripped = self.strip_nullable(id);
+        if let TyKind::Struct(def, _) = self.kind(stripped) {
+            if self.value_defs.contains(def) {
+                return false;
+            }
+        }
+        self.kind(stripped).is_reference()
     }
 
     /// Iterates every interned type as `(id, kind)` in interning order (deterministic). Used by the

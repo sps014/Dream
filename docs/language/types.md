@@ -147,7 +147,12 @@ fun add(a: Number, b: Number): Number {
 
 ## Classes
 
-User-defined types. See [Classes](classes.md).
+User-defined reference types. See [Classes](classes.md).
+
+## Value structs
+
+User-defined value types: stored inline with copy-on-assignment semantics, but otherwise sharing all
+class features. See [Value Structs](value-structs.md).
 
 ## The `object` type
 

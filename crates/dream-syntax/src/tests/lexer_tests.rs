@@ -182,6 +182,26 @@ fn test_lex_trivia() {
 }
 
 #[test]
+fn test_lex_struct_keyword() {
+    let mut lexer = Lexer::new("struct Vec2 { }".to_string());
+    let mut diagnostics = DiagnosticBag::new(None);
+    let tokens = lexer.lex_all(&mut diagnostics);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let kinds: Vec<TokenKind> = tokens.iter().map(|t| t.kind).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::StructToken,
+            TokenKind::IdentifierToken,
+            TokenKind::CurlyOpenBracketToken,
+            TokenKind::CurlyCloseBracketToken,
+            TokenKind::EndOfFileToken,
+        ]
+    );
+}
+
+#[test]
 fn test_lex_declaration_comments() {
     let source = "
 // Class comment

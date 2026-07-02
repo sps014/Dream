@@ -1,4 +1,6 @@
 use super::*;
+use crate::mir::emit::valuetype::{ValueFrame, ValueLocalKind};
+use std::collections::HashSet;
 
 /// Emits one function as WAT (calls fall back to `$def{N}`, and field/index access has no layout, so
 /// this is for layout-free unit tests; the pipeline uses [`emit_program`]/[`emit_module`]).
@@ -12,6 +14,7 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         &IndexMap::new(),
         &HashMap::new(),
         &HashMap::new(),
+        &HashSet::new(),
     )
 }
 
@@ -25,7 +28,9 @@ pub(super) fn emit_function_with(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
     func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
+    value_glue: &HashSet<TypeId>,
 ) -> String {
+    let frame = ValueFrame::compute(func, interner);
     let mut e = Emitter {
         func,
         interner,
@@ -35,6 +40,8 @@ pub(super) fn emit_function_with(
         strings,
         tags,
         func_table,
+        value_glue,
+        frame,
         out: String::new(),
         async_parent: None,
     };
@@ -57,6 +64,10 @@ pub(crate) fn emit_straight_line_segment(
     // Async poll segments do not apply call-argument widening yet (async cases are still gated); an
     // empty signature map disables it without extra plumbing through the coroutine transform.
     let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
+    // Async poll segments do not participate in value-struct shadow frames yet (value structs in
+    // async bodies are gated); an empty frame/glue set disables the value-type paths.
+    let value_glue: HashSet<TypeId> = HashSet::new();
+    let frame = ValueFrame::compute(func, interner);
     let mut e = Emitter {
         func,
         interner,
@@ -66,6 +77,8 @@ pub(crate) fn emit_straight_line_segment(
         strings,
         tags,
         func_table: ftable,
+        value_glue: &value_glue,
+        frame,
         out: String::new(),
         async_parent: Some(async_parent),
     };
@@ -105,6 +118,10 @@ struct Emitter<'a> {
     strings: &'a IndexMap<String, u32>,
     tags: &'a HashMap<TypeId, i32>,
     func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
+    /// Value-struct types that require retain/drop glue (see [`valuetype`]).
+    value_glue: &'a HashSet<TypeId>,
+    /// Shadow-frame layout + ownership classification of this function's value-struct locals.
+    frame: ValueFrame,
     out: String,
     /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
     async_parent: Option<&'a MirFunction>,
@@ -125,15 +142,23 @@ impl Emitter<'_> {
     }
 
     fn emit(&mut self) {
-        let params: String = self
+        let mut params: String = self
             .func
             .params
             .iter()
             .map(|p| format!(" (param ${} {})", p.0, self.wasm_ty(self.func.local_ty(*p))))
             .collect();
-        let result = match self.interner.kind(self.func.ret) {
-            TyKind::Void => String::new(),
-            _ => format!(" (result {})", self.wasm_ty(self.func.ret)),
+        // A value(`struct`)-returning function uses the sret ABI: a hidden leading `$__sret` pointer
+        // names the caller-provided destination the result is copied into, and the function itself
+        // returns no WASM value.
+        let result = if self.returns_value_struct() {
+            params = format!(" (param $__sret i32){}", params);
+            String::new()
+        } else {
+            match self.interner.kind(self.func.ret) {
+                TyKind::Void => String::new(),
+                _ => format!(" (result {})", self.wasm_ty(self.func.ret)),
+            }
         };
         self.line(&format!("(func ${}{}{}", func_symbol(self.func), params, result));
 
@@ -146,6 +171,10 @@ impl Emitter<'_> {
             self.line(&format!("  (local ${} {})", i, self.wasm_ty(decl.ty)));
         }
         self.line("  (local $__pc i32)");
+        if self.frame.size > 0 {
+            // Saved shadow-stack pointer, restored before every return.
+            self.line("  (local $__saved_sp i32)");
+        }
         // Scratch pointer holding the object under construction across field initialization
         // (`New`/`ArrayLit`). Safe as a single slot: lowering materializes all args into operands,
         // so allocations never nest within a single rvalue.
@@ -158,8 +187,51 @@ impl Emitter<'_> {
         // `obj.f = g(obj.f)` sound).
         self.line("  (local $__rel i32)");
 
+        self.emit_value_frame_prologue();
         self.emit_dispatch();
         self.line(")");
+    }
+
+    /// Reserves this function's shadow-stack frame (for inline value(`struct`) locals): save `$__sp`,
+    /// carve the frame by growing the stack downward, zero it (so drop-glue on a not-yet-assigned slot
+    /// sees null reference fields), and point each owning value local at its slot.
+    fn emit_value_frame_prologue(&mut self) {
+        if self.frame.size == 0 {
+            return;
+        }
+        let size = self.frame.size;
+        self.line("     (global.get $__sp) (local.set $__saved_sp)");
+        self.line(&format!(
+            "     (global.get $__sp) (i32.const {}) (i32.sub) (global.set $__sp)",
+            size
+        ));
+        // Zero the whole frame: memory.fill(dest = $__sp, value = 0, len = size).
+        self.line(&format!(
+            "     (global.get $__sp) (i32.const 0) (i32.const {}) (memory.fill)",
+            size
+        ));
+        for (local, offset) in self.frame.owning_slots() {
+            let ty = self.func.local_ty(local);
+            let l0 = local.0;
+            let slot_addr = |s: &mut Self| {
+                s.line("     (global.get $__sp)");
+                if offset > 0 {
+                    s.line(&format!("     (i32.const {}) (i32.add)", offset));
+                }
+            };
+            if self.frame.kind(local) == Some(ValueLocalKind::Param) {
+                // A value param arrives as a pointer to the caller's value: copy those bytes into the
+                // callee's private slot (retaining reference fields), then rebind the param to the slot
+                // so the caller's value is never mutated (copy semantics).
+                self.emit_value_copy(
+                    &slot_addr,
+                    |s| s.line(&format!("     (local.get ${})", l0)),
+                    ty,
+                );
+            }
+            slot_addr(self);
+            self.line(&format!("     (local.set ${})", l0));
+        }
     }
 
     /// The labeled-block dispatch loop: each iteration reads `$__pc` and `br_table`s to the matching
@@ -194,8 +266,9 @@ impl Emitter<'_> {
         self.line("  )"); // exit block
         // Every block ends in a `return`/`goto`, so control never falls out of the dispatch loop.
         // A value-returning function still needs its implicit `end` to be well-typed; mark the
-        // unreachable tail so the validator does not demand a phantom result value on the stack.
-        if !matches!(self.interner.kind(self.func.ret), TyKind::Void) {
+        // unreachable tail so the validator does not demand a phantom result value on the stack. A
+        // value-`struct` (sret) return produces no WASM result, so it needs no phantom either.
+        if self.wasm_returns_value() {
             self.line("  (unreachable)");
         }
     }
@@ -300,6 +373,29 @@ impl Emitter<'_> {
     fn emit_assign(&mut self, place: &Place, rvalue: &Rvalue) {
         match place {
             Place::Local(l) => {
+                let ty = self.func.local_ty(*l);
+                if self.interner.is_value_type(ty) {
+                    let l0 = l.0;
+                    match self.frame.kind(*l) {
+                        Some(ValueLocalKind::Owning) => {
+                            self.emit_value_store(
+                                |s| s.line(&format!("     (local.get ${})", l0)),
+                                ty,
+                                rvalue,
+                            );
+                        }
+                        // A borrow/param value local just holds an address: rebind it to the source
+                        // value's address (no copy, no drop).
+                        _ => {
+                            match rvalue {
+                                Rvalue::Use(o) => self.emit_operand_addr(o),
+                                _ => self.emit_rvalue(rvalue),
+                            }
+                            self.line(&format!("     (local.set ${})", l0));
+                        }
+                    }
+                    return;
+                }
                 self.emit_rvalue(rvalue);
                 self.line(&format!("     (local.set ${})", l.0));
             }
@@ -310,6 +406,10 @@ impl Emitter<'_> {
             Place::Field { base, field } => {
                 if let Some((off, fty)) = self.field_layout(*base, *field) {
                     let (b, off, fty) = (*base, off, fty);
+                    if self.interner.is_value_type(fty) {
+                        self.emit_value_store(move |s| s.field_addr(b, off), fty, rvalue);
+                        return;
+                    }
                     let stash = self.stash_old_ref(fty, |s| s.field_addr(b, off));
                     self.field_addr(*base, off);
                     self.emit_rvalue(rvalue);
@@ -324,6 +424,11 @@ impl Emitter<'_> {
             Place::Index { base, index } => {
                 if let Some(ety) = self.array_elem_ty(*base) {
                     let (b, idx) = (*base, index.clone());
+                    if self.interner.is_value_type(ety) {
+                        let idx2 = idx.clone();
+                        self.emit_value_store(move |s| s.elem_addr(b, ety, &idx2), ety, rvalue);
+                        return;
+                    }
                     let stash = self.stash_old_ref(ety, |s| s.elem_addr(b, ety, &idx));
                     self.elem_addr(*base, ety, index);
                     self.emit_rvalue(rvalue);
@@ -365,6 +470,23 @@ impl Emitter<'_> {
     /// materialized here (lowering routes those through a temporary that is itself released at scope
     /// exit), so retaining a copied operand is the sound, uniform rule.
     fn store_at_obj(&mut self, offset: u32, value_ty: TypeId, value: &Operand) {
+        // A value struct stored into a freshly-allocated container is copied inline (byte-wise + a
+        // retain of its reference fields); the block was just zeroed, so there is no old value to
+        // drop.
+        if self.interner.is_value_type(value_ty) {
+            let value = value.clone();
+            self.emit_value_copy(
+                |s| {
+                    s.line("     (local.get $__obj)");
+                    if offset > 0 {
+                        s.line(&format!("     (i32.const {}) (i32.add)", offset));
+                    }
+                },
+                |s| s.emit_operand_addr(&value),
+                value_ty,
+            );
+            return;
+        }
         self.line("     (local.get $__obj)");
         if offset > 0 {
             self.line(&format!("     (i32.const {})", offset));
@@ -490,6 +612,171 @@ impl Emitter<'_> {
             TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.store",
             TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => "i32.store8",
             _ => "i32.store",
+        }
+    }
+
+    // ---- Value (`struct`) type helpers -------------------------------------------------------
+
+    /// True when this function returns a value struct by the sret ABI (a hidden `$__sret` pointer)
+    /// rather than as a WASM result.
+    fn returns_value_struct(&self) -> bool {
+        self.interner.is_value_type(self.func.ret)
+    }
+
+    /// True when this function returns an ordinary WASM value (non-void, non-value-struct).
+    fn wasm_returns_value(&self) -> bool {
+        !matches!(self.interner.kind(self.func.ret), TyKind::Void) && !self.returns_value_struct()
+    }
+
+    /// The inline byte size of value struct `ty`.
+    fn value_size(&self, ty: TypeId) -> u32 {
+        scalar_size(self.interner, ty).0
+    }
+
+    /// True when value struct `ty` needs retain/drop glue (embeds references or declares `del`).
+    fn value_has_glue(&self, ty: TypeId) -> bool {
+        self.value_glue.contains(&self.interner.strip_nullable(ty))
+    }
+
+    /// The layout name of value struct `ty`, if laid out.
+    fn value_name(&self, ty: TypeId) -> Option<String> {
+        self.layouts
+            .get(self.interner.strip_nullable(ty))
+            .map(|l| l.name.clone())
+    }
+
+    /// Pushes the address of value place `p` (a value struct is addressed, never loaded).
+    fn emit_place_addr(&mut self, p: &Place) {
+        match p {
+            Place::Local(l) => self.line(&format!("     (local.get ${})", l.0)),
+            Place::Field { base, field } => {
+                if let Some((off, _)) = self.field_layout(*base, *field) {
+                    self.field_addr(*base, off);
+                }
+            }
+            Place::Index { base, index } => {
+                if let Some(ety) = self.array_elem_ty(*base) {
+                    self.elem_addr(*base, ety, index);
+                }
+            }
+            Place::Global(_) => self.line("     (i32.const 0) ;; value-struct global unsupported"),
+        }
+    }
+
+    /// Pushes the address of a value-struct operand.
+    fn emit_operand_addr(&mut self, o: &Operand) {
+        match o {
+            Operand::Copy(p) => self.emit_place_addr(p),
+            Operand::Const(_) => self.line("     (i32.const 0)"),
+        }
+    }
+
+    /// Byte-wise copies value struct `ty` from the `src` address to the `dst` address, then retains
+    /// the destination's (now duplicated) reference fields so the copy owns its own references.
+    fn emit_value_copy(
+        &mut self,
+        dst: impl Fn(&mut Self),
+        src: impl Fn(&mut Self),
+        ty: TypeId,
+    ) {
+        let size = self.value_size(ty);
+        dst(self);
+        src(self);
+        self.line(&format!("     (i32.const {})", size));
+        self.line("     (memory.copy)");
+        if self.value_has_glue(ty) {
+            if let Some(name) = self.value_name(ty) {
+                dst(self);
+                self.line(&format!("     (call {})", vs_retain_sym(&name)));
+            }
+        }
+    }
+
+    /// Drops the value struct `ty` at the `at` address (runs `del`, releases reference fields), if it
+    /// needs glue.
+    fn emit_value_drop(&mut self, at: impl Fn(&mut Self), ty: TypeId) {
+        if self.value_has_glue(ty) {
+            if let Some(name) = self.value_name(ty) {
+                at(self);
+                self.line(&format!("     (call {})", vs_drop_sym(&name)));
+            }
+        }
+    }
+
+    /// Constructs a value struct in place at the `dst` address: zero its bytes, then (if it has a
+    /// user constructor) call `ctor(this = dst, args...)`.
+    fn construct_value_new(
+        &mut self,
+        dst: impl Fn(&mut Self),
+        ctor: Option<DefId>,
+        args: &[Operand],
+        ty: TypeId,
+    ) {
+        let size = self.value_size(ty);
+        dst(self);
+        self.line("     (i32.const 0)");
+        self.line(&format!("     (i32.const {})", size));
+        self.line("     (memory.fill)");
+        if let Some(ctor) = ctor {
+            dst(self);
+            for arg in args {
+                self.emit_operand(arg);
+            }
+            let sym = self.callee_symbol(&crate::mir::Callee {
+                def: ctor,
+                args: vec![],
+                ret: self.interner.void(),
+            });
+            self.line(&format!("     (call ${})", sym));
+        }
+    }
+
+    /// Emits a direct call to a value-struct-returning function using the sret ABI: the destination
+    /// address (produced by `dst`) is passed as the hidden leading argument, then the real arguments.
+    fn emit_value_sret_call(
+        &mut self,
+        dst: impl Fn(&mut Self),
+        callee: &crate::mir::Callee,
+        args: &[Operand],
+    ) {
+        dst(self);
+        self.emit_call_args(callee, args);
+        self.line(&format!("     (call ${})", self.callee_symbol(callee)));
+    }
+
+    /// Stores a value struct produced by `rvalue` into the destination at the `dst` address (a local
+    /// slot, a container field/element, or a union payload): the old contents are dropped, then the
+    /// new value is constructed / sret-called / copied in place.
+    fn emit_value_store(&mut self, dst: impl Fn(&mut Self), ty: TypeId, rvalue: &Rvalue) {
+        self.emit_value_drop(&dst, ty);
+        match rvalue {
+            Rvalue::New { ctor, args, ty: nty, .. } => {
+                self.construct_value_new(&dst, *ctor, args, *nty)
+            }
+            Rvalue::Call { callee, args } => self.emit_value_sret_call(&dst, callee, args),
+            Rvalue::Use(Operand::Copy(src)) => {
+                let src = src.clone();
+                self.emit_value_copy(&dst, |s| s.emit_place_addr(&src), ty);
+            }
+            other => {
+                // Any other value-struct-producing rvalue (e.g. a `UnionField` payload extraction)
+                // yields the *address* of an existing value; copy those bytes into the destination.
+                let other = other.clone();
+                self.emit_value_copy(&dst, |s| s.emit_rvalue(&other), ty);
+            }
+        }
+    }
+
+    /// Emits the scope-exit teardown of a function's shadow frame: drop each owning value local, then
+    /// restore `$__sp`. A no-op for functions with no value frame.
+    fn emit_frame_teardown(&mut self) {
+        for (local, _) in self.frame.owning_slots() {
+            let ty = self.func.local_ty(local);
+            let l0 = local.0;
+            self.emit_value_drop(|s| s.line(&format!("     (local.get ${})", l0)), ty);
+        }
+        if self.frame.size > 0 {
+            self.line("     (local.get $__saved_sp) (global.set $__sp)");
         }
     }
 
@@ -777,7 +1064,11 @@ impl Emitter<'_> {
                         self.line(&format!("     (i32.const {})", off));
                         self.line("     (i32.add)");
                     }
-                    self.line(&format!("     ({})", self.load_instr(fty)));
+                    // A value-struct payload is addressed inline (its bytes live in the union block),
+                    // so reading it yields the payload address rather than a load.
+                    if !self.interner.is_value_type(fty) {
+                        self.line(&format!("     ({})", self.load_instr(fty)));
+                    }
                 } else {
                     self.line("     (i32.const 0) ;; TODO(layout): union payload");
                 }
@@ -925,10 +1216,28 @@ impl Emitter<'_> {
                 self.goto(*default);
             }
             Terminator::Return(Some(o)) => {
-                self.emit_operand(o);
+                if self.returns_value_struct() {
+                    // sret ABI: copy the result into the caller-provided `$__sret` slot (retaining
+                    // its reference fields) before the frame teardown drops the source local.
+                    let o = o.clone();
+                    let ty = self.func.ret;
+                    self.emit_value_copy(
+                        |s| s.line("     (local.get $__sret)"),
+                        |s| s.emit_operand_addr(&o),
+                        ty,
+                    );
+                    self.emit_frame_teardown();
+                    self.line("     (return)");
+                } else {
+                    self.emit_operand(o);
+                    self.emit_frame_teardown();
+                    self.line("     (return)");
+                }
+            }
+            Terminator::Return(None) => {
+                self.emit_frame_teardown();
                 self.line("     (return)");
             }
-            Terminator::Return(None) => self.line("     (return)"),
             Terminator::Unreachable => self.line("     (unreachable)"),
             Terminator::AsyncComplete(_) => self.line("     (unreachable) ;; async in sync fn"),
         }
@@ -1080,7 +1389,11 @@ impl Emitter<'_> {
             Operand::Copy(Place::Field { base, field }) => {
                 if let Some((off, fty)) = self.field_layout(*base, *field) {
                     self.field_addr(*base, off);
-                    self.line(&format!("     ({})", self.load_instr(fty)));
+                    // A value-struct field is addressed inline, not loaded: reading it yields the
+                    // address of its inline storage (the consumer copies where a value is needed).
+                    if !self.interner.is_value_type(fty) {
+                        self.line(&format!("     ({})", self.load_instr(fty)));
+                    }
                 } else {
                     self.line(&format!(
                         "     (local.get ${}) (i32.load) ;; TODO(layout): field {}",
@@ -1091,7 +1404,9 @@ impl Emitter<'_> {
             Operand::Copy(Place::Index { base, index }) => {
                 if let Some(ety) = self.array_elem_ty(*base) {
                     self.elem_addr(*base, ety, index);
-                    self.line(&format!("     ({})", self.load_instr(ety)));
+                    if !self.interner.is_value_type(ety) {
+                        self.line(&format!("     ({})", self.load_instr(ety)));
+                    }
                 } else {
                     self.line(&format!(
                         "     (local.get ${}) (i32.load) ;; TODO(layout): index",

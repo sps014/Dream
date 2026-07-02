@@ -583,11 +583,28 @@ impl<'a> Analyzer<'a> {
     ) {
         for struct_decl in node.structs.iter() {
             diagnostics.file_path = file_path_string(&struct_decl.file_path);
-            self.type_ctx.register(
+            let def = self.type_ctx.register(
                 DefKind::Struct,
                 &struct_decl.name.text,
                 generic_param_names(&struct_decl.generic_parameters),
             );
+            // A `struct` is a value type: record it on the def table and the interner so
+            // reference-classification (RC, layout, codegen) treats its instances as inline values.
+            if struct_decl.is_value {
+                self.type_ctx.defs.mark_value(def);
+                self.type_ctx.interner.mark_value_def(def);
+                // v1 restriction: value structs cannot participate in interface dispatch (that would
+                // require boxing to a tagged heap object, which is a deferred feature).
+                if !struct_decl.implements.is_empty() {
+                    diagnostics.report_error(
+                        format!(
+                            "value struct '{}' cannot implement interfaces in this version; use a reference type ('class') for interface dispatch",
+                            struct_decl.name.text
+                        ),
+                        Some(struct_decl.name.position),
+                    );
+                }
+            }
             if struct_decl.generic_parameters.is_some() {
                 // A generic class may implement a (generic or non-generic) interface; the
                 // `implements` clause is validated per monomorphization in `ensure_struct_instantiated`.
@@ -623,6 +640,91 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
         }
+
+        // A value (`struct`) type is stored inline, so it cannot (transitively) contain itself by
+        // value — that would require infinite storage. A reference (`class`) or array field breaks
+        // the cycle. Generic value structs are checked per instantiation.
+        for struct_decl in node.structs.iter() {
+            if struct_decl.generic_parameters.is_some() {
+                continue;
+            }
+            let name = &struct_decl.name.text;
+            let is_value = self
+                .struct_table
+                .get_struct(name)
+                .map(|s| s.is_value)
+                .unwrap_or(false);
+            if is_value && self.value_struct_contains_self(name) {
+                diagnostics.report_error(
+                    format!(
+                        "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
+                        name
+                    ),
+                    Some(struct_decl.name.position),
+                );
+            }
+            // v1 restriction: a value struct has no null representation, so `T?` on a value struct is
+            // rejected (nullability is a deferred feature). Checked on every declared field.
+            for field in &struct_decl.fields {
+                let base = field.field_type.base_name();
+                if field.field_type.is_nullable() && self.is_value_type_name(&base) {
+                    diagnostics.report_error(
+                        format!(
+                            "field '{}' cannot be a nullable value struct ('{}'); value structs are non-nullable in this version",
+                            field.name.text, base
+                        ),
+                        Some(field.name.position),
+                    );
+                }
+            }
+        }
+    }
+
+    /// True when the (unadorned) type name resolves to a declared value (`struct`) type.
+    fn is_value_type_name(&self, name: &str) -> bool {
+        self.struct_table.get_struct(name).map(|s| s.is_value).unwrap_or(false)
+    }
+
+    /// True when value struct `start` transitively embeds itself by value. Only value-typed,
+    /// non-array fields form inline edges; reference fields (`class`, `string`, arrays) do not.
+    fn value_struct_contains_self(&self, start: &str) -> bool {
+        let mut visited = std::collections::HashSet::new();
+        let mut work = self.value_struct_field_targets(start);
+        while let Some(cur) = work.pop() {
+            if cur == start {
+                return true;
+            }
+            if !visited.insert(cur.clone()) {
+                continue;
+            }
+            work.extend(self.value_struct_field_targets(&cur));
+        }
+        false
+    }
+
+    /// The names of value-struct types embedded *by value* in `name`'s fields (the inline edges of
+    /// the value-containment graph). Nullable suffixes are stripped; array fields are references.
+    fn value_struct_field_targets(&self, name: &str) -> Vec<String> {
+        let Some(info) = self.struct_table.get_struct(name) else {
+            return Vec::new();
+        };
+        if !info.is_value {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for f in info.fields.values() {
+            let type_name = f.type_.get_type();
+            let base = type_name.trim_end_matches('?');
+            if base.ends_with("[]") {
+                continue;
+            }
+            if let Some(field_info) = self.struct_table.get_struct(base) {
+                if field_info.is_value {
+                    out.push(base.to_string());
+                }
+            }
+        }
+        out
     }
 
     /// Pass: analyze and register every top-level variable. Each initializer is type-checked in
@@ -959,7 +1061,7 @@ impl<'a> Analyzer<'a> {
 
         let mut new_name_token = template.name.clone();
         new_name_token.text = mangled_name.clone();
-        let new_decl = StructDeclarationNode::new(
+        let mut new_decl = StructDeclarationNode::new(
             template.attributes.clone(),
             new_name_token,
             None,
@@ -967,6 +1069,7 @@ impl<'a> Analyzer<'a> {
             template.methods.clone(),
             template.is_public,
         );
+        new_decl.is_value = template.is_value;
 
         let new_decl_ref: &'a StructDeclarationNode<'a> = self.arena.alloc(new_decl);
 

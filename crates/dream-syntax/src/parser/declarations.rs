@@ -170,7 +170,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_public = true;
         }
 
-        self.match_token(TokenKind::ClassToken);
+        // A value type is introduced with `struct`; a reference type with `class`. Both share the
+        // same declaration shape and AST node, differing only in the `is_value` flag.
+        let is_value = self.current_token().kind == TokenKind::StructToken;
+        if is_value {
+            self.match_token(TokenKind::StructToken);
+        } else {
+            self.match_token(TokenKind::ClassToken);
+        }
         let mut struct_name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut struct_name, first_trivia);
 
@@ -274,6 +281,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_public,
         );
         decl.implements = implements;
+        decl.is_value = is_value;
         Ok(decl)
     }
 

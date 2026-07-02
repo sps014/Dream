@@ -228,6 +228,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         // This prevents swallowing `}` or `class` when they unexpectedly terminate a statement.
         match self.current_token().kind {
             TokenKind::ClassToken
+            | TokenKind::StructToken
             | TokenKind::FunToken
             | TokenKind::LetToken
             | TokenKind::ConstToken
@@ -255,6 +256,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             match kind {
                 TokenKind::ClassToken
+                | TokenKind::StructToken
                 | TokenKind::FunToken
                 | TokenKind::LetToken
                 | TokenKind::ConstToken

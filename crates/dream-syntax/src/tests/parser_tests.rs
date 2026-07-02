@@ -495,6 +495,37 @@ fn test_parse_struct_constructor_and_destructor() {
 }
 
 #[test]
+fn test_parse_struct_keyword_sets_is_value() {
+    // The `struct` keyword parses through the same path as `class` but flags the declaration as a
+    // value type (`is_value`); a `class` declaration leaves it `false`.
+    let code = "struct Vec2 { x: int; y: int; \
+                constructor(x: int, y: int) { this.x = x; this.y = y; } \
+                fun sum(): int { return this.x + this.y; } } \
+                class Ref { v: int; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    assert_eq!(program.structs.len(), 2);
+
+    let value = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Vec2")
+        .expect("Vec2 declaration");
+    assert!(value.is_value, "`struct` must set is_value = true");
+    assert_eq!(value.fields.len(), 2);
+    assert!(value.methods.iter().any(|m| m.name.text == "sum"));
+
+    let reference = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Ref")
+        .expect("Ref declaration");
+    assert!(!reference.is_value, "`class` must leave is_value = false");
+}
+
+#[test]
 fn test_parse_async_function_and_await() {
     // `async fun` sets `is_async`; `await e;` is an `AwaitStmt` and `let x = await e;` carries an
     // `Await` initializer.

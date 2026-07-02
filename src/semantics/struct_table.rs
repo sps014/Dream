@@ -20,6 +20,9 @@ pub struct StructInfo {
     pub fields: IndexMap<String, StructFieldInfo>,
     pub size: usize,
     pub is_public: bool,
+    /// True for `struct` (value) types: stored inline with copy semantics, not heap-allocated and
+    /// reference-counted. Unions are always reference types (`false`).
+    pub is_value: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +104,7 @@ impl StructTable {
                 fields,
                 size: current_offset,
                 is_public: struct_decl.is_public,
+                is_value: struct_decl.is_value,
             },
         );
 
@@ -122,6 +126,7 @@ impl StructTable {
                 fields: IndexMap::new(),
                 size,
                 is_public,
+                is_value: false,
             },
         );
         Ok(())

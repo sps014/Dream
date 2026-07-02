@@ -41,6 +41,12 @@ const STRING_BASE: u32 = 1024;
 /// Linear-memory size, in 64 KiB WASM pages.
 const MEMORY_PAGES: u32 = 16;
 
+/// The shadow stack (for inline value-`struct` locals) grows *downward* from the top of linear
+/// memory, while the heap bump-allocates *upward* from `heap_start`. `$__sp` is initialized here;
+/// each function that has value locals reserves its frame by subtracting from `$__sp` in its
+/// prologue and restores `$__sp` before every return.
+const SHADOW_STACK_TOP: u32 = MEMORY_PAGES * 65536;
+
 /// The fixed allocator runtime (`$malloc`/`$free`/`$retain`/`$release_generic`/`$object_tag`), the
 /// single source of truth for the heap ABI. Its debug-counter placeholders are filled in by
 /// [`runtime_prelude`] (instrumentation on only under `--debug`).
@@ -71,6 +77,7 @@ mod runtime;
 mod strings;
 mod tables;
 mod types;
+mod valuetype;
 
 // Flat internal re-exports so each submodule can `use super::*` and call sibling helpers
 // exactly as it did when this was one file. Kept private (not part of the crate API).
@@ -81,6 +88,7 @@ use runtime::*;
 use strings::*;
 use tables::*;
 use types::*;
+use valuetype::*;
 
 // The external API of the backend, at the historical `crate::mir::emit::…` paths.
 pub use emitter::emit_function;

@@ -1,0 +1,36 @@
+// A value `struct` has copy-on-assignment semantics: assigning one value struct to another (or
+// passing it as an argument) copies its bytes, so mutating the copy leaves the original untouched.
+
+struct Vec2 {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public fun sum(): int {
+        return this.x + this.y;
+    }
+}
+
+// Value params are passed by copy: mutating `v` here must not affect the caller's argument.
+fun bump(v: Vec2): int {
+    v.x = v.x + 1000;
+    return v.x;
+}
+
+fun main() {
+    let a = Vec2(1, 2);
+    let b = a;        // copy
+    b.x = 100;        // mutates the copy only
+
+    System.println(a.x);      // 1  (unchanged by the copy's mutation)
+    System.println(b.x);      // 100
+    System.println(a.sum());  // 3
+    System.println(b.sum());  // 102
+
+    System.println(bump(a));  // 1001 (local copy inside bump)
+    System.println(a.x);      // 1    (caller's value unchanged)
+}

@@ -2,6 +2,10 @@
 
 Classes are user-defined types that group related data together.
 
+> A class is a **reference type**: instances live on the heap and are shared by reference. If you
+> want a **value type** with copy semantics (stored inline, copied on assignment) but the same set of
+> features, use a [`struct`](value-structs.md) instead.
+
 ## Defining a class
 
 ```dream

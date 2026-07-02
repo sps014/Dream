@@ -8,10 +8,11 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
     let strings = string_table(mir);
     let tags = struct_tags(mir);
     let ftable = func_table(mir);
+    let value_glue = value_glue_types(mir, interner);
     let mut out = String::new();
     for f in &mir.functions {
         out.push_str(&emit_function_with(
-            f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable,
+            f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue,
         ));
         out.push('\n');
     }
@@ -27,6 +28,7 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
     let strings = string_table(mir);
     let tags = struct_tags(mir);
     let ftable = func_table(mir);
+    let value_glue = value_glue_types(mir, interner);
     let mut out = String::new();
     out.push_str("(module\n");
 
@@ -45,6 +47,8 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
     let _ = writeln!(out, "(memory {})", MEMORY_PAGES);
     let _ = writeln!(out, "(global $heap_ptr (mut i32) (i32.const {}))", iface.heap_start);
     out.push_str("(global $free_list_head (mut i32) (i32.const 0))\n");
+    // Shadow-stack pointer for inline value (`struct`) locals; grows down from the top of memory.
+    let _ = writeln!(out, "(global $__sp (mut i32) (i32.const {}))", SHADOW_STACK_TOP);
     out.push_str("(global $live_objects (mut i32) (i32.const 0))\n");
     out.push_str("(global $total_allocations (mut i32) (i32.const 0))\n");
 
@@ -65,7 +69,9 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
     out.push('\n');
     emit_object_protocol(&mut out, mir, interner, &strings, &tags);
     out.push('\n');
-    emit_release_funcs(&mut out, mir, interner, &tags);
+    emit_release_funcs(&mut out, mir, interner, &tags, &value_glue);
+    out.push('\n');
+    emit_value_glue(&mut out, mir, interner, &value_glue);
     out.push('\n');
 
     // Interface dispatch trampolines (reference `$object_tag` + `$__ft`, both defined above).
@@ -93,7 +99,7 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
             ));
         } else {
             out.push_str(&emit_function_with(
-                f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable,
+                f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue,
             ));
         }
         if f.name == crate::mir::lower::INIT_FN_NAME {

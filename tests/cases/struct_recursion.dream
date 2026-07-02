@@ -1,0 +1,12 @@
+// A value `struct` stored inline cannot contain itself by value — that would require infinite
+// storage. The analyzer must reject this (a reference `class` or an array would break the cycle).
+
+struct Node {
+    public value: int;
+    public next: Node;
+}
+
+fun main() {
+    let n = Node();
+    System.println(n.value);
+}

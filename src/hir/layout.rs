@@ -10,9 +10,15 @@
 use crate::types::{PrimTy, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 
-/// The in-memory size and alignment (bytes) of a scalar/reference value of `ty`. References (string,
-/// array, struct, union, object), enums, and function values are `i32` pointers/indices.
+/// The in-memory size and alignment (bytes) of a scalar/reference value of `ty`. Reference types
+/// (string, array, `class`, union, object), enums, and function values are `i32` pointers/indices
+/// (4 bytes). A value (`struct`) type is stored *inline* and occupies its full footprint, recorded
+/// on the interner once layouts are computed.
 pub fn scalar_size(interner: &TypeInterner, ty: TypeId) -> (u32, u32) {
+    // Value structs are stored inline: their footprint is their computed layout size/align.
+    if let Some(sz) = interner.value_layout(ty) {
+        return sz;
+    }
     match interner.kind(interner.strip_nullable(ty)) {
         TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => (1, 1),
         TyKind::Prim(PrimTy::Double | PrimTy::Long | PrimTy::ULong) => (8, 8),

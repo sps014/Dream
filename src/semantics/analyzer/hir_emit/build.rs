@@ -85,29 +85,70 @@ impl<'a> Analyzer<'a> {
             .collect();
 
         let mut layouts = LayoutTable::default();
+        // Lower every struct's fields to interned ids up front. Keyed by the struct's interned type id
+        // (`lower_str` canonicalizes both plain names and mangled generic instances like `Box_int` to
+        // `struct_ty(def, args)`), so each monomorphization gets its own layout.
+        let mut lowered: Vec<(TypeId, String, Vec<(String, TypeId)>)> =
+            Vec::with_capacity(struct_snapshot.len());
         for (name, fields) in struct_snapshot {
-            // Key by the struct's interned type id (`lower_str` canonicalizes both plain names and
-            // mangled generic instances like `Box_int` to `struct_ty(def, args)`), so each
-            // monomorphization gets its own layout.
             let ty = self.type_ctx.lower_str(&name);
             let defs: Vec<(String, TypeId)> =
                 fields.iter().map(|(fname, t)| (fname.clone(), self.type_ctx.lower(t))).collect();
+            lowered.push((ty, name, defs));
+        }
+        // Value (`struct`) types are stored inline, so their footprint must be known before any layout
+        // (or an enclosing struct/array/union) can size them. Compute each value struct's inline
+        // (size, align) recursively — a value field contributes its full footprint; a reference field
+        // contributes a 4-byte pointer — and record it on the interner so `scalar_size` resolves it.
+        let field_map: std::collections::HashMap<TypeId, Vec<TypeId>> = lowered
+            .iter()
+            .map(|(ty, _, defs)| (*ty, defs.iter().map(|(_, t)| *t).collect()))
+            .collect();
+        let mut memo: std::collections::HashMap<TypeId, (u32, u32)> = std::collections::HashMap::new();
+        for &(ty, ..) in &lowered {
+            if self.type_ctx.interner.is_value_type(ty) {
+                let mut in_progress = std::collections::HashSet::new();
+                compute_value_layout(
+                    ty,
+                    &field_map,
+                    &mut memo,
+                    &mut in_progress,
+                    &self.type_ctx.interner,
+                );
+            }
+        }
+        for (ty, sz) in &memo {
+            self.type_ctx.interner.set_value_layout(*ty, sz.0, sz.1);
+        }
+        for (ty, name, defs) in lowered {
             layouts.insert(ty, TypeLayout::from_fields(&self.type_ctx.interner, name, defs));
         }
-        for (name, size, variants) in union_snapshot {
+        for (name, _size, variants) in union_snapshot {
             let ty = self.type_ctx.lower_str(&name);
             let mut vs = Vec::with_capacity(variants.len());
+            // Recompute payload offsets with value-aware sizes now that inline value(`struct`)
+            // footprints are known: an inline value payload occupies its full size (the declaration
+            // pass conservatively sized it as a 4-byte pointer). The discriminant word is at offset 0.
+            const DISCRIMINANT_SIZE: u32 = 4;
+            let mut block_end = DISCRIMINANT_SIZE;
             for (vname, discriminant, fields) in variants {
-                let flds = fields
-                    .into_iter()
-                    .map(|(fname, offset, t)| FieldLayout {
-                        offset,
-                        ty: self.type_ctx.lower(&t),
-                        name: fname,
-                    })
-                    .collect();
+                let mut offset = DISCRIMINANT_SIZE;
+                let mut flds = Vec::with_capacity(fields.len());
+                for (fname, _old_offset, t) in fields {
+                    let fty = self.type_ctx.lower(&t);
+                    let (fsize, falign) = crate::hir::scalar_size(&self.type_ctx.interner, fty);
+                    let rem = offset % falign;
+                    if rem != 0 {
+                        offset += falign - rem;
+                    }
+                    flds.push(FieldLayout { offset, ty: fty, name: fname });
+                    offset += fsize;
+                }
+                block_end = block_end.max(offset);
                 vs.push(UnionVariant { name: vname, discriminant, fields: flds });
             }
+            // Keep the block 8-byte aligned so a `double` payload stays naturally aligned.
+            let size = block_end.div_ceil(8) * 8;
             layouts.insert_union(ty, UnionLayout { name, variants: vs, size });
         }
         layouts
@@ -201,5 +242,68 @@ impl<'a> Analyzer<'a> {
             }
         }
         out
+    }
+}
+
+/// Recursively computes the inline `(size, align)` of value (`struct`) type `ty`, memoizing results.
+/// A value-typed field contributes its own inline footprint (recursing); every other field is a
+/// scalar or a 4-byte reference pointer. `in_progress` guards against value-type cycles (which are
+/// rejected as a semantic error before codegen); a back-edge resolves to a 4-byte placeholder so
+/// this computation always terminates.
+fn compute_value_layout(
+    ty: crate::types::TypeId,
+    field_map: &std::collections::HashMap<crate::types::TypeId, Vec<crate::types::TypeId>>,
+    memo: &mut std::collections::HashMap<crate::types::TypeId, (u32, u32)>,
+    in_progress: &mut std::collections::HashSet<crate::types::TypeId>,
+    interner: &crate::types::TypeInterner,
+) -> (u32, u32) {
+    if let Some(&sz) = memo.get(&ty) {
+        return sz;
+    }
+    if !in_progress.insert(ty) {
+        // Cyclic value type: broken here so sizing terminates (the cycle is a reported error).
+        return (4, 4);
+    }
+    let mut offset = 0u32;
+    let mut max_align = 4u32;
+    if let Some(fields) = field_map.get(&ty) {
+        for &fty in fields {
+            let (size, align) = value_field_size(fty, field_map, memo, in_progress, interner);
+            let rem = offset % align;
+            if rem != 0 {
+                offset += align - rem;
+            }
+            offset += size;
+            max_align = max_align.max(align);
+        }
+    }
+    let rem = offset % max_align;
+    if rem != 0 {
+        offset += max_align - rem;
+    }
+    in_progress.remove(&ty);
+    let result = (offset, max_align);
+    memo.insert(ty, result);
+    result
+}
+
+/// The inline `(size, align)` of a single field type: a nested value struct recurses; a scalar uses
+/// its width; any reference is a 4-byte pointer.
+fn value_field_size(
+    fty: crate::types::TypeId,
+    field_map: &std::collections::HashMap<crate::types::TypeId, Vec<crate::types::TypeId>>,
+    memo: &mut std::collections::HashMap<crate::types::TypeId, (u32, u32)>,
+    in_progress: &mut std::collections::HashSet<crate::types::TypeId>,
+    interner: &crate::types::TypeInterner,
+) -> (u32, u32) {
+    use crate::types::{PrimTy, TyKind};
+    let stripped = interner.strip_nullable(fty);
+    if interner.is_value_type(stripped) {
+        return compute_value_layout(stripped, field_map, memo, in_progress, interner);
+    }
+    match interner.kind(stripped) {
+        TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => (1, 1),
+        TyKind::Prim(PrimTy::Double | PrimTy::Long | PrimTy::ULong) => (8, 8),
+        _ => (4, 4),
     }
 }

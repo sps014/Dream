@@ -79,6 +79,7 @@ nav:
     - Arrays: language/arrays.md
     - Enums: language/enums.md
     - Classes: language/classes.md
+    - Value Structs: language/value-structs.md
     - Interfaces: language/interfaces.md
     - Discriminated Unions: language/discriminated-unions.md
     - The object Type: language/objects.md

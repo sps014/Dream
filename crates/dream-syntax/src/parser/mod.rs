@@ -330,10 +330,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             // The core declaration keyword, looking past any leading `public`/`static`/`async`.
             let core = self.first_keyword_after_modifiers();
             if core == TokenKind::ClassToken
+                || core == TokenKind::StructToken
                 || (cur == TokenKind::AtToken
                     && self.peek_token(1).kind == TokenKind::IdentifierToken
-                    && (self.peek_token(2).kind == TokenKind::ClassToken
-                        || self.peek_token(3).kind == TokenKind::ClassToken))
+                    && (matches!(
+                        self.peek_token(2).kind,
+                        TokenKind::ClassToken | TokenKind::StructToken
+                    ) || matches!(
+                        self.peek_token(3).kind,
+                        TokenKind::ClassToken | TokenKind::StructToken
+                    )))
             {
                 match self.parse_struct_declaration() {
                     Ok(struct_decl) => structs.push(struct_decl),
@@ -410,6 +416,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             if matches!(
                 kind,
                 TokenKind::ClassToken
+                    | TokenKind::StructToken
                     | TokenKind::InterfaceToken
                     | TokenKind::EnumToken
                     | TokenKind::ExtendToken

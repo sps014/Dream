@@ -18,7 +18,9 @@ pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: T
                 "$release_object".to_string()
             }
         }
-        TyKind::Array(e) if interner.is_reference(*e) => format!("$release_array_t{}", e.0),
+        TyKind::Array(e) if interner.is_reference(*e) || interner.is_value_type(*e) => {
+            format!("$release_array_t{}", e.0)
+        }
         // An interface-typed value is a concrete tagged object; release it through the
         // tag-dispatching `$release_object` so the concrete type's deep release runs.
         TyKind::Object | TyKind::Interface(..) => "$release_object".to_string(),
@@ -49,6 +51,35 @@ pub(super) fn emit_del_call(out: &mut String, del: Option<&str>) {
     }
 }
 
+/// Emits an in-place drop of an inline value(`struct`) field `f` (at `ptr + offset`) via its
+/// `$__vs_drop_<T>` glue, if the field is a value struct that requires glue. A no-op otherwise. The
+/// inline storage is not freed (it belongs to the enclosing object's block).
+fn emit_embedded_value_drop(
+    out: &mut String,
+    mir: &crate::mir::Mir,
+    interner: &TypeInterner,
+    value_glue: &std::collections::HashSet<TypeId>,
+    f: &crate::hir::FieldLayout,
+    indent: &str,
+) {
+    if !interner.is_value_type(f.ty) {
+        return;
+    }
+    let stripped = interner.strip_nullable(f.ty);
+    if !value_glue.contains(&stripped) {
+        return;
+    }
+    let Some(name) = mir.layouts.structs.get(&stripped).map(|l| l.name.clone()) else {
+        return;
+    };
+    out.push_str(indent);
+    out.push_str("(local.get $ptr)");
+    if f.offset > 0 {
+        let _ = write!(out, " (i32.const {}) (i32.add)", f.offset);
+    }
+    let _ = writeln!(out, " (call {})", vs_drop_sym(&name));
+}
+
 /// Emits the deep-release runtime: a per-struct/union `$release_<Type>` (run `del()` if present,
 /// release reference fields, then `$free`), a `$release_array_t<E>` for each reference-element array
 /// type, and the tag-dispatching `$release_object`. Non-reference fields and scalar arrays never need
@@ -58,6 +89,7 @@ pub(super) fn emit_release_funcs(
     mir: &crate::mir::Mir,
     interner: &TypeInterner,
     tags: &HashMap<TypeId, i32>,
+    value_glue: &std::collections::HashSet<TypeId>,
 ) {
     let fn_names: std::collections::HashSet<&str> =
         mir.functions.iter().map(|f| f.name.as_str()).collect();
@@ -82,6 +114,12 @@ pub(super) fn emit_release_funcs(
                 "    (i32.load) (call {})",
                 release_call(interner, &mir.layouts, f.ty)
             );
+        }
+        // Inline value(`struct`) fields are dropped in place (their reference fields released, `del`
+        // run) via the field type's drop-glue at `ptr + offset` — never freed, since they share the
+        // enclosing object's block.
+        for f in &layout.fields {
+            emit_embedded_value_drop(out, mir, interner, value_glue, f, "    ");
         }
         out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
     }
@@ -118,29 +156,73 @@ pub(super) fn emit_release_funcs(
             }
             out.push_str("    ))\n");
         }
+        // Inline value-struct payloads (present in at most one active variant) are dropped in place.
+        for v in &layout.variants {
+            let value_fields: Vec<&crate::hir::FieldLayout> = v
+                .fields
+                .iter()
+                .filter(|f| {
+                    interner.is_value_type(f.ty)
+                        && value_glue.contains(&interner.strip_nullable(f.ty))
+                })
+                .collect();
+            if value_fields.is_empty() {
+                continue;
+            }
+            let _ = writeln!(
+                out,
+                "    (local.get $d) (i32.const {}) (i32.eq) (if (then",
+                v.discriminant
+            );
+            for f in value_fields {
+                emit_embedded_value_drop(out, mir, interner, value_glue, f, "      ");
+            }
+            out.push_str("    ))\n");
+        }
         out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
     }
 
-    // One array release per reference-element array type; the element type is known statically at the
-    // call site, so array releases (unlike `$release_object`) can recurse into their elements.
+    // One array release per reference- or value-element array type; the element type is known
+    // statically at the call site, so array releases (unlike `$release_object`) can recurse into
+    // their elements. Reference elements are released by loaded pointer; inline value-struct elements
+    // are dropped in place via their drop-glue at the element address.
     for elem in array_elem_types(mir, interner) {
-        if !interner.is_reference(elem) {
+        let is_ref = interner.is_reference(elem);
+        let is_value = interner.is_value_type(elem);
+        if !is_ref && !is_value {
             continue;
         }
         let _ = writeln!(out, "(func $release_array_t{} (param $ptr i32)", elem.0);
         out.push_str("  (local $rc i32) (local $nc i32) (local $len i32) (local $i i32) (local $elem i32)\n");
         emit_release_prologue(out);
-        out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
-        out.push_str("    (i32.const 0) (local.set $i)\n");
-        out.push_str("    (block $done (loop $scan\n");
-        out.push_str("      (local.get $i) (local.get $len) (i32.ge_s) (br_if $done)\n");
-        out.push_str("      (local.get $ptr) (i32.const 4) (i32.add) (local.get $i) (i32.const 4) (i32.mul) (i32.add) (i32.load) (local.set $elem)\n");
-        let _ = writeln!(
-            out,
-            "      (local.get $elem) (if (then (local.get $elem) (call {})))",
-            release_call(interner, &mir.layouts, elem)
-        );
-        out.push_str("      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n");
+        if is_ref {
+            out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
+            out.push_str("    (i32.const 0) (local.set $i)\n");
+            out.push_str("    (block $done (loop $scan\n");
+            out.push_str("      (local.get $i) (local.get $len) (i32.ge_s) (br_if $done)\n");
+            out.push_str("      (local.get $ptr) (i32.const 4) (i32.add) (local.get $i) (i32.const 4) (i32.mul) (i32.add) (i32.load) (local.set $elem)\n");
+            let _ = writeln!(
+                out,
+                "      (local.get $elem) (if (then (local.get $elem) (call {})))",
+                release_call(interner, &mir.layouts, elem)
+            );
+            out.push_str("      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n");
+        } else if value_glue.contains(&interner.strip_nullable(elem)) {
+            // Drop each inline element (stride = its inline size) via `$__vs_drop_<T>` at its address.
+            let name = mir.layouts.structs[&interner.strip_nullable(elem)].name.clone();
+            let (stride, _) = crate::hir::scalar_size(interner, elem);
+            out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
+            out.push_str("    (i32.const 0) (local.set $i)\n");
+            out.push_str("    (block $done (loop $scan\n");
+            out.push_str("      (local.get $i) (local.get $len) (i32.ge_s) (br_if $done)\n");
+            let _ = writeln!(
+                out,
+                "      (local.get $ptr) (i32.const 4) (i32.add) (local.get $i) (i32.const {}) (i32.mul) (i32.add) (call {})",
+                stride,
+                vs_drop_sym(&name)
+            );
+            out.push_str("      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n");
+        }
         out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
     }
 
