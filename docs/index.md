@@ -14,32 +14,168 @@ fun main() {
 
 ## Features
 
-- **Statically Typed** — errors caught at compile time.
-- **WebAssembly Native** — compiles to a `.wat` file for any WASM runtime.
-- **Automatic Memory** — deterministic, fast reference counting.
-- **Generics** — write reusable code without performance loss.
-- **Built-in Collections** — `List<T>` and `Map<K, V>` are standard.
+<div class="grid cards" markdown>
 
-## Start here
+-   :material-shield-check: **Statically Typed**
 
-New to Dream? Follow the [Getting Started](getting-started.md) guide to install the compiler, write your first program, and run it.
+    ---
 
-If you already know the basics, the [Language Basics](language/variables.md) section covers everything in detail.
+    Errors caught at compile time. Safe, robust, and reliable typing system.
+
+-   :material-web: **WebAssembly Native**
+
+    ---
+
+    Compiles to a `.wat` file for any WASM runtime. Highly portable and fast execution.
+
+-   :material-memory: **Automatic Memory**
+
+    ---
+
+    Deterministic, fast automatic reference counting (ARC). No garbage collector pauses, no manual frees.
+
+-   :material-shape: **Generics**
+
+    ---
+
+    Write highly reusable code without performance loss. Zero-overhead abstractions.
+
+-   :material-library: **Built-in Collections**
+
+    ---
+
+    High-performance standard `List<T>` and `Map<K, V>` structures are built right in.
+
+</div>
+
+## Start Here
+
+<div class="grid cards" markdown>
+
+-   :material-rocket-launch: **Getting Started**
+
+    ---
+
+    New to Dream? Follow our quick installation and setup guide. Learn how to write your first program and run it.
+
+    [:octicons-arrow-right-24: Install & Run](getting-started.md)
+
+-   :material-book-open-page-variant: **Language Basics**
+
+    ---
+
+    Already know the basics? Jump straight into the syntax documentation covering variables, operators, and control flow.
+
+    [:octicons-arrow-right-24: Learn Syntax](language/variables.md)
+
+</div>
 
 ## Standard Library
 
-| Page | Description |
-|------|-------------|
-| [Built-ins](stdlib/builtins.md) | `print`, `println`, `x.to_string()`, `x.hash_code()`, `Array.new`, `Math.*` |
-| [string](stdlib/string.md) | String methods: `substring`, `contains`, `trim`, `to_lower`, … |
-| [Primitives](language/primitives.md) | `int`, `float`, `bool`, `char`, `byte`, `long`, etc. |
-| [Option & Result](stdlib/option-result.md) | Safe handling of missing values and errors |
-| [Collections](stdlib/collections.md) | `List<T>` and `Map<K, V>` |
-| [JSON](stdlib/json.md) | `JsonValue` model, `JSON.parse`/`stringify`, `@json` auto-derive |
-| [File I/O](stdlib/file.md) | `File` and `FileStream`: read/write text and bytes, list, stat, stream |
-| [HTTP](stdlib/http.md) | `HttpClient`: cross-runtime requests over `async`/`await` |
-| [DateTime](stdlib/datetime.md) | Calendar dates and times: construction, arithmetic, comparison |
+<div class="grid cards" markdown>
+
+-   :material-code-braces: **Built-ins**
+
+    ---
+
+    Essential core utilities: `print`, `println`, `x.to_string()`, `x.hash_code()`, `Array.new`, `Math.*`
+
+    [:octicons-arrow-right-24: View Built-ins](stdlib/builtins.md)
+
+-   :material-format-text: **Strings**
+
+    ---
+
+    Rich string manipulations: `substring`, `contains`, `trim`, `to_lower`, and more.
+
+    [:octicons-arrow-right-24: String Docs](stdlib/string.md)
+
+-   :material-numeric: **Primitives**
+
+    ---
+
+    Core scalar types including `int`, `float`, `bool`, `char`, `byte`, `long`, etc.
+
+    [:octicons-arrow-right-24: Primitive Types](language/primitives.md)
+
+-   :material-alert-circle-outline: **Option & Result**
+
+    ---
+
+    Safe monadic handling of missing values and errors, preventing null-pointer reference issues.
+
+    [:octicons-arrow-right-24: Option & Result Docs](stdlib/option-result.md)
+
+-   :material-layers: **Collections**
+
+    ---
+
+    Power your algorithms with robust implementations of `List<T>` and `Map<K, V>`.
+
+    [:octicons-arrow-right-24: Collections Docs](stdlib/collections.md)
+
+-   :material-code-json: **JSON**
+
+    ---
+
+    Structured JSON manipulation: `JsonValue` model, `JSON.parse`/`stringify`, and `@json` auto-derive support.
+
+    [:octicons-arrow-right-24: JSON Docs](stdlib/json.md)
+
+-   :material-file-document: **File I/O**
+
+    ---
+
+    Interact with the filesystem via `File` and `FileStream`. Read, write, list, and stream bytes/text.
+
+    [:octicons-arrow-right-24: File I/O Docs](stdlib/file.md)
+
+-   :material-swap-horizontal: **HTTP**
+
+    ---
+
+    Cross-runtime request execution over standard `async`/`await` powered by `HttpClient`.
+
+    [:octicons-arrow-right-24: HTTP Docs](stdlib/http.md)
+
+-   :material-calendar-clock: **DateTime**
+
+    ---
+
+    Flexible calendar date and time tracking: instantiation, arithmetic, and comparison operations.
+
+    [:octicons-arrow-right-24: DateTime Docs](stdlib/datetime.md)
+
+</div>
 
 ## Interop
 
-Dream runs in the browser, Node, and native WASM runtimes. The `extern` keyword bridges to the JavaScript host with no boilerplate. See [JS Interop](language/interop.md), [References](language/references.md), and [Callbacks](language/callbacks.md).
+Dream runs natively in the browser, Node.js, and native WASM runtimes. The `extern` keyword bridges seamlessly to the JavaScript host with no boilerplate.
+
+<div class="grid cards" markdown>
+
+-   :material-javascript: **JS Interop**
+
+    ---
+
+    Call JavaScript functions directly from Dream and leverage Web API ecosystems.
+
+    [:octicons-arrow-right-24: Interop Overview](language/interop.md)
+
+-   :material-link: **JS References**
+
+    ---
+
+    Hold references to JavaScript objects safely inside the Dream runtime ecosystem.
+
+    [:octicons-arrow-right-24: Reference Docs](language/references.md)
+
+-   :material-phone-in-talk: **Callbacks**
+
+    ---
+
+    Seamlessly pass Dream function pointers into JS environments to handle asynchronous actions.
+
+    [:octicons-arrow-right-24: Callback Docs](language/callbacks.md)
+
+</div>
