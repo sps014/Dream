@@ -1,8 +1,6 @@
-// The `ulong` primitive (unsigned 64-bit) as an extensible class. `ulong` keeps its runtime
-// representation (a stack `i64` with unsigned operations). Auto-imported into every program.
-
+// The `ulong` primitive.
 extend ulong : Comparable<ulong> {
-    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<ulong>`.
+    // Orders this value against `other`.
     public fun compare(other: ulong): int {
         if (this < other) {
             return 0 - 1;
@@ -40,8 +38,7 @@ extend ulong : Comparable<ulong> {
         return this;
     }
 
-    // Parses an unsigned decimal integer from `text`. Returns `Err` for an empty string or any
-    // non-digit character; otherwise `Ok` with the value. Called as `ulong.parse("42")`.
+    // Parses an unsigned decimal integer from `text`.
     public static fun parse(text: string): Result<ulong, string> {
         let n = text.size();
         if (n == 0) {

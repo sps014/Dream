@@ -1,35 +1,14 @@
-// `DateTime` - a calendar date and time of day, either in UTC or a fixed local offset.
-// Auto-imported into every program.
-//
-// Only two things require the host (the wall clock and the OS timezone database); every other
-// operation - calendar math, arithmetic, comparison, ISO-8601 formatting/parsing - is implemented
-// in pure Dream using Howard Hinnant's `days_from_civil` / `civil_from_days` algorithms
-// (http://howardhinnant.github.io/date_algorithms.html), which are integer-only and correct for
-// the proleptic Gregorian calendar. This keeps the module portable across the wasmtime CLI and
-// the browser/Node JS host, exactly like `File` keeps its host surface to a handful of externs.
-//
-//   let now = DateTime.now();               // local time
-//   System.println(now.to_iso8601());
-//   let later = now.add_days(7);
-//   System.println(later.year() + "-" + later.month() + "-" + later.day());
-//
-//   let parsed = DateTime.parse_iso8601("2026-07-02T10:35:00.000Z");
+// A calendar date and time of day.
 class DateTime {
-    // --- host bridge: synchronous externs (real WASM imports; no @intrinsic) -------------------
-    // Current wall-clock time as UTC epoch milliseconds.
     @js("Dream", "dateNowMillis")
     static extern fun __now_millis(): long;
 
-    // The local system timezone's UTC offset, in minutes east of UTC, for the given UTC epoch
-    // millisecond instant. Takes the instant (not "now") because the offset depends on which DST
-    // rules are active at that particular point in time.
     @js("Dream", "dateLocalOffsetMinutes")
     static extern fun __local_offset_minutes(epoch_millis: long): int;
 
     // The instant this value represents, as UTC epoch milliseconds.
     public epoch_millis: long;
-    // The UTC offset (in minutes) this value renders itself in. 0 means UTC; any other value means
-    // "local" as of whatever offset was in effect at construction time.
+    // The UTC offset in minutes.
     public offset_minutes: int;
 
     constructor(epoch_millis: long, offset_minutes: int) {
@@ -37,14 +16,12 @@ class DateTime {
         this.offset_minutes = offset_minutes;
     }
 
-    // --- construction -----------------------------------------------------------------------
-
-    // The current instant, in UTC.
+    // The current instant in UTC.
     public static fun utc_now(): DateTime {
         return DateTime(DateTime.__now_millis(), 0);
     }
 
-    // The current instant, rendered in the local system timezone.
+    // The current instant in the local system timezone.
     public static fun now(): DateTime {
         let millis = DateTime.__now_millis();
         let offset = DateTime.__local_offset_minutes(millis);
@@ -67,108 +44,107 @@ class DateTime {
         return DateTime(millis, 0);
     }
 
-    // Builds an instant from calendar fields interpreted as local wall-clock time (the local
-    // system timezone's offset for that wall-clock instant is resolved via the host).
+    // Builds an instant from calendar fields interpreted as local wall-clock time.
     public static fun of_local(year: int, month: int, day: int, hour: int, minute: int, second: int, millisecond: int): DateTime {
         let tentative = DateTime.of(year, month, day, hour, minute, second, millisecond);
         let offset = DateTime.__local_offset_minutes(tentative.epoch_millis);
         return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
     }
 
-    // --- conversion ---------------------------------------------------------------------------
-
-    // The same instant, rendered in UTC.
+    // The same instant in UTC.
     public fun to_utc(): DateTime {
         return DateTime(this.epoch_millis, 0);
     }
 
-    // The same instant, rendered in the local system timezone (re-resolves the offset for this
-    // exact instant, so it stays correct across DST transitions).
+    // The same instant in the local system timezone.
     public fun to_local(): DateTime {
         let offset = DateTime.__local_offset_minutes(this.epoch_millis);
         return DateTime(this.epoch_millis, offset);
     }
 
-    // --- calendar accessors ---------------------------------------------------------------------
-
-    // Days since the epoch (1970-01-01) for this value's rendered (offset-adjusted) date.
     fun _local_days(): int {
         let total = this.epoch_millis + (long)this.offset_minutes * 60000L;
         return (int) DateTime._floor_div(total, 86400000L);
     }
 
-    // Milliseconds since local midnight, in [0, 86400000).
     fun _millis_of_day(): long {
         let total = this.epoch_millis + (long)this.offset_minutes * 60000L;
         return DateTime._floor_mod(total, 86400000L);
     }
 
+    // The year.
     public fun year(): int {
         return DateTime._civil_from_days(this._local_days()).year;
     }
 
+    // The month.
     public fun month(): int {
         return DateTime._civil_from_days(this._local_days()).month;
     }
 
+    // The day.
     public fun day(): int {
         return DateTime._civil_from_days(this._local_days()).day;
     }
 
+    // The hour.
     public fun hour(): int {
         return (int) (this._millis_of_day() / 3600000L);
     }
 
+    // The minute.
     public fun minute(): int {
         return (int) ((this._millis_of_day() / 60000L) % 60L);
     }
 
+    // The second.
     public fun second(): int {
         return (int) ((this._millis_of_day() / 1000L) % 60L);
     }
 
+    // The millisecond.
     public fun millisecond(): int {
         return (int) (this._millis_of_day() % 1000L);
     }
 
-    // Day of the week: 0 = Sunday, 1 = Monday, ..., 6 = Saturday (matches JS `Date.getDay()`).
+    // The day of the week (0 = Sunday).
     public fun day_of_week(): int {
         return (int) DateTime._floor_mod((long) this._local_days() + 4L, 7L);
     }
 
-    // Day of the year, 1-based (Jan 1st is 1).
+    // The day of the year (1-based).
     public fun day_of_year(): int {
         let ymd = DateTime._civil_from_days(this._local_days());
         let jan1 = DateTime._days_from_civil(ymd.year, 1, 1);
         return this._local_days() - jan1 + 1;
     }
 
-    // --- arithmetic (all preserve `offset_minutes`; call `to_local()` afterwards to re-resolve a
-    // DST-correct offset if the result crosses a DST boundary) --------------------------------
-
+    // Adds milliseconds.
     public fun add_millis(amount: long): DateTime {
         return DateTime(this.epoch_millis + amount, this.offset_minutes);
     }
 
+    // Adds seconds.
     public fun add_seconds(amount: long): DateTime {
         return this.add_millis(amount * 1000L);
     }
 
+    // Adds minutes.
     public fun add_minutes(amount: long): DateTime {
         return this.add_millis(amount * 60000L);
     }
 
+    // Adds hours.
     public fun add_hours(amount: long): DateTime {
         return this.add_millis(amount * 3600000L);
     }
 
+    // Adds days.
     public fun add_days(amount: long): DateTime {
         return this.add_millis(amount * 86400000L);
     }
 
-    // --- comparison (always compares the absolute instant, regardless of offset) ---------------
-
-    // -1 if this is before `other`, 1 if after, 0 if the same instant.
+    // Compares to another DateTime.
     public fun compare_to(other: DateTime): int {
         if (this.epoch_millis < other.epoch_millis) {
             return 0 - 1;
@@ -179,21 +155,22 @@ class DateTime {
         return 0;
     }
 
+    // True if this is before `other`.
     public fun is_before(other: DateTime): bool {
         return this.epoch_millis < other.epoch_millis;
     }
 
+    // True if this is after `other`.
     public fun is_after(other: DateTime): bool {
         return this.epoch_millis > other.epoch_millis;
     }
 
+    // True if this equals `other`.
     public fun equals(other: DateTime): bool {
         return this.epoch_millis == other.epoch_millis;
     }
 
-    // --- formatting -----------------------------------------------------------------------------
-
-    // e.g. "2026-07-02T10:35:00.000Z" (UTC) or "2026-07-02T16:05:00.000+05:30" (local).
+    // Formats as ISO-8601.
     public fun to_iso8601(): string {
         let result = DateTime._pad(this.year(), 4) + "-" + DateTime._pad(this.month(), 2) + "-" + DateTime._pad(this.day(), 2)
             + "T" + DateTime._pad(this.hour(), 2) + ":" + DateTime._pad(this.minute(), 2) + ":" + DateTime._pad(this.second(), 2)
@@ -204,7 +181,7 @@ class DateTime {
         return result + DateTime._offset_suffix(this.offset_minutes);
     }
 
-    // A human-readable rendering, e.g. "2026-07-02 10:35:00 UTC" or "2026-07-02 16:05:00 +05:30".
+    // A human-readable formatting.
     @override
     public fun to_string(): string {
         let result = DateTime._pad(this.year(), 4) + "-" + DateTime._pad(this.month(), 2) + "-" + DateTime._pad(this.day(), 2)
@@ -215,9 +192,7 @@ class DateTime {
         return result + " " + DateTime._offset_suffix(this.offset_minutes);
     }
 
-    // Parses an ISO-8601 datetime of the form "YYYY-MM-DDTHH:mm:ss[.fff](Z|+HH:MM|-HH:MM)?".
-    // The fractional part (if present) may have any number of digits; it is truncated or
-    // zero-padded to milliseconds. A missing offset (and no trailing "Z") is treated as UTC.
+    // Parses an ISO-8601 datetime.
     public static fun parse_iso8601(text: string): Result<DateTime, string> {
         let n = text.size();
         if (n < 19) {
@@ -314,11 +289,6 @@ class DateTime {
         return Result.Ok(DateTime(utc_millis, offset_minutes));
     }
 
-    // --- internal helpers -----------------------------------------------------------------------
-
-    // Floor division: unlike `/` (which truncates toward zero), this rounds toward negative
-    // infinity, which is what splitting a possibly-negative epoch millisecond count into
-    // (day, time-of-day) components requires.
     static fun _floor_div(a: long, b: long): long {
         let q = a / b;
         let r = a % b;
@@ -328,7 +298,6 @@ class DateTime {
         return q;
     }
 
-    // Floor modulo: the remainder consistent with `_floor_div`, always in [0, b) for a positive b.
     static fun _floor_mod(a: long, b: long): long {
         let r = a % b;
         if ((r != 0L) && ((r < 0L) != (b < 0L))) {
@@ -337,8 +306,6 @@ class DateTime {
         return r;
     }
 
-    // Days since the epoch (1970-01-01) for the given proleptic-Gregorian calendar date.
-    // Howard Hinnant's `days_from_civil`: http://howardhinnant.github.io/date_algorithms.html
     static fun _days_from_civil(year: int, month: int, day: int): int {
         let y = year;
         if (month <= 2) {
@@ -356,8 +323,6 @@ class DateTime {
         return era * 146097 + doe - 719468;
     }
 
-    // The inverse of `_days_from_civil`: recovers (year, month, day) from a day count since the
-    // epoch. Howard Hinnant's `civil_from_days`.
     static fun _civil_from_days(days: int): _DateTimeYmd {
         let z = days + 719468;
         let era = z;
@@ -381,8 +346,6 @@ class DateTime {
         return _DateTimeYmd(y, m, d);
     }
 
-    // Left-pads `n`'s decimal representation with zeros to at least `width` digits (negative or
-    // over-wide values are returned unpadded).
     static fun _pad(n: int, width: int): string {
         let s = n.to_string();
         while ((s.size() < width) && (n >= 0)) {
@@ -391,7 +354,6 @@ class DateTime {
         return s;
     }
 
-    // Formats a UTC offset in minutes as "+HH:MM" / "-HH:MM".
     static fun _offset_suffix(offset_minutes: int): string {
         let sign = "+";
         let m = offset_minutes;
@@ -402,8 +364,6 @@ class DateTime {
         return sign + DateTime._pad(m / 60, 2) + ":" + DateTime._pad(m % 60, 2);
     }
 
-    // Parses exactly `len` ASCII decimal digits starting at `start`, or `None` if any character in
-    // range is not a digit (or the range is out of bounds).
     static fun _parse_digits(text: string, start: int, len: int): Option<int> {
         if (len <= 0) {
             return Option.None;
@@ -425,7 +385,7 @@ class DateTime {
     }
 }
 
-// A plain (year, month, day) triple, returned by `DateTime._civil_from_days`.
+// A (year, month, day) tuple.
 class _DateTimeYmd {
     public year: int;
     public month: int;

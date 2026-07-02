@@ -1,10 +1,7 @@
-// A parsed view over the raw response bytes returned by the host (produced by `HttpClient`). Status
-// and header reads scan the ASCII head; `text`/`bytes`/`json` materialize the body only when asked.
-// All reads are synchronous - the bytes are already in hand by the time the request future resolves.
-// Auto-imported into every program.
+// A parsed view over HTTP response bytes.
 class HttpResponse {
     data: char[];
-    boundary: int;   // index of the first '\n' of the head/body "\n\n" separator (-1 until scanned)
+    boundary: int;
     scanned: bool;
 
     constructor(data: char[]) {
@@ -13,8 +10,6 @@ class HttpResponse {
         this.scanned = false;
     }
 
-    // Locates the blank line separating the head from the body. `boundary` ends up at the first of
-    // the two consecutive newlines (or at the end of the buffer when there is no body).
     fun scan(): void {
         if (this.scanned == false) {
             this.scanned = true;
@@ -34,7 +29,6 @@ class HttpResponse {
         }
     }
 
-    // Decodes the half-open byte range [start, end) of the response as text.
     fun slice_text(start: int, end: int): string {
         let len = end - start;
         if (len < 0) {
@@ -49,13 +43,12 @@ class HttpResponse {
         return result;
     }
 
-    // The ASCII head (status line + header lines) as text.
     fun head_text(): string {
         this.scan();
         return this.slice_text(0, this.boundary);
     }
 
-    // The HTTP status code, e.g. 200. Parsed from the leading digits of the head.
+    // The HTTP status code.
     public fun status(): int {
         let n = this.data.size();
         let i = 0;
@@ -64,7 +57,7 @@ class HttpResponse {
         while ((i < n) && (going == true)) {
             let c = this.data[i];
             if (c.is_digit() == true) {
-                value = value * 10 + (c.to_int() - 48);   // 48 = '0'
+                value = value * 10 + (c.to_int() - 48);
                 i = i + 1;
             } else {
                 going = false;
@@ -79,11 +72,11 @@ class HttpResponse {
         return (s >= 200) && (s < 300);
     }
 
-    // The value of response header `name` (case-insensitive), or "" if absent.
+    // The value of response header `name`.
     public fun header(name: string): string {
         let lines = this.head_text().split('\n');
         let want = name.to_lower();
-        let i = 1;   // line 0 is the status line
+        let i = 1;
         while (i < lines.size()) {
             let line = lines[i];
             let colon = line.index_of(':').unwrap_or(0 - 1);
@@ -104,8 +97,7 @@ class HttpResponse {
         return this.slice_text(this.boundary + 2, this.data.size());
     }
 
-    // The response body as raw bytes (binary-safe; a fresh `byte[]` slice). Each code point of the
-    // raw response buffer is narrowed to a byte.
+    // The response body as raw bytes.
     public fun bytes(): byte[] {
         this.scan();
         let n = this.data.size();

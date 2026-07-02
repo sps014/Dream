@@ -1,13 +1,4 @@
-// `Regex` - regular expressions over a small set of synchronous host functions, implemented
-// natively in Rust (`src/execution/host.rs`, via the `regex` crate) for the wasmtime CLI and in
-// JavaScript (`runtime/dream.js`, via `RegExp`) for Node and the browser. Because both back the
-// same string-in/string-out helpers, the same `.dream` runs unchanged on every host.
-//
-// Note: the native (wasmtime) backend uses Rust's `regex` crate, which has no lookaround or
-// backreferences. Patterns using those features compile under JS `RegExp` but not natively, where
-// they fall back to a safe default (`test` false, `replace` unchanged, `match` empty).
-
-// Regex provides helpful regex functions that can be used to test, replace, and match strings.
+// Regular expressions.
 class Regex {
     pattern: string;
     flags: string;
@@ -17,7 +8,6 @@ class Regex {
         this.flags = flags;
     }
 
-    // --- host bridge (implemented by the `Dream` module: natively in Rust, or via JS `RegExp`) ---
     @js("Dream", "regexTest")
     static extern fun __regex_test(pattern: string, flags: string, input: string): bool;
 
@@ -32,14 +22,12 @@ class Regex {
         return Regex.__regex_test(this.pattern, this.flags, input);
     }
 
-    // Returns `input` with every match replaced by `replacement` (use the `g` flag for all).
-    // `replacement` supports JS `$1`/`$<name>` group references.
+    // Returns `input` with every match replaced by `replacement`.
     public fun replace(input: string, replacement: string): string {
         return Regex.__regex_replace(this.pattern, this.flags, input, replacement);
     }
 
-    // Returns the matches in `input` as an array. With the `g` flag this is every match; without
-    // it, the full match followed by any capture groups. Empty when there is no match.
+    // Returns the matches in `input` as an array.
     public fun match(input: string): string[] {
         let joined = Regex.__regex_match_joined(this.pattern, this.flags, input, "\n");
         if (joined.size() == 0) {

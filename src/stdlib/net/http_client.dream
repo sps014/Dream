@@ -1,51 +1,21 @@
-// `HttpClient` - a small, instantiable, cross-runtime HTTP client returning `HttpResponse`
-// (`http_response.dream`). Unlike the `JsRef`-based interop in `jsref.dream`, this works
-// *everywhere* the same way: the host capability is a pair of `extern async` imports implemented
-// natively in Rust (`src/execution/host/http.rs`, via a blocking `reqwest` call) for the wasmtime
-// CLI, and in JavaScript (`runtime/dream.js`, via the platform `fetch`) for Node and the browser.
-// Each import performs the whole request and hands back the entire response - status line, headers,
-// and raw body - as a single binary-safe `char[]`, so there is no `JsRef`, no per-body round-trip,
-// and binary payloads survive byte-for-byte. Auto-imported into every program.
-//
-//   async fun main(): void {
-//       let api = HttpClient("https://example.com").set_header("Accept", "application/json");
-//       let res = await api.get("/users/42");
-//       if (res.ok()) {
-//           let data = await res.json();          // JsonValue
-//           System.println(data.get("name").as_string());
-//       }
-//   }
-//
-// Construct it with a base URL ("" for none) and optionally attach default headers that are merged
-// into every request:
-//
-//   let api = HttpClient("https://api.example.com")
-//       .set_header("Authorization", "Bearer token")
-//       .set_header("Accept", "application/json");
+// A cross-runtime HTTP client returning HttpResponse.
 class HttpClient {
     base_url: string;
-    default_headers: string;   // a JSON object string ("" for none)
+    default_headers: string;
 
-    // --- host bridge: one request per call, full response returned as raw bytes ----------------
-    // Response wire format (produced identically by every host):
-    //   "<status>\n" "<Header-Name>: <value>\n" ... "\n" <raw body bytes>
-    // i.e. an ASCII head (status line + header lines), a blank line, then the untouched body.
-
-    // Text request body (used directly as the body; ignored on GET/HEAD).
     @js("Dream", "httpRequest")
     static extern async fun __http_request(url: string, method: string, headers: string, body: string): char[];
 
-    // Binary request body (the `byte[]` crosses without a UTF-8 round-trip; ignored on GET/HEAD).
     @js("Dream", "httpRequestBytes")
     static extern async fun __http_request_bytes(url: string, method: string, headers: string, body: byte[]): char[];
 
-    // Creates a client. `base_url` is prepended to relative paths (pass "" to require absolute URLs).
+    // Creates an HTTP client with a base URL.
     constructor(base_url: string) {
         this.base_url = base_url;
         this.default_headers = "";
     }
 
-    // Adds (or overwrites) a default header sent with every request. Returns `this` for chaining.
+    // Adds a default header sent with every request.
     public fun set_header(name: string, value: string): HttpClient {
         let obj = JsonValue.dict();
         if (this.default_headers.is_empty() == false) {
@@ -56,7 +26,6 @@ class HttpClient {
         return this;
     }
 
-    // Joins `path` onto `base_url`. An absolute URL or an empty base is returned unchanged.
     fun resolve(path: string): string {
         if (this.base_url.is_empty() == true) {
             return path;
@@ -67,8 +36,6 @@ class HttpClient {
         return this.base_url + path;
     }
 
-    // Combines the client's default headers with this call's headers (call values win). Both are
-    // JSON object strings; "" on either side short-circuits.
     fun merge_headers(call: string): string {
         if (this.default_headers.is_empty() == true) {
             return call;
@@ -88,50 +55,60 @@ class HttpClient {
         return JSON.stringify(base);
     }
 
-    // Performs an arbitrary request with a text body. `method` is the verb (GET/POST/PUT/...),
-    // `headers` is a JSON-object string of header pairs ("" for none), `body` is the request body
-    // ("" for none, ignored on GET/HEAD).
+    // Performs a request with a text body.
     public async fun request(method: string, path: string, body: string, headers: string): HttpResponse {
         let raw = await HttpClient.__http_request(this.resolve(path), method, this.merge_headers(headers), body);
         return HttpResponse(raw);
     }
 
-    // Common verbs with a text body.
+    // Performs a GET request.
     public async fun get(path: string): HttpResponse {
         return await this.request("GET", path, "", "");
     }
+
+    // Performs a POST request.
     public async fun post(path: string, body: string): HttpResponse {
         return await this.request("POST", path, body, "");
     }
+
+    // Performs a PUT request.
     public async fun put(path: string, body: string): HttpResponse {
         return await this.request("PUT", path, body, "");
     }
+
+    // Performs a PATCH request.
     public async fun patch(path: string, body: string): HttpResponse {
         return await this.request("PATCH", path, body, "");
     }
+
+    // Performs a DELETE request.
     public async fun delete(path: string): HttpResponse {
         return await this.request("DELETE", path, "", "");
     }
+
+    // Performs a HEAD request.
     public async fun head(path: string): HttpResponse {
         return await this.request("HEAD", path, "", "");
     }
 
-    // GETs `path` and resolves with its body as text.
+    // Performs a GET request and resolves with its body as text.
     public async fun text(path: string): string {
         let res = await this.get(path);
         return res.text();
     }
 
-    // Performs an arbitrary request with a binary (`byte[]`) body.
+    // Performs a request with a binary body.
     public async fun request_bytes(method: string, path: string, body: byte[], headers: string): HttpResponse {
         let raw = await HttpClient.__http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body);
         return HttpResponse(raw);
     }
 
-    // POST/PUT a raw byte payload.
+    // Performs a POST request with a binary body.
     public async fun post_bytes(path: string, body: byte[]): HttpResponse {
         return await this.request_bytes("POST", path, body, "");
     }
+
+    // Performs a PUT request with a binary body.
     public async fun put_bytes(path: string, body: byte[]): HttpResponse {
         return await this.request_bytes("PUT", path, body, "");
     }

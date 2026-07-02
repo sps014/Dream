@@ -1,9 +1,6 @@
-// The `long` primitive (signed 64-bit) as an extensible class. `long` keeps its runtime
-// representation (a stack `i64`); these are ordinary methods dispatched on the receiver via
-// `this`, plus a `static` factory that parses text. Auto-imported into every program.
-
+// The `long` primitive.
 extend long : Comparable<long> {
-    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<long>`.
+    // Orders this value against `other`.
     public fun compare(other: long): int {
         if (this < other) {
             return 0 - 1;
@@ -60,9 +57,7 @@ extend long : Comparable<long> {
         return 0L;
     }
 
-    // Parses a (possibly signed) decimal integer from `text`. Returns `Err` for an empty string,
-    // a bare sign, or any non-digit character; otherwise `Ok` with the value. Called as
-    // `long.parse("42")`.
+    // Parses a decimal integer from `text`.
     public static fun parse(text: string): Result<long, string> {
         let n = text.size();
         if (n == 0) {

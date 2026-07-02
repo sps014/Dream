@@ -1,6 +1,4 @@
-// Cursor produced by `string.iterator()`. `next()` yields `Some(char)` for each character in
-// order until the string is exhausted, then `None` — the enumerator protocol consumed by
-// `for (let c in s)`. Uses only the string's public `size()`/`char_at()`.
+// Cursor produced by `string.iterator()`.
 class StringIterator {
     text: string;
     idx: int;
@@ -10,6 +8,7 @@ class StringIterator {
         this.idx = 0;
     }
 
+    // Yields the next character or None.
     public fun next(): Option<char> {
         if (this.idx >= this.text.size()) {
             return Option.None;

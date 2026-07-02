@@ -1,14 +1,14 @@
-/// Promise utilities for async tasks
+// Promise utilities for async tasks.
 class Promise {
-    /// Waits for all promises in the array to resolve.
+    // Waits for all promises in the array to resolve.
     @intrinsic("promise_all")
     static extern async fun all<T>(promises: T[]): T[];
     
-    /// Waits for any promise in the array to resolve.
+    // Waits for any promise in the array to resolve.
     @intrinsic("promise_any")
     static extern async fun any<T>(promises: T[]): T;
     
-    /// Returns the first promise to resolve or reject.
+    // Returns the first promise to resolve or reject.
     @intrinsic("promise_race")
     static extern async fun race<T>(promises: T[]): T;
 }

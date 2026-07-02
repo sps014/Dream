@@ -1,8 +1,6 @@
-// The `uint` primitive (unsigned 32-bit) as an extensible class. `uint` keeps its runtime
-// representation (a stack `i32` with unsigned operations). Auto-imported into every program.
-
+// The `uint` primitive.
 extend uint : Comparable<uint> {
-    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<uint>`.
+    // Orders this value against `other`.
     public fun compare(other: uint): int {
         if (this < other) {
             return 0 - 1;
@@ -40,8 +38,7 @@ extend uint : Comparable<uint> {
         return this;
     }
 
-    // Parses an unsigned decimal integer from `text`. Returns `Err` for an empty string or any
-    // non-digit character; otherwise `Ok` with the value. Called as `uint.parse("42")`.
+    // Parses an unsigned decimal integer from `text`.
     public static fun parse(text: string): Result<uint, string> {
         let n = text.size();
         if (n == 0) {

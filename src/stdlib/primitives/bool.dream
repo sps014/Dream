@@ -1,6 +1,4 @@
-// The `bool` primitive as an extensible class. A `bool` is an `i32` (0 or 1) at runtime.
-// Auto-imported into every program.
-
+// The `bool` primitive.
 extend bool {
     // 1 for true, 0 for false.
     public fun to_int(): int {

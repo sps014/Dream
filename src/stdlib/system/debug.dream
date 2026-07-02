@@ -1,33 +1,22 @@
-// `Debug` - allocator introspection for tests and diagnostics. The probes below read existing
-// allocator state and cost nothing on the allocation hot path, EXCEPT `live_objects()` and
-// `total_allocations()`, which rely on counters that `$malloc`/`$free` only maintain when the
-// program is compiled with allocator instrumentation enabled (the `--debug` CLI flag). Without
-// `--debug` those two return 0; the others always report real values. Auto-imported into every
-// program. These have no Dream bodies; each `@intrinsic` static method is lowered directly by the
-// codegen backend (no host import), so they work identically on every runtime.
+// Allocator introspection for tests and diagnostics.
 class Debug {
-    // Head pointer of the allocator's free list (0 when empty). Used by memory tests.
+    // Head pointer of the allocator's free list.
     @intrinsic("debug_get_free_list_head")
     static extern fun free_list_head(): int;
 
-    // Current bump pointer (the heap high-water mark in bytes). Grows only when no free block
-    // can satisfy an allocation; staying flat across repeated work proves blocks are reused.
+    // Current bump pointer of the heap.
     @intrinsic("debug_get_heap_ptr")
     static extern fun heap_ptr(): int;
 
-    // Number of heap blocks currently handed out (incremented on every allocation, decremented
-    // on every free). Returning to a baseline after a unit of work proves there is no leak.
-    // Requires `--debug`; returns 0 otherwise.
+    // Number of heap blocks currently alive.
     @intrinsic("debug_get_live_objects")
     static extern fun live_objects(): int;
 
-    // Monotonic count of every allocation ever made. Useful to confirm a code path actually
-    // allocated (and how much) regardless of reclamation. Requires `--debug`; returns 0 otherwise.
+    // Total number of allocations ever made.
     @intrinsic("debug_get_total_allocations")
     static extern fun total_allocations(): int;
 
-    // Live reference count of a heap value (string, array, struct, or boxed object). Lets tests
-    // assert ARC retain/release behavior directly (e.g. a shared value has a count > 1).
+    // Live reference count of a heap value.
     @intrinsic("debug_get_ref_count")
     static extern fun ref_count(o: object): int;
 }

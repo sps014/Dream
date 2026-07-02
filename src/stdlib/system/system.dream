@@ -1,67 +1,48 @@
-// System utilities: console output (`print`/`println`), console input (`readLine`/`readKey`/
-// `readInt`/`readDouble`), process control (`exit`), and ANSI terminal colors (`ConsoleColor`,
-// `setForeground`/`setBackground`/`resetColor`/`printColored`), plus `clear`. Auto-imported into
-// every program. The `ConsoleColor` enum used below lives in `console_color.dream`.
-//
-//   System.print("name? ");
-//   let name = System.readLine();
-//   System.setForeground(ConsoleColor.Green);
-//   System.println("hi " + name);
-//   System.resetColor();
-
+// System utilities for console I/O, process control, and terminal colors.
 class System {
-    /// Prints a value to standard output.
+    // Prints a value to standard output.
     @intrinsic("print")
     static extern fun print<T>(value: T): void;
 
-    /// Prints a value to standard output followed by a newline.
+    // Prints a value to standard output followed by a newline.
     @intrinsic("println")
     static extern fun println<T>(value: T): void;
 
-    // --- host bridge: synchronous externs (real WASM imports; no @intrinsic) -------------------
-
-    // Blocks until a line of text is available on stdin; returns it without the trailing newline.
     @js("Dream", "consoleReadLine")
     static extern fun __read_line(): string;
 
-    // Blocks until a single keypress is available; returns its character code (0 for keys with
-    // no character representation, e.g. arrow keys).
     @js("Dream", "consoleReadKey")
     static extern fun __read_key(): char;
 
-    // Terminates the process immediately with the given exit code.
     @js("Dream", "consoleExit")
     static extern fun __exit(code: int): void;
 
-    // Reads a full line of input from stdin (blocking), without the trailing newline.
+    // Reads a line of input from stdin.
     public static fun readLine(): string {
         return System.__read_line();
     }
 
-    // Reads a single keypress from stdin (blocking) without waiting for Enter, and without
-    // echoing it back to the terminal. Returns `(char)0` for keys with no character (e.g. arrows).
+    // Reads a single keypress from stdin.
     public static fun readKey(): char {
         return System.__read_key();
     }
 
-    // Reads a line from stdin and parses it as an `int`. `Err` when the line is not a valid
-    // (optionally signed) decimal integer.
+    // Reads a line from stdin and parses it as an integer.
     public static fun readInt(): Result<int, string> {
         return int.parse(System.readLine());
     }
 
-    // Reads a line from stdin and parses it as a `double`. `Err` when the line is not a valid
-    // decimal number.
+    // Reads a line from stdin and parses it as a double.
     public static fun readDouble(): Result<double, string> {
         return double.parse(System.readLine());
     }
 
-    // Terminates the process immediately with the given exit code. Never returns.
+    // Terminates the process with the given exit code.
     public static fun exit(code: int): void {
         System.__exit(code);
     }
 
-    // Clears the terminal screen and moves the cursor to the top-left, via ANSI escapes.
+    // Clears the terminal screen.
     public static fun clear(): void {
         System.print((char)27);
         System.print("[2J");
@@ -69,7 +50,6 @@ class System {
         System.print("[H");
     }
 
-    // The ANSI SGR foreground code (30-37 dim, 90-97 bright) for a `ConsoleColor`.
     static fun _fg_code(color: ConsoleColor): int {
         switch (color) {
             case ConsoleColor.Black:
@@ -103,11 +83,11 @@ class System {
             case ConsoleColor.Cyan:
                 return 96;
             default:
-                return 97; // White
+                return 97;
         }
     }
 
-    // Sets the foreground (text) color for subsequent output. Stays in effect until `resetColor`.
+    // Sets the foreground color for subsequent output.
     public static fun setForeground(color: ConsoleColor): void {
         System.print((char)27);
         System.print("[");
@@ -115,7 +95,7 @@ class System {
         System.print("m");
     }
 
-    // Sets the background color for subsequent output. Stays in effect until `resetColor`.
+    // Sets the background color for subsequent output.
     public static fun setBackground(color: ConsoleColor): void {
         System.print((char)27);
         System.print("[");
@@ -123,13 +103,13 @@ class System {
         System.print("m");
     }
 
-    // Resets foreground/background color (and other SGR attributes) to the terminal default.
+    // Resets console colors to the terminal default.
     public static fun resetColor(): void {
         System.print((char)27);
         System.print("[0m");
     }
 
-    // Prints `value` in `color`, then resets back to the default color. Does not print a newline.
+    // Prints a string in the specified color.
     public static fun printColored(value: string, color: ConsoleColor): void {
         System.setForeground(color);
         System.print(value);

@@ -1,9 +1,6 @@
-// The `byte` primitive (unsigned 8-bit) as an extensible class. `byte` keeps its runtime
-// representation (a stack `i32` holding a value in [0, 255], one byte in memory). Auto-imported
-// into every program.
-
+// The `byte` primitive.
 extend byte : Comparable<byte> {
-    // Orders this value against `other` (negative/zero/positive), implementing `Comparable<byte>`.
+    // Orders this value against `other`.
     public fun compare(other: byte): int {
         if (this < other) {
             return 0 - 1;
@@ -41,8 +38,7 @@ extend byte : Comparable<byte> {
         return this;
     }
 
-    // Parses an unsigned decimal byte (0-255) from `text`. Returns `Err` for an empty string, a
-    // non-digit character, or a value out of range; otherwise `Ok`. Called as `byte.parse("42")`.
+    // Parses an unsigned decimal byte from `text`.
     public static fun parse(text: string): Result<byte, string> {
         let n = text.size();
         if (n == 0) {
