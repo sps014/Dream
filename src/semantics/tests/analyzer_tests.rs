@@ -1618,19 +1618,32 @@ fn test_analyze_await_outside_async() {
 }
 
 #[test]
-fn test_analyze_await_in_subexpression_rejected() {
-    // v1 restricts `await` to top-level statement positions.
+fn test_analyze_await_in_unconditional_subexpression_allowed() {
+    // `await` in an unconditionally-evaluated sub-expression is hoisted by the async normalization
+    // pass, so it type-checks cleanly.
     let code = "
         async fun delay(): void { }
         async fun work(n: int): int { await delay(); return n; }
-        async fun main(): void { let x = await work(1) + 1; }
+        async fun main(): void { let x = await work(1) + 1; let y = x; }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_await_in_conditional_position_rejected() {
+    // `await` in a ternary arm evaluates conditionally, which the async lowering cannot yet handle.
+    let code = "
+        async fun delay(): void { }
+        async fun work(n: int): int { await delay(); return n; }
+        async fun main(): void { let c = true; let x = c ? await work(1) : await work(2); let y = x; }
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
     assert!(diagnostics
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("top-level statement")));
+        .any(|d| d.message.contains("conditionally-evaluated position")));
 }
 
 #[test]

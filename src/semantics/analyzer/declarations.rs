@@ -669,16 +669,9 @@ impl<'a> Analyzer<'a> {
             if struct_decl.generic_parameters.is_some() {
                 // A generic class may implement a (generic or non-generic) interface; the
                 // `implements` clause is validated per monomorphization in `ensure_struct_instantiated`.
-                // v1 restriction: async methods on generic classes are not supported (the async
-                // state machine would have to be re-generated per monomorphization).
-                for method in struct_decl.methods.iter() {
-                    if method.is_async {
-                        diagnostics.report_error(
-                            format!("Async methods are not supported on generic class '{}' (method '{}')", struct_decl.name.text, method.name.text),
-                            Some(method.name.position),
-                        );
-                    }
-                }
+                // Async methods are supported: each monomorphization registers the method as a
+                // distinct concrete function (see `register_struct_methods`), so its async state
+                // machine is generated per instance like any other async method.
                 self.generic_structs
                     .insert(struct_decl.name.text.clone(), struct_decl);
                 continue;

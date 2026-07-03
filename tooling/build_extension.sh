@@ -7,11 +7,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VSCODE_DIR="$SCRIPT_DIR/vscode"
 
-echo "==> Building dream-lsp native binary in release mode..."
+echo "==> Building dream-lsp and dream native binaries in release mode..."
 cd "$ROOT_DIR"
 cargo build --release -p dream-lsp
+cargo build --release --bin dream
 
-echo "==> Copying binary into extension folder..."
+echo "==> Copying binaries into extension folder..."
 mkdir -p "$VSCODE_DIR/bin"
 
 # Determine Node-compatible platform string
@@ -40,6 +41,8 @@ echo "Detected Platform: $PLATFORM, Arch: $ARCH"
 
 cp "target/release/dream-lsp$EXT" "$VSCODE_DIR/bin/dream-lsp$EXT"
 cp "target/release/dream-lsp$EXT" "$VSCODE_DIR/bin/dream-lsp-${PLATFORM}-${ARCH}${EXT}"
+cp "target/release/dream$EXT" "$VSCODE_DIR/bin/dream$EXT"
+cp "target/release/dream$EXT" "$VSCODE_DIR/bin/dream-${PLATFORM}-${ARCH}${EXT}"
 
 echo "==> Navigating to VS Code extension directory..."
 cd "$VSCODE_DIR"

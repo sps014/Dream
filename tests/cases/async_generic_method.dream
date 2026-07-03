@@ -1,0 +1,21 @@
+// Async methods on a generic class: each monomorphization (`Cell<int>`, `Cell<string>`) regenerates
+// its own async state machine, so awaiting a generic method resolves with the concrete type.
+class Cell<T> {
+    public value: T;
+    constructor(value: T) { this.value = value; }
+
+    public async fun get(): T {
+        await Time.sleep(10);
+        return this.value;
+    }
+}
+
+async fun main(): void {
+    let a = Cell<int>(42);
+    let ra = await a.get();
+    System.println(ra);
+
+    let b = Cell<string>("hello");
+    let rb = await b.get();
+    System.println(rb);
+}

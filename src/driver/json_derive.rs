@@ -92,6 +92,16 @@ fn generate_json_extend(
     diagnostics: &mut DiagnosticBag,
 ) -> Option<String> {
     let name = &struct_decl.name.text;
+    // Generic parameter names (`Box<T>` -> ["T"]). A field typed by one of these is serialized
+    // through the object protocol (`x.to_json()` / `T.from_json(...)`), resolved per concrete
+    // instantiation by the monomorphizer. The `extend` and `from_json` are emitted with the same
+    // parameter list so the derive attaches to the generic template.
+    let generic_params: Vec<String> = struct_decl
+        .generic_parameters
+        .as_ref()
+        .map(|ps| ps.iter().map(|p| p.text.clone()).collect())
+        .unwrap_or_default();
+    let is_type_param = |t: &str| generic_params.iter().any(|p| p == t);
     let mut to_body = String::from("        let __o = JsonValue.dict();\n");
     let mut from_prelude = String::new();
     // `from_json` reconstructs the value by calling the class's field-order constructor positionally,
@@ -181,6 +191,22 @@ fn generate_json_extend(
                     return None;
                 }
             }
+        } else if is_type_param(ftype) {
+            // A field typed by a generic parameter (`value: T`) is serialized through the
+            // `JSON.serialize`/`JSON.deserialize` intrinsics, which the analyzer resolves per
+            // concrete instantiation (`T` -> the monomorphized type's `to_json`/`from_json`). A
+            // static call on the bare parameter `T` cannot be named directly, so we round-trip via
+            // text: `JSON.parse(JSON.serialize(x))` yields the nested `JsonValue`.
+            to_body.push_str(&format!(
+                "        __o.set(\"{k}\", JSON.parse(JSON.serialize(this.{f})));\n",
+                k = json_key,
+                f = fname
+            ));
+            from_fields.push(format!(
+                "JSON.deserialize<{ty}>(JSON.stringify(v.get(\"{k}\").unwrap_or(JsonValue.none())))",
+                ty = ftype,
+                k = json_key
+            ));
         } else {
             let to_e = json_to_expr(ftype, &format!("this.{}", fname), json_names);
             let from_e = json_from_expr(
@@ -212,16 +238,26 @@ fn generate_json_extend(
     }
     to_body.push_str("        return __o;\n");
 
+    // For a generic type the derive attaches to the template (`extend Box<T>`) and names the
+    // instantiated type in the constructor call / return type (`Box<T>`), so each monomorphization
+    // gets its own concrete `to_json`/`from_json`.
+    let params_clause = if generic_params.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", generic_params.join(", "))
+    };
+    let self_ty = format!("{}{}", name, params_clause);
+
     let from_body = format!(
-        "{prelude}        return {name}({fields});\n",
+        "{prelude}        return {self_ty}({fields});\n",
         prelude = from_prelude,
-        name = name,
+        self_ty = self_ty,
         fields = from_fields.join(", ")
     );
 
     Some(format!(
-        "extend {name} {{\n    public fun to_json(): JsonValue {{\n{to_body}    }}\n    public static fun from_json(v: JsonValue): {name} {{\n{from_body}    }}\n}}\n",
-        name = name, to_body = to_body, from_body = from_body
+        "extend {name}{params} {{\n    public fun to_json(): JsonValue {{\n{to_body}    }}\n    public static fun from_json(v: JsonValue): {self_ty} {{\n{from_body}    }}\n}}\n",
+        name = name, params = params_clause, self_ty = self_ty, to_body = to_body, from_body = from_body
     ))
 }
 
@@ -235,6 +271,15 @@ fn generate_json_union(
     diagnostics: &mut DiagnosticBag,
 ) -> Option<String> {
     let name = &enum_decl.name.text;
+    // Generic parameter names (`Result<T, E>` -> ["T", "E"]). A variant payload typed by one of
+    // these round-trips through `JSON.serialize`/`JSON.deserialize`, resolved per concrete
+    // instantiation by the monomorphizer (see the class path for details).
+    let generic_params: Vec<String> = enum_decl
+        .generic_parameters
+        .as_ref()
+        .map(|ps| ps.iter().map(|p| p.text.clone()).collect())
+        .unwrap_or_default();
+    let is_type_param = |t: &str| generic_params.iter().any(|p| p == t);
 
     // `to_json`: a `switch` over the variant fills a tagged dict. Block arms run for effect.
     let mut to_body = String::from("        let __o = JsonValue.dict();\n        switch (this) {\n");
@@ -260,7 +305,12 @@ fn generate_json_union(
         for field in &variant.fields {
             let fname = &field.name.text;
             let ftype = field.type_token.text.as_str();
-            match json_to_expr(ftype, fname, json_names) {
+            let to_expr = if is_type_param(ftype) {
+                Some(format!("JSON.parse(JSON.serialize({}))", fname))
+            } else {
+                json_to_expr(ftype, fname, json_names)
+            };
+            match to_expr {
                 Some(expr) => {
                     to_body.push_str(&format!(
                         "                __o.set(\"{}\", {});\n",
@@ -290,7 +340,12 @@ fn generate_json_union(
                 let fname = &field.name.text;
                 let ftype = field.type_token.text.as_str();
                 let jexpr = format!("v.get(\"{}\").unwrap_or(JsonValue.none())", fname);
-                match json_from_expr(ftype, &jexpr, json_names) {
+                let from_expr = if is_type_param(ftype) {
+                    Some(format!("JSON.deserialize<{}>(JSON.stringify({}))", ftype, jexpr))
+                } else {
+                    json_from_expr(ftype, &jexpr, json_names)
+                };
+                match from_expr {
                     Some(expr) => args.push(expr),
                     None => {
                         diagnostics.report_error(
@@ -321,12 +376,13 @@ fn generate_json_union(
         let mut args = Vec::new();
         for field in &first.fields {
             let jexpr = format!("v.get(\"{}\").unwrap_or(JsonValue.none())", field.name.text);
+            let ftype = field.type_token.text.as_str();
             // Field types were already validated in the loop above.
-            args.push(json_from_expr(
-                field.type_token.text.as_str(),
-                &jexpr,
-                json_names,
-            )?);
+            if is_type_param(ftype) {
+                args.push(format!("JSON.deserialize<{}>(JSON.stringify({}))", ftype, jexpr));
+            } else {
+                args.push(json_from_expr(ftype, &jexpr, json_names)?);
+            }
         }
         format!("{}.{}({})", name, first.name.text, args.join(", "))
     };
@@ -338,9 +394,19 @@ fn generate_json_union(
         fallback = fallback
     );
 
+    // For a generic union the derive attaches to the template (`extend Result<T, E>`) and names the
+    // instantiated type in the `from_json` return type, so each monomorphization gets its own
+    // concrete converters.
+    let params_clause = if generic_params.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", generic_params.join(", "))
+    };
+    let self_ty = format!("{}{}", name, params_clause);
+
     Some(format!(
-        "extend {name} {{\n    public fun to_json(): JsonValue {{\n{to_body}    }}\n    public static fun from_json(v: JsonValue): {name} {{\n{from_body}    }}\n}}\n",
-        name = name, to_body = to_body, from_body = from_body
+        "extend {name}{params} {{\n    public fun to_json(): JsonValue {{\n{to_body}    }}\n    public static fun from_json(v: JsonValue): {self_ty} {{\n{from_body}    }}\n}}\n",
+        name = name, params = params_clause, self_ty = self_ty, to_body = to_body, from_body = from_body
     ))
 }
 
@@ -373,16 +439,6 @@ pub(crate) fn generate_json_derives<'a>(
 
     let mut source = String::new();
     for struct_decl in all_structs.iter().filter(|s| has_json_attr(&s.attributes)) {
-        if struct_decl.generic_parameters.is_some() {
-            diagnostics.report_error(
-                format!(
-                    "@json is not supported on generic class '{}'",
-                    struct_decl.name.text
-                ),
-                Some(struct_decl.name.position),
-            );
-            continue;
-        }
         if let Some(block) = generate_json_extend(struct_decl, &json_names, diagnostics) {
             source.push_str(&block);
             source.push('\n');
@@ -390,16 +446,6 @@ pub(crate) fn generate_json_derives<'a>(
     }
 
     for enum_decl in all_enums.iter().filter(|e| has_json_attr(&e.attributes)) {
-        if enum_decl.generic_parameters.is_some() {
-            diagnostics.report_error(
-                format!(
-                    "@json is not supported on generic union '{}'",
-                    enum_decl.name.text
-                ),
-                Some(enum_decl.name.position),
-            );
-            continue;
-        }
         if !enum_decl.is_data_enum() {
             diagnostics.report_error(
                 format!(

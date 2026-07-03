@@ -37,7 +37,33 @@
         "scopeName": "source.dream",
         "path": "./syntaxes/dream.tmLanguage.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "dream.runFile",
+        "title": "Dream: Run File",
+        "icon": "$(play)"
+      },
+      {
+        "command": "dream.showWat",
+        "title": "Dream: Show Generated WAT",
+        "icon": "$(output)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "dream.runFile",
+          "when": "resourceLangId == dream",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dream.showWat",
+          "when": "resourceLangId == dream",
+          "group": "navigation@2"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p ./",

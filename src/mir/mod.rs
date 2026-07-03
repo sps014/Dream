@@ -9,6 +9,7 @@
 
 pub mod abi;
 pub mod async_emit;
+pub mod async_normalize;
 pub mod build;
 pub mod emit;
 pub mod js_abi;

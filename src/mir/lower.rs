@@ -67,7 +67,10 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
 /// Lowers a single function.
 pub fn lower_function(func: &HFunction, interner: &TypeInterner) -> MirFunction {
     if func.is_async {
-        return lower_async_stub(func, interner);
+        // Hoist awaits nested in sub-expressions into top-level `let` temporaries so the segment
+        // splitter (which only recognizes await at statement position) can handle them.
+        let normalized = super::async_normalize::normalize_async_awaits(func);
+        return lower_async_stub(&normalized, interner);
     }
     lower_sync_function(func, interner)
 }

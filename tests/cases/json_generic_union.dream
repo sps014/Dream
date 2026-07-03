@@ -1,0 +1,31 @@
+// @json on a generic discriminated union: the derive attaches to the template `Opt<T>` and each
+// concrete instantiation gets its own converters. Type-parameter payloads round-trip through
+// `JSON.serialize`/`JSON.deserialize`, resolved per instance by the monomorphizer.
+@json
+struct Point { public x: int; public y: int; constructor(x: int, y: int) { this.x = x; this.y = y; } }
+
+@json
+enum Opt<T> {
+    Some(value: T),
+    None,
+}
+
+fun main(): void {
+    let a: Opt<Point> = Opt.Some(Point(3, 4));
+    let sa = JSON.serialize<Opt<Point>>(a);
+    System.println(sa);
+    let backA = JSON.deserialize<Opt<Point>>(sa);
+    switch (backA) {
+        Some(value) => { System.println(value.x); System.println(value.y); }
+        None => { System.println("none"); }
+    }
+
+    let b: Opt<Point> = Opt.None;
+    let sb = JSON.serialize<Opt<Point>>(b);
+    System.println(sb);
+    let backB = JSON.deserialize<Opt<Point>>(sb);
+    switch (backB) {
+        Some(value) => { System.println("some"); }
+        None => { System.println("none"); }
+    }
+}

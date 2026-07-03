@@ -1,0 +1,22 @@
+// `await` may appear in unconditionally-evaluated sub-expressions: call arguments, operands, array
+// literals, etc. The compiler hoists each nested await into a top-level temporary before the async
+// coroutine transform, preserving left-to-right evaluation order.
+async fun val(n: int): int {
+    await Time.sleep(5);
+    return n;
+}
+
+fun add(a: int, b: int): int { return a + b; }
+
+async fun main(): void {
+    // await in a call argument
+    System.println(add(await val(3), await val(4)));   // 7
+    // await in an arithmetic operand
+    let s = (await val(10)) + (await val(20));
+    System.println(s);                                 // 30
+    // nested await: the future's own argument is itself awaited
+    System.println(await val(await val(42)));          // 42
+    // await inside an array literal, then index it
+    let arr = [await val(1), await val(2), await val(3)];
+    System.println(arr[2]);                            // 3
+}
