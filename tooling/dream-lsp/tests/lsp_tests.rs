@@ -716,6 +716,34 @@ async fun main(): void {
 }
 
 #[test]
+fn await_in_branch_infers_unwrapped_type() {
+    // `await` inside a branch/loop body is a supported suspend point, and the LSP walks into those
+    // bodies, so `let a = await g(...)` there still infers the unwrapped awaited type.
+    use dream_lsp::index::{Index, InlayKind};
+    let src = "
+async fun g(n: int): int { return n; }
+async fun main(): void {
+    let ready = true;
+    if (ready) {
+        let a = await g(10);
+    }
+}
+";
+    let index = Index::build(None, src);
+    let labels: Vec<&str> = index
+        .inlay_hints
+        .iter()
+        .filter(|h| h.kind == InlayKind::Type)
+        .map(|h| h.label.as_str())
+        .collect();
+    assert!(
+        labels.contains(&": int"),
+        "`let a = await g(10)` inside a branch should show `: int`; got {:?}",
+        labels
+    );
+}
+
+#[test]
 fn arithmetic_binary_infers_operand_type() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "
