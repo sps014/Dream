@@ -196,13 +196,35 @@ impl TypeInterner {
     }
 
     /// True if `id` names a value type — a value (`struct`) type or a value union — after stripping
-    /// any nullable wrapper. Both are stored inline with copy semantics rather than as heap references.
+    /// any nullable wrapper. Both are stored inline with copy semantics rather than as heap
+    /// references.
+    ///
+    /// A *nullable* value struct (`T?`) is the exception: it is stored as a nullable heap pointer to
+    /// a boxed copy of `T` (so `null` has a representation), and therefore behaves as a reference,
+    /// not an inline value. `is_nullable_boxed_value` distinguishes it.
     pub fn is_value_type(&self, id: TypeId) -> bool {
+        if self.is_nullable_boxed_value(id) {
+            return false;
+        }
         let stripped = self.strip_nullable(id);
         if self.value_unions.contains(&stripped) {
             return true;
         }
         matches!(self.kind(stripped), TyKind::Struct(def, _) if self.value_defs.contains(def))
+    }
+
+    /// True when `id` is `T?` where `T` is a value (`struct`) type: represented at runtime as a
+    /// nullable heap pointer to a boxed copy of `T`, so `null` is expressible. A value *union* is
+    /// excluded (it carries its own inline discriminant and stays inline even when nullable).
+    pub fn is_nullable_boxed_value(&self, id: TypeId) -> bool {
+        let TyKind::Nullable(inner) = self.kind(id) else {
+            return false;
+        };
+        let inner = self.strip_nullable(*inner);
+        if self.value_unions.contains(&inner) {
+            return false;
+        }
+        matches!(self.kind(inner), TyKind::Struct(def, _) if self.value_defs.contains(def))
     }
 
     /// Records the inline `(size, align)` of a value (`struct`) type. Keyed by the nullable-stripped
@@ -221,6 +243,11 @@ impl TypeInterner {
     /// True if a value of `id` is a heap reference (after stripping any nullable wrapper). A
     /// `struct` (value) type is *not* a reference even though it is a `TyKind::Struct`.
     pub fn is_reference(&self, id: TypeId) -> bool {
+        // A nullable value struct (`T?`) is boxed onto the heap, so it *is* a reference even though
+        // the bare `T` is an inline value.
+        if self.is_nullable_boxed_value(id) {
+            return true;
+        }
         let stripped = self.strip_nullable(id);
         // A value union is stored inline (not a heap reference) even though it is a `TyKind::Union`.
         if self.value_unions.contains(&stripped) {

@@ -724,24 +724,13 @@ impl<'a> Analyzer<'a> {
                     Some(struct_decl.name.position),
                 );
             }
-            // v1 restriction: a value struct has no null representation, so `T?` on a value struct is
-            // rejected (nullability is a deferred feature). Checked on every declared field.
-            for field in &struct_decl.fields {
-                let base = field.field_type.base_name();
-                if field.field_type.is_nullable() && self.is_value_type_name(&base) {
-                    diagnostics.report_error(
-                        format!(
-                            "field '{}' cannot be a nullable value struct ('{}'); value structs are non-nullable in this version",
-                            field.name.text, base
-                        ),
-                        Some(field.name.position),
-                    );
-                }
-            }
+            // A nullable value struct field (`T?`) is stored as a nullable heap pointer to a boxed
+            // copy of `T` (see `is_nullable_boxed_value`), so `null` is representable. No rejection.
         }
     }
 
     /// True when the (unadorned) type name resolves to a declared value (`struct`) type.
+    #[allow(dead_code)]
     pub(super) fn is_value_type_name(&self, name: &str) -> bool {
         self.struct_table.get_struct(name).map(|s| s.is_value).unwrap_or(false)
     }
@@ -1161,18 +1150,8 @@ impl<'a> Analyzer<'a> {
                     Some(*position),
                 );
             }
-            for field in &new_decl_ref.fields {
-                let base = field.field_type.base_name();
-                if field.field_type.is_nullable() && self.is_value_type_name(&base) {
-                    diagnostics.report_error(
-                        format!(
-                            "field '{}' cannot be a nullable value struct ('{}'); value structs are non-nullable in this version",
-                            field.name.text, base
-                        ),
-                        Some(field.name.position),
-                    );
-                }
-            }
+            // A nullable value struct field (`T?`) boxes to a nullable heap pointer, so `null` is
+            // representable — no rejection (see the non-generic path above).
         }
 
         self.register_struct_methods(new_decl_ref, &mangled_name, &bindings, diagnostics);

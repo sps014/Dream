@@ -1287,17 +1287,21 @@ impl Emitter<'_> {
             self.line(&format!("     (call {})", sym));
             return;
         }
-        // Boxing a value struct into a reference target (`object` or an interface): allocate a
-        // tagged heap block, byte-copy the inline value in, and retain the copy's embedded
-        // references. The result is a refcounted heap object indistinguishable from a class
-        // instance for dynamic dispatch, the object protocol, and deep release.
+        // Boxing a value struct into a reference target (`object`, an interface, or a nullable value
+        // struct `T?`): allocate a tagged heap block, byte-copy the inline value in, and retain the
+        // copy's embedded references. The result is a refcounted heap object indistinguishable from
+        // a class instance for dynamic dispatch, the object protocol, and deep release.
         let to_ref = self.interner.strip_nullable(to);
-        if matches!(
+        let from_bare = self.interner.strip_nullable(from);
+        let to_is_ref_box = matches!(
             self.interner.kind(to_ref),
             TyKind::Object | TyKind::Interface(..)
-        ) && self.interner.is_value_type(self.interner.strip_nullable(from))
+        ) || self.interner.is_nullable_boxed_value(to);
+        if to_is_ref_box
+            && self.interner.is_value_type(from_bare)
+            && !self.interner.is_nullable_boxed_value(from)
         {
-            self.emit_box_value_struct(o, self.interner.strip_nullable(from));
+            self.emit_box_value_struct(o, from_bare);
             return;
         }
         let from_prim = prim_of(self.interner, from);

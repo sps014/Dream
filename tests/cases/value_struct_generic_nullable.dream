@@ -1,5 +1,5 @@
-// Value-struct soundness is enforced per generic instantiation: `Wrapper<Point>` substitutes its
-// field to `Point?`, a nullable value struct, which is rejected only once `T` is concrete.
+// A generic field substituted to a nullable value struct (`Wrapper<Point>.inner : Point?`) is now
+// supported: it boxes to a nullable heap pointer, so `null` is representable per instantiation.
 
 struct Point {
     public x: int;
@@ -19,5 +19,10 @@ struct Wrapper<T> {
 
 fun main(): void {
     let w = Wrapper<Point>(Point(1));
-    System.println(w.inner.x);
+    let p: Point = w.inner ?? Point(-1);
+    System.println(p.x);
+
+    let empty = Wrapper<Point>(null);
+    let q: Point = empty.inner ?? Point(-1);
+    System.println(q.x);
 }

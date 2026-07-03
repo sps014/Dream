@@ -1,0 +1,32 @@
+// A nullable value struct (`Point?`) is stored as a nullable heap pointer to a boxed copy, so
+// `null` is representable. Assignment boxes the value; null-checks compare the pointer; coalescing
+// with a non-null value unboxes it back to an inline `Point`.
+
+struct Point {
+    public x: int;
+    public y: int;
+    constructor(x: int, y: int) { this.x = x; this.y = y; }
+}
+
+fun show(p: Point?): void {
+    if (p == null) {
+        System.println("none");
+    } else {
+        System.println("some");
+    }
+}
+
+fun main(): void {
+    let a: Point? = Point(3, 4);
+    let b: Point? = null;
+    show(a);
+    show(b);
+
+    // Coalesce back to an inline Point, then read its fields.
+    let c: Point = a ?? Point(0, 0);
+    System.println(c.x);
+    System.println(c.y);
+    let d: Point = b ?? Point(7, 8);
+    System.println(d.x);
+    System.println(d.y);
+}

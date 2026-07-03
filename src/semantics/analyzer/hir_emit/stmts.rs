@@ -111,14 +111,19 @@ impl<'a> Analyzer<'a> {
         if matches!(target_k, TyKind::Object) && matches!(val_k, TyKind::Prim(_)) {
             return HExpr::new(target, HExprKind::Cast(Box::new(value)));
         }
-        // Boxing a value struct into `object` or an interface reference: the backend allocates a
-        // tagged heap copy so the value participates in dynamic dispatch / the object protocol.
-        // Reference structs are already pointers (identity upcast), so only value structs box here.
-        if matches!(target_k, TyKind::Object | TyKind::Interface(..))
+        // Boxing a value struct into `object`, an interface reference, or a nullable value struct
+        // (`T?`): the backend allocates a tagged heap copy so `null` is representable / the value
+        // participates in dynamic dispatch and the object protocol. Reference structs are already
+        // pointers (identity upcast), so only value structs box here.
+        let target_is_boxed_value = self.type_ctx.interner.is_nullable_boxed_value(target);
+        if (matches!(target_k, TyKind::Object | TyKind::Interface(..)) || target_is_boxed_value)
             && matches!(val_k, TyKind::Struct(..))
         {
             let vty = self.type_ctx.interner.strip_nullable(value.ty);
-            if self.type_ctx.interner.is_value_type(vty) {
+            // A bare value struct value being widened; not an already-boxed nullable one.
+            if self.type_ctx.interner.is_value_type(vty)
+                && !self.type_ctx.interner.is_nullable_boxed_value(value.ty)
+            {
                 return HExpr::new(target, HExprKind::Cast(Box::new(value)));
             }
         }
