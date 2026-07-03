@@ -1,6 +1,6 @@
 # Collections
 
-The Dream standard library provides two built-in collection types available automatically in every program: `List<T>` and `Map<K, V>`.
+The Dream standard library provides three built-in collection types available automatically in every program: `List<T>`, `Map<K, V>`, and `Set<T>`.
 
 ## `List<T>`
 
@@ -75,3 +75,39 @@ for (let pair in scores) {
 
 ### Key Requirements
 Any type can be a map key as long as its `hash_code` and `==` operators work correctly. Primitives and strings work automatically. Classes use reference equality by default unless their `hash_code` and `==` are overridden.
+
+---
+
+## `Set<T>`
+
+`Set<T>` is a hash set that stores unique values with average O(1) lookups and insertions.
+
+```dream
+let users = Set<string>();
+users.add("alice");
+users.add("bob");
+users.add("alice");     // returns false, not added again
+```
+
+### Common Set Methods
+*   **`.add(value)`**: Inserts a value. Returns `true` if it was newly added, or `false` if it was already present.
+*   **`.contains(value)`**: Returns `true` if the value exists in the set.
+*   **`.remove(value)`**: Removes the value, returning `true` if it existed.
+*   **`.size()`**: Returns the number of elements.
+*   **`.clear()`**: Empties the set.
+*   **`.to_array()`**: Returns a new array containing all elements in the set.
+
+### Set Iteration
+Sets support standard `for..in` loops:
+
+```dream
+let unique_numbers = Set<int>();
+// ... populate set ...
+
+for (let num in unique_numbers) {
+    println(num);
+}
+```
+
+### Element Requirements
+Like maps, any type can be added to a set as long as its `hash_code` and `==` operators work correctly. Classes are compared using reference equality by default.
