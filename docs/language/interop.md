@@ -25,11 +25,10 @@ fun main(): void {
 }
 ```
 
-By default the import comes from the `env` module under the function's own name.
+By default the import comes from the `env` module under the function's own name. Three things
+cooperate to make the call work:
 
-There is one interop mechanism, made of three pieces:
-
-- `extern fun` declares the function on the Dream side.
+- `extern fun` declares the function's signature on the Dream side.
 - `@js("module", "field")` is an optional attribute that remaps which import module and field the
   function binds to.
 - The runtime (`runtime/dream.js`) reads the ABI, marshals values across the boundary, binds
