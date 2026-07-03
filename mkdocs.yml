@@ -65,6 +65,7 @@ nav:
     - Operators: language/operators.md
     - Control Flow: language/control-flow.md
     - Functions: language/functions.md
+    - Language Invariants: language/invariants.md
   - Types & Data:
     - Overview: language/types.md
     - Primitives: language/primitives.md

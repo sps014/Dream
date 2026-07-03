@@ -81,6 +81,15 @@ impl Compiler {
             &mut acc.file_contents,
         )?;
 
+        // Inherit interface default-method bodies into implementing classes that omit them, by
+        // appending synthesized `extend` blocks (must run after class collection so `implements`
+        // clauses are all present).
+        crate::driver::interface_defaults::generate_interface_default_impls(
+            &acc.all_structs,
+            &acc.all_interfaces,
+            &mut acc.all_extends,
+        );
+
         if diagnostics.has_errors() {
             render(&diagnostics, &acc.file_contents);
             return Err(CompileError::Syntax);

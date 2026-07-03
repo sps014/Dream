@@ -488,10 +488,8 @@ impl<'a> Analyzer<'a> {
                 Some(left.position),
             );
         }
-        let r = self
-            .analyze_expression(right, parent_function, symbol_table, diagnostics)
-            .unwrap_or(Type::Unknown);
-        let value = self.hir_take();
+        // Peek the target's declared type first so it can drive inference of the right-hand side
+        // (e.g. an untyped empty array literal `xs = []` resolves to the variable's element type).
         let l = match (*symbol_table).as_ref().borrow().get_symbol(left) {
             Ok(sym) => sym,
             Err(e) => {
@@ -500,6 +498,13 @@ impl<'a> Analyzer<'a> {
                 return Ok(());
             }
         };
+        let saved_expected = self.current_expected_type.take();
+        self.current_expected_type = Some(l.clone());
+        let r = self
+            .analyze_expression(right, parent_function, symbol_table, diagnostics)
+            .unwrap_or(Type::Unknown);
+        let value = self.hir_take();
+        self.current_expected_type = saved_expected;
         self.compare_data_type(&l, &r, &left.position, diagnostics)?;
         self.hir_assign_local(&left.text, value);
         Ok(())
@@ -773,10 +778,15 @@ impl<'a> Analyzer<'a> {
             );
         }
 
+        // Publish the field's declared type so the right-hand side can infer against it
+        // (e.g. `this.items = []` resolves the empty literal to the field's element type).
+        let saved_expected = self.current_expected_type.take();
+        self.current_expected_type = Some(field_type.clone());
         let right_type = self
             .analyze_expression(right, parent_function, symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
         let value_hir = self.hir_take();
+        self.current_expected_type = saved_expected;
         self.compare_data_type(&field_type, &right_type, &member.position, diagnostics)?;
 
         match self.struct_field_index(&struct_name, &member.text) {

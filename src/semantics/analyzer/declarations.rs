@@ -613,6 +613,11 @@ impl<'a> Analyzer<'a> {
                             );
                         }
                     }
+                    None if im.is_default_impl => {
+                        // Satisfied by the interface's default body, which is injected as an
+                        // `extend <class> { ... }` method before analysis (see
+                        // `generate_interface_default_impls`), so the class need not declare it.
+                    }
                     None => {
                         diagnostics.report_error(
                             format!(
@@ -814,7 +819,7 @@ impl<'a> Analyzer<'a> {
             if global.is_public && global.is_static {
                 diagnostics.report_error(
                     format!(
-                        "Top-level variable '{}' cannot be both 'public' and 'static'",
+                        "Top-level variable '{}' cannot be both 'public' and 'static': they request opposite linkage ('public' exposes it to other modules, 'static' pins it to module-internal linkage)",
                         global.name.text
                     ),
                     Some(global.name.position),

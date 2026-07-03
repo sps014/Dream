@@ -332,9 +332,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(decl)
     }
 
-    /// Parses one interface method signature: `[public] [static] fun Name[<T>](params)[: ret] ;`.
-    /// The method has no body; a `{ ... }` default body is rejected (deferred to a later version)
-    /// but still consumed so parsing can continue.
+    /// Parses one interface method: `[public] [static] fun Name[<T>](params)[: ret] ;` for a
+    /// signature-only method, or `... { ... }` for a *default* method whose body implementing
+    /// classes inherit when they omit the method.
     fn parse_interface_method(
         &mut self,
         attributes: Vec<crate::nodes::AttributeNode>,
@@ -356,32 +356,28 @@ impl<'a, 'b> Parser<'a, 'b> {
             return_type = Some(self.parse_type()?);
         }
 
-        if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
-            self.diagnostics.report_error(
-                format!(
-                    "interface method '{}' must be a signature ending with ';' (default method bodies are not supported yet)",
-                    function_name.text
-                ),
-                Some(function_name.position),
-            );
-            // Consume the block so parsing can recover.
-            let _ = self.parse_block()?;
-        } else {
-            self.match_token(TokenKind::SemicolonToken);
-        }
+        // A `{ ... }` body makes this a *default* method: implementing classes that omit it inherit
+        // this body. A signature-only method ends with `;`.
+        let (body, is_default): (&'a [StatementNode<'a>], bool) =
+            if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
+                (self.parse_block()?, true)
+            } else {
+                self.match_token(TokenKind::SemicolonToken);
+                (self.arena.alloc_slice_fill_iter(std::iter::empty()), false)
+            };
 
-        let empty: &'a [StatementNode<'a>] = self.arena.alloc_slice_fill_iter(std::iter::empty());
         let mut node = FunctionNode::new(
             attributes,
             function_name,
             generic_parameters,
             return_type,
             params,
-            empty,
+            body,
             is_public,
         );
         node.is_static = is_static;
         node.is_async = is_async;
+        node.is_default_impl = is_default;
         node.generic_constraints = generic_constraints;
         Ok(node)
     }
@@ -620,7 +616,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             m.is_extern = true;
             if m.is_public {
                 self.diagnostics.report_error(
-                    "A function cannot be both 'public' and 'extern'".to_string(),
+                    "A function cannot be both 'public' and 'extern': 'extern' declares an imported host symbol, while 'public' exports a defined one".to_string(),
                     Some(self.current_token().position),
                 );
             }

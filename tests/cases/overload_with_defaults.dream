@@ -1,0 +1,18 @@
+// Overloading combined with default parameter values. `scale` has two overloads: one taking an
+// int (with a defaulted multiplier) and one taking a string. Calls resolve by argument type, and
+// omitted trailing arguments fall back to their defaults. An exact-arity call is preferred over a
+// defaulted one.
+
+fun scale(n: int, by: int = 2): int {
+    return n * by;
+}
+
+fun scale(s: string): string {
+    return s + s;
+}
+
+fun main(): void {
+    System.println(scale(5));        // int overload, default by=2 -> 10
+    System.println(scale(5, 3));     // int overload, explicit by=3 -> 15
+    System.println(scale("ab"));     // string overload -> "abab"
+}

@@ -100,6 +100,10 @@ pub struct FunctionNode<'a> {
     /// `Some` when this is a TypeScript-style property accessor (`get`/`set`) rather than an
     /// ordinary method; `name` then holds the property name. `None` for normal methods/functions.
     pub accessor: Option<AccessorKind>,
+    /// True for an interface method that supplies a *default* body (`fun f() { ... }` inside an
+    /// `interface`). Implementing classes that omit the method inherit this body. `false` for
+    /// ordinary methods and signature-only interface methods.
+    pub is_default_impl: bool,
 }
 
 impl<'a> FunctionNode<'a> {
@@ -127,6 +131,7 @@ impl<'a> FunctionNode<'a> {
             is_async: false,
             file_path: None,
             accessor: None,
+            is_default_impl: false,
         }
     }
 }

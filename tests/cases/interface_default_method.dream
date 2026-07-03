@@ -1,0 +1,31 @@
+// Interface default methods: `greet` has a default body that classes inherit when they omit it.
+// The default calls another interface method (`name`) on `this`, which dispatches to the concrete
+// implementation. `Robot` overrides the default; `Person` inherits it.
+
+interface Greeter {
+    fun name(): string;
+    fun greet(): string {
+        return "Hello, I am " + this.name();
+    }
+}
+
+class Person : Greeter {
+    public fun name(): string { return "Ada"; }
+}
+
+class Robot : Greeter {
+    public fun name(): string { return "R2"; }
+    // Overrides the default.
+    public fun greet(): string { return "BEEP " + this.name(); }
+}
+
+// Interface-typed parameter dispatches `greet` dynamically: the default for Person, the override
+// for Robot.
+fun announce(g: Greeter): void {
+    System.println(g.greet());
+}
+
+fun main(): void {
+    announce(Person());
+    announce(Robot());
+}

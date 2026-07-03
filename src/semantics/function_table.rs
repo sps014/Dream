@@ -98,24 +98,10 @@ impl FunctionTable {
             self.functions.insert(base.to_string(), info);
             return Ok(base.to_string());
         }
-        // Default parameter values are only supported on non-overloaded functions: an omitted
-        // trailing argument would make overload resolution ambiguous. Reject the combination
-        // whether the default is on the new overload or on one already registered. (An explicit
-        // loop rather than a closure, so it borrows only `self.functions`, disjoint from the
-        // mutable `existing` borrow of `self.overloads`.)
-        let mut existing_has_defaults = false;
-        for k in existing.iter() {
-            if self.functions.get(k).map(|f| f.has_defaults()).unwrap_or(false) {
-                existing_has_defaults = true;
-                break;
-            }
-        }
-        if info.has_defaults() || existing_has_defaults {
-            return Err(SymbolError::new(format!(
-                "function '{}' cannot be overloaded because it uses default parameter values",
-                base
-            )));
-        }
+        // Default parameter values are allowed on overloaded functions. A defaulted overload is
+        // viable for any argument count in `required..=total`; overload resolution
+        // ([`select_overload`]) prefers an exact-arity match over one that fills defaults, and
+        // reports genuinely ambiguous calls at the call site.
         // Promote a lone bare singleton to its mangled key the moment a second overload appears.
         if existing.len() == 1 && existing[0] == base {
             if let Some(mut first) = self.functions.remove(base) {
@@ -182,11 +168,15 @@ impl FunctionTable {
                 Some(info) => info,
                 None => continue,
             };
-            if info.parameters.len() != args.len() {
+            // A defaulted overload matches any argument count from its required count up to its
+            // full arity; the omitted trailing parameters are filled from their defaults later.
+            if args.len() < info.required_params() || args.len() > info.parameters.len() {
                 continue;
             }
             let mut score = 0i32;
             let mut viable = true;
+            // Only the supplied arguments are type-checked against their parameters; defaulted
+            // trailing parameters are guaranteed to match their own literal defaults.
             for (param, arg) in info.parameters.iter().zip(args.iter()) {
                 if param == arg {
                     score += 1;
@@ -196,6 +186,11 @@ impl FunctionTable {
                     viable = false;
                     break;
                 }
+            }
+            // Prefer an overload whose arity exactly matches the call (no defaults filled) over one
+            // that relies on defaults, so `f(int)` beats `f(int, int = 0)` for a one-argument call.
+            if viable && args.len() == info.parameters.len() {
+                score += 1;
             }
             if viable {
                 scored.push((score, key));

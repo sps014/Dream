@@ -1,11 +1,12 @@
 use crate::token::syntax_token::SyntaxToken;
 use std::rc::Rc;
 
-/// An `interface` declaration: a named set of method signatures a class can implement. Interfaces
-/// declare method signatures only (no instance fields, no default bodies in v1); a class satisfies
-/// an interface by providing a matching method for each signature. Interfaces cannot be
-/// instantiated; an interface-typed value is a tagged object pointer whose method calls dispatch
-/// dynamically through the object's runtime tag (see itable dispatch in codegen).
+/// An `interface` declaration: a named set of methods a class can implement. Methods are usually
+/// signature-only, but may supply a *default* body (`fun f() { ... }`) that implementing classes
+/// inherit when they omit the method. Interfaces declare no instance fields. A class satisfies an
+/// interface by providing a matching method for each signature (defaults excepted). Interfaces
+/// cannot be instantiated; an interface-typed value is a tagged object pointer whose method calls
+/// dispatch dynamically through the object's runtime tag (see itable dispatch in codegen).
 #[derive(Debug, Clone)]
 pub struct InterfaceDeclarationNode<'a> {
     pub attributes: Vec<crate::nodes::AttributeNode>,

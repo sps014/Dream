@@ -30,8 +30,24 @@ impl<'a> Analyzer<'a> {
         let mut function_name = name.text.clone();
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
-        for param in params.iter() {
+        // When the callee is an unambiguous (non-overloaded) free function, publish each parameter's
+        // declared type as the expected type while analyzing the matching argument, so untyped
+        // literals such as an empty array `[]` infer their element type from the signature.
+        let expected_params: Option<Vec<Type>> = if self.function_table.is_overloaded(&function_name)
+        {
+            None
+        } else {
+            self.function_table
+                .get_function(&function_name)
+                .ok()
+                .map(|info| info.parameters.iter().map(|p| Self::type_from_name(p)).collect())
+        };
+        for (i, param) in params.iter().enumerate() {
+            let saved_expected = self.current_expected_type.take();
+            self.current_expected_type =
+                expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
+            self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
             params_types.push(t.get_type());
         }

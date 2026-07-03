@@ -341,6 +341,31 @@ fn test_hir_emission_index_and_array_literal() {
 }
 
 #[test]
+fn test_empty_array_literal_infers_from_context() {
+    // An untyped `[]` resolves its element type from the surrounding context: a `return`, a
+    // variable reassignment, a field write, and a call argument. None of these carry an inline
+    // `int[]` annotation on the literal itself, so each exercises the expected-type threading.
+    let code = "
+        fun sink(xs: int[]): int { return 0; }
+        class Bag { public items: int[]; constructor() { this.items = []; } }
+        fun make(): int[] { return []; }
+        fun driver(): int {
+            let ys: int[] = [1];
+            ys = [];
+            return sink([]);
+        }
+    ";
+    let (wat, _count) = emit_hir_to_wat(code);
+    assert!(wat.contains("(func $make"), "return-context empty array should emit:\n{}", wat);
+    assert!(wat.contains("(func $driver"), "assignment/arg empty array should emit:\n{}", wat);
+    assert!(
+        wat.contains("(func $Bag_constructor"),
+        "field-init empty array should emit:\n{}",
+        wat
+    );
+}
+
+#[test]
 fn test_hir_emission_direct_call() {
     // A direct free-function call resolves to the callee's `DefId` and emits a `call`.
     let code = "
@@ -746,6 +771,25 @@ fn exec_print_int_and_arithmetic() {
 fn exec_println_int_appends_newline() {
     let code = format!("{SYSTEM_STUB} fun main(): void {{ System.println(7); }}");
     assert_eq!(run_and_capture(&code, "main"), "7\n");
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn exec_int_to_string_via_concat_and_interpolation() {
+    // A non-string operand of `+` (and any interpolation hole) is implicitly rendered through the
+    // object protocol's `to_string`, so `int` values compose into strings with no explicit call.
+    let code = format!(
+        "{SYSTEM_STUB}
+        fun main(): void {{
+            let n: int = 42;
+            System.println(\"count = \" + n);
+            System.println($\"n is {{n}} and n+1 is {{n + 1}}\");
+        }}"
+    );
+    assert_eq!(
+        run_and_capture(&code, "main"),
+        "count = 42\nn is 42 and n+1 is 43\n"
+    );
 }
 
 #[cfg(feature = "native")]
