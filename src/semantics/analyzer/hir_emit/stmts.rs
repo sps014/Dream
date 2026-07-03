@@ -111,6 +111,17 @@ impl<'a> Analyzer<'a> {
         if matches!(target_k, TyKind::Object) && matches!(val_k, TyKind::Prim(_)) {
             return HExpr::new(target, HExprKind::Cast(Box::new(value)));
         }
+        // Boxing a value struct into `object` or an interface reference: the backend allocates a
+        // tagged heap copy so the value participates in dynamic dispatch / the object protocol.
+        // Reference structs are already pointers (identity upcast), so only value structs box here.
+        if matches!(target_k, TyKind::Object | TyKind::Interface(..))
+            && matches!(val_k, TyKind::Struct(..))
+        {
+            let vty = self.type_ctx.interner.strip_nullable(value.ty);
+            if self.type_ctx.interner.is_value_type(vty) {
+                return HExpr::new(target, HExprKind::Cast(Box::new(value)));
+            }
+        }
         // Dynamic `js`: box a primitive/`string` into a `js` handle, or unbox a `js` value into a
         // primitive/`string`, at this typed binding boundary (so `let x: js = 5` and
         // `let n: int = el.count` work without an explicit conversion).

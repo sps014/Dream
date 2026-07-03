@@ -505,11 +505,11 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when `class_name` may be implicitly/explicitly widened to an interface *reference*
-    /// (`iface_name`). A value (`struct`) type implements interfaces for *static* dispatch (direct
-    /// calls, generic constraints, `==`), but cannot become an interface reference because that
-    /// requires boxing to a tagged heap object (a deferred feature), so such an upcast is rejected.
+    /// (`iface_name`). A reference class upcasts by identity (same tagged pointer); a value
+    /// (`struct`) type is *boxed* into a fresh tagged heap object at the upcast site (see the value
+    /// struct case in `emit_cast`), so it too may become an interface reference.
     pub(super) fn implements_as_interface_ref(&self, class_name: &str, iface_name: &str) -> bool {
-        self.class_implements(class_name, iface_name) && !self.is_value_type_name(class_name)
+        self.class_implements(class_name, iface_name)
     }
 
     /// True when `iface_method` and `class_method` have matching signatures (same parameter types
@@ -661,10 +661,10 @@ impl<'a> Analyzer<'a> {
             if struct_decl.is_value {
                 self.type_ctx.defs.mark_value(def);
                 self.type_ctx.interner.mark_value_def(def);
-                // A value struct may implement interfaces (e.g. `Comparable`/`Equatable`): its methods
-                // are dispatched *statically* through direct calls and generic constraints, so no
-                // boxing is required. Widening it to an interface *reference* (a dynamic upcast that
-                // would box) remains unsupported — see `implements_as_interface_ref`.
+                // A value struct may implement interfaces (e.g. `Comparable`/`Equatable`): its
+                // methods dispatch *statically* through direct calls and generic constraints with no
+                // boxing. Widening it to an interface *reference* (or `object`) boxes it into a fresh
+                // tagged heap copy at the upcast site — see the value struct case in `emit_cast`.
             }
             if struct_decl.generic_parameters.is_some() {
                 // A generic class may implement a (generic or non-generic) interface; the

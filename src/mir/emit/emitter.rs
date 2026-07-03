@@ -1256,12 +1256,48 @@ impl Emitter<'_> {
         }
     }
 
+    /// Boxes a value struct `ty` (whose operand pushes its inline address) into a fresh tagged heap
+    /// object: `$malloc(size, tag)`, `memory.copy` the inline bytes in, then retain the copy's
+    /// embedded references. Leaves the heap data pointer on the stack (refcount 1, owned).
+    fn emit_box_value_struct(&mut self, o: &Operand, ty: TypeId) {
+        let size = self.value_size(ty);
+        let tag = self.type_tag(ty, crate::types::DefId(0));
+        self.line(&format!("     (i32.const {})", size));
+        self.line(&format!("     (i32.const {}) ;; tag", tag));
+        self.line("     (call $malloc)");
+        self.line("     (local.set $__obj)");
+        // memory.copy(dst = $__obj, src = inline address of the value, size)
+        self.line("     (local.get $__obj)");
+        self.emit_operand(o);
+        self.line(&format!("     (i32.const {})", size));
+        self.line("     (memory.copy)");
+        if self.value_has_glue(ty) {
+            if let Some(name) = self.value_name(ty) {
+                self.line(&format!("     (local.get $__obj) (call {})", vs_retain_sym(&name)));
+            }
+        }
+        self.line("     (local.get $__obj)");
+    }
+
     fn emit_cast(&mut self, o: &Operand, from: TypeId, to: TypeId) {
         // A struct/class <-> `js` cast routes through the generated deep-copy marshalers (see
         // `js_marshal`); everything else falls through to the primitive box/unbox path below.
         if let Some(sym) = js_marshal::cast_sym(self.interner, self.layouts, from, to) {
             self.emit_operand(o);
             self.line(&format!("     (call {})", sym));
+            return;
+        }
+        // Boxing a value struct into a reference target (`object` or an interface): allocate a
+        // tagged heap block, byte-copy the inline value in, and retain the copy's embedded
+        // references. The result is a refcounted heap object indistinguishable from a class
+        // instance for dynamic dispatch, the object protocol, and deep release.
+        let to_ref = self.interner.strip_nullable(to);
+        if matches!(
+            self.interner.kind(to_ref),
+            TyKind::Object | TyKind::Interface(..)
+        ) && self.interner.is_value_type(self.interner.strip_nullable(from))
+        {
+            self.emit_box_value_struct(o, self.interner.strip_nullable(from));
             return;
         }
         let from_prim = prim_of(self.interner, from);

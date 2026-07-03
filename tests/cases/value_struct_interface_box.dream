@@ -1,0 +1,37 @@
+// A value `struct` widened to an interface reference is boxed into a tagged heap object, so it
+// participates in dynamic dispatch just like a class. `Rect` and `Sq` both implement `Shape`; an
+// interface-typed local dispatches `area`/`name` dynamically to the boxed value's concrete method.
+
+interface Shape {
+    fun area(): int;
+    fun name(): string;
+}
+
+struct Rect : Shape {
+    public w: int;
+    public h: int;
+    constructor(w: int, h: int) { this.w = w; this.h = h; }
+    public fun area(): int { return this.w * this.h; }
+    public fun name(): string { return "rect"; }
+}
+
+struct Sq : Shape {
+    public side: int;
+    constructor(side: int) { this.side = side; }
+    public fun area(): int { return this.side * this.side; }
+    public fun name(): string { return "sq"; }
+}
+
+fun describe(s: Shape): void {
+    System.print(s.name());
+    System.print(" ");
+    System.println(s.area());
+}
+
+fun main(): void {
+    // Each `let` upcast boxes the value struct into a heap object; dispatch is dynamic.
+    let a: Shape = Rect(3, 4);
+    let b: Shape = Sq(5);
+    describe(a);
+    describe(b);
+}
