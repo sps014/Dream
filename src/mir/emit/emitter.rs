@@ -462,10 +462,14 @@ impl Emitter<'_> {
         self.tags.get(&ty).copied().unwrap_or(fallback.0 as i32)
     }
 
-    /// The heap address of an interned string (0 if not interned — should not happen for strings
-    /// surfaced through `strings_in_*`).
+    /// The heap address of an interned string. Every string literal reachable in codegen is
+    /// harvested into the interner beforehand (see `strings_in_*`), so a miss is a harvesting bug,
+    /// not a user error — fail loudly instead of emitting a null (address 0) string.
     fn string_addr(&self, s: &str) -> u32 {
-        self.strings.get(s).copied().unwrap_or(0)
+        self.strings
+            .get(s)
+            .copied()
+            .unwrap_or_else(|| unreachable!("string literal {:?} was not interned before codegen", s))
     }
 
     fn field_addr(&mut self, base: crate::mir::Local, offset: u32) {
@@ -973,12 +977,16 @@ impl Emitter<'_> {
                 self.emit_js_call(callee, target, method.as_ref(), args);
             }
             Rvalue::FuncRef(callee) => {
-                // A function value is its slot index in the module function table.
+                // A function value is its slot index in the module function table. The table is
+                // built from every referenced function, so a miss means it diverged from MIR
+                // (compiler bug); trap loudly rather than silently referencing slot 0.
                 let idx = self
                     .func_table
                     .get(&(callee.def, callee.args.clone()))
                     .copied()
-                    .unwrap_or(0);
+                    .unwrap_or_else(|| {
+                        unreachable!("funcref to def{} missing from the function table", callee.def.0)
+                    });
                 self.line(&format!("     (i32.const {}) ;; funcref def{}", idx, callee.def.0));
             }
             Rvalue::New { def, ty, ctor, args } => {
@@ -1035,6 +1043,15 @@ impl Emitter<'_> {
                         .map(|v| (size, v.fields.iter().map(|f| (f.offset, f.ty)).collect::<Vec<_>>()))
                 });
                 if let Some((size, fields)) = layout {
+                    // The analyzer already checked the variant's arity, so the argument list and the
+                    // variant's field slots must line up; a mismatch would silently drop or
+                    // misplace payload words.
+                    debug_assert_eq!(
+                        args.len(),
+                        fields.len(),
+                        "union def{} variant {} arity ({} args) disagrees with its layout ({} fields)",
+                        def.0, variant, args.len(), fields.len()
+                    );
                     self.line(&format!("     (i32.const {})", size));
                     self.line(&format!("     (i32.const {}) ;; tag", self.type_tag(*ty, *def)));
                     self.line("     (call $malloc)");
@@ -1043,23 +1060,41 @@ impl Emitter<'_> {
                     self.line(&format!("     (i32.const {}) ;; discriminant", variant));
                     self.line("     (i32.store)");
                     for (i, arg) in args.iter().enumerate() {
-                        if let Some(&(off, fty)) = fields.get(i) {
-                            self.store_at_obj(off, fty, arg);
-                        }
+                        let &(off, fty) = fields.get(i).unwrap_or_else(|| {
+                            unreachable!(
+                                "union def{} variant {} has no field slot for argument {}",
+                                def.0, variant, i
+                            )
+                        });
+                        self.store_at_obj(off, fty, arg);
                     }
                     self.line("     (local.get $__obj)");
                 } else {
-                    self.line(&format!(
-                        "     (i32.const 0) ;; union def{} variant {} has no layout",
+                    // A union that survived analysis always has a registered layout; a miss is a
+                    // compiler bug, so trap loudly rather than emitting a null pointer.
+                    unreachable!(
+                        "Missing layout for union def{} variant {}",
                         def.0, variant
-                    ));
+                    );
                 }
             }
             Rvalue::ArrayLit { elem_ty, elems } => {
                 // Array block: `[len: i32][elem0][elem1]...`; the length is the first word (matching
                 // `ArrayLen`), elements follow at stride `elem_size`.
                 let (esize, _) = scalar_size(self.interner, *elem_ty);
-                let size = 4 + esize * (elems.len() as u32);
+                // `[len:i32] + count * esize`. A literal big enough to overflow u32 is not
+                // representable in source, but guard the arithmetic so a bug can never emit a
+                // silently-truncated (undersized) allocation.
+                let size = (elems.len() as u32)
+                    .checked_mul(esize)
+                    .and_then(|payload| payload.checked_add(4))
+                    .unwrap_or_else(|| {
+                        unreachable!(
+                            "array literal size overflows u32 ({} elems x {} bytes)",
+                            elems.len(),
+                            esize
+                        )
+                    });
                 self.line(&format!("     (i32.const {})", size));
                 self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
                 self.line("     (call $malloc)");
@@ -1181,7 +1216,12 @@ impl Emitter<'_> {
             Rvalue::IsType(o, target) => {
                 self.emit_operand(o);
                 self.line("     (call $object_tag)");
-                let tag = runtime_tag_for(self.interner, self.tags, *target).unwrap_or(0);
+                // The analyzer only admits `is` against a type with a concrete runtime tag; a
+                // `None` here means an unsupported target slipped through (compiler bug). Comparing
+                // against 0 would silently answer the wrong question, so fail loudly instead.
+                let tag = runtime_tag_for(self.interner, self.tags, *target).unwrap_or_else(|| {
+                    unreachable!("`is` target type {:?} has no runtime tag", target)
+                });
                 self.line(&format!("     (i32.const {})", tag));
                 self.line("     (i32.eq)");
             }
@@ -1498,11 +1538,12 @@ impl Emitter<'_> {
         use crate::intrinsics;
         match kind {
             intrinsics::SLEEP => {
+                use crate::mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
                 self.emit_operand(&args[0]);
                 self.line("     (local.set $__scratch)");
-                self.line("     (i32.const 56) ;; F_SLOTS");
-                self.line("     (i32.const -1)");
-                self.line("     (i32.const 1) ;; KIND_HOST");
+                self.line(&format!("     (i32.const {F_SLOTS}) ;; F_SLOTS"));
+                self.line(&format!("     (i32.const {HOST_POLL_INDEX})"));
+                self.line(&format!("     (i32.const {KIND_HOST}) ;; KIND_HOST"));
                 self.line("     (call $dream_new_future)");
                 self.line("     (local.tee $__obj)");
                 self.line("     (local.get $__scratch)");

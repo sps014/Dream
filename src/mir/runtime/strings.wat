@@ -27,7 +27,7 @@
     i32.add
     i32.const 4
     i32.add
-    i32.const 5
+    i32.const {TAG_STRING}
     call $malloc
     local.set $new_ptr
     ;; store the combined length at [new_ptr]
@@ -217,7 +217,7 @@
     local.get $n
     i32.const 4
     i32.add
-    i32.const 5
+    i32.const {TAG_STRING}
     call $malloc
     local.set $p
     ;; store the length at [p]

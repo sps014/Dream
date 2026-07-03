@@ -31,22 +31,22 @@ const STRING_TAG: i32 = super::abi::TAG_STRING;
 
 /// Byte size of the universal heap-block header `[size:i32][tag:i32][ref_count:i32]` that precedes
 /// every allocated value; a value's pointer points at `block_start + HEAP_HEADER_SIZE`.
-const HEAP_HEADER_SIZE: u32 = 12;
+const HEAP_HEADER_SIZE: u32 = super::abi::HEAP_HEADER_SIZE;
 
 /// Base address (block start) of the interned string data segment. Each string is a heap-object
 /// block `[size=0][tag=STRING][ref_count=1][len: i32][utf8]`; the mapped address points at the
 /// length word (block start + header), with utf8 bytes at `ptr+4`. `$strlen` is a single load at
 /// `ptr`; there is no NUL terminator (the length prefix makes it redundant). The heap starts above.
-const STRING_BASE: u32 = 1024;
+const STRING_BASE: u32 = super::abi::STRING_BASE;
 
 /// Linear-memory size, in 64 KiB WASM pages.
-const MEMORY_PAGES: u32 = 16;
+const MEMORY_PAGES: u32 = super::abi::MEMORY_PAGES;
 
 /// The shadow stack (for inline value-`struct` locals) grows *downward* from the top of linear
 /// memory, while the heap bump-allocates *upward* from `heap_start`. `$__sp` is initialized here;
 /// each function that has value locals reserves its frame by subtracting from `$__sp` in its
 /// prologue and restores `$__sp` before every return.
-const SHADOW_STACK_TOP: u32 = MEMORY_PAGES * 65536;
+const SHADOW_STACK_TOP: u32 = super::abi::SHADOW_STACK_TOP;
 
 /// The fixed allocator runtime (`$malloc`/`$free`/`$retain`/`$release_generic`/`$object_tag`), the
 /// single source of truth for the heap ABI. Its debug-counter placeholders are filled in by

@@ -282,7 +282,7 @@ fn prune_functions(mir: &mut Mir) {
         .functions
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.name == "main" || f.name == lower::INIT_FN_NAME)
+        .filter(|(_, f)| f.name == crate::mir::abi::ENTRY_FN || f.name == lower::INIT_FN_NAME)
         .map(|(i, _)| i)
         .collect();
 

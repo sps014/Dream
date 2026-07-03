@@ -16,8 +16,10 @@ use crate::types::{method_fn, DefId, PrimTy, TyKind, TypeId, TypeInterner};
 pub(crate) const HOST_MODULE: &str = "Dream";
 
 /// The Dream type name whose stdlib methods back every interop bridge. Combined with a method name
-/// via [`method_fn`] it yields the mangled symbol an `@js` extern is emitted/imported under.
-const JS_TYPE: &str = "js";
+/// via [`method_fn`] it yields the mangled symbol an `@js` extern is emitted/imported under. Shared
+/// with the analyzer (`semantics::analyzer::js_interop`) so the spelling that drives bridge mangling
+/// and the one the analyzer recognizes as the dynamic `js` type can never diverge.
+pub(crate) const JS_TYPE: &str = "js";
 
 /// The WAT symbol of the `js.<method>` stdlib bridge (e.g. `bridge_sym("__box_int")` -> `$js___box_int`),
 /// derived through the one canonical mangler so the generated marshalers never hard-code the scheme.

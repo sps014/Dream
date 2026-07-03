@@ -107,12 +107,12 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
         }
         if f.name == crate::mir::lower::INIT_FN_NAME {
             has_init = true;
-        } else if f.instance.is_empty() && f.name == "main" && f.is_async {
+        } else if f.instance.is_empty() && f.name == crate::mir::abi::ENTRY_FN && f.is_async {
             out.push_str(&crate::mir::async_emit::emit_async_main_wrapper(
                 &func_symbol(f),
                 !f.params.is_empty(),
             ));
-        } else if f.instance.is_empty() && f.name == "main" && !f.params.is_empty() {
+        } else if f.instance.is_empty() && f.name == crate::mir::abi::ENTRY_FN && !f.params.is_empty() {
             // `main(args: string[])`: the exported entry takes no args, so wrap the real `main` with a
             // `()` shim that passes an empty `string[]` (a zero-length, TAG_ARRAY block).
             let _ = writeln!(
@@ -133,13 +133,14 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
     }
 
     // Host-facing exports: memory and the allocator (so a JS runtime can build heap values).
-    out.push_str("(export \"memory\" (memory 0))\n");
-    out.push_str("(export \"malloc\" (func $malloc))\n");
-    out.push_str("(export \"free\" (func $free))\n");
+    use crate::mir::abi;
+    let _ = writeln!(out, "(export \"{}\" (memory 0))", abi::EXPORT_MEMORY);
+    let _ = writeln!(out, "(export \"{}\" (func $malloc))", abi::EXPORT_MALLOC);
+    let _ = writeln!(out, "(export \"{}\" (func $free))", abi::EXPORT_FREE);
     if crate::mir::async_emit::module_has_async(&mir.functions) {
-        out.push_str("(export \"__dream_run_loop\" (func $dream_run_loop))\n");
-        out.push_str("(export \"__dream_resolve\" (func $dream_resolve))\n");
-        out.push_str("(export \"__dream_new_future\" (func $dream_new_future))\n");
+        let _ = writeln!(out, "(export \"{}\" (func $dream_run_loop))", abi::EXPORT_RUN_LOOP);
+        let _ = writeln!(out, "(export \"{}\" (func $dream_resolve))", abi::EXPORT_RESOLVE);
+        let _ = writeln!(out, "(export \"{}\" (func $dream_new_future))", abi::EXPORT_NEW_FUTURE);
     }
     out.push_str(")\n");
     // Whole-module dead-function elimination: drop embedded runtime helpers (and any other funcs)
@@ -158,7 +159,11 @@ pub(super) fn emit_imports(out: &mut String, mir: &crate::mir::Mir, interner: &T
         ("print_double", "f64"),
         ("print_char", "i32"),
     ] {
-        let _ = writeln!(out, "(import \"env\" \"{name}\" (func ${name} (param {param})))");
+        let _ = writeln!(
+            out,
+            "(import \"{}\" \"{name}\" (func ${name} (param {param})))",
+            crate::mir::abi::ENV_MODULE
+        );
     }
     for imp in &mir.imports {
         let params: String = imp

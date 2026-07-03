@@ -18,7 +18,17 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
         "fileRead",
         |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
             let path = read_arg_string(&mut caller, path_ptr);
-            let content = fs::read_to_string(&path).unwrap_or_default();
+            // The bridge ABI returns a bare string pointer with no error channel (the Dream `File.read`
+            // wrapper guards with `exists()` and reports `Err` itself), so a genuine read failure here
+            // can only surface as empty content. Log it rather than swallowing it silently, and read
+            // as bytes + lossy-decode so a non-UTF-8 file still yields its content instead of "".
+            let content = match fs::read(&path) {
+                Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+                Err(e) => {
+                    tracing::warn!(path = %path, error = %e, "fileRead failed; returning empty string");
+                    String::new()
+                }
+            };
             write_string_to_memory(&mut caller, &content)
         },
     )?;
@@ -60,7 +70,11 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
         "fileReadBytes",
         |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
             let path = read_arg_string(&mut caller, path_ptr);
-            let bytes = fs::read(&path).unwrap_or_default();
+            // As with `fileRead`, the ABI has no error channel; log failures instead of masking them.
+            let bytes = fs::read(&path).unwrap_or_else(|e| {
+                tracing::warn!(path = %path, error = %e, "fileReadBytes failed; returning empty array");
+                Vec::new()
+            });
             write_bytes_to_memory(&mut caller, &bytes)
         },
     )?;

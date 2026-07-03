@@ -164,7 +164,7 @@ fn eligible(
     if recursive.contains(key) {
         return false; // part of a call cycle: inlining could not terminate
     }
-    if g.name == "main" || g.name == crate::mir::lower::INIT_FN_NAME {
+    if g.name == crate::mir::abi::ENTRY_FN || g.name == crate::mir::lower::INIT_FN_NAME {
         return false;
     }
     if g.params.len() != args.len() || g.blocks.is_empty() {

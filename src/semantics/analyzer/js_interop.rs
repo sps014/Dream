@@ -25,18 +25,24 @@ impl<'a> Analyzer<'a> {
     /// The legacy AST `Type` for the dynamic `js` type (a bare nominal name the type context lowers
     /// to `TyKind::Js`).
     pub(super) fn js_type() -> Type {
-        Type::Struct(synthetic_token(TokenKind::IdentifierToken, "js"), None)
+        Type::Struct(
+            synthetic_token(TokenKind::IdentifierToken, crate::mir::js_abi::JS_TYPE),
+            None,
+        )
     }
 
-    /// True if `ty` is the dynamic `js` type.
+    /// True if `ty` is the dynamic `js` type. `js` is represented at the AST layer as a nominal type
+    /// whose spelling is exactly [`js_abi::JS_TYPE`](crate::mir::js_abi::JS_TYPE); comparing against
+    /// that shared constant (rather than a bare literal) keeps recognition in lockstep with the
+    /// bridge-mangling side, and the exact match excludes `js[]` / `js?`.
     pub(super) fn is_js_type(&self, ty: &Type) -> bool {
-        ty.get_type() == "js"
+        ty.get_type() == crate::mir::js_abi::JS_TYPE
     }
 
     /// Builds a call to a `js` bridge extern (`js.__something`), resolved by its mangled def name.
     /// Returns `None` only if the bridge is somehow unregistered (a stdlib bug).
     fn js_bridge_call(&self, method: &str, args: Vec<HExpr>, ret: TypeId) -> Option<HExpr> {
-        let mangled = method_fn("js", method);
+        let mangled = method_fn(crate::mir::js_abi::JS_TYPE, method);
         let def = self.type_ctx.defs.lookup(DefKind::Function, &mangled)?;
         Some(HExpr::new(
             ret,
@@ -212,7 +218,7 @@ impl<'a> Analyzer<'a> {
         args: Vec<HExpr>,
     ) -> Option<HExpr> {
         let js = self.type_ctx.interner.js();
-        let mangled = method_fn("js", bridge);
+        let mangled = method_fn(crate::mir::js_abi::JS_TYPE, bridge);
         let def = self.type_ctx.defs.lookup(DefKind::Function, &mangled)?;
         Some(HExpr::new(
             js,
@@ -236,7 +242,7 @@ impl<'a> Analyzer<'a> {
         ctx: &super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let mangled = method_fn("js", &method.text);
+        let mangled = method_fn(crate::mir::js_abi::JS_TYPE, &method.text);
         let known = self.function_table.get_function(&mangled).is_ok();
 
         let mut arg_hirs = Vec::with_capacity(params.len());

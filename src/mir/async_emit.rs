@@ -19,8 +19,17 @@ use std::fmt::Write;
 const F_STATE: i32 = 0;
 const F_RESULT: i32 = 8;
 const F_AWAITING: i32 = 20;
-const F_SLOTS: i32 = 56;
+/// Byte size of a `Future` frame's fixed header region (locals are appended past it). Shared with
+/// the emitter's `sleep` intrinsic and the host bridge (`execution/host/http.rs`,
+/// `runtime/dream.js`), which allocate host futures of exactly this size.
+pub(crate) const F_SLOTS: i32 = 56;
 const KIND_TASK: i32 = 0;
+/// `Future.kind` for a host-driven future (timer / HTTP / extern async): settled by the host via
+/// `__dream_resolve` rather than by re-polling Dream code.
+pub(crate) const KIND_HOST: i32 = 1;
+/// Poll-table index stored in a host future; `-1` means "no Dream poll function" (the host settles
+/// it directly), so the scheduler never dispatches through the function table for it.
+pub(crate) const HOST_POLL_INDEX: i32 = -1;
 const SLOT_SIZE: i32 = 8;
 
 const RUNTIME_ASYNC: &str = include_str!("runtime/async.wat");
@@ -52,7 +61,6 @@ pub fn async_runtime_wat() -> String {
     const F_CHILDREN: i32 = 28;
     const F_COUNT: i32 = 32;
     const F_REMAINING: i32 = 36;
-    const F_SLOTS_RT: i32 = 56;
     const KIND_ALL: i32 = 2;
     const KIND_ANY: i32 = 3;
     RUNTIME_ASYNC
@@ -68,7 +76,7 @@ pub fn async_runtime_wat() -> String {
         .replace("{F_CHILDREN}", &F_CHILDREN.to_string())
         .replace("{F_COUNT}", &F_COUNT.to_string())
         .replace("{F_REMAINING}", &F_REMAINING.to_string())
-        .replace("{F_SLOTS}", &F_SLOTS_RT.to_string())
+        .replace("{F_SLOTS}", &F_SLOTS.to_string())
         .replace("{KIND_ALL}", &KIND_ALL.to_string())
         .replace("{KIND_ANY}", &KIND_ANY.to_string())
         .replace("{tag_array}", &super::abi::TAG_ARRAY.to_string())

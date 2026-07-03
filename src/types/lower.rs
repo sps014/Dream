@@ -202,10 +202,16 @@ impl TypeCtx {
                 let def = self.defs.intern(DefKind::Interface, name, vec![]);
                 self.interner.interface_ty(def, vec![])
             }
-            _ => {
+            Some(DefKind::Struct) => {
                 let def = self.defs.intern(DefKind::Struct, name, vec![]);
                 self.interner.struct_ty(def, vec![])
             }
+            // An unregistered name (or a function name used in type position) is not a known type.
+            // Interning it as a nominal struct here is exactly the fragility hazard from the review:
+            // a typo or interning-drift would silently mint a bogus type and miscompile. Lower it to
+            // the poison `Error` type instead, which `compat.rs` already suppresses so the real
+            // diagnostic (raised where the name was resolved) is what surfaces.
+            Some(DefKind::Function) | None => self.interner.error(),
         }
     }
 }

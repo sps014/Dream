@@ -65,7 +65,13 @@ impl Compiler {
         )?;
 
         // Auto-derive `to_json`/`from_json` converters for every `@json` class (must run after
-        // all classes are collected so `@json` field cross-references resolve).
+        // all classes are collected so `@json` field cross-references resolve). The prelude merge
+        // above always contributes stdlib structs (List/Map/...), so an empty struct set here means
+        // the derive is running before collection completed.
+        debug_assert!(
+            !acc.all_structs.is_empty(),
+            "generate_json_derives must run after prelude merge / class collection"
+        );
         generate_json_derives(
             &arena,
             &acc.all_structs,

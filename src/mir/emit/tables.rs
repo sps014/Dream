@@ -230,7 +230,14 @@ pub(super) fn emit_interface_dispatch(
 
     let tags = struct_tags(mir);
     let max_tag = tags.values().copied().max().unwrap_or(STRUCT_TAG_BASE - 1);
-    let num_tags = (max_tag + 1).max(0) as usize;
+    // Dense per-interface tables are sized `num_tags * method_count`; guard the `+1` and the sign so
+    // a corrupt (negative/overflowing) tag can't wrap into a huge allocation or truncate the row
+    // count. Tags are assigned as small `STRUCT_TAG_BASE + i`, so this only trips on a real bug.
+    let num_tags = if max_tag >= 0 {
+        (max_tag as usize).saturating_add(1)
+    } else {
+        0
+    };
 
     // Concrete method symbol -> its `$__ft` slot (the function's position in `mir.functions`).
     let by_symbol: HashMap<&str, usize> = mir
@@ -256,6 +263,10 @@ pub(super) fn emit_interface_dispatch(
                 if slot >= k {
                     continue;
                 }
+                // A missing symbol here is an impl entry for a method that whole-module DCE pruned
+                // (e.g. a constraint method never dispatched through this interface at runtime). The
+                // slot is therefore never reached, so 0 is a harmless filler; keep it lenient rather
+                // than trapping on dead-but-listed entries.
                 let idx = by_symbol.get(sym.as_str()).copied().unwrap_or(0);
                 tables[*iid][tag * k + slot] = idx as i32;
             }

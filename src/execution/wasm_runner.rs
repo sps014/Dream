@@ -67,7 +67,9 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     let instance = linker.instantiate(&mut store, &module)?;
 
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, "main") {
+    if let Ok(main_func) =
+        instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN)
+    {
         main_func.call(&mut store, ())?;
     } else {
         println!("No main function found in module");

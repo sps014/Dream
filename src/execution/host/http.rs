@@ -4,13 +4,10 @@
 
 use wasmtime::*;
 
-use super::memory::{read_arg_bytes, read_arg_string, write_bytes_to_memory};
+use crate::mir::abi;
+use crate::mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
 
-/// Future heap-block sizing/kind, mirroring `mir::async_emit` (`F_SLOTS` = 56) and
-/// `runtime/dream.js` (`FUTURE_KIND_HOST` = 1). A host future saves no locals, so its block is
-/// exactly the fixed header region.
-const FUTURE_SLOTS_SIZE: i32 = 56;
-const FUTURE_KIND_HOST: i32 = 1;
+use super::memory::{read_arg_bytes, read_arg_string, write_bytes_to_memory};
 
 /// Calls an exported function on the caller's module by name with the given typed signature.
 fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) {
@@ -31,16 +28,16 @@ fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) {
 /// the scheduler simply re-polls the waiter.
 fn resolve_host_future_bytes(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> i32 {
     let new_future = caller
-        .get_export("__dream_new_future")
+        .get_export(abi::EXPORT_NEW_FUTURE)
         .and_then(Extern::into_func)
         .expect("module must export `__dream_new_future`")
         .typed::<(i32, i32, i32), i32>(&*caller)
         .expect("unexpected `__dream_new_future` signature");
     let future = new_future
-        .call(&mut *caller, (FUTURE_SLOTS_SIZE, -1, FUTURE_KIND_HOST))
+        .call(&mut *caller, (F_SLOTS, HOST_POLL_INDEX, KIND_HOST))
         .expect("`__dream_new_future` call failed");
     let data_ptr = write_bytes_to_memory(caller, bytes);
-    call_export_2(caller, "__dream_resolve", future, data_ptr);
+    call_export_2(caller, abi::EXPORT_RESOLVE, future, data_ptr);
     future
 }
 

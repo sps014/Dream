@@ -63,6 +63,17 @@ impl PassManager {
         pm.add(SimplifyCfg);
         pm.add(Dce);
         pm.add(RcElision);
+        // RC *insertion* is a module-wide phase that must run once before inlining (see
+        // `optimize_module`); the per-function pipeline only *elides* redundant RC. Running
+        // RcInsertion here would double-insert retains/releases, so guard against that regression.
+        debug_assert!(
+            pm.passes.iter().all(|p| p.name() != "rc-insertion"),
+            "per-function pipeline must not contain RcInsertion (RC is inserted module-wide first)"
+        );
+        debug_assert!(
+            pm.passes.iter().any(|p| p.name() == "rc-elision"),
+            "per-function pipeline is expected to clean up RC with RcElision"
+        );
         pm
     }
 
@@ -110,6 +121,11 @@ pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     for f in &mut mir.functions {
         rc.run(f, interner);
     }
+    // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
+    // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag
+    // makes a future reordering that hoists the inliner above this point fail loudly in dev.
+    let _rc_inserted = true;
+    debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
     let inliner = Inliner::default();
     for _ in 0..MAX_ROUNDS {
         let changed = inliner.run(mir, interner);

@@ -18,7 +18,9 @@ pub(super) fn runtime_prelude(debug_alloc: bool) -> String {
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
         .replace(";;@DEBUG_FREE_COUNT@", free_count);
     out.push('\n');
-    out.push_str(RUNTIME_STRINGS);
+    // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`; keep
+    // `abi.rs` authoritative rather than baking the literal into the `.wat`.
+    out.push_str(&RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()));
     out
 }
 

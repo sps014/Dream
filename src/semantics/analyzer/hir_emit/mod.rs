@@ -306,7 +306,7 @@ impl<'a> Analyzer<'a> {
 }
 
 fn extern_import_target(func: &FunctionNode) -> (String, String) {
-    let mut module = "env".to_string();
+    let mut module = crate::mir::abi::ENV_MODULE.to_string();
     let mut field = func.name.text.clone();
     if let Some(js) = func.attributes.iter().find(|a| a.name.text == "js") {
         if let Some(arg) = js.args.first() {

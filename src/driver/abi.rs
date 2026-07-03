@@ -66,7 +66,7 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         if !func.is_extern || crate::intrinsics::has_intrinsic_attr(&func.attributes) {
             return None;
         }
-        let mut import_module = "env".to_string();
+        let mut import_module = crate::mir::abi::ENV_MODULE.to_string();
         let mut import_name = func.name.text.clone();
         if let Some(js_attr) = func.attributes.iter().find(|a| a.name.text == "js") {
             if let Some(arg) = js_attr.args.first() {
@@ -113,7 +113,7 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         if func.is_extern || func.generic_parameters.is_some() {
             continue;
         }
-        if func.is_public || func.name.text == "main" {
+        if func.is_public || func.name.text == crate::mir::abi::ENTRY_FN {
             exports.push(format!("\"{}\"", json_escape(&func.name.text)));
         }
     }
