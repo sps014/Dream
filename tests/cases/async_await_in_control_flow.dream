@@ -1,0 +1,59 @@
+// `await` may appear in *any* control-flow position — inside a branch, a loop body, a loop
+// condition, a `for-in` body, a `switch` arm, a ternary arm, and the right operand of `&&`/`??`.
+// The coroutine transform lowers the whole body to a CFG state machine where each `await` is a
+// suspend point, so each of these resumes correctly (including a loop that suspends every iteration).
+
+async fun g(n: int): int { return n; }
+async fun ready(): bool { return true; }
+
+async fun in_branch(b: int): int {
+    let acc = 0;
+    if (b == 2) { acc = acc + await g(3); }     // await inside a branch body
+    else { acc = acc + await g(7); }
+    return acc;
+}
+
+async fun in_loop(): int {
+    let sum = 0;
+    let i = 0;
+    while (i < 4) { sum = sum + await g(i); i = i + 1; }   // await every iteration
+    return sum;                                            // 0+1+2+3 = 6
+}
+
+async fun in_foreach(): int {
+    let xs: int[] = [1, 2, 3];
+    let total = 0;
+    for (let x in xs) { total = total + await g(x * 2); }  // await inside for-in
+    return total;                                          // 2+4+6 = 12
+}
+
+async fun in_switch(n: int): int {
+    switch (n) {
+        case 0:
+            return await g(100);
+        default:
+            return await g(200);
+    }
+    return -1;
+}
+
+async fun in_ternary(flag: bool): int {
+    let v = flag ? await g(7) : await g(9);     // await in a ternary arm
+    return v;
+}
+
+async fun in_shortcircuit(flag: bool): bool {
+    let ok = flag && await ready();             // await in the right operand of `&&`
+    return ok;
+}
+
+async fun main(): void {
+    System.println(await in_branch(2));         // 3
+    System.println(await in_branch(5));         // 7
+    System.println(await in_loop());            // 6
+    System.println(await in_foreach());         // 12
+    System.println(await in_switch(0));         // 100
+    System.println(await in_switch(1));         // 200
+    System.println(await in_ternary(true));     // 7
+    System.println(await in_shortcircuit(true)); // true
+}

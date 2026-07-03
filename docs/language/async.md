@@ -29,8 +29,8 @@ async fun main(): void {
 
 ### Where `await` is allowed
 
-`await` may appear in any **unconditionally-evaluated** sub-expression of a top-level statement —
-call arguments, arithmetic operands, an array literal, the awaited value itself:
+`await` may appear **anywhere** inside an `async` function — the whole body is compiled to a
+control-flow state machine, so a suspend point can sit in any expression or statement position:
 
 ```dream
 await e;                       // discard the result
@@ -40,16 +40,18 @@ let y = await f() + 1;         // in an arithmetic operand
 process(await a(), await b()); // several awaits in call arguments
 ```
 
-It is rejected in **conditionally-evaluated** positions, because suspending there would need a full
-control-flow state machine:
+That includes **conditionally-evaluated** and control-flow positions — branches, loops, `switch`
+arms, ternary arms, and the short-circuiting right operand of `&&`/`||`/`??`:
 
 ```dream
-let y = cond ? await a() : 0;  // error: a ternary arm
-let z = flag && await ready(); // error: right side of && / || / ??
+if (retry) { data = await fetch(url); }   // inside a branch
+while (i < n) { sum += await g(i); i += 1; } // suspends every iteration
+for (let x in xs) { total += await work(x); } // inside a for-in body
+let y = cond ? await a() : await b();      // in a ternary arm
+let z = flag && await ready();             // right side of && / || / ??
 ```
 
-`await` inside a loop or branch body — or in a `switch` expression's arms — is likewise not
-supported yet, and `await` outside an `async` function is always an error.
+The only rule is that `await` outside an `async` function is an error.
 
 ## Storing futures (eager execution)
 

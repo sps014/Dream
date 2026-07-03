@@ -163,15 +163,15 @@ async fun load(): void {
 }
 ```
 
-!!! note "v1 limitation"
-    An `await` may follow branches and loops (`if x { ... } let a = await ...;` works), but it may
-    not appear *inside* a loop or branch body yet — hoist it to a top-level statement first:
+An `await` may appear anywhere in an `async` function, including inside a loop or branch body, so you
+can fetch conditionally or in a loop without hoisting:
 
-    ```dream
-    let a = await js.global.fetch("/a");
-    let b = await js.global.fetch("/b");
-    // ... branch on a and b here ...
-    ```
+```dream
+for (let url in urls) {
+    let resp = await js.global.fetch(url);   // suspends each iteration
+    // ... use resp ...
+}
+```
 
 For a plain typed extern that returns a Promise (`@js(...) extern async fun getUser(...): string`),
 see [Async/Await](async.md#awaiting-javascript-promises) instead — that path skips `js` entirely

@@ -69,6 +69,12 @@ fn terminator(t: &Terminator) -> String {
             "async_complete{}",
             v.as_ref().map(operand).unwrap_or_default()
         ),
+        Terminator::Await { future, dest, resume } => format!(
+            "await {}{} -> bb{}",
+            operand(future),
+            dest.map(|d| format!(" into _{}", d.0)).unwrap_or_default(),
+            resume.0
+        ),
         Terminator::Unreachable => "unreachable".to_string(),
     }
 }

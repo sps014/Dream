@@ -98,8 +98,8 @@ use wat_dce::*;
 // The external API of the backend, at the historical `crate::mir::emit::…` paths.
 pub use emitter::emit_function;
 pub use module::{emit_module, emit_program};
-pub(crate) use emitter::{emit_expr_to_scratch, emit_straight_line_segment};
-pub(crate) use tables::{func_symbol, poll_symbol, release_call_for_ty};
+pub(crate) use emitter::emit_async_poll;
+pub(crate) use tables::{func_symbol, poll_symbol};
 pub(crate) use types::wasm_ty_of;
 
 #[cfg(test)]

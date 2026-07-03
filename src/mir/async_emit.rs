@@ -4,21 +4,17 @@
 //! the first poll, returns the frame pointer) and a **poll** function (resumable state machine between
 //! `await` points). The cooperative scheduler runtime lives in `mir/runtime/async.wat`.
 
-use super::emit::{
-    emit_expr_to_scratch, emit_straight_line_segment, func_symbol, poll_symbol, release_call_for_ty,
-    wasm_ty_of,
-};
-use super::lower::{lower_async_segment, lower_expr_value};
+use super::emit::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of};
+use super::lower::lower_async_poll_body;
 use super::MirFunction;
-use crate::hir::{HExpr, HExprKind, HStmt, LocalId};
 use crate::types::{TypeId, TypeInterner};
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::fmt::Write;
 
-const F_STATE: i32 = 0;
-const F_RESULT: i32 = 8;
-const F_AWAITING: i32 = 20;
+pub(crate) const F_STATE: i32 = 0;
+pub(crate) const F_RESULT: i32 = 8;
+pub(crate) const F_AWAITING: i32 = 20;
 /// Byte size of a `Future` frame's fixed header region (locals are appended past it). Shared with
 /// the emitter's `sleep` intrinsic and the host bridge (`execution/host/http.rs`,
 /// `runtime/dream.js`), which allocate host futures of exactly this size.
@@ -82,10 +78,13 @@ pub fn async_runtime_wat() -> String {
         .replace("{tag_array}", &super::abi::TAG_ARRAY.to_string())
 }
 
-struct AsyncSlots {
-    entries: Vec<(usize, String, String)>,
-    offsets: HashMap<usize, i32>,
-    ref_locals: Vec<usize>,
+pub(crate) struct AsyncSlots {
+    /// `(local index, name, wasm type)` for every frame-resident local, in save/load order.
+    pub(crate) entries: Vec<(usize, String, String)>,
+    /// Local index → byte offset of its slot within the `Future` frame.
+    pub(crate) offsets: HashMap<usize, i32>,
+    /// Indices of reference-typed locals (retained across a suspend, released on completion).
+    pub(crate) ref_locals: Vec<usize>,
 }
 
 fn async_slots(func: &MirFunction, interner: &TypeInterner) -> AsyncSlots {
@@ -114,66 +113,7 @@ fn async_slots(func: &MirFunction, interner: &TypeInterner) -> AsyncSlots {
     }
 }
 
-enum AsyncResume {
-    None,
-    BindLocal(LocalId),
-    Discard,
-    ReturnAwaited,
-}
-
-enum SegmentEnd {
-    Suspend(HExpr),
-    CompleteVoid,
-}
-
-struct Segment {
-    resume: AsyncResume,
-    plain: Vec<HStmt>,
-    end: SegmentEnd,
-}
-
-fn split_async_segments(body: &[HStmt]) -> Vec<Segment> {
-    let mut segs: Vec<Segment> = Vec::new();
-    let mut resume = AsyncResume::None;
-    let mut plain: Vec<HStmt> = Vec::new();
-
-    for stmt in body {
-        match stmt {
-            HStmt::Let { local, value, .. } if matches!(value.kind, HExprKind::Await(_)) => {
-                let HExprKind::Await(inner) = &value.kind else { unreachable!() };
-                segs.push(Segment {
-                    resume: std::mem::replace(&mut resume, AsyncResume::BindLocal(*local)),
-                    plain: std::mem::take(&mut plain),
-                    end: SegmentEnd::Suspend(*inner.clone()),
-                });
-            }
-            HStmt::Await(e) => {
-                segs.push(Segment {
-                    resume: std::mem::replace(&mut resume, AsyncResume::Discard),
-                    plain: std::mem::take(&mut plain),
-                    end: SegmentEnd::Suspend(e.clone()),
-                });
-            }
-            HStmt::Return(Some(e)) if matches!(e.kind, HExprKind::Await(_)) => {
-                let HExprKind::Await(inner) = &e.kind else { unreachable!() };
-                segs.push(Segment {
-                    resume: std::mem::replace(&mut resume, AsyncResume::ReturnAwaited),
-                    plain: std::mem::take(&mut plain),
-                    end: SegmentEnd::Suspend(*inner.clone()),
-                });
-            }
-            other => plain.push(other.clone()),
-        }
-    }
-    segs.push(Segment {
-        resume,
-        plain,
-        end: SegmentEnd::CompleteVoid,
-    });
-    segs
-}
-
-fn slot_store(wt: &str) -> &'static str {
+pub(crate) fn slot_store(wt: &str) -> &'static str {
     match wt {
         "f64" => "f64.store",
         "f32" => "f32.store",
@@ -182,7 +122,7 @@ fn slot_store(wt: &str) -> &'static str {
     }
 }
 
-fn slot_load(wt: &str) -> &'static str {
+pub(crate) fn slot_load(wt: &str) -> &'static str {
     match wt {
         "f64" => "f64.load",
         "f32" => "f32.load",
@@ -191,39 +131,10 @@ fn slot_load(wt: &str) -> &'static str {
     }
 }
 
-fn emit_release_all_locals(
-    out: &mut String,
-    func: &MirFunction,
-    interner: &TypeInterner,
-    layouts: &crate::hir::LayoutTable,
-) {
-    for (i, decl) in func.locals.iter().enumerate() {
-        if interner.is_reference(decl.ty) {
-            let call = release_call_for_ty(interner, layouts, decl.ty);
-            let _ = writeln!(out, "     (local.get ${i})");
-            let _ = writeln!(out, "     (call {call})");
-        }
-    }
-}
-
-fn emit_dream_complete(out: &mut String, value_on_stack: bool) {
-    out.push_str("     (local.get $self)\n");
-    if !value_on_stack {
-        out.push_str("     (i32.const 0)\n");
-    }
-    out.push_str("     (call $dream_complete)\n     (i32.const 0)\n     (return)\n");
-}
-
-fn save_locals_to_frame(out: &mut String, slots: &AsyncSlots) {
-    for (local_idx, _, wt) in &slots.entries {
-        let off = slots.offsets[local_idx];
-        let _ = writeln!(out, "     (local.get $self)");
-        let _ = writeln!(out, "     (local.get ${local_idx})");
-        let _ = writeln!(out, "     {} offset={off}", slot_store(wt));
-    }
-}
-
-/// Emits the constructor + poll WAT for one async function.
+/// Emits the constructor + poll WAT for one async function. The whole body is lowered to a coroutine
+/// CFG ([`lower_async_poll_body`]) in which `await` is a [`super::Terminator::Await`] suspend point;
+/// the poll is then a single state-machine dispatch (see [`emit_async_poll`]) that resumes at the
+/// `resume` block recorded in the future's `state`, so awaits work in any control-flow position.
 #[allow(clippy::too_many_arguments)]
 pub fn emit_async_function(
     func: &MirFunction,
@@ -236,29 +147,22 @@ pub fn emit_async_function(
     poll_idx: usize,
 ) -> String {
     let hir = func.hir_fn.as_ref().expect("async function missing hir_fn snapshot");
-    let slots = async_slots(func, interner);
+    // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
+    let body = lower_async_poll_body(hir, interner);
+    let slots = async_slots(&body, interner);
     let frame_size = F_SLOTS + (slots.entries.len() as i32) * SLOT_SIZE;
     let sym = func_symbol(func);
-    let segments = split_async_segments(&hir.body);
-    // Segment lowering may introduce temporaries beyond the user's locals; size the poll frame to fit.
-    let mut max_locals = func.locals.len();
-    for seg in &segments {
-        if !seg.plain.is_empty() {
-            max_locals = max_locals.max(lower_async_segment(hir, &seg.plain, interner).locals.len());
-        }
-        if let SegmentEnd::Suspend(child) = &seg.end {
-            max_locals = max_locals.max(lower_expr_value(hir, child, interner).0.locals.len());
-        }
-    }
     let mut out = String::new();
 
+    // Constructor: allocate the future frame, store (and retain) the params into their slots, enqueue
+    // the first poll, and hand the frame back to the caller as the task handle.
     let _ = writeln!(out, "(func ${sym}");
-    for p in &func.params {
+    for p in &body.params {
         let _ = writeln!(
             out,
             " (param ${} {})",
             p.0,
-            wasm_ty_of(interner, func.locals[p.0 as usize].ty)
+            wasm_ty_of(interner, body.locals[p.0 as usize].ty)
         );
     }
     out.push_str(" (result i32)\n (local $self i32)\n");
@@ -266,11 +170,11 @@ pub fn emit_async_function(
     let _ = writeln!(out, " i32.const {poll_idx}");
     let _ = writeln!(out, " i32.const {KIND_TASK}");
     out.push_str(" call $dream_new_future\n local.set $self\n");
-    for p in &func.params {
+    for p in &body.params {
         let idx = p.0 as usize;
         let off = slots.offsets[&idx];
-        let wt = wasm_ty_of(interner, func.locals[idx].ty);
-        if interner.is_reference(func.locals[idx].ty) {
+        let wt = wasm_ty_of(interner, body.locals[idx].ty);
+        if interner.is_reference(body.locals[idx].ty) {
             let _ = writeln!(out, " local.get ${idx}");
             out.push_str(" call $retain\n");
         }
@@ -278,91 +182,21 @@ pub fn emit_async_function(
     }
     out.push_str(" local.get $self\n call $dream_enqueue\n local.get $self\n)\n\n");
 
-    let _ = writeln!(out, "(func ${} (param $self i32) (result i32)", poll_symbol(func));
-    for i in 0..max_locals {
-        let ty = func
-            .locals
-            .get(i)
-            .map(|d| d.ty)
-            .unwrap_or_else(|| interner.int());
-        let _ = writeln!(out, " (local ${i} {})", wasm_ty_of(interner, ty));
-    }
-    // `$__obj`/`$__len`/`$__rel` back the same array/reassignment scratch the normal emitter uses;
-    // `$__pc` drives the per-segment CFG dispatch loop (segments whose plain code has control flow).
-    out.push_str(" (local $__obj i32)\n (local $__scratch i32)\n");
-    out.push_str(" (local $__len i32)\n (local $__rel i32)\n (local $__pc i32)\n");
-    // Saved `$__sp` across a dynamic `js` call's argument-slot buffer (see `Emitter::emit_js_call`),
-    // needed here too since a `js` call can appear in an `async` body.
-    out.push_str(" (local $__jsp i32)\n");
-
-    for (local_idx, _, wt) in &slots.entries {
-        let off = slots.offsets[local_idx];
-        out.push_str(" local.get $self\n");
-        let _ = writeln!(out, " {} offset={off}", slot_load(wt));
-        let _ = writeln!(out, " local.set ${local_idx}");
-        if slots.ref_locals.contains(local_idx) {
-            out.push_str(" local.get $self\n i32.const 0\n");
-            let _ = writeln!(out, " i32.store offset={off}");
-        }
-    }
-
-    let n = segments.len();
-    for k in (0..n).rev() {
-        let _ = writeln!(out, " (block $async_seg{k}");
-    }
-    out.push_str(&format!(
-        " local.get $self\n i32.load offset={F_STATE}\n br_table {}\n",
-        (0..n).map(|k| format!("$async_seg{k} ")).collect::<String>()
+    // Poll: the coroutine state machine over `body`'s CFG. Only the persistent user locals (params +
+    // declared `let`s, which lead `body.locals`) are released on completion.
+    let user_local_count = hir.params.len() + hir.locals.len();
+    out.push_str(&emit_async_poll(
+        &body,
+        interner,
+        symbols,
+        layouts,
+        strings,
+        tags,
+        ftable,
+        &slots,
+        &poll_symbol(func),
+        user_local_count,
     ));
-
-    for (seg_idx, seg) in segments.iter().enumerate() {
-        out.push_str(" )\n");
-        match &seg.resume {
-            AsyncResume::None => {}
-            AsyncResume::BindLocal(id) => {
-                let mir_local = id.0 as usize;
-                out.push_str(&format!(
-                    " local.get $self\n i32.load offset={F_AWAITING}\n i32.load offset={F_RESULT}\n local.set ${mir_local}\n"
-                ));
-            }
-            AsyncResume::Discard => {}
-            AsyncResume::ReturnAwaited => {
-                emit_release_all_locals(&mut out, func, interner, layouts);
-                out.push_str(" local.get $self\n local.get $self\n");
-                let _ = writeln!(out, " i32.load offset={F_AWAITING}");
-                let _ = writeln!(out, " i32.load offset={F_RESULT}");
-                emit_dream_complete(&mut out, true);
-                continue;
-            }
-        }
-
-        if !seg.plain.is_empty() {
-            let seg_mir = lower_async_segment(hir, &seg.plain, interner);
-            out.push_str(&emit_straight_line_segment(
-                &seg_mir, interner, symbols, layouts, strings, tags, ftable, func,
-            ));
-        }
-
-        match &seg.end {
-            SegmentEnd::Suspend(child) => {
-                out.push_str(&emit_expr_to_scratch(
-                    hir, child, interner, symbols, layouts, strings, tags, ftable, func,
-                ));
-                let next = seg_idx + 1;
-                out.push_str(" local.get $self\n local.get $__scratch\n");
-                let _ = writeln!(out, " i32.store offset={F_AWAITING}");
-                out.push_str(&format!(" local.get $self\n i32.const {next}\n i32.store offset={F_STATE}\n"));
-                save_locals_to_frame(&mut out, &slots);
-                out.push_str(" local.get $self\n local.get $__scratch\n call $dream_await\n i32.const 0\n return\n");
-            }
-            SegmentEnd::CompleteVoid => {
-                emit_release_all_locals(&mut out, func, interner, layouts);
-                emit_dream_complete(&mut out, false);
-            }
-        }
-    }
-
-    out.push_str(")\n");
     out
 }
 

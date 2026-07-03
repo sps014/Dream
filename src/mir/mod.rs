@@ -165,6 +165,15 @@ pub enum Terminator {
     /// Completes the enclosing async task (`$dream_complete`) in a poll function. Used only by the
     /// async coroutine transform; synchronous functions use [`Terminator::Return`].
     AsyncComplete(Option<Operand>),
+    /// A coroutine suspend point (`await`): the block ends by parking the task on `future`; when the
+    /// future settles the poll resumes at `resume`, where the awaited result is bound to `dest` (if
+    /// the value is used). Emitted only by the async coroutine transform. `resume`'s block id doubles
+    /// as the saved poll state (`Future.state`).
+    Await {
+        future: Operand,
+        dest: Option<Local>,
+        resume: BlockId,
+    },
     /// Statically unreachable (e.g. after a diverging call); the placeholder default.
     #[default]
     Unreachable,
@@ -181,6 +190,7 @@ impl Terminator {
                 s.push(*default);
                 s
             }
+            Terminator::Await { resume, .. } => vec![*resume],
             Terminator::Return(_) | Terminator::AsyncComplete(_) | Terminator::Unreachable => vec![],
         }
     }

@@ -607,6 +607,13 @@ fn remap_terminator(t: &mut Terminator, local_base: u32, block_base: u32) {
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
             remap_operand(o, local_base)
         }
+        Terminator::Await { future, dest, resume } => {
+            remap_operand(future, local_base);
+            if let Some(d) = dest {
+                d.0 += local_base;
+            }
+            resume.0 += block_base;
+        }
         Terminator::Return(None) | Terminator::AsyncComplete(None) | Terminator::Unreachable => {}
     }
 }

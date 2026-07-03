@@ -102,14 +102,6 @@ pub(crate) fn poll_symbol(func: &MirFunction) -> String {
     format!("poll_{}", func_symbol(func))
 }
 
-pub(crate) fn release_call_for_ty(
-    interner: &TypeInterner,
-    layouts: &LayoutTable,
-    ty: TypeId,
-) -> String {
-    release_call(interner, layouts, ty)
-}
-
 /// Emits the function table and its element section (constructors/sync functions first, then async
 /// poll functions), plus the `__indirect_function_table` export.
 pub(super) fn emit_func_table(out: &mut String, mir: &crate::mir::Mir) {

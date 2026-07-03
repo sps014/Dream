@@ -1,4 +1,5 @@
 use super::*;
+use crate::mir::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RESULT, F_STATE};
 use crate::mir::emit::valuetype::{ValueFrame, ValueLocalKind};
 use std::collections::HashSet;
 
@@ -44,14 +45,17 @@ pub(super) fn emit_function_with(
         frame,
         out: String::new(),
         async_parent: None,
+        async_user_locals: 0,
     };
     e.emit();
     e.out
 }
 
-/// Emits one basic block's straight-line body (no CFG dispatch loop). Used by async poll segments.
+/// Emits the poll function of an async coroutine: a single state-machine dispatch over the full
+/// lowered body (`func`), whose `Await` terminators suspend/resume. `slots` maps every frame-resident
+/// local to its offset in the `Future` frame. See [`Emitter::emit_async_state_machine`].
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_straight_line_segment(
+pub(crate) fn emit_async_poll(
     func: &MirFunction,
     interner: &TypeInterner,
     symbols: &HashMap<(DefId, Vec<TypeId>), String>,
@@ -59,13 +63,13 @@ pub(crate) fn emit_straight_line_segment(
     strings: &IndexMap<String, u32>,
     tags: &HashMap<TypeId, i32>,
     ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
-    async_parent: &MirFunction,
+    slots: &AsyncSlots,
+    poll_sym: &str,
+    user_local_count: usize,
 ) -> String {
-    // Async poll segments do not apply call-argument widening yet (async cases are still gated); an
-    // empty signature map disables it without extra plumbing through the coroutine transform.
+    // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
+    // elsewhere); empty maps disable those paths without extra plumbing through the transform.
     let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
-    // Async poll segments do not participate in value-struct shadow frames yet (value structs in
-    // async bodies are gated); an empty frame/glue set disables the value-type paths.
     let value_glue: HashSet<TypeId> = HashSet::new();
     let frame = ValueFrame::compute(func, interner);
     let mut e = Emitter {
@@ -80,32 +84,12 @@ pub(crate) fn emit_straight_line_segment(
         value_glue: &value_glue,
         frame,
         out: String::new(),
-        async_parent: Some(async_parent),
+        // The poll body *is* the coroutine; completions release its own reference locals.
+        async_parent: Some(func),
+        async_user_locals: user_local_count,
     };
-    e.emit_poll_segment_body();
+    e.emit_async_state_machine(slots, poll_sym);
     e.out
-}
-
-/// Evaluates a HIR expression and stores the result in `$__scratch` (async poll suspend).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_expr_to_scratch(
-    hir: &crate::hir::HFunction,
-    expr: &crate::hir::HExpr,
-    interner: &TypeInterner,
-    symbols: &HashMap<(DefId, Vec<TypeId>), String>,
-    layouts: &LayoutTable,
-    strings: &IndexMap<String, u32>,
-    tags: &HashMap<TypeId, i32>,
-    ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
-    parent: &MirFunction,
-) -> String {
-    let (mir, temp) = crate::mir::lower::lower_expr_value(hir, expr, interner);
-    let mut out = emit_straight_line_segment(
-        &mir, interner, symbols, layouts, strings, tags, ftable, parent,
-    );
-    let _ = writeln!(out, "     (local.get ${})", temp.0);
-    out.push_str("     (local.set $__scratch)\n");
-    out
 }
 
 struct Emitter<'a> {
@@ -125,6 +109,11 @@ struct Emitter<'a> {
     out: String,
     /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
     async_parent: Option<&'a MirFunction>,
+    /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
+    /// front of `func.locals`; only these are released on completion. Synthetic lowering temporaries
+    /// (await results, array/reassignment scratch) that follow are transient and not deep-released
+    /// here (mirroring the pre-CFG async behavior), so no helper is needed for their element types.
+    async_user_locals: usize,
 }
 
 impl Emitter<'_> {
@@ -1467,34 +1456,17 @@ impl Emitter<'_> {
             }
             Terminator::Unreachable => self.line("     (unreachable)"),
             Terminator::AsyncComplete(_) => self.line("     (unreachable) ;; async in sync fn"),
+            Terminator::Await { .. } => self.line("     (unreachable) ;; await in sync fn"),
         }
     }
 
-    /// Terminator emission for async poll segments (completes the task instead of returning). Only
-    /// value-carrying/`AsyncComplete` terminators reach here; a void fall-through is elided by the
-    /// caller so control continues to the segment's suspend/complete handling.
-    fn emit_poll_terminator(&mut self, t: &Terminator) {
-        match t {
-            Terminator::AsyncComplete(v) => {
-                let v = v.clone();
-                self.emit_poll_complete(v.as_ref());
-            }
-            // A value `return x;` inside an async body lowers to `AsyncComplete`, but handle the plain
-            // form too (complete the coroutine with the value rather than returning it from `poll`).
-            Terminator::Return(Some(o)) => {
-                let o = o.clone();
-                self.emit_poll_complete(Some(&o));
-            }
-            Terminator::Return(None) => self.emit_poll_complete(None),
-            _ => {}
-        }
-    }
-
-    /// Completes the current coroutine: releases the parent's reference locals, then
+    /// Completes the current coroutine: releases the persistent user reference locals, then
     /// `$dream_complete($self, value)` and returns `0` (the poll result).
     fn emit_poll_complete(&mut self, value: Option<&Operand>) {
         if let Some(parent) = self.async_parent {
-            for (i, decl) in parent.locals.iter().enumerate() {
+            // Only the persistent user locals (params + declared `let`s) are released; the trailing
+            // synthetic temps are transient and have no guaranteed release helper for their types.
+            for (i, decl) in parent.locals.iter().enumerate().take(self.async_user_locals) {
                 if self.interner.is_reference(decl.ty) {
                     let call = release_call(self.interner, self.layouts, decl.ty);
                     self.line(&format!("     (local.get ${i})"));
@@ -1512,64 +1484,126 @@ impl Emitter<'_> {
         self.line("     (return)");
     }
 
-    /// Emits a plain async poll segment's body. A single-block segment is emitted inline; its void
-    /// fall-through terminator is elided so control continues to the segment's own suspend/complete
-    /// handling in `emit_async_function`. A multi-block segment (the plain code contained an
-    /// `if`/loop/`match`, or a suspend expression with control flow) is emitted through a `$__pc`
-    /// dispatch loop wrapped in `$__segexit`: CFG edges re-dispatch, completions run
-    /// `$dream_complete`, and a void fall-through/`unreachable` tail `br`s to `$__segexit` so the
-    /// code the caller appends after the segment runs next.
-    fn emit_poll_segment_body(&mut self) {
-        let n = self.func.blocks.len();
-        if n <= 1 {
-            let block = self.func.block(self.func.entry);
-            for stmt in &block.stmts {
-                self.emit_stmt(stmt);
-            }
-            match &block.terminator {
-                Terminator::AsyncComplete(None)
-                | Terminator::Return(None)
-                | Terminator::Unreachable => {}
-                other => self.emit_poll_terminator(other),
-            }
-            return;
+    /// Emits the coroutine poll function: a state-machine dispatch over the whole lowered async body.
+    /// On entry the frame-resident locals are restored, then a `$__pc`/`br_table` loop (seeded from
+    /// the saved `Future.state`) runs blocks; CFG edges re-dispatch, an [`Terminator::Await`] parks
+    /// the task and returns (recording its `resume` block as the next state), and completions run
+    /// `$dream_complete`. A block that is some await's `resume` target first binds the settled result.
+    fn emit_async_state_machine(&mut self, slots: &AsyncSlots, poll_sym: &str) {
+        self.line(&format!("(func ${} (param $self i32) (result i32)", poll_sym));
+        for (i, decl) in self.func.locals.iter().enumerate() {
+            self.line(&format!(" (local ${} {})", i, self.wasm_ty(decl.ty)));
         }
-        self.line("     (block $__segexit");
-        self.line(&format!("      (i32.const {})", self.func.entry.0));
-        self.line("      (local.set $__pc)");
-        self.line("      (loop $__loop");
+        // Scratch locals shared with the normal emitter (`$__obj`/`$__len`/`$__rel` back array &
+        // reassignment scratch, `$__jsp` a saved `$__sp` across a dynamic `js` call); `$__pc` drives
+        // the block dispatch, `$__scratch` holds the awaited future at a suspend.
+        self.line(" (local $__obj i32)");
+        self.line(" (local $__scratch i32)");
+        self.line(" (local $__len i32)");
+        self.line(" (local $__rel i32)");
+        self.line(" (local $__pc i32)");
+        self.line(" (local $__jsp i32)");
+
+        // Restore every frame-resident local; reference slots are zeroed after the move so ownership
+        // lives in the WASM local (and is not double-freed from the frame) until the next suspend.
+        for (idx, _, wt) in &slots.entries {
+            let off = slots.offsets[idx];
+            self.line(" local.get $self");
+            self.line(&format!(" {} offset={}", slot_load(wt), off));
+            self.line(&format!(" local.set ${}", idx));
+            if slots.ref_locals.contains(idx) {
+                self.line(" local.get $self");
+                self.line(" i32.const 0");
+                self.line(&format!(" i32.store offset={}", off));
+            }
+        }
+
+        // Blocks that are an await's `resume` target, mapped to the local its result binds to (if any).
+        let mut resume_binds: HashMap<u32, Option<crate::mir::Local>> = HashMap::new();
+        for block in &self.func.blocks {
+            if let Terminator::Await { dest, resume, .. } = &block.terminator {
+                resume_binds.insert(resume.0, *dest);
+            }
+        }
+
+        let n = self.func.blocks.len();
+        self.line(" local.get $self");
+        self.line(&format!(" i32.load offset={}", F_STATE));
+        self.line(" local.set $__pc");
+        self.line(" (block $__exit");
+        self.line("  (loop $__loop");
         for i in (0..n).rev() {
-            self.line(&format!("       (block $bb{}", i));
+            self.line(&format!("   (block $bb{}", i));
         }
         let labels: String = (0..n).map(|i| format!("$bb{} ", i)).collect();
         let default = format!("$bb{}", n.saturating_sub(1));
-        self.line(&format!("        (br_table {}{} (local.get $__pc))", labels, default));
+        self.line(&format!("    (br_table {}{} (local.get $__pc))", labels, default));
         for i in 0..n {
-            self.line(&format!("       ) ;; bb{} body", i));
+            self.line(&format!("   ) ;; bb{} body", i));
+            if let Some(dest) = resume_binds.get(&(i as u32)) {
+                // Resume point: bind the settled result (`awaiting.result`) before continuing.
+                self.line("     (local.get $self)");
+                self.line(&format!("     (i32.load offset={})", F_AWAITING));
+                self.line(&format!("     (i32.load offset={})", F_RESULT));
+                match dest {
+                    Some(d) => self.line(&format!("     (local.set ${})", d.0)),
+                    None => self.line("     (drop)"),
+                }
+            }
             let block = self.func.block(crate::mir::BlockId(i as u32));
             for stmt in &block.stmts {
                 self.emit_stmt(stmt);
             }
-            self.emit_poll_cfg_terminator(&block.terminator);
+            self.emit_async_cfg_terminator(&block.terminator, slots);
         }
-        self.line("      )"); // loop
-        self.line("     )"); // $__segexit
+        self.line("  )"); // loop
+        self.line(" )"); // $__exit
+        // Every reachable path suspends (returns) or completes (returns); the tail is unreachable but
+        // keeps the `(result i32)` signature well-typed.
+        self.line(" (unreachable)");
+        self.line(")");
     }
 
-    /// Terminator emission inside a multi-block poll segment: CFG edges dispatch through `$__pc`
-    /// (via [`Self::emit_terminator`]'s `goto`), completions run `$dream_complete`, and a void
-    /// fall-through/`unreachable` tail exits the dispatch loop so the segment's trailing code runs.
-    fn emit_poll_cfg_terminator(&mut self, t: &Terminator) {
+    /// Terminator emission inside the coroutine poll dispatch: CFG edges re-dispatch through `$__pc`,
+    /// an `Await` parks the task and returns, and completions/returns finish the task.
+    fn emit_async_cfg_terminator(&mut self, t: &Terminator, slots: &AsyncSlots) {
         match t {
             Terminator::Goto(_) | Terminator::If { .. } | Terminator::Switch { .. } => {
                 self.emit_terminator(t)
             }
-            Terminator::AsyncComplete(_) | Terminator::Return(Some(_)) => {
-                self.emit_poll_terminator(t)
+            Terminator::Await { future, resume, .. } => {
+                // Evaluate the awaited future, park the task on it, save live locals, and return so the
+                // scheduler can drive it; the poll re-enters at `resume` when the future settles.
+                self.emit_operand(future);
+                self.line("     (local.set $__scratch)");
+                self.line("     (local.get $self)");
+                self.line("     (local.get $__scratch)");
+                self.line(&format!("     (i32.store offset={})", F_AWAITING));
+                self.line("     (local.get $self)");
+                self.line(&format!("     (i32.const {})", resume.0));
+                self.line(&format!("     (i32.store offset={})", F_STATE));
+                for (idx, _, wt) in &slots.entries {
+                    let off = slots.offsets[idx];
+                    self.line("     (local.get $self)");
+                    self.line(&format!("     (local.get ${})", idx));
+                    self.line(&format!("     ({} offset={})", slot_store(wt), off));
+                }
+                self.line("     (local.get $self)");
+                self.line("     (local.get $__scratch)");
+                self.line("     (call $dream_await)");
+                self.line("     (i32.const 0)");
+                self.line("     (return)");
             }
-            Terminator::Return(None) | Terminator::Unreachable => {
-                self.line("     (br $__segexit)")
+            Terminator::AsyncComplete(v) => {
+                let v = v.clone();
+                self.emit_poll_complete(v.as_ref());
             }
+            // A value `return x;` in an async body lowers to `AsyncComplete`; handle the plain form too.
+            Terminator::Return(v) => {
+                let v = v.clone();
+                self.emit_poll_complete(v.as_ref());
+            }
+            Terminator::Unreachable => self.line("     (unreachable)"),
         }
     }
 

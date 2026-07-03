@@ -1680,19 +1680,32 @@ fn test_analyze_await_in_unconditional_subexpression_allowed() {
 }
 
 #[test]
-fn test_analyze_await_in_conditional_position_rejected() {
-    // `await` in a ternary arm evaluates conditionally, which the async lowering cannot yet handle.
+fn test_analyze_await_in_conditional_position_allowed() {
+    // `await` in a conditionally-evaluated position (ternary arm) is now supported: the coroutine
+    // transform lowers the whole body to a CFG state machine, so it type-checks cleanly.
     let code = "
         async fun delay(): void { }
         async fun work(n: int): int { await delay(); return n; }
         async fun main(): void { let c = true; let x = c ? await work(1) : await work(2); let y = x; }
     ";
     let diagnostics = analyze_code(code);
-    assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("conditionally-evaluated position")));
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_await_in_loop_and_branch_allowed() {
+    // `await` inside a loop body and a branch body is supported by the CFG coroutine transform.
+    let code = "
+        async fun step(n: int): int { return n; }
+        async fun main(): void {
+            let sum = 0;
+            let i = 0;
+            while (i < 3) { sum = sum + await step(i); i = i + 1; }
+            if (sum > 0) { let last = await step(sum); sum = last; }
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
 }
 
 #[test]

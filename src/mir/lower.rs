@@ -114,7 +114,7 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
         interner,
         locals,
         loops: Vec::new(),
-        async_segment: false,
+        async_coroutine: false,
     };
     lo.lower_block(&func.body);
 
@@ -125,10 +125,15 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
     lo.b.finish()
 }
 
-/// Lowers a straight-line slice of an async function body (one poll segment). `Return` becomes
-/// [`Terminator::AsyncComplete`] so the async emitter can finish the task with `$dream_complete`.
-pub fn lower_async_segment(func: &HFunction, stmts: &[HStmt], interner: &TypeInterner) -> MirFunction {
-    let mut b = FunctionBuilder::new(format!("{}__seg", func.name), func.ret);
+/// Lowers a complete async function body into a coroutine CFG for the poll state machine: the whole
+/// body becomes one block graph in which every `await` is a [`Terminator::Await`] suspend point
+/// (see [`Lowerer::lower_await`]), so awaits work in any control-flow position (branches, loops,
+/// `switch`, ternary arms). `return` becomes [`Terminator::AsyncComplete`]; falling off the end
+/// completes the task with no value. The async backend ([`crate::mir::async_emit`]) turns each
+/// `Await`'s `resume` block id into the saved poll state.
+pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFunction {
+    let mut b = FunctionBuilder::new(func.name.clone(), func.ret);
+    b.set_async(true);
     b.set_def(func.def, func.instance.clone());
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
@@ -144,49 +149,15 @@ pub fn lower_async_segment(func: &HFunction, stmts: &[HStmt], interner: &TypeInt
         interner,
         locals,
         loops: Vec::new(),
-        async_segment: true,
+        async_coroutine: true,
     };
-    lo.lower_block(stmts);
+    lo.lower_block(&func.body);
     if !lo.b.is_terminated() {
-        // The segment's *natural* fall-through (not an explicit `return`) must hand control back to
-        // the async emitter's per-segment suspend/complete handling, not finish the task here. It is
-        // marked `Return(None)` so the multi-block poll path `br`s to `$__segexit` (an explicit
-        // `return;` stays `AsyncComplete`, which does complete the task).
-        lo.b.terminate(Terminator::Return(None));
+        lo.b.terminate(Terminator::AsyncComplete(None));
     }
-    lo.b.finish()
-}
-
-/// Lowers a single expression into a temporary local; used when an async poll segment needs a future
-/// value in `$__scratch`.
-pub fn lower_expr_value(
-    func: &HFunction,
-    expr: &crate::hir::HExpr,
-    interner: &TypeInterner,
-) -> (MirFunction, Local) {
-    let mut b = FunctionBuilder::new(format!("{}__expr", func.name), expr.ty);
-    b.set_def(func.def, func.instance.clone());
-    let mut locals: HashMap<u32, Local> = HashMap::new();
-    for p in &func.params {
-        let l = b.new_param(p.ty, Some(p.name.clone()));
-        locals.insert(p.local.0, l);
-    }
-    for decl in &func.locals {
-        let l = b.new_local(decl.ty, Some(decl.name.clone()));
-        locals.insert(decl.id.0, l);
-    }
-    let mut lo = Lowerer {
-        b,
-        interner,
-        locals,
-        loops: Vec::new(),
-        async_segment: false,
-    };
-    let t = lo.b.new_temp(expr.ty);
-    let rv = lo.lower_rvalue(expr);
-    lo.b.assign(Place::Local(t), rv);
-    lo.b.terminate(Terminator::Unreachable);
-    (lo.b.finish(), t)
+    let mut f = lo.b.finish();
+    f.ret = func.ret;
+    f
 }
 
 struct LoopCtx {
@@ -200,8 +171,10 @@ struct Lowerer<'a> {
     interner: &'a TypeInterner,
     locals: HashMap<u32, Local>,
     loops: Vec<LoopCtx>,
-    /// When set, `return` completes the async task instead of returning from a WASM function.
-    async_segment: bool,
+    /// When set, this is an async coroutine body: `return` completes the async task (rather than
+    /// returning from a WASM function), and each `await` lowers to a [`Terminator::Await`] suspend
+    /// point that splits the current block (so awaits work in any control-flow position).
+    async_coroutine: bool,
 }
 
 impl Lowerer<'_> {
@@ -229,6 +202,13 @@ impl Lowerer<'_> {
                 let rv = self.lower_rvalue(value);
                 let p = self.lower_place(place);
                 self.b.assign(p, rv);
+            }
+            // A bare `await e;` in a coroutine suspends on the future and discards its result.
+            HStmt::Await(e) if self.async_coroutine => {
+                let fut = self.lower_operand(e);
+                let resume = self.b.new_block();
+                self.b.terminate(Terminator::Await { future: fut, dest: None, resume });
+                self.b.switch_to(resume);
             }
             HStmt::Expr(e) | HStmt::Await(e) => match &e.kind {
                 // A bare call keeps its `Call` statement form (return value discarded). This matters
@@ -279,7 +259,7 @@ impl Lowerer<'_> {
             },
             HStmt::Return(e) => {
                 let op = e.as_ref().map(|e| self.lower_operand(e));
-                if self.async_segment {
+                if self.async_coroutine {
                     self.b.terminate(Terminator::AsyncComplete(op));
                 } else {
                     self.b.terminate(Terminator::Return(op));
@@ -722,6 +702,15 @@ impl Lowerer<'_> {
             HExprKind::Binary { op, .. } if op.is_logical() => self.lower_short_circuit(e),
             HExprKind::Ternary { .. } => self.lower_ternary(e),
             HExprKind::Coalesce { .. } => self.lower_coalesce(e),
+            // In a coroutine, `await` is a suspend point that splits the current block; elsewhere the
+            // outer await is a no-op wrapper (the value is the inner future expression).
+            HExprKind::Await(inner) => {
+                if self.async_coroutine {
+                    self.lower_await(e)
+                } else {
+                    self.lower_operand(inner)
+                }
+            }
             _ => {
                 let rv = self.lower_rvalue(e);
                 let temp = self.b.new_temp(e.ty);
@@ -853,11 +842,9 @@ impl Lowerer<'_> {
                 let from = inner.ty;
                 Rvalue::Cast(self.lower_operand(inner), from, e.ty)
             }
-            HExprKind::Await(inner) => {
-                // `await` lowers to a call into the runtime poll/await machinery; modeled here as
-                // using the inner future operand. The async coroutine transform refines this.
-                Rvalue::Use(self.lower_operand(inner))
-            }
+            // `await` as an rvalue routes through `lower_operand`, which suspends in a coroutine
+            // (materializing the awaited result into a temp) or unwraps to the inner future otherwise.
+            HExprKind::Await(_) => Rvalue::Use(self.lower_operand(e)),
             // Already-operand-shaped or short-circuiting forms: go through `lower_operand`.
             _ => Rvalue::Use(self.lower_operand(e)),
         }
@@ -872,6 +859,26 @@ impl Lowerer<'_> {
                 t
             }
         }
+    }
+
+    /// Lowers `await e` (in a coroutine) to a suspend point: the future `e` is evaluated in the
+    /// current block, which ends with a [`Terminator::Await`] parking the task; lowering continues in
+    /// a fresh `resume` block where the settled result is bound to `dest`. Returns the `dest` read, so
+    /// callers see `await e` as an ordinary value — hence awaits compose in any sub-expression.
+    fn lower_await(&mut self, await_expr: &HExpr) -> Operand {
+        let HExprKind::Await(inner) = &await_expr.kind else {
+            unreachable!("lower_await on non-await expression");
+        };
+        let future = self.lower_operand(inner);
+        let dest = self.b.new_temp(await_expr.ty);
+        let resume = self.b.new_block();
+        self.b.terminate(Terminator::Await {
+            future,
+            dest: Some(dest),
+            resume,
+        });
+        self.b.switch_to(resume);
+        Operand::Copy(Place::Local(dest))
     }
 
     fn lower_callee(&self, callee: &crate::hir::Callee) -> super::Callee {
