@@ -29,6 +29,11 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
         "<std>/collections/map_iterator.dream",
         include_str!("collections/map_iterator.dream"),
     ),
+    ("<std>/collections/set.dream", include_str!("collections/set.dream")),
+    (
+        "<std>/collections/set_iterator.dream",
+        include_str!("collections/set_iterator.dream"),
+    ),
     // Scalar primitives: each attaches methods to a built-in numeric/bool/char type.
     ("<std>/primitives/int.dream", include_str!("primitives/int.dream")),
     ("<std>/primitives/long.dream", include_str!("primitives/long.dream")),

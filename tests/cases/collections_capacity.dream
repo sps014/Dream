@@ -1,0 +1,25 @@
+fun main(): void {
+    // List with default capacity
+    let l1 = List<int>();
+    System.println("l1 cap: " + l1.capacity()); // Should be 8
+    
+    // List with custom capacity
+    let l2 = List<int>(32);
+    System.println("l2 cap: " + l2.capacity()); // Should be 32
+    
+    // Map with default capacity
+    let m1 = Map<string, int>();
+    System.println("m1 cap: " + m1.capacity()); // Should be 8
+    
+    // Map with custom capacity (should round up to next power of 2)
+    let m2 = Map<string, int>(100);
+    System.println("m2 cap: " + m2.capacity()); // Should be 128
+    
+    // Set with default capacity
+    let s1 = Set<int>();
+    System.println("s1 cap: " + s1.capacity()); // Should be 8
+    
+    // Set with custom capacity
+    let s2 = Set<int>(20);
+    System.println("s2 cap: " + s2.capacity()); // Should be 32
+}

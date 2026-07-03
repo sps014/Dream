@@ -1,29 +1,25 @@
-// A generic open-addressing hash map.
-class Map<K, V> {
-    keys: K[];
-    values: V[];
+// A generic open-addressing hash set.
+class Set<T> {
+    keys: T[];
     states: int[];
-    defaults: V[];
     count: int;
     used: int;
     cap: int;
 
-    // Allocates an empty map with an initial capacity (defaults to 8, rounded up to power of 2).
+    // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
     constructor(capacity: int = 8) {
         let c = 8;
         while (c < capacity) {
             c = c * 2;
         }
         this.cap = c;
-        this.keys = Array.new<K>(c);
-        this.values = Array.new<V>(c);
+        this.keys = Array.new<T>(c);
         this.states = Array.new<int>(c);
-        this.defaults = Array.new<V>(1);
         this.count = 0;
         this.used = 0;
     }
 
-    // Number of key/value pairs currently stored.
+    // Number of elements currently stored.
     public fun size(): int {
         return this.count;
     }
@@ -33,15 +29,15 @@ class Map<K, V> {
         return this.cap;
     }
 
-    // Initial probe index for a key.
-    public fun home(key: K): int {
-        let h = key.hash_code();
+    // Initial probe index for a value.
+    public fun home(value: T): int {
+        let h = value.hash_code();
         return h & (this.cap - 1);
     }
 
-    // Index of an occupied slot holding a key, or -1.
-    public fun find(key: K): int {
-        let idx = this.home(key);
+    // Index of an occupied slot holding a value, or -1.
+    public fun find(value: T): int {
+        let idx = this.home(value);
         let result = -1;
         let searching = true;
         while (searching == true) {
@@ -50,7 +46,7 @@ class Map<K, V> {
                 searching = false;
             } else {
                 if (s == 1) {
-                    if (this.keys[idx] == key) {
+                    if (this.keys[idx] == value) {
                         result = idx;
                         searching = false;
                     }
@@ -66,18 +62,16 @@ class Map<K, V> {
         return result;
     }
 
-    // Grows and rehashes the map when it gets too full.
-    public fun rehash(): void {
+    // Grows and rehashes the set when it gets too full.
+    fun rehash(): void {
         let old_keys = this.keys;
-        let old_values = this.values;
         let old_states = this.states;
         let old_cap = this.cap;
         let new_cap = old_cap * 2;
         if (new_cap < 8) {
             new_cap = 8;
         }
-        this.keys = Array.new<K>(new_cap);
-        this.values = Array.new<V>(new_cap);
+        this.keys = Array.new<T>(new_cap);
         this.states = Array.new<int>(new_cap);
         this.cap = new_cap;
         this.count = 0;
@@ -85,25 +79,21 @@ class Map<K, V> {
         let i = 0;
         while (i < old_cap) {
             if (old_states[i] == 1) {
-                this.put(old_keys[i], old_values[i]);
+                this.add(old_keys[i]);
             }
             i = i + 1;
         }
     }
 
-    // Sets the value for a key.
-    public fun set(key: K, value: V): void {
-        this.put(key, value);
-    }
-
-    // Inserts or updates the value for a key.
-    public fun put(key: K, value: V): void {
+    // Inserts a value into the set. Returns true if it was newly added, false if already present.
+    public fun add(value: T): bool {
         if ((this.used + 1) * 4 >= this.cap * 3) {
             this.rehash();
         }
-        let idx = this.home(key);
+        let idx = this.home(value);
         let first_tomb = -1;
         let placed = false;
+        let added = false;
         while (placed == false) {
             let s = this.states[idx];
             if (s == 0) {
@@ -111,23 +101,23 @@ class Map<K, V> {
                 if (first_tomb >= 0) {
                     target = first_tomb;
                 }
-                this.keys[target] = key;
-                this.values[target] = value;
+                this.keys[target] = value;
                 this.states[target] = 1;
                 this.count = this.count + 1;
                 if (first_tomb < 0) {
                     this.used = this.used + 1;
                 }
                 placed = true;
+                added = true;
             } else {
                 if (s == 2) {
                     if (first_tomb < 0) {
                         first_tomb = idx;
                     }
                 } else {
-                    if (this.keys[idx] == key) {
-                        this.values[idx] = value;
+                    if (this.keys[idx] == value) {
                         placed = true;
+                        added = false;
                     }
                 }
                 if (placed == false) {
@@ -138,61 +128,42 @@ class Map<K, V> {
                 }
             }
         }
+        return added;
     }
 
-    // True if the map contains the key.
-    public fun contains(key: K): bool {
-        return this.find(key) >= 0;
+    // True if the set contains the value.
+    public fun contains(value: T): bool {
+        return this.find(value) >= 0;
     }
 
-    // Gets the value for a key, or None.
-    public fun get(key: K): Option<V> {
-        let i = this.find(key);
-        if (i >= 0) {
-            return Option.Some(this.values[i]);
-        }
-        return Option.None;
-    }
-
-    // Gets the value for a key, or a fallback.
-    public fun get_or(key: K, fallback: V): V {
-        let i = this.find(key);
-        if (i >= 0) {
-            return this.values[i];
-        }
-        return fallback;
-    }
-
-    // Removes a key and returns true if it was removed.
-    public fun remove(key: K): bool {
-        let i = this.find(key);
+    // Removes a value and returns true if it was removed.
+    public fun remove(value: T): bool {
+        let i = this.find(value);
         if (i >= 0) {
             this.states[i] = 2;
-            this.values[i] = this.defaults[0];
             this.count = this.count - 1;
             return true;
         }
         return false;
     }
 
-    // True if the map is empty.
+    // True if the set is empty.
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
-    // Removes all entries.
+    // Removes all elements.
     public fun clear(): void {
-        this.keys = Array.new<K>(8);
-        this.values = Array.new<V>(8);
+        this.keys = Array.new<T>(8);
         this.states = Array.new<int>(8);
         this.count = 0;
         this.used = 0;
         this.cap = 8;
     }
 
-    // Gets all keys.
-    public fun keys(): K[] {
-        let result = Array.new<K>(this.count);
+    // Gets all elements as an array.
+    public fun to_array(): T[] {
+        let result = Array.new<T>(this.count);
         let i = 0;
         let j = 0;
         while (i < this.cap) {
@@ -205,23 +176,8 @@ class Map<K, V> {
         return result;
     }
 
-    // Gets all values.
-    public fun values(): V[] {
-        let result = Array.new<V>(this.count);
-        let i = 0;
-        let j = 0;
-        while (i < this.cap) {
-            if (this.states[i] == 1) {
-                result[j] = this.values[i];
-                j = j + 1;
-            }
-            i = i + 1;
-        }
-        return result;
-    }
-
-    // Gets an iterator for the map.
-    public fun iterator(): MapIterator<K, V> {
-        return MapIterator<K, V>(this.keys(), this.values());
+    // Gets an iterator for the set.
+    public fun iterator(): SetIterator<T> {
+        return SetIterator<T>(this.to_array());
     }
 }

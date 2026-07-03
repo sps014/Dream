@@ -17,15 +17,24 @@ class List<T> {
     items: T[];
     count: int;
 
-    // Allocates an empty list with a small initial backing buffer, e.g. `let xs = List<int>();`.
-    constructor() {
-        this.items = Array.new<T>(8);
+    // Allocates an empty list with an initial backing buffer capacity (defaults to 8).
+    constructor(capacity: int = 8) {
+        let c = capacity;
+        if (c < 4) {
+            c = 4;
+        }
+        this.items = Array.new<T>(c);
         this.count = 0;
     }
 
     // Number of elements currently stored.
     public fun size(): int {
         return this.count;
+    }
+
+    // Current capacity of the backing buffer.
+    public fun capacity(): int {
+        return this.items.size();
     }
 
     // Doubles the backing buffer, copying existing elements across. Internal to `push`.

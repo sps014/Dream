@@ -1,0 +1,45 @@
+fun main(): void {
+    let s = Set<int>();
+    
+    // Test size and is_empty
+    System.println("Empty? " + s.is_empty());
+    System.println("Size: " + s.size());
+    
+    // Test additions
+    System.println("Add 1: " + s.add(1));
+    System.println("Add 2: " + s.add(2));
+    System.println("Add 3: " + s.add(3));
+    
+    // Test duplicates
+    System.println("Add 2 again: " + s.add(2));
+    
+    // Test properties again
+    System.println("Empty? " + s.is_empty());
+    System.println("Size: " + s.size());
+    
+    // Test contains
+    System.println("Contains 1: " + s.contains(1));
+    System.println("Contains 4: " + s.contains(4));
+    
+    // Test remove
+    System.println("Remove 2: " + s.remove(2));
+    System.println("Remove 4: " + s.remove(4));
+    System.println("Contains 2: " + s.contains(2));
+    System.println("Size after remove: " + s.size());
+
+    // Test iteration (use a list to sort since order isn't guaranteed)
+    let l = List<int>();
+    for (let x in s) {
+        l.push(x);
+    }
+    l.sort();
+    
+    System.println("Iterated: " + l.size());
+    for (let x in l) {
+        System.println("Elem: " + x);
+    }
+    
+    // Test clear
+    s.clear();
+    System.println("Size after clear: " + s.size());
+}

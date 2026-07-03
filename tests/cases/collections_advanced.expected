@@ -1,0 +1,15 @@
+Map size: 2
+Red x: 10, y: 20
+Green x: 30, y: 40
+Add Alice: true
+Add Bob: true
+Add Alice again: false
+Add new Alice instance: true
+Set size: 3
+Contains Alice: true
+Contains new Alice instance: true
+u1 role: Admin
+u2 role: Editor
+u3 role: None
+Add pt: true
+Contains pt: false

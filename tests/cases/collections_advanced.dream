@@ -1,0 +1,71 @@
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+struct Point {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class User {
+    public name: string;
+    
+    constructor(name: string) {
+        this.name = name;
+    }
+}
+
+fun main(): void {
+    let m = Map<Color, Point>();
+    
+    // Enum as key, struct as value
+    m.set(Color.Red, Point(10, 20));
+    m.set(Color.Green, Point(30, 40));
+    
+    System.println("Map size: " + m.size());
+    let p1 = m.get_or(Color.Red, Point(0, 0));
+    System.println("Red x: " + p1.x + ", y: " + p1.y);
+    
+    let p2 = m.get_or(Color.Green, Point(0, 0));
+    System.println("Green x: " + p2.x + ", y: " + p2.y);
+    
+    // Test Set with class references
+    let s = Set<User>();
+    let u1 = User("Alice");
+    let u2 = User("Bob");
+    
+    System.println("Add Alice: " + s.add(u1));
+    System.println("Add Bob: " + s.add(u2));
+    System.println("Add Alice again: " + s.add(u1)); // Should be false based on reference equality
+    
+    // Create a NEW instance with the identical data
+    let u3 = User("Alice");
+    System.println("Add new Alice instance: " + s.add(u3)); // True, because it is a different heap allocation
+    
+    System.println("Set size: " + s.size());
+    System.println("Contains Alice: " + s.contains(u1));
+    System.println("Contains new Alice instance: " + s.contains(u3));
+    
+    // Test Map with Class as Key
+    let class_map = Map<User, string>();
+    class_map.set(u1, "Admin");
+    class_map.set(u2, "Editor");
+    
+    System.println("u1 role: " + class_map.get_or(u1, "None"));
+    System.println("u2 role: " + class_map.get_or(u2, "None"));
+    // u3 has the same name "Alice" but is a different instance, so it shouldn't match u1's key
+    System.println("u3 role: " + class_map.get_or(u3, "None"));
+    
+    // Struct as key in set
+    let pointSet = Set<Point>();
+    let pt = Point(5, 5);
+    System.println("Add pt: " + pointSet.add(pt));
+    System.println("Contains pt: " + pointSet.contains(pt));
+}

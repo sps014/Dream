@@ -1,0 +1,18 @@
+Empty? true
+Size: 0
+Add 1: true
+Add 2: true
+Add 3: true
+Add 2 again: false
+Empty? false
+Size: 3
+Contains 1: true
+Contains 4: false
+Remove 2: true
+Remove 4: false
+Contains 2: false
+Size after remove: 2
+Iterated: 2
+Elem: 1
+Elem: 3
+Size after clear: 0

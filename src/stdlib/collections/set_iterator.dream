@@ -1,0 +1,20 @@
+// An iterator for traversing a `Set`.
+class SetIterator<T> {
+    elements: T[];
+    index: int;
+
+    constructor(elements: T[]) {
+        this.elements = elements;
+        this.index = 0;
+    }
+
+    // Returns the next element, or `None` if exhausted.
+    public fun next(): Option<T> {
+        if (this.index >= this.elements.size()) {
+            return Option.None;
+        }
+        let val = this.elements[this.index];
+        this.index = this.index + 1;
+        return Option.Some(val);
+    }
+}
