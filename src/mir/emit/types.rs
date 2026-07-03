@@ -31,6 +31,18 @@ pub(super) fn load_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static st
     }
 }
 
+/// The store instruction matching [`load_instr_for`] (width-aware; sub-word scalars truncate). Used
+/// by the generated struct<->js marshalers to write a field/element slot of type `ty`.
+pub(super) fn store_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static str {
+    match interner.kind(interner.strip_nullable(ty)) {
+        TyKind::Prim(PrimTy::Float) => "f32.store",
+        TyKind::Prim(PrimTy::Double) => "f64.store",
+        TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.store",
+        TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => "i32.store8",
+        _ => "i32.store",
+    }
+}
+
 /// The `$*_to_string` call that turns a loaded value of `ty` into a string pointer, or `None` when
 /// the value already *is* a string pointer (`string`, needing no conversion). Enums render as their
 /// The primitive kind of `ty` (stripping nullability), or `None` for reference/`object`/other types.

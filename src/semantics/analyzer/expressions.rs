@@ -310,6 +310,15 @@ impl<'a> Analyzer<'a> {
                     self.hir_none();
                     return Ok(Type::Unknown);
                 }
+                // Awaiting a dynamic `js` value treats it as a JS Promise: desugar to
+                // `await js.__await(inner)`, whose async bridge yields `Future<js>` and resolves to
+                // the awaited value as another `js`.
+                if self.is_js_type(&fut) {
+                    let fut_hir = self.desugar_js_await(inner_hir);
+                    let opt = Self::option_js_type();
+                    self.hir_set_await(fut_hir, &opt);
+                    return Ok(opt);
+                }
                 match Self::future_inner_type(&fut) {
                     Some(t) => {
                         self.hir_set_await(inner_hir, &t);
@@ -430,6 +439,15 @@ impl<'a> Analyzer<'a> {
                     }
                 }
                 return Ok(enum_ty);
+            }
+        }
+        // `js.global` as a value (not the `js.global("name")` call form) is `globalThis`, so
+        // `js.global.document` / `js.global.fetch(...)` chain naturally off the JS global scope.
+        if let ExpressionNode::Identifier(id) = obj {
+            let is_local = symbol_table.borrow().get_symbol(id).is_ok();
+            if !is_local && id.text == "js" && member.text == "global" {
+                self.desugar_js_global_this();
+                return Ok(Self::js_type());
             }
         }
         // Static property getter `Type.prop`: when the receiver names a type (not a local) and a

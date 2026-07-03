@@ -1,7 +1,16 @@
 # JS Interop
 
-Dream compiles to WebAssembly, so it runs anywhere WASM does, including the browser and Node. The
-`extern` keyword declares a function that lives in the JavaScript host.
+Dream compiles to WebAssembly, so it runs anywhere WASM does, including the browser and Node.
+Talking to that host — calling its functions, reading its values, handing it callbacks — is built
+on three pieces, each covered by its own page:
+
+| Piece | What it's for | Docs |
+| --- | --- | --- |
+| `extern fun` | a typed, fixed-signature function that lives in JS (`Math.max`, your own glue code) | this page |
+| `js` | a dynamic handle to *any* live JS value, read/called with native syntax | [The js type](references.md) |
+| function values | passing functions across the boundary in either direction | [Callbacks](callbacks.md) |
+
+This page covers the first: declaring, binding, and running `extern` functions.
 
 ## Declaring an extern function
 
@@ -110,15 +119,23 @@ To hand a string back to Dream from a JS implementation, the runtime calls the e
 
 ## Dynamic JavaScript values
 
-A real JavaScript object (a `RegExp`, a fetch `Response`, a DOM node, a function) crosses into Dream
-as a dynamic [`js`](references.md) value rather than being flattened to a string. Member access,
-method calls, indexing, and calling bind at runtime, so you write them with native syntax
-(`doc.getElementById("app")`, `el.title = "x"`). See [The js type](references.md) for the full API.
+`extern fun` is great for a fixed, known signature, but a lot of real JS APIs hand back open-ended
+values — a DOM node, a `fetch` `Response`, a `RegExp` — that you want to read and call natively
+rather than flatten to a string. That's what the dynamic [`js`](references.md) type is for:
+
+```dream
+let el = js.global.document.getElementById("app");
+el.textContent = "hello";
+```
+
+Head to [The js type](references.md) for the full API: getting values, calling methods, passing
+structs/classes, and awaiting Promises.
 
 ## Callbacks
 
 Functions cross the boundary in both directions: pass a Dream `fun(...)` to JavaScript, or hand a JS
-function into a Dream `extern` parameter. See [Callbacks](callbacks.md).
+function into Dream and call it directly. See [Callbacks](callbacks.md) for both directions,
+including registering DOM event handlers.
 
 ## Built on interop
 

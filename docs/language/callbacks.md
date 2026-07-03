@@ -1,13 +1,12 @@
 # Callbacks
 
-Functions cross the Dream/JavaScript boundary in both directions. A Dream function value
-(`fun(params): ret`) is an index into the module's function table, which the runtime bridges so JS
-can call into Dream and Dream can call into JS.
+Functions cross the Dream/JavaScript boundary in both directions: hand a Dream function to JS, or
+call a JS function from Dream. A Dream function value (`fun(params): ret`) is an index into the
+module's function table, and the runtime wraps that index as a real, callable JS function.
 
 ## Dream → JS
 
-Pass a Dream `fun(...)` to an `extern` whose parameter is a function type. The runtime wraps the
-function index as a real JS callable, so the host can invoke it directly:
+Declare an `extern` parameter with a function type, and pass a Dream function where it's expected:
 
 ```dream
 fun on_tick(n: int): void {
@@ -17,16 +16,15 @@ fun on_tick(n: int): void {
 extern fun run_callback(cb: fun(int): void, times: int): void;
 
 fun main(): void {
-    run_callback(on_tick, 3);   // on_tick is passed as a funcref handle
+    run_callback(on_tick, 3);   // on_tick crosses as a JS-callable wrapper
 }
 ```
 
-Host side:
+The host receives `cb` already wrapped and just calls it like any other JS function:
 
 ```js
 await run("callbacks.wasm", {
   imports: {
-    // `cb` arrives already wrapped as a JS callable.
     run_callback: (cb, times) => {
       for (let i = 0; i < times; i++) cb(i);
     },
@@ -34,12 +32,14 @@ await run("callbacks.wasm", {
 });
 ```
 
-The compiler exports the function table as `__indirect_function_table`, and the `*.abi.json` marks `fun(...)` parameters so the runtime knows to wrap the incoming index.
+Behind the scenes, the compiler exports the function table as `__indirect_function_table`, and the
+generated `*.abi.json` marks `fun(...)` parameters so the runtime knows to wrap the incoming index
+before the host ever sees it.
 
-### Registering DOM handlers
+## Registering DOM handlers
 
-Passing a Dream `fun(js): void` / `fun(): void` directly to a dynamic [`js`](references.md) call
-auto-wraps it as a JS callable, so event handlers read natively:
+Passing a Dream function directly into a dynamic [`js`](references.md) call wraps it automatically
+— so event handlers read exactly like they would in JavaScript:
 
 ```dream
 fun on_click(ev: js): void {
@@ -47,24 +47,25 @@ fun on_click(ev: js): void {
 }
 
 fun main(): void {
-    let el = js.global("document").getElementById("app");
+    let el = js.global.document.getElementById("app");
     el.addEventListener("click", on_click);
 }
 ```
 
-The wrapper has **stable identity per function** - the runtime caches it by funcref table index - so
-the same handler registered with `addEventListener` can be removed with `removeEventListener`. When
-you need an explicit `js` callable value, use `js.func(handler)` / `js.func0(handler)`.
+The wrapper has **stable identity per function** — the runtime caches it by function-table index —
+so a handler registered with `addEventListener` can later be removed with the *same* Dream function
+value passed to `removeEventListener`. If you need an explicit `js` callable value up front (to
+store, compare, or pass around before registering it), build one with `js.func(handler)` /
+`js.func0(handler)`.
 
 ## JS → Dream
 
-A JavaScript function handed to Dream is just a [`js`](references.md) value; call it directly with
-native syntax. Arguments auto-marshal, so no manual boxing is needed:
+A JavaScript function handed to Dream is just a [`js`](references.md) value — call it with native
+syntax, and its arguments auto-convert on the way in:
 
 ```dream
 fun main(): void {
-    let logger = js.global("logger");          // a JS function on the global scope
-    logger("hello from Dream");
+    js.global.logger("hello from Dream");
 }
 ```
 
@@ -75,6 +76,13 @@ await run("callbacks.wasm");
 
 ## Marshaling
 
-Callback arguments and results are marshaled with the same rules as ordinary externs (see [JS Interop](interop.md#value-marshaling)): primitives and `string` convert automatically, and JS values travel as `js` handles.
+Callback arguments and results follow the same conversion rules as ordinary externs and dynamic
+`js` calls (see [Value marshaling](interop.md#value-marshaling) and
+[Passing values to JS](references.md#passing-values-to-js)): primitives and `string` convert
+automatically, and JS values travel as `js` handles.
 
-A complete runnable example lives in [`sample/interop/callbacks.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/callbacks.dream) with its Node runner `callbacks.mjs`.
+## Try it
+
+[`sample/interop/callbacks.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/callbacks.dream)
+runs both directions end to end, with its Node runner
+[`callbacks.mjs`](https://github.com/sps014/Dream/blob/main/sample/interop/callbacks.mjs).

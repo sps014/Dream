@@ -70,6 +70,8 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
     out.push('\n');
     emit_object_protocol(&mut out, mir, interner, &strings, &tags);
     out.push('\n');
+    emit_js_marshal(&mut out, mir, interner, &strings, &tags);
+    out.push('\n');
     emit_release_funcs(&mut out, mir, interner, &tags, &value_glue);
     out.push('\n');
     emit_value_glue(&mut out, mir, interner, &value_glue);

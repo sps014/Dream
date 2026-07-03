@@ -114,10 +114,10 @@ impl<'a> Analyzer<'a> {
         // Dynamic `js`: box a primitive/`string` into a `js` handle, or unbox a `js` value into a
         // primitive/`string`, at this typed binding boundary (so `let x: js = 5` and
         // `let n: int = el.count` work without an explicit conversion).
-        if matches!(target_k, TyKind::Js) && matches!(val_k, TyKind::Prim(_)) {
+        if matches!(target_k, TyKind::Js) && matches!(val_k, TyKind::Prim(_) | TyKind::Struct(..)) {
             return self.box_to_js(value).unwrap_or_else(|| HExpr::new(target, HExprKind::IntLit(0)));
         }
-        if matches!(val_k, TyKind::Js) && matches!(target_k, TyKind::Prim(_)) {
+        if matches!(val_k, TyKind::Js) && matches!(target_k, TyKind::Prim(_) | TyKind::Struct(..)) {
             return self.unbox_from_js(value, target);
         }
         // Implicit numeric widening (e.g. `let w: long = 5;`, `let d: double = someLong;`). The two

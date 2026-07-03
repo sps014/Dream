@@ -1,0 +1,33 @@
+// Awaiting a JS Promise through the dynamic `js` type - no `extern async` declaration needed.
+//
+//   cargo run -- sample/interop/async_js.dream
+//   node sample/interop/async_js.mjs sample/interop/async_js.wasm
+//
+// `js.global.fetchUser` binds `js.global` to `globalThis` and reads `fetchUser`; calling it yields a
+// `js` (the Promise handle). `await` on a `js` value desugars to the async `jsAwait` bridge,
+// suspending the task until the Promise settles and yielding the resolved value as another `js`.
+
+async fun main(): void {
+    System.println("fetching...");
+
+    // `await` on a `js` yields `Option<js>`: `Some(value)` on resolve, `None` on rejection - so
+    // failure is impossible to ignore. (Note: the async lowering does not yet support an `await`
+    // that follows a branch, so the two awaits come first, then we handle their results.)
+    let user = await js.global.fetchUser(42);
+    let res = await js.global.fetchUser(7);
+
+    switch (user) {
+        Some(u) => {
+            let name: string = u.name;        // property read + unbox at the typed binding
+            System.println("user = " + name);
+        }
+        None => System.println("fetch failed"),
+    }
+    switch (res) {
+        Some(r) => {
+            let id: int = r.id;
+            System.println("id = " + id);
+        }
+        None => System.println("fetch failed"),
+    }
+}

@@ -6,10 +6,14 @@ use super::*;
 pub(super) fn protocol_strings(mir: &crate::mir::Mir) -> Vec<String> {
     let mut v =
         vec!["null".to_string(), "<object>".to_string(), "[".to_string(), "]".to_string(), ", ".to_string()];
+    // `length` is the JS array-length key read by the generated `$js_to_array_t*` marshalers.
+    v.push("length".to_string());
     for layout in mir.layouts.structs.values() {
         v.push(format!("{} {{ ", layout.name));
         for (i, f) in layout.fields.iter().enumerate() {
             v.push(if i == 0 { format!("{}: ", f.name) } else { format!(", {}: ", f.name) });
+            // The bare field name is the JS property key used by the struct<->js marshalers.
+            v.push(f.name.clone());
         }
         v.push(" }".to_string());
     }
@@ -128,6 +132,13 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         Rvalue::InterfaceCall { receiver, args, .. } => {
             strings_in_operand(receiver, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
+        }
+        Rvalue::JsCall { target, method, args, .. } => {
+            strings_in_operand(target, out);
+            if let Some(m) = method {
+                strings_in_operand(m, out);
+            }
+            args.iter().for_each(|(a, _)| strings_in_operand(a, out));
         }
         Rvalue::FuncRef(_) => {}
     }

@@ -112,6 +112,16 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
             }
             c
         }
+        Rvalue::JsCall { target, method, args, .. } => {
+            let mut c = subst_operand(target, known);
+            if let Some(m) = method {
+                c |= subst_operand(m, known);
+            }
+            for (a, _) in args {
+                c |= subst_operand(a, known);
+            }
+            c
+        }
         Rvalue::FuncRef(_) => false,
     }
 }

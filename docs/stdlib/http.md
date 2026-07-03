@@ -10,7 +10,7 @@
 | Node.js | The global `fetch` (Node 18+) |
 | Browser | The page's `fetch` |
 
-The API is identical across all three; only the underlying transport differs. Unlike the [`JsRef`](../language/references.md)-based interop, there is no JS-only restriction and nothing to release — the body bytes are already in hand once the request future resolves.
+The API is identical across all three; only the underlying transport differs. Unlike the dynamic [`js`](../language/references.md) type, there is no JS-only restriction and nothing to release — the body bytes are already in hand once the request future resolves.
 
 ## Creating a client
 

@@ -170,6 +170,13 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
             read_operand(receiver, read);
             args.iter().for_each(|a| read_operand(a, read));
         }
+        Rvalue::JsCall { target, method, args, .. } => {
+            read_operand(target, read);
+            if let Some(m) = method {
+                read_operand(m, read);
+            }
+            args.iter().for_each(|(a, _)| read_operand(a, read));
+        }
         Rvalue::FuncRef(_) => {}
     }
 }

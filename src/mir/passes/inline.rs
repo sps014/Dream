@@ -545,6 +545,15 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
                 remap_operand(a, base);
             }
         }
+        Rvalue::JsCall { target, method, args, .. } => {
+            remap_operand(target, base);
+            if let Some(m) = method {
+                remap_operand(m, base);
+            }
+            for (a, _) in args {
+                remap_operand(a, base);
+            }
+        }
         Rvalue::FuncRef(_) => {}
     }
 }

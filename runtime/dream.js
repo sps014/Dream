@@ -420,10 +420,20 @@ function wrapAsyncImport(getInstance, fn, signature) {
     }
     const args = marshalArgs(inst, params, rawArgs);
     const future = exports.__dream_new_future(FUTURE_SLOTS_SIZE, -1, FUTURE_KIND_HOST);
-    Promise.resolve(fn(...args)).then((value) => {
-      exports.__dream_resolve(future, marshalResult(inst, result, value));
-      exports.__dream_run_loop();
-    });
+    Promise.resolve(fn(...args)).then(
+      (value) => {
+        exports.__dream_resolve(future, marshalResult(inst, result, value));
+        exports.__dream_run_loop();
+      },
+      (err) => {
+        // A rejected Promise has no Dream-level error channel yet; settle the future with a
+        // zero/null result (a `null` `js` handle for a `js` result) so the scheduler is not left
+        // hanging, and surface the reason on the console for diagnosis.
+        console.error("Dream: awaited JS promise rejected:", err);
+        exports.__dream_resolve(future, marshalResult(inst, result, null));
+        exports.__dream_run_loop();
+      },
+    );
     return future;
   };
 }
@@ -476,6 +486,57 @@ async function httpDo(url, method, headersJson, body) {
   return out;
 }
 
+// Slot tags for the dynamic-`js` argument buffer. One argument = one 16-byte slot laid out as
+// `[tag: i32][aux: i32][payload: 8 bytes]`. Must match `src/mir/emit/types.rs::js_slot`.
+const JS_SLOT = {
+  NULL: 0, INT: 1, LONG: 2, DOUBLE: 3, BOOL: 4, STRING: 5, JS: 6, FUNC: 7, ARRAY: 8,
+};
+// Maps an array element's slot tag (the `aux` word of an ARRAY slot) to the Dream element-type name
+// understood by `readArray`.
+const JS_ARRAY_ELEM = {
+  [JS_SLOT.INT]: "int", [JS_SLOT.LONG]: "long", [JS_SLOT.DOUBLE]: "double",
+  [JS_SLOT.BOOL]: "bool", [JS_SLOT.STRING]: "string", [JS_SLOT.JS]: "js",
+};
+
+/**
+ * Decodes `argc` tagged argument slots starting at `ptr` (in the instance's linear memory) into an
+ * array of live JS values. Primitives are read in place, strings/arrays are materialized, `js`
+ * handles are dereferenced, and Dream funcrefs are wrapped as identity-stable JS callables. This is
+ * the read side of the shadow-stack marshaling emitted by `Emitter::emit_js_call`.
+ */
+function decodeJsSlots(inst, ptr, argc) {
+  const dv = inst.view;
+  const out = new Array(argc);
+  for (let i = 0; i < argc; i++) {
+    const base = ptr + i * 16;
+    const tag = dv.getInt32(base, true);
+    const aux = dv.getInt32(base + 4, true);
+    const p = base + 8;
+    switch (tag) {
+      case JS_SLOT.NULL: out[i] = null; break;
+      case JS_SLOT.INT: out[i] = dv.getInt32(p, true); break;
+      case JS_SLOT.LONG: out[i] = dv.getBigInt64(p, true); break;
+      case JS_SLOT.DOUBLE: out[i] = dv.getFloat64(p, true); break;
+      case JS_SLOT.BOOL: out[i] = dv.getInt32(p, true) !== 0; break;
+      case JS_SLOT.STRING: out[i] = inst.readString(dv.getInt32(p, true)); break;
+      case JS_SLOT.JS: out[i] = inst.derefHandle(dv.getInt32(p, true)); break;
+      case JS_SLOT.FUNC:
+        out[i] = inst.callback(dv.getInt32(p, true), aux === 1 ? "fun(js):void" : "fun():void");
+        break;
+      case JS_SLOT.ARRAY: {
+        const arrPtr = dv.getInt32(p, true);
+        const elem = JS_ARRAY_ELEM[aux] || "int";
+        out[i] = elem === "js"
+          ? inst.readArray(arrPtr, "int").map((h) => inst.derefHandle(h))
+          : inst.readArray(arrPtr, elem);
+        break;
+      }
+      default: out[i] = null;
+    }
+  }
+  return out;
+}
+
 /**
  * The built-in `Dream` host module backing the stdlib interop layer (the dynamic `js` type, regex,
  * fetch). These run *after* argument marshaling, so a `js` parameter arrives as the live JS value
@@ -483,12 +544,10 @@ async function httpDo(url, method, headersJson, body) {
  * instance, to drop the handle for the value it was given.
  */
 function defaultDreamModule(getInstance) {
-  // Dynamic-call args arrive as a Dream `js[]`: an array of raw handle ids. Deref each to the live
-  // JS value before applying (top-level `js` params are already deref'd by `marshalArgs`).
-  const derefArgs = (ids) => (ids || []).map((id) => getInstance().derefHandle(id));
   return {
     // --- entry points / value constructors --------------------------------
     jsGlobal: (name) => globalThis[name],
+    jsGlobalThis: () => globalThis,
     jsObject: () => ({}),
     jsArray: () => [],
     // Boxing: a Dream primitive/string -> a `js` handle (marshalResult registers the return value).
@@ -500,12 +559,21 @@ function defaultDreamModule(getInstance) {
     // --- dynamic operations (deferred binding happens right here in JS) ----
     jsGetV: (target, name) => (target == null ? undefined : target[name]),
     jsSetV: (target, name, value) => { if (target != null) target[name] = value; },
-    jsCallV: (target, name, argIds) => target[name](...derefArgs(argIds)),
-    jsInvokeV: (target, argIds) => target(...derefArgs(argIds)),
+    // Variadic call/invoke. Arguments arrive as a shadow-stack buffer of tagged 16-byte slots
+    // (`argsPtr`/`argc`); `decodeJsSlots` reads them straight out of linear memory - one boundary
+    // crossing, no per-argument handles.
+    jsCallV: (target, name, argsPtr, argc) =>
+      target[name](...decodeJsSlots(getInstance(), argsPtr, argc)),
+    jsInvokeV: (target, argsPtr, argc) =>
+      target(...decodeJsSlots(getInstance(), argsPtr, argc)),
     jsIndexGetV: (target, key) => (target == null ? undefined : target[key]),
     jsIndexSetV: (target, key, value) => { if (target != null) target[key] = value; },
+    // Awaiting a JS Promise: `target` (already deref'd) is the thenable. Returning it lets the async
+    // import wrapper (`wrapAsyncImport`) settle it and register the resolved value as a `js` handle.
+    jsAwait: (target) => target,
     // Unboxing: a `js` handle (already deref'd) -> a Dream primitive/string.
     jsAsInt: (target) => (target == null ? 0 : (Number(target) | 0)),
+    jsAsLong: (target) => (target == null ? 0 : Math.trunc(Number(target))),
     jsAsDouble: (target) => (target == null ? 0 : Number(target)),
     jsAsBool: (target) => !!target,
     jsAsString: (target) => (target == null ? "" : String(target)),

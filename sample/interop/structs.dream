@@ -1,0 +1,40 @@
+// Passing Dream classes across the JS boundary: a class deep-copies into a plain JS object (nested
+// classes and array fields included), and a JS object reads back into a Dream class field-by-field.
+//
+//   cargo run -- sample/interop/structs.dream
+//   node sample/interop/structs.mjs sample/interop/structs.wasm
+
+class Point {
+    public x: int;
+    public y: int;
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class User {
+    public name: string;
+    public age: int;
+    public scores: int[];
+    public home: Point;
+    constructor(name: string, age: int, scores: int[], home: Point) {
+        this.name = name;
+        this.age = age;
+        this.scores = scores;
+        this.home = home;
+    }
+}
+
+fun main(): void {
+    let u = User("Ada", 36, [10, 20, 30], Point(3, 4));
+
+    // Dream -> JS: deep-copied into a plain object `{ name, age, scores: [...], home: { x, y } }`.
+    js.global.receiveUser(u);
+
+    // JS -> Dream: reconstruct a `User` from the returned JS object's properties.
+    let v: User = js.global.makeUser();
+    System.println("name=" + v.name + " age=" + v.age);
+    System.println("home=(" + v.home.x + "," + v.home.y + ")");
+    System.println("score[1]=" + v.scores[1]);
+}

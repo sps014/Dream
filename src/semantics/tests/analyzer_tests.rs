@@ -582,9 +582,15 @@ const SYSTEM_STUB: &str = "
 /// type; these `extend js` declarations provide the entry points and `@js` bridge externs the
 /// analyzer desugars dynamic operations into.
 const JS_STUB: &str = "
+    enum Option<T> {
+        Some(value: T),
+        None,
+    }
     extend js {
         @js(\"Dream\", \"jsGlobal\")
         static extern fun global(name: string): js;
+        @js(\"Dream\", \"jsGlobalThis\")
+        static extern fun __global_this(): js;
         @js(\"Dream\", \"jsObject\")
         static extern fun object(): js;
         @js(\"Dream\", \"jsArray\")
@@ -615,6 +621,8 @@ const JS_STUB: &str = "
         static extern fun __index_get(target: js, key: js): js;
         @js(\"Dream\", \"jsIndexSetV\")
         static extern fun __index_set(target: js, key: js, value: js): void;
+        @js(\"Dream\", \"jsAwait\")
+        static extern async fun __await(target: js): js;
         @js(\"Dream\", \"jsAsInt\")
         static extern fun __as_int(target: js): int;
         @js(\"Dream\", \"jsAsDouble\")
@@ -1154,13 +1162,13 @@ fn test_hir_emission_generic_function_instances() {
 #[test]
 fn test_hir_emission_string_literal() {
     // A string literal resolves to its interned data pointer. The runtime constants are interned
-    // first (`true`/`false`/`-` then the object-protocol `null`/`<object>`/`[`/`]`/`, `), so the
-    // user's `"hi"` follows them at 1204 (each block carries a 4-byte length prefix, no NUL).
+    // first (`true`/`false`/`-` then the object-protocol `null`/`<object>`/`[`/`]`/`, `/`length`),
+    // so the user's `"hi"` follows them at 1228 (each block carries a 4-byte length prefix, no NUL).
     let code = "fun greet(): string { return \"hi\"; }";
     let (wat, count) = emit_hir_to_wat(code);
     assert_eq!(count, 1, "the string-returning function should be emitted as HIR");
     assert!(wat.contains("(func $greet"), "missing emitted function:\n{}", wat);
-    assert!(wat.contains("(i32.const 1204)"), "string literal should resolve to its data pointer:\n{}", wat);
+    assert!(wat.contains("(i32.const 1228)"), "string literal should resolve to its data pointer:\n{}", wat);
 }
 
 #[test]
@@ -2326,6 +2334,65 @@ fn test_js_index_access() {
 }
 
 #[test]
+fn test_js_struct_marshaling() {
+    // A struct/class deep-copies into a `js` object when passed to / stored in `js`, and a `js`
+    // value reconstructs a reference class at a typed binding - both type-check without explicit
+    // conversions.
+    let code = format!(
+        "{JS_STUB}
+        class Point {{
+            public x: int;
+            public y: int;
+            constructor(x: int, y: int) {{ this.x = x; this.y = y; }}
+        }}
+        fun main(): void {{
+            let p = Point(1, 2);
+            js.global.send(p);              // struct -> js argument
+            let doc = js.global.document;
+            doc.origin = p;                 // struct -> js property
+            let q: Point = js.global.makePoint();  // js -> struct binding
+            let n: int = q.x;
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_js_global_property_syntax() {
+    // `js.global` is `globalThis` as a value, so members chain off it: `js.global.document` reads a
+    // property and `js.global.fetch(...)` / `js.global.document.getElementById(...)` call through it.
+    let code = format!(
+        "{JS_STUB}
+        fun main(): void {{
+            let doc = js.global.document;
+            let el = js.global.document.getElementById(\"app\");
+            js.global.console.log(\"hi\");
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_js_await_promise() {
+    // Awaiting a `js` value (a JS Promise handle) is legal inside an async function and yields
+    // `Option<js>` - `Some` on resolve, `None` on rejection.
+    let code = format!(
+        "{JS_STUB}
+        async fun main(): void {{
+            let user = await js.global.fetchUser(42);
+            let name: string = switch (user) {{
+                Some(u) => u.name.to_str(),
+                None => \"\",
+            }};
+        }}"
+    );
+    let diagnostics = analyze_code(&code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
 fn test_js_desugars_to_host_bridges() {
     // The dynamic operations lower to the `Dream` host-module bridge imports, so the emitted WAT
     // references them by their import field names.
@@ -2341,4 +2408,11 @@ fn test_js_desugars_to_host_bridges() {
     assert!(wat.contains("$js_global"), "js.global lowers to the global bridge:\n{}", wat);
     assert!(wat.contains("$js___call"), "method call lowers to the __call bridge:\n{}", wat);
     assert!(wat.contains("$js___set"), "property set lowers to the __set bridge:\n{}", wat);
+    // The variadic method call marshals its argument through the shadow stack rather than a heap
+    // `js[]`: it saves `$__sp` into the per-call scratch and carves the slot buffer.
+    assert!(
+        wat.contains("$__jsp") && wat.contains("global.set $__sp"),
+        "js method call marshals args via the shadow-stack slot buffer:\n{}",
+        wat
+    );
 }

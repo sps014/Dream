@@ -71,6 +71,7 @@ const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
 const RUNTIME_STR_CONSTS: [&str; 3] = ["true", "false", "-"];
 
 mod emitter;
+mod js_marshal;
 mod module;
 mod protocol;
 mod release;
@@ -84,6 +85,7 @@ mod wat_dce;
 // Flat internal re-exports so each submodule can `use super::*` and call sibling helpers
 // exactly as it did when this was one file. Kept private (not part of the crate API).
 use emitter::*;
+use js_marshal::*;
 use protocol::*;
 use release::*;
 use runtime::*;

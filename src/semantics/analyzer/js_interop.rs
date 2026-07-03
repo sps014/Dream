@@ -89,6 +89,9 @@ impl<'a> Analyzer<'a> {
                     _ => None,
                 }
             }
+            // A struct/class deep-copies into a plain JS object; the backend generates a
+            // `$<Type>_to_js` marshaler that the `Cast` dispatches to (see `mir/emit/js_marshal.rs`).
+            TyKind::Struct(..) => Some(HExpr::new(js, HExprKind::Cast(Box::new(e)))),
             _ => None,
         }
     }
@@ -98,6 +101,13 @@ impl<'a> Analyzer<'a> {
     /// boundaries by `coerce_to`.
     pub(super) fn unbox_from_js(&mut self, e: HExpr, target: TypeId) -> HExpr {
         let target_stripped = self.type_ctx.interner.strip_nullable(target);
+        // A reference struct/class target reconstructs from the JS object's properties via the
+        // generated `$js_to_<Type>` marshaler that the `Cast` dispatches to.
+        if matches!(self.type_ctx.interner.kind(target_stripped), TyKind::Struct(..))
+            && self.type_ctx.interner.is_reference(target_stripped)
+        {
+            return HExpr::new(target_stripped, HExprKind::Cast(Box::new(e)));
+        }
         let TyKind::Prim(p) = self.type_ctx.interner.kind(target_stripped).clone() else {
             return e;
         };
@@ -132,17 +142,41 @@ impl<'a> Analyzer<'a> {
         HExpr::new(string, HExprKind::StringLit(name.to_string()))
     }
 
-    /// Boxes each argument and collects them into a `js[]` array literal. Reports a compile error and
-    /// returns `None` if any argument is not marshalable into `js`.
-    fn js_args_array(
+    /// Prepares one argument for a shadow-stack `js` call *slot*: unlike [`box_to_js`], primitives
+    /// are NOT boxed into handles (the host reads them straight out of the tagged slot); only a
+    /// `float` is widened to `double` so its slot payload is an `f64`. `js`, `string`, primitive,
+    /// `enum`, a `fun(js)`/`fun()` callback, and a primitive/`string`/`js` array are all accepted as
+    /// they are; any other type returns `None` (a compile error pointing at `js.object()`/`js.array()`).
+    fn js_slot_arg(&mut self, e: HExpr) -> Option<HExpr> {
+        let stripped = self.type_ctx.interner.strip_nullable(e.ty);
+        let kind = self.type_ctx.interner.kind(stripped).clone();
+        match kind {
+            TyKind::Js | TyKind::Enum(_) => Some(e),
+            TyKind::Prim(PrimTy::Float) => Some(self.cast_prim(e, PrimTy::Double)),
+            TyKind::Prim(_) => Some(e),
+            TyKind::Func(params, _) if params.len() <= 1 => Some(e),
+            TyKind::Array(elem) => {
+                let ek = self.type_ctx.interner.kind(self.type_ctx.interner.strip_nullable(elem)).clone();
+                match ek {
+                    TyKind::Prim(_) | TyKind::Js | TyKind::Enum(_) => Some(e),
+                    _ => None,
+                }
+            }
+            // A struct/class argument deep-copies into a JS object handle (a JS slot).
+            TyKind::Struct(..) => self.box_to_js(e),
+            _ => None,
+        }
+    }
+
+    /// Prepares every argument via [`js_slot_arg`], reporting a compile error and returning `None` on
+    /// the first non-marshalable one.
+    fn js_slot_args(
         &mut self,
         args: Vec<Option<HExpr>>,
         pos: Option<TextSpan>,
         diagnostics: &mut DiagnosticBag,
-    ) -> Option<HExpr> {
-        let js = self.type_ctx.interner.js();
-        let arr_ty = self.type_ctx.interner.array(js);
-        let mut boxed = Vec::with_capacity(args.len());
+    ) -> Option<Vec<HExpr>> {
+        let mut out = Vec::with_capacity(args.len());
         for arg in args {
             let arg = arg?;
             let arg_display = crate::types::display_name(
@@ -150,8 +184,8 @@ impl<'a> Analyzer<'a> {
                 &self.type_ctx.defs,
                 self.type_ctx.interner.strip_nullable(arg.ty),
             );
-            match self.box_to_js(arg) {
-                Some(b) => boxed.push(b),
+            match self.js_slot_arg(arg) {
+                Some(a) => out.push(a),
                 None => {
                     diagnostics.report_error(
                         format!(
@@ -164,9 +198,30 @@ impl<'a> Analyzer<'a> {
                 }
             }
         }
+        Some(out)
+    }
+
+    /// Builds a `JsCall` HIR node targeting the `js.__call`/`js.__invoke` bridge import, whose
+    /// arguments the backend marshals through the shadow stack. Returns `None` only if the bridge is
+    /// somehow unregistered (a stdlib bug).
+    fn js_call_node(
+        &self,
+        bridge: &str,
+        target: HExpr,
+        method: Option<HExpr>,
+        args: Vec<HExpr>,
+    ) -> Option<HExpr> {
+        let js = self.type_ctx.interner.js();
+        let mangled = method_fn("js", bridge);
+        let def = self.type_ctx.defs.lookup(DefKind::Function, &mangled)?;
         Some(HExpr::new(
-            arr_ty,
-            HExprKind::ArrayLit { elem_ty: js, elems: boxed },
+            js,
+            HExprKind::JsCall {
+                callee: Callee { def, instance: vec![], ret: js },
+                target: Box::new(target),
+                method: method.map(Box::new),
+                args,
+            },
         ))
     }
 
@@ -259,17 +314,16 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return;
         }
-        let js = self.type_ctx.interner.js();
         let name_lit = self.js_name_lit(name);
         let Some(recv) = recv else {
             self.hir_none();
             return;
         };
-        let Some(arr) = self.js_args_array(args, pos, diagnostics) else {
+        let Some(args) = self.js_slot_args(args, pos, diagnostics) else {
             self.hir_none();
             return;
         };
-        let call = self.js_bridge_call("__call", vec![recv, name_lit, arr], js);
+        let call = self.js_call_node("__call", recv, Some(name_lit), args);
         self.hir_set_last(call);
     }
 
@@ -285,17 +339,48 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return;
         }
-        let js = self.type_ctx.interner.js();
         let Some(recv) = recv else {
             self.hir_none();
             return;
         };
-        let Some(arr) = self.js_args_array(args, pos, diagnostics) else {
+        let Some(args) = self.js_slot_args(args, pos, diagnostics) else {
             self.hir_none();
             return;
         };
-        let call = self.js_bridge_call("__invoke", vec![recv, arr], js);
+        let call = self.js_call_node("__invoke", recv, None, args);
         self.hir_set_last(call);
+    }
+
+    /// `js.global` (the bare property, not the `js.global("name")` call) -> `globalThis`, so member
+    /// access chains like `js.global.document` / `js.global.fetch(...)` bind against the JS global
+    /// scope. Sets `hir.last`.
+    pub(super) fn desugar_js_global_this(&mut self) {
+        if !self.hir_active() {
+            self.hir_none();
+            return;
+        }
+        let js = self.type_ctx.interner.js();
+        let call = self.js_bridge_call("__global_this", vec![], js);
+        self.hir_set_last(call);
+    }
+
+    /// The AST type `Option<js>` (the result of awaiting a `js` Promise).
+    pub(super) fn option_js_type() -> Type {
+        Type::Struct(
+            synthetic_token(TokenKind::IdentifierToken, "Option"),
+            Some(vec![Self::js_type()]),
+        )
+    }
+
+    /// `await <jsExpr>` -> `await js.__await(<jsExpr>)`. Builds the async wrapper call whose result is
+    /// `Future<Option<js>>` (so the enclosing `await` unwraps it to `Option<js>` - `Some` on resolve,
+    /// `None` on rejection), letting a JS Promise be awaited natively. Returns the
+    /// `Future<Option<js>>`-typed call HIR (to hand to `hir_set_await`), or `None` if the inner
+    /// expression was not representable.
+    pub(super) fn desugar_js_await(&mut self, inner: Option<HExpr>) -> Option<HExpr> {
+        let recv = inner?;
+        let fut = self.type_ctx.lower(&Self::future_type(Self::option_js_type()));
+        self.js_bridge_call("__await", vec![recv], fut)
     }
 
     /// `recv[key]` -> `js.__index_get(recv, box(key))`. Sets `hir.last`.

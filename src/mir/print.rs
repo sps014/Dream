@@ -113,6 +113,11 @@ fn rvalue(r: &Rvalue) -> String {
             format!("{}#{}.{}", operand(base), variant, field)
         }
         Rvalue::FuncRef(callee) => format!("funcref def{}", callee.def.0),
+        Rvalue::JsCall { callee, target, method, args } => {
+            let m = method.as_ref().map(|m| operand(m)).unwrap_or_else(|| "*".to_string());
+            let a = args.iter().map(|(o, _)| operand(o)).collect::<Vec<_>>().join(", ");
+            format!("js_call def{} {}[{}]({})", callee.def.0, operand(target), m, a)
+        }
     }
 }
 

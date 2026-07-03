@@ -57,11 +57,20 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
     // unboxes into any primitive/`string`. The actual box/unbox conversion is materialized by the
     // analyzer's coercion pass; here we only permit the assignment to type-check. `js <-> js` is the
     // identity handled above.
+    // A struct/class also deep-copies into a `js` object and reconstructs from one (the backend
+    // generates the `$<Type>_to_js` / `$js_to_<Type>` marshalers); reconstruction targets a reference
+    // class only.
     if matches!(tk, TyKind::Js) {
-        return matches!(vk, TyKind::Prim(_)) || is_null_literal(interner, value);
+        return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..)) || is_null_literal(interner, value);
     }
     if matches!(vk, TyKind::Js) {
-        return matches!(tk, TyKind::Prim(_));
+        if matches!(tk, TyKind::Prim(_)) {
+            return true;
+        }
+        if matches!(tk, TyKind::Struct(..)) {
+            return interner.is_reference(target);
+        }
+        return false;
     }
 
     // Enum <-> int both directions.

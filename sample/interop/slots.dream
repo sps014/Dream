@@ -1,0 +1,23 @@
+// Exercises the shadow-stack argument marshaling for dynamic `js` calls: multiple mixed-type
+// arguments, an array argument, and a Dream callback argument - all crossing in one host call each.
+//
+//   cargo run -- sample/interop/slots.dream
+//   node sample/interop/slots.mjs sample/interop/slots.wasm
+
+fun handle(ev: js): void {
+    System.println("  handler saw: " + ev.to_str());
+}
+
+fun main(): void {
+    let api = js.global.api;
+
+    // Mixed variadic method call: string + int + bool + double, one boundary crossing.
+    api.log("row", 42, true, 3.5);
+
+    // Array argument (a primitive `int[]` slot).
+    let nums = [10, 20, 30];
+    api.sum(nums);
+
+    // Callback argument (a FUNC slot): the Dream function is wrapped host-side and invoked.
+    api.each(handle);
+}

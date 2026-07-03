@@ -831,6 +831,17 @@ impl Lowerer<'_> {
                     elems: lowered,
                 }
             }
+            HExprKind::JsCall { callee, target, method, args } => {
+                let target = self.lower_operand(target);
+                let method = method.as_ref().map(|m| self.lower_operand(m));
+                let args = args.iter().map(|a| (self.lower_operand(a), a.ty)).collect();
+                Rvalue::JsCall {
+                    callee: self.lower_callee(callee),
+                    target,
+                    method,
+                    args,
+                }
+            }
             HExprKind::Cast(inner) => {
                 let from = inner.ty;
                 Rvalue::Cast(self.lower_operand(inner), from, e.ty)

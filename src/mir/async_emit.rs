@@ -283,6 +283,9 @@ pub fn emit_async_function(
     // `$__pc` drives the per-segment CFG dispatch loop (segments whose plain code has control flow).
     out.push_str(" (local $__obj i32)\n (local $__scratch i32)\n");
     out.push_str(" (local $__len i32)\n (local $__rel i32)\n (local $__pc i32)\n");
+    // Saved `$__sp` across a dynamic `js` call's argument-slot buffer (see `Emitter::emit_js_call`),
+    // needed here too since a `js` call can appear in an `async` body.
+    out.push_str(" (local $__jsp i32)\n");
 
     for (local_idx, _, wt) in &slots.entries {
         let off = slots.offsets[local_idx];

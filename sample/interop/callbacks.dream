@@ -17,6 +17,5 @@ extern fun run_callback(cb: fun(int): void, times: int): void;
 fun main(): void {
     run_callback(on_tick, 3);
 
-    let logger = js.global("logger");
-    logger("hello from Dream");
+    js.global.logger("hello from Dream");
 }

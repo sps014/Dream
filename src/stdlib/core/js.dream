@@ -14,9 +14,14 @@
 extend js {
     // --- entry points ----------------------------------------------------------------------
 
-    // A handle to a value on the JS global scope (e.g. `js.global("document")`).
+    // A handle to a value on the JS global scope by name (e.g. `js.global("document")`), for
+    // computed names. Prefer the property form `js.global.document` / `js.global.fetch(...)`, which
+    // binds `js.global` to `globalThis` (see `__global_this`) and then reads members dynamically.
     @js("Dream", "jsGlobal")
     static extern fun global(name: string): js;
+    // `globalThis` itself, backing the `js.global.<member>` property syntax.
+    @js("Dream", "jsGlobalThis")
+    static extern fun __global_this(): js;
     // A fresh empty JS object (`{}`) to populate and hand to a JS API.
     @js("Dream", "jsObject")
     static extern fun object(): js;
@@ -51,18 +56,43 @@ extend js {
     static extern fun __get(target: js, name: string): js;
     @js("Dream", "jsSetV")
     static extern fun __set(target: js, name: string, value: js): void;
+    // Variadic call/invoke. The compiler does not call these with a Dream argument list: it emits a
+    // shadow-stack buffer of tagged 16-byte slots and passes its pointer + count, so all arguments
+    // cross in a single boundary crossing with no per-argument boxing or heap array. The `args_ptr`
+    // / `argc` parameters describe that buffer.
     @js("Dream", "jsCallV")
-    static extern fun __call(target: js, name: string, args: js[]): js;
+    static extern fun __call(target: js, name: string, args_ptr: int, argc: int): js;
     @js("Dream", "jsInvokeV")
-    static extern fun __invoke(target: js, args: js[]): js;
+    static extern fun __invoke(target: js, args_ptr: int, argc: int): js;
     @js("Dream", "jsIndexGetV")
     static extern fun __index_get(target: js, key: js): js;
     @js("Dream", "jsIndexSetV")
     static extern fun __index_set(target: js, key: js, value: js): void;
 
+    // Awaits a JS thenable/Promise handle, yielding the resolved value as another `js`, or a `null`
+    // `js` if the Promise rejected (the reason is logged host-side). Bridged as `extern async` so it
+    // flows through the same Future machinery as any other async call.
+    @js("Dream", "jsAwait")
+    static extern async fun __await_raw(target: js): js;
+
+    // The awaited result the compiler actually targets: `await <jsExpr>` desugars to
+    // `await js.__await(<jsExpr>)`, which yields `Option<js>` - `Some(value)` when the Promise
+    // resolved, `None` when it rejected (or resolved with `null`/`undefined`). So a JS Promise reads
+    // natively while still forcing the caller to handle failure:
+    //   let r = await js.global.fetch("/api");   // r: Option<js>
+    static async fun __await(target: js): Option<js> {
+        let v = await js.__await_raw(target);
+        if (v.is_null()) {
+            return Option.None;
+        }
+        return Option.Some(v);
+    }
+
     // --- unboxing: js handle -> Dream value (used by the compiler + the helpers below) -------
     @js("Dream", "jsAsInt")
     static extern fun __as_int(target: js): int;
+    @js("Dream", "jsAsLong")
+    static extern fun __as_long(target: js): long;
     @js("Dream", "jsAsDouble")
     static extern fun __as_double(target: js): double;
     @js("Dream", "jsAsBool")

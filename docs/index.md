@@ -162,19 +162,19 @@ Dream runs natively in the browser, Node.js, and native WASM runtimes. The `exte
 
     [:octicons-arrow-right-24: Interop Overview](language/interop.md)
 
--   :material-link: **JS References**
+-   :material-link: **The `js` Type**
 
     ---
 
-    Hold references to JavaScript objects safely inside the Dream runtime ecosystem.
+    Read, call, and mutate any live JavaScript value with native syntax — no fixed-arity helpers.
 
-    [:octicons-arrow-right-24: Reference Docs](language/references.md)
+    [:octicons-arrow-right-24: The js type](language/references.md)
 
 -   :material-phone-in-talk: **Callbacks**
 
     ---
 
-    Seamlessly pass Dream function pointers into JS environments to handle asynchronous actions.
+    Pass Dream functions into JS and call JS functions from Dream, in either direction.
 
     [:octicons-arrow-right-24: Callback Docs](language/callbacks.md)
 

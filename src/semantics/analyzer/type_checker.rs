@@ -231,7 +231,11 @@ impl<'a> Analyzer<'a> {
                     .analyze_expression(future_expr, parent_function, symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
                 let value = self.hir_take();
-                if Self::future_inner_type(&fut).is_none() {
+                // `await <jsExpr>;` (discarding the `Option<js>` result): desugar the same way.
+                if self.is_js_type(&fut) {
+                    let fut_hir = self.desugar_js_await(value);
+                    self.hir_await_stmt(fut_hir);
+                } else if Self::future_inner_type(&fut).is_none() {
                     diagnostics.report_error(
                         format!("'await' expects a Future value, got {}", fut.get_type()),
                         future_expr.position(),

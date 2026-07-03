@@ -413,6 +413,18 @@ pub enum HExprKind {
     /// The `print`/`println` builtins (`System.print`/`System.println`), lowered to the host
     /// `print_*` imports. Void-typed; only valid in statement position. `newline` appends a `\n`.
     Print { arg: Box<HExpr>, newline: bool },
+    /// A dynamic `js` call whose variadic arguments are marshaled through the shadow stack in a
+    /// single host crossing (no per-argument boxing, no heap array). `callee` is the bridge import
+    /// (`js.__call` for a method call, `js.__invoke` for calling the value); `target` is the JS
+    /// receiver/callee handle; `method` is the method-name string for `target[name](...)` (or `None`
+    /// to call `target(...)`); `args` are the raw arguments (each with its type, which selects the
+    /// tagged-slot layout). Result is `js`.
+    JsCall {
+        callee: Callee,
+        target: Box<HExpr>,
+        method: Option<Box<HExpr>>,
+        args: Vec<HExpr>,
+    },
 }
 
 impl HExpr {

@@ -11,6 +11,7 @@ pub mod abi;
 pub mod async_emit;
 pub mod build;
 pub mod emit;
+pub mod js_abi;
 pub mod lower;
 pub mod passes;
 pub mod print;
@@ -310,6 +311,18 @@ pub enum Rvalue {
     /// A runtime type test `value is T`: compares the boxed value's `$object_tag` against the tag of
     /// `TypeId`. Yields `bool`.
     IsType(Operand, TypeId),
+    /// A dynamic `js` call marshaled through the shadow stack: the emitter reserves `argc * 16` bytes
+    /// below `$__sp`, writes one tagged 16-byte slot per argument (tag + aux + 8-byte payload),
+    /// invokes `callee` (the `jsCallV`/`jsInvokeV` bridge import) with `(target, [namePtr,] argsPtr,
+    /// argc)`, then restores `$__sp`. `method` is `Some(namePtr)` for `target[name](...)` and `None`
+    /// for calling `target(...)`; each argument carries its `TypeId` so emit can pick the slot tag.
+    /// One boundary crossing, no per-arg boxing, no heap allocation.
+    JsCall {
+        callee: Callee,
+        target: Operand,
+        method: Option<Operand>,
+        args: Vec<(Operand, TypeId)>,
+    },
 }
 
 /// A resolved call target carried into MIR. The backend derives the emitted symbol from

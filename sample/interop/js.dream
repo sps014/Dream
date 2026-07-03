@@ -8,7 +8,7 @@
 
 fun main(): void {
     // `appConfig` is a plain JS object provided by the host (see js.mjs / interop.html).
-    let config = js.global("appConfig");
+    let config = js.global.appConfig;
 
     // Property reads yield `js`; unbox at the typed binding.
     let title: string = config.title;
