@@ -27,9 +27,15 @@ enum HirArmShape {
         variant: usize,
         bindings: Vec<crate::hir::LocalId>,
     },
-    /// A catch-all (`_` or a bare binding that names no variant) → the switch `default` block.
+    /// A catch-all `_` → the switch `default` block.
     Default,
-    /// Not representable in HIR's `Switch` (nested sub-pattern, bind-whole-value, bad literal).
+    /// A catch-all that binds the whole subject to `local` (a bare identifier naming no variant) →
+    /// the `default` block, prefixed with `let <name> = <subject>;`.
+    DefaultBind {
+        local: crate::hir::LocalId,
+        ty: crate::types::TypeId,
+    },
+    /// Not representable in HIR's `Switch` (nested sub-pattern, bad literal).
     Unsupported,
 }
 
@@ -218,12 +224,14 @@ impl<'a> Analyzer<'a> {
         pattern: &PatternNode,
         union_info: &Option<UnionInfo>,
         union_def: Option<crate::types::DefId>,
+        subject_type: &Type,
     ) -> HirArmShape {
         match pattern {
             PatternNode::Wildcard(_) => HirArmShape::Default,
             PatternNode::Binding(name) => {
                 // A bare identifier naming a unit variant is a unit-variant pattern; otherwise it
-                // binds the whole subject, which HIR's `Switch` cannot express.
+                // binds the whole subject and acts as a catch-all `default` arm (the subject value
+                // is copied into the named local, injected by the caller).
                 if let (Some(info), Some(def)) = (union_info, union_def) {
                     if let Some(v) = info.variant(&name.text) {
                         if v.fields.is_empty() {
@@ -235,7 +243,11 @@ impl<'a> Analyzer<'a> {
                         }
                     }
                 }
-                HirArmShape::Unsupported
+                let ty = self.type_ctx.lower(subject_type);
+                match self.hir_alloc_local(&name.text, subject_type) {
+                    Some(local) => HirArmShape::DefaultBind { local, ty },
+                    None => HirArmShape::Unsupported,
+                }
             }
             PatternNode::Literal(lit) => {
                 self.hir_set_literal(lit);
@@ -874,6 +886,31 @@ impl<'a> Analyzer<'a> {
             .defs
             .lookup(crate::types::DefKind::Union, &subject_base);
 
+        // A whole-subject binding arm (`other => ...`, where `other` names no unit variant) needs the
+        // subject value available in the `default` block. Bind it to a temp once and dispatch the
+        // `Switch` on a read of that temp, so the binding arm can copy it into its named local.
+        let subj_ty_id = self.type_ctx.lower(&subject_type);
+        let has_whole_bind = arms.iter().any(|a| {
+            a.guard.is_none()
+                && matches!(&a.pattern, PatternNode::Binding(n)
+                    if !matches!(&union_info, Some(info) if info.variant(&n.text).is_some_and(|v| v.fields.is_empty())))
+        });
+        let switch_scrutinee = if has_whole_bind {
+            match (self.hir_alloc_local("__switch_subj", &subject_type), subject_hir) {
+                (Some(subj_local), Some(sh)) => {
+                    self.hir_push_stmt(crate::hir::HStmt::Let {
+                        local: subj_local,
+                        ty: subj_ty_id,
+                        value: sh,
+                    });
+                    Some(self.hx_local(subj_local, subj_ty_id))
+                }
+                _ => None,
+            }
+        } else {
+            subject_hir
+        };
+
         let mut arm_value_type: Option<Type> = None;
         let mut covered: HashSet<String> = HashSet::new();
         let mut has_catch_all = false;
@@ -884,7 +921,7 @@ impl<'a> Analyzer<'a> {
         // arm body assigning the shared result temporary.
         let mut hir_arms: Vec<crate::hir::HArm> = Vec::new();
         let mut hir_default: Vec<crate::hir::HStmt> = Vec::new();
-        let mut hir_ok = subject_hir.is_some();
+        let mut hir_ok = switch_scrutinee.is_some();
         let mut result_temp: Option<crate::hir::LocalId> = None;
         let mut result_ty_id: Option<crate::types::TypeId> = None;
 
@@ -916,9 +953,28 @@ impl<'a> Analyzer<'a> {
             }
 
             // Classify the pattern (allocating payload binding slots) before the body is lowered.
-            let shape = self.hir_switch_pattern(&arm.pattern, &union_info, union_def);
+            let shape = self.hir_switch_pattern(&arm.pattern, &union_info, union_def, &subject_type);
 
             self.hir_open_block();
+            // A whole-subject binding copies the subject into its named local as the first statement
+            // of the (catch-all) body, mirroring the `Switch` scrutinee read.
+            if let HirArmShape::DefaultBind { local, ty } = &shape {
+                let read = self.hx_local(
+                    match &switch_scrutinee {
+                        Some(crate::hir::HExpr {
+                            kind: crate::hir::HExprKind::Var(crate::hir::Binding::Local(l)),
+                            ..
+                        }) => *l,
+                        _ => crate::hir::LocalId(0),
+                    },
+                    subj_ty_id,
+                );
+                self.hir_push_stmt(crate::hir::HStmt::Let {
+                    local: *local,
+                    ty: *ty,
+                    value: read,
+                });
+            }
             match &arm.body {
                 SwitchArmBody::Expr(expr) => {
                     let t =
@@ -964,7 +1020,7 @@ impl<'a> Analyzer<'a> {
             let body_hir = self.hir_close_block();
 
             match shape {
-                HirArmShape::Default => hir_default = body_hir,
+                HirArmShape::Default | HirArmShape::DefaultBind { .. } => hir_default = body_hir,
                 HirArmShape::Const(label) => match self.hir_const_arm(Some(label), body_hir) {
                     Some(arm) => hir_arms.push(arm),
                     None => hir_ok = false,
@@ -992,7 +1048,7 @@ impl<'a> Analyzer<'a> {
             // Emit the desugared switch, then leave the result temp read as the match's value.
             match (result_temp, result_ty_id) {
                 (Some(tmp), Some(ty)) if hir_ok => {
-                    self.hir_switch(subject_hir, hir_arms, hir_default, true);
+                    self.hir_switch(switch_scrutinee, hir_arms, hir_default, true);
                     self.hir_set_local_read(tmp, ty);
                 }
                 _ => {
@@ -1001,7 +1057,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
         } else {
-            self.hir_switch(subject_hir, hir_arms, hir_default, hir_ok);
+            self.hir_switch(switch_scrutinee, hir_arms, hir_default, hir_ok);
         }
 
         self.check_exhaustiveness(

@@ -1,0 +1,24 @@
+// A bare identifier arm that names no variant binds the *whole subject* to that name and acts as a
+// catch-all: the subject value is copied into the local, so the arm body can use it (here, passed to
+// another match). Previously this crashed codegen; now it lowers as the switch `default` with an
+// injected binding.
+enum E { A(v: int), B(v: int) }
+
+fun tag(e: E): int {
+    return switch (e) {
+        A(_) => 1,
+        B(_) => 2,
+    };
+}
+
+fun f(e: E): int {
+    return switch (e) {
+        A(n) => n,
+        rest => tag(rest) + 100,
+    };
+}
+
+fun main(): void {
+    System.println(f(E.A(5)));   // matches A -> 5
+    System.println(f(E.B(6)));   // whole-subject bind -> tag(B)=2, +100 -> 102
+}
