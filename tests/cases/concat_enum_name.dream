@@ -1,0 +1,15 @@
+// String concatenation and interpolation stringify a non-string operand with its `to_string`. For a
+// C-style enum that means the variant *name*, matching `Color.Green.to_string()`, not the raw
+// discriminant. Other types keep their normal rendering.
+
+enum Color { Red, Green, Blue }
+
+class P { public x: int; constructor(x: int) { this.x = x; } }
+
+fun main(): void {
+    let c = Color.Green;
+    System.println(c.to_string());   // Green
+    System.println("c=" + c);        // c=Green
+    System.println($"c={c}");        // c=Green
+    System.println("n=" + 42 + " b=" + true + " p=" + P(3));   // other types unaffected
+}

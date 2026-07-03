@@ -164,9 +164,8 @@ async fun load(): void {
 ```
 
 !!! note "v1 limitation"
-    Async lowering doesn't yet support an `await` that appears *after* a branch (`if` / `switch`)
-    in the same function. If you need several awaits, do them all first, then branch on the
-    results:
+    An `await` may follow branches and loops (`if x { ... } let a = await ...;` works), but it may
+    not appear *inside* a loop or branch body yet — hoist it to a top-level statement first:
 
     ```dream
     let a = await js.global.fetch("/a");

@@ -99,7 +99,8 @@ fun main(): void {
 - `JSON.deserialize<T>(text): T` parses `text` and reconstructs a `T`.
 
 Field types may be primitives, `string`, other `@json` classes, arrays of those, and nullable
-`string?` or nullable `@json` classes.
+`string?` or nullable `@json` classes. A field whose type is a class, struct, or union that is *not*
+itself `@json` is a compile error — the diagnostic names the type and tells you to add `@json` to it.
 
 ### Custom keys
 

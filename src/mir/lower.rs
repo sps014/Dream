@@ -148,7 +148,11 @@ pub fn lower_async_segment(func: &HFunction, stmts: &[HStmt], interner: &TypeInt
     };
     lo.lower_block(stmts);
     if !lo.b.is_terminated() {
-        lo.b.terminate(Terminator::AsyncComplete(None));
+        // The segment's *natural* fall-through (not an explicit `return`) must hand control back to
+        // the async emitter's per-segment suspend/complete handling, not finish the task here. It is
+        // marked `Return(None)` so the multi-block poll path `br`s to `$__segexit` (an explicit
+        // `return;` stays `AsyncComplete`, which does complete the task).
+        lo.b.terminate(Terminator::Return(None));
     }
     lo.b.finish()
 }

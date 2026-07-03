@@ -1,0 +1,1 @@
+@json class 'Wrapper' field 'inner' has unsupported type 'Plain'; 'Plain' must itself be marked @json (add the @json attribute to it)

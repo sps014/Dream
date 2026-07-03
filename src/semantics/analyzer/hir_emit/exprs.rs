@@ -700,14 +700,15 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records string concatenation `a + b` (typed `string`): each non-string operand is first run
-    /// through the object-protocol `to_string`, then the two string pointers are joined by the
-    /// runtime `$concat_strings`. Drops out of coverage if either operand is not representable.
+    /// through its `to_string` (a C-style enum renders its variant name; everything else uses the
+    /// object protocol), then the two string pointers are joined by the runtime `$concat_strings`.
+    /// Drops out of coverage if either operand is not representable.
     pub(in crate::semantics::analyzer) fn hir_set_concat(
         &mut self,
         lhs: Option<HExpr>,
-        lhs_is_string: bool,
+        lhs_ty: &crate::syntax::nodes::Type,
         rhs: Option<HExpr>,
-        rhs_is_string: bool,
+        rhs_ty: &crate::syntax::nodes::Type,
     ) {
         if !self.active() {
             self.hir.last = None;
@@ -718,20 +719,41 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let string = self.type_ctx.interner.prim(PrimTy::String);
-        let to_str = |e: HExpr, is_string: bool| {
-            if is_string {
-                e
-            } else {
-                HExpr::new(string, HExprKind::ToString(Box::new(e)))
-            }
-        };
+        let lhs = self.concat_stringify(lhs, lhs_ty, string);
+        let rhs = self.concat_stringify(rhs, rhs_ty, string);
         self.hir.last = Some(HExpr::new(
             string,
-            HExprKind::Concat(
-                Box::new(to_str(lhs, lhs_is_string)),
-                Box::new(to_str(rhs, rhs_is_string)),
-            ),
+            HExprKind::Concat(Box::new(lhs), Box::new(rhs)),
         ));
+    }
+
+    /// Converts a concatenation operand to a `string`-typed HExpr: string operands pass through, a
+    /// C-style enum maps its discriminant to the interned variant name (matching `.to_string()`),
+    /// and any other type goes through the object-protocol `to_string`.
+    fn concat_stringify(
+        &self,
+        e: HExpr,
+        ty: &crate::syntax::nodes::Type,
+        string: crate::types::TypeId,
+    ) -> HExpr {
+        if ty.is_string() {
+            return e;
+        }
+        let base = crate::syntax::nodes::types::strip_nullable(&ty.get_type()).to_string();
+        if let Some(members) = self.enum_table.get(&base) {
+            let arms: Vec<(i64, String)> = members
+                .iter()
+                .map(|(name, value)| (*value as i64, name.clone()))
+                .collect();
+            return HExpr::new(
+                string,
+                HExprKind::EnumName {
+                    value: Box::new(e),
+                    arms,
+                },
+            );
+        }
+        HExpr::new(string, HExprKind::ToString(Box::new(e)))
     }
 
     /// Records a C-style enum's `to_string()` (typed `string`): the backend maps the receiver's

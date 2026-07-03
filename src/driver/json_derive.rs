@@ -76,6 +76,21 @@ fn json_from_expr(elem_type: &str, jexpr: &str, json_names: &HashSet<String>) ->
     Some((json_codec(elem_type, json_names)?.from)(jexpr))
 }
 
+/// Actionable suffix for an "unsupported field type" diagnostic: when `core` names a user-defined
+/// class/struct/union that *could* be `@json` but isn't, point the user at the fix. `core` is the
+/// bare type name (nullable `?` / array `[]` already stripped). Empty for genuinely unsupported
+/// types (`js`, functions, C-style enums, …), which keep the plain "unsupported" wording.
+fn missing_json_hint(core: &str, jsonable: &HashSet<String>) -> String {
+    if jsonable.contains(core) {
+        format!(
+            "; '{core}' must itself be marked @json (add the @json attribute to it)",
+            core = core
+        )
+    } else {
+        String::new()
+    }
+}
+
 /// Returns `true` if the declaration carries the `@json` attribute.
 fn has_json_attr<'a>(
     attributes: impl IntoIterator<Item = &'a crate::syntax::nodes::AttributeNode>,
@@ -89,6 +104,7 @@ fn has_json_attr<'a>(
 fn generate_json_extend(
     struct_decl: &crate::syntax::nodes::struct_node::StructDeclarationNode,
     json_names: &HashSet<String>,
+    jsonable: &HashSet<String>,
     diagnostics: &mut DiagnosticBag,
 ) -> Option<String> {
     let name = &struct_decl.name.text;
@@ -139,7 +155,7 @@ fn generate_json_extend(
                 )
             } else {
                 diagnostics.report_error(
-                    format!("@json class '{}' field '{}' has unsupported nullable type '{}' (only `string?` and nullable @json classes are supported)", name, fname, ftype),
+                    format!("@json class '{}' field '{}' has unsupported nullable type '{}' (only `string?` and nullable @json classes are supported){}", name, fname, ftype, missing_json_hint(base, jsonable)),
                     Some(field.name.position),
                 );
                 return None;
@@ -183,8 +199,8 @@ fn generate_json_extend(
                 _ => {
                     diagnostics.report_error(
                         format!(
-                            "@json class '{}' field '{}' has unsupported array element type '{}'",
-                            name, fname, elem
+                            "@json class '{}' field '{}' has unsupported array element type '{}'{}",
+                            name, fname, elem, missing_json_hint(elem, jsonable)
                         ),
                         Some(field.name.position),
                     );
@@ -226,8 +242,8 @@ fn generate_json_extend(
                 _ => {
                     diagnostics.report_error(
                         format!(
-                            "@json class '{}' field '{}' has unsupported type '{}'",
-                            name, fname, ftype
+                            "@json class '{}' field '{}' has unsupported type '{}'{}",
+                            name, fname, ftype, missing_json_hint(ftype, jsonable)
                         ),
                         Some(field.name.position),
                     );
@@ -268,6 +284,7 @@ fn generate_json_extend(
 fn generate_json_union(
     enum_decl: &crate::syntax::nodes::EnumDeclarationNode,
     json_names: &HashSet<String>,
+    jsonable: &HashSet<String>,
     diagnostics: &mut DiagnosticBag,
 ) -> Option<String> {
     let name = &enum_decl.name.text;
@@ -320,8 +337,8 @@ fn generate_json_union(
                 None => {
                     diagnostics.report_error(
                         format!(
-                            "@json union '{}' variant '{}' field '{}' has unsupported type '{}'",
-                            name, vname, fname, ftype
+                            "@json union '{}' variant '{}' field '{}' has unsupported type '{}'{}",
+                            name, vname, fname, ftype, missing_json_hint(ftype, jsonable)
                         ),
                         Some(field.name.position),
                     );
@@ -350,8 +367,8 @@ fn generate_json_union(
                     None => {
                         diagnostics.report_error(
                             format!(
-                                "@json union '{}' variant '{}' field '{}' has unsupported type '{}'",
-                                name, vname, fname, ftype
+                                "@json union '{}' variant '{}' field '{}' has unsupported type '{}'{}",
+                                name, vname, fname, ftype, missing_json_hint(ftype, jsonable)
                             ),
                             Some(field.name.position),
                         );
@@ -437,9 +454,20 @@ pub(crate) fn generate_json_derives<'a>(
         return Ok(());
     }
 
+    // User-defined types that *could* be `@json` (every class/struct, plus discriminated unions).
+    // Used to turn an "unsupported field type" error into an actionable "mark it @json" hint. Plain
+    // C-style enums are excluded — `@json` isn't supported on them.
+    let mut jsonable: HashSet<String> = all_structs.iter().map(|s| s.name.text.clone()).collect();
+    jsonable.extend(
+        all_enums
+            .iter()
+            .filter(|e| e.is_data_enum())
+            .map(|e| e.name.text.clone()),
+    );
+
     let mut source = String::new();
     for struct_decl in all_structs.iter().filter(|s| has_json_attr(&s.attributes)) {
-        if let Some(block) = generate_json_extend(struct_decl, &json_names, diagnostics) {
+        if let Some(block) = generate_json_extend(struct_decl, &json_names, &jsonable, diagnostics) {
             source.push_str(&block);
             source.push('\n');
         }
@@ -456,7 +484,7 @@ pub(crate) fn generate_json_derives<'a>(
             );
             continue;
         }
-        if let Some(block) = generate_json_union(enum_decl, &json_names, diagnostics) {
+        if let Some(block) = generate_json_union(enum_decl, &json_names, &jsonable, diagnostics) {
             source.push_str(&block);
             source.push('\n');
         }

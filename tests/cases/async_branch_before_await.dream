@@ -1,0 +1,27 @@
+// Control flow (branches, loops, early returns) that runs *before* an `await` must not prematurely
+// complete the async task: each poll segment's natural fall-through hands control to the suspend,
+// while an explicit `return` still completes. Regression for segments whose plain code has an `if`.
+
+async fun g(n: int): int { return n; }
+
+async fun pick(early: bool): int {
+    if (early) { return 99; }          // explicit return in a branch before the await
+    let y = await g(5);
+    return y + 1;
+}
+
+async fun run(): int {
+    let sum = 0;
+    let i = 0;
+    while (i < 4) { sum = sum + i; i = i + 1; }   // loop before the await
+    let a = await g(1);
+    if (a == 1) { a = a + 10; }                   // branch between two awaits
+    let b = await g(2);
+    return sum + a + b;
+}
+
+async fun main(): void {
+    System.println(await pick(true));    // 99
+    System.println(await pick(false));   // 6
+    System.println(await run());         // 6 + 11 + 2 = 19
+}

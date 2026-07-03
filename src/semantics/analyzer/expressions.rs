@@ -695,13 +695,14 @@ impl<'a> Analyzer<'a> {
         }
 
         // String concatenation: `string + T` (or `T + string`) yields a string, auto-converting
-        // the non-string operand through the object protocol (`to_string`) in codegen. This means
-        // `"count = " + n` works for any `n` with no explicit `.to_string()`.
+        // the non-string operand through its `to_string` (the object protocol, or a C-style enum's
+        // variant-name rendering) in codegen. This means `"count = " + n` works for any `n` with no
+        // explicit `.to_string()`.
         if opr.kind == TokenKind::PlusToken {
             let left_is_string = left_value.is_string();
             let right_is_string = right_value.is_string();
             if left_is_string || right_is_string {
-                self.hir_set_concat(left_hir, left_is_string, right_hir, right_is_string);
+                self.hir_set_concat(left_hir, &left_value, right_hir, &right_value);
                 return Ok(if left_is_string {
                     left_value
                 } else {

@@ -16,10 +16,13 @@ Both operands must be the same type. Use an explicit cast if they differ:
 let x = 7 / (float)2;   // 3.5
 ```
 
-String concatenation uses `+`:
+String concatenation uses `+`: when either operand is a `string`, the other is converted through
+its [`to_string`](../stdlib/builtins.md) (a C-style enum renders its variant *name*, not the raw
+discriminant), so any value can be appended without an explicit call:
 
 ```dream
 let msg = "Hello, " + name + "!";
+let line = "color = " + Color.Green;   // "color = Green"
 ```
 
 ## String interpolation

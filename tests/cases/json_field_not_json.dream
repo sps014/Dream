@@ -1,0 +1,16 @@
+// A @json class field whose type is a user class/struct/union that is not itself @json must be
+// rejected at compile time with an actionable diagnostic (the field cannot be serialized).
+
+class Plain { public v: int; constructor(v: int) { this.v = v; } }
+
+@json
+class Wrapper {
+    public name: string;
+    public inner: Plain;
+    constructor(name: string, inner: Plain) { this.name = name; this.inner = inner; }
+}
+
+fun main(): void {
+    let w = Wrapper("a", Plain(5));
+    System.println(JSON.serialize(w));
+}
