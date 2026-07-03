@@ -6,8 +6,8 @@ value dispatch to the concrete class's implementation at runtime (polymorphism).
 
 ## Declaring an interface
 
-An interface lists method signatures — a return type and parameters, but **no body**. Each signature
-ends with a semicolon:
+An interface lists method signatures — a return type and parameters. A signature with no body ends
+with a semicolon:
 
 ```dream
 interface Animal {
@@ -16,8 +16,32 @@ interface Animal {
 }
 ```
 
-Interfaces declare methods only. They cannot have fields, and (for now) cannot provide default method
-bodies.
+Interfaces declare methods only; they cannot have fields.
+
+### Default methods
+
+A method may carry a **default body**. An implementing class inherits that body when it omits the
+method, and can override it by declaring its own. A default can call the interface's other methods on
+`this`, which still dispatch to the concrete implementation:
+
+```dream
+interface Greeter {
+    fun name(): string;
+    fun greet(): string {           // default body
+        return "Hello, I am " + this.name();
+    }
+}
+
+class Person : Greeter {
+    public fun name(): string { return "Ada"; }
+    // inherits the default greet()
+}
+
+class Robot : Greeter {
+    public fun name(): string { return "R2"; }
+    public fun greet(): string { return "BEEP " + this.name(); }   // overrides
+}
+```
 
 ## Implementing an interface
 
@@ -251,12 +275,16 @@ code all work without any extra code.
 
 Both interfaces work with [value structs](classes-structs.md): when the concrete type is known (a direct
 call or a [generic constraint](generics.md#generic-constraints)), dispatch is static with no boxing.
+Assigning a value struct to a bare interface-typed variable boxes it into a tagged heap object, after
+which it dispatches dynamically like a class:
+
+```dream
+let a: Shape = Rect(3, 4);   // boxed; a.area() dispatches dynamically
+```
 
 ## Limits (current version)
 
-- Interfaces declare method signatures only — no fields and no default method bodies.
-- A [value struct](classes-structs.md) can implement an interface and be dispatched statically, but it
-  cannot yet be stored in a bare interface-typed variable (dynamic upcast / boxing is deferred).
+- Interfaces declare method signatures only — no fields.
 
 ## See also
 

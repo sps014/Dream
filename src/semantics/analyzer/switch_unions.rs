@@ -14,7 +14,7 @@ use crate::syntax::nodes::{
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 /// The HIR shape a switch pattern lowers to (for statement-position `switch` → [`HStmt::Switch`]).
@@ -42,10 +42,10 @@ enum HirArmShape {
 /// What checking a single pattern told us, used to drive exhaustiveness and unreachable-arm
 /// analysis.
 struct PatternInfo {
-    /// True when the pattern matches every value of its type (a bare binding or `_`).
+    /// True when the pattern matches every value of its type (a bare binding or `_`). Drives
+    /// unreachable-arm detection; full (possibly nested) coverage is computed separately in
+    /// [`Analyzer::check_exhaustiveness`] from the arm patterns.
     irrefutable: bool,
-    /// The union variant fully covered by this pattern (all sub-patterns irrefutable), if any.
-    covered_variant: Option<String>,
 }
 
 impl<'a> Analyzer<'a> {
@@ -679,8 +679,6 @@ impl<'a> Analyzer<'a> {
         let subj_read = |s: &Self| s.hx_local(subj_local.unwrap_or(crate::hir::LocalId(0)), subj_ty_id);
 
         let mut arm_value_type: Option<Type> = None;
-        let mut covered: HashSet<String> = HashSet::new();
-        let mut has_catch_all = false;
         let mut catch_all_index: Option<usize> = None;
         let mut result_temp: Option<crate::hir::LocalId> = None;
         let mut result_ty_id: Option<crate::types::TypeId> = None;
@@ -785,14 +783,10 @@ impl<'a> Analyzer<'a> {
             }
             self.hir_push_stmt(HStmt::If { cond, then_branch, else_branch: vec![] });
 
-            // Exhaustiveness bookkeeping (guarded arms never contribute — a guard may fail).
-            if arm.guard.is_none() {
-                if info.irrefutable {
-                    has_catch_all = true;
-                    catch_all_index = Some(i);
-                } else if let Some(v) = info.covered_variant {
-                    covered.insert(v);
-                }
+            // Track the first irrefutable (catch-all) arm so later arms can be flagged unreachable.
+            // (Exhaustiveness itself is decided from the arm patterns in `check_exhaustiveness`.)
+            if arm.guard.is_none() && info.irrefutable {
+                catch_all_index = Some(i);
             }
         }
 
@@ -808,35 +802,16 @@ impl<'a> Analyzer<'a> {
             self.hir_fail();
         }
 
-        // Exhaustiveness: a guarded catch-all doesn't count, so require full variant coverage or `_`.
-        if !has_catch_all {
-            if let Some(info) = &union_info {
-                let missing: Vec<String> = info
-                    .variants
-                    .iter()
-                    .filter(|v| !covered.contains(&v.name))
-                    .map(|v| v.name.clone())
-                    .collect();
-                if !missing.is_empty() {
-                    diagnostics.report_error(
-                        format!(
-                            "Non-exhaustive switch on '{}': missing variant(s) {}. Add the missing arm(s) or a `_` arm",
-                            subject_base,
-                            missing.join(", ")
-                        ),
-                        subject.position(),
-                    );
-                }
-            } else if !subject_type.is_unknown() {
-                diagnostics.report_error(
-                    format!(
-                        "Non-exhaustive switch on '{}': add a `_` arm to cover all cases",
-                        subject_base
-                    ),
-                    subject.position(),
-                );
-            }
-        }
+        // Exhaustiveness: a guarded catch-all doesn't count, so require full variant coverage or `_`
+        // (recursively, so nested patterns like `Wrap(A(n))` + `Wrap(B)` count as covering `Wrap`).
+        self.check_exhaustiveness(
+            &subject_base,
+            &subject_type,
+            &union_info,
+            arms,
+            subject.position(),
+            diagnostics,
+        );
 
         if is_expression {
             Ok(arm_value_type.unwrap_or(Type::Void))
@@ -912,8 +887,6 @@ impl<'a> Analyzer<'a> {
         };
 
         let mut arm_value_type: Option<Type> = None;
-        let mut covered: HashSet<String> = HashSet::new();
-        let mut has_catch_all = false;
         let mut catch_all_index: Option<usize> = None;
 
         // HIR: build `Switch` arms + a default block. A statement-position switch lowers directly; a
@@ -1033,14 +1006,10 @@ impl<'a> Analyzer<'a> {
                 HirArmShape::Unsupported => hir_ok = false,
             }
 
-            // An arm only contributes to exhaustiveness when it has no guard (a guard may fail).
-            if arm.guard.is_none() {
-                if info.irrefutable {
-                    has_catch_all = true;
-                    catch_all_index = Some(i);
-                } else if let Some(v) = info.covered_variant {
-                    covered.insert(v);
-                }
+            // Track the first irrefutable (catch-all) arm so later arms can be flagged unreachable.
+            // (Exhaustiveness itself is decided from the arm patterns in `check_exhaustiveness`.)
+            if arm.guard.is_none() && info.irrefutable {
+                catch_all_index = Some(i);
             }
         }
 
@@ -1064,8 +1033,7 @@ impl<'a> Analyzer<'a> {
             &subject_base,
             &subject_type,
             &union_info,
-            has_catch_all,
-            &covered,
+            arms,
             subject.position(),
             diagnostics,
         );
@@ -1091,7 +1059,6 @@ impl<'a> Analyzer<'a> {
         match pattern {
             PatternNode::Wildcard(_) => Ok(PatternInfo {
                 irrefutable: true,
-                covered_variant: None,
             }),
             PatternNode::Binding(name) => {
                 // A bare identifier that names a unit variant of the matched union is a
@@ -1099,10 +1066,7 @@ impl<'a> Analyzer<'a> {
                 if let Some(info) = &union_info {
                     if let Some(v) = info.variant(&name.text) {
                         if v.fields.is_empty() {
-                            return Ok(PatternInfo {
-                                irrefutable: false,
-                                covered_variant: Some(name.text.clone()),
-                            });
+                            return Ok(PatternInfo { irrefutable: false });
                         }
                     }
                 }
@@ -1114,7 +1078,6 @@ impl<'a> Analyzer<'a> {
                 }
                 Ok(PatternInfo {
                     irrefutable: true,
-                    covered_variant: None,
                 })
             }
             PatternNode::Literal(lit) => {
@@ -1133,7 +1096,6 @@ impl<'a> Analyzer<'a> {
                 }
                 Ok(PatternInfo {
                     irrefutable: false,
-                    covered_variant: None,
                 })
             }
             PatternNode::Variant(qualifier, variant, subs) => {
@@ -1153,7 +1115,6 @@ impl<'a> Analyzer<'a> {
                         }
                         return Ok(PatternInfo {
                             irrefutable: false,
-                            covered_variant: None,
                         });
                     }
                 };
@@ -1182,7 +1143,6 @@ impl<'a> Analyzer<'a> {
                         }
                         return Ok(PatternInfo {
                             irrefutable: false,
-                            covered_variant: None,
                         });
                     }
                 };
@@ -1200,28 +1160,19 @@ impl<'a> Analyzer<'a> {
                     );
                 }
 
-                let mut all_irrefutable = true;
+                // Recurse into each sub-pattern for its own type-checking / binding introduction.
                 for (i, sub) in subs.iter().enumerate() {
                     let field_type = var_info
                         .fields
                         .get(i)
                         .map(|f| f.type_.clone())
                         .unwrap_or(Type::Unknown);
-                    let sub_info = self.check_pattern(sub, &field_type, scope, diagnostics)?;
-                    if !sub_info.irrefutable {
-                        all_irrefutable = false;
-                    }
+                    self.check_pattern(sub, &field_type, scope, diagnostics)?;
                 }
 
-                // The variant is fully covered only when every sub-pattern is irrefutable.
-                Ok(PatternInfo {
-                    irrefutable: false,
-                    covered_variant: if all_irrefutable {
-                        Some(variant.text.clone())
-                    } else {
-                        None
-                    },
-                })
+                // A variant pattern is refutable on its own; whether the variant is fully covered
+                // (across all arms, including nested sub-patterns) is decided in `check_exhaustiveness`.
+                Ok(PatternInfo { irrefutable: false })
             }
         }
     }
@@ -1264,19 +1215,32 @@ impl<'a> Analyzer<'a> {
         subject_base: &str,
         subject_type: &Type,
         union_info: &Option<UnionInfo>,
-        has_catch_all: bool,
-        covered: &HashSet<String>,
+        arms: &[SwitchArm<'a>],
         position: Option<crate::text::text_span::TextSpan>,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if has_catch_all {
+        // Only unguarded arms contribute to coverage (a guard may fail at runtime).
+        let patterns: Vec<&PatternNode> = arms
+            .iter()
+            .filter(|a| a.guard.is_none())
+            .map(|a| &a.pattern)
+            .collect();
+
+        // An irrefutable pattern (`_` or a whole-subject binding) covers everything.
+        if patterns
+            .iter()
+            .any(|p| self.pattern_is_irrefutable(p, subject_type))
+        {
             return;
         }
+
         if let Some(info) = union_info {
+            // A variant is covered when a matching arm reaches it and (recursively) its payload
+            // sub-patterns cover the field types — so `Wrap(A(n))` + `Wrap(B)` together cover `Wrap`.
             let missing: Vec<String> = info
                 .variants
                 .iter()
-                .filter(|v| !covered.contains(&v.name))
+                .filter(|v| !self.variant_covered(&v.name, &v.fields, &patterns))
                 .map(|v| v.name.clone())
                 .collect();
             if !missing.is_empty() {
@@ -1297,6 +1261,108 @@ impl<'a> Analyzer<'a> {
                 ),
                 position.clone(),
             );
+        }
+    }
+
+    /// True when the set of `patterns` (matched against a value of type `ty`) exhaustively covers
+    /// every value of `ty`. Recurses into a union's variants and their single-field payloads, so a
+    /// nested match like `Wrap(A(n))` + `Wrap(B)` is recognized as complete. Sound but conservative:
+    /// a multi-field variant is only "covered" by an arm whose sub-patterns are all irrefutable
+    /// (cartesian coverage across fields is not attempted), and an un-instantiated / non-union field
+    /// type needs an irrefutable sub-pattern.
+    fn patterns_exhaustive(&self, ty: &Type, patterns: &[&PatternNode]) -> bool {
+        if patterns
+            .iter()
+            .any(|p| self.pattern_is_irrefutable(p, ty))
+        {
+            return true;
+        }
+        let base = strip_nullable(&ty.get_type()).to_string();
+        let Some(info) = self.union_table.get(&base).cloned() else {
+            return false;
+        };
+        info.variants
+            .iter()
+            .all(|v| self.variant_covered(&v.name, &v.fields, patterns))
+    }
+
+    /// True when `patterns` cover the union variant named `vname` (with `fields` payload).
+    fn variant_covered(
+        &self,
+        vname: &str,
+        fields: &[crate::semantics::union_table::UnionFieldInfo],
+        patterns: &[&PatternNode],
+    ) -> bool {
+        match fields.len() {
+            // Unit variant: covered by a matching unit pattern (`V` or `V()`).
+            0 => patterns.iter().any(|p| Self::matches_unit_variant(p, vname)),
+            // Single-field variant: covered when the sub-patterns at that field (gathered across all
+            // arms matching this variant) recursively cover the field's type.
+            1 => {
+                let subs: Vec<&PatternNode> = patterns
+                    .iter()
+                    .filter_map(|p| Self::variant_sub(p, vname, 0))
+                    .collect();
+                !subs.is_empty() && self.patterns_exhaustive(&fields[0].type_, &subs)
+            }
+            // Multi-field variant: covered only by an arm binding every field irrefutably.
+            _ => patterns
+                .iter()
+                .any(|p| self.variant_all_irrefutable(p, vname, fields)),
+        }
+    }
+
+    /// True when `p` always matches a value of type `ty`: `_`, or a bare binding that names no unit
+    /// variant of `ty`'s union (a unit-variant binding is refutable — it only matches that variant).
+    fn pattern_is_irrefutable(&self, p: &PatternNode, ty: &Type) -> bool {
+        match p {
+            PatternNode::Wildcard(_) => true,
+            PatternNode::Binding(name) => {
+                let base = strip_nullable(&ty.get_type()).to_string();
+                if let Some(info) = self.union_table.get(&base) {
+                    if let Some(v) = info.variant(&name.text) {
+                        if v.fields.is_empty() {
+                            return false;
+                        }
+                    }
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// True when `p` is a unit-variant pattern for `vname` (`V` as a bare binding, or `V()`).
+    fn matches_unit_variant(p: &PatternNode, vname: &str) -> bool {
+        match p {
+            PatternNode::Binding(name) => name.text == vname,
+            PatternNode::Variant(_, name, subs) => name.text == vname && subs.is_empty(),
+            _ => false,
+        }
+    }
+
+    /// If `p` is a variant pattern for `vname`, returns its `i`-th sub-pattern.
+    fn variant_sub<'p>(p: &'p PatternNode, vname: &str, i: usize) -> Option<&'p PatternNode> {
+        match p {
+            PatternNode::Variant(_, name, subs) if name.text == vname => subs.get(i),
+            _ => None,
+        }
+    }
+
+    /// True when `p` matches `vname` binding every field irrefutably (e.g. `Pair(a, b)` / `Pair(_, _)`).
+    fn variant_all_irrefutable(
+        &self,
+        p: &PatternNode,
+        vname: &str,
+        fields: &[crate::semantics::union_table::UnionFieldInfo],
+    ) -> bool {
+        match p {
+            PatternNode::Variant(_, name, subs) if name.text == vname && subs.len() == fields.len() => {
+                subs.iter()
+                    .zip(fields)
+                    .all(|(s, f)| self.pattern_is_irrefutable(s, &f.type_))
+            }
+            _ => false,
         }
     }
 }

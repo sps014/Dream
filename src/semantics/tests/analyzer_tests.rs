@@ -1418,6 +1418,55 @@ fn test_hir_emission_switch_expression() {
 }
 
 #[test]
+fn test_switch_nested_patterns_are_exhaustive() {
+    // Nested union patterns are counted recursively: `Wrap(A(n))` + `Wrap(B)` together cover the
+    // `Wrap` variant (all of `Inner`), so with `Bare` the switch is exhaustive without a `_` arm.
+    let code = "
+        enum Inner { A(v: int), B }
+        enum Outer { Wrap(inner: Inner), Bare }
+        fun describe(o: Outer): int {
+            return switch (o) {
+                Wrap(A(n)) => n,
+                Wrap(B)    => -1,
+                Bare       => 0,
+            };
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(
+        !diagnostics.has_errors(),
+        "nested patterns should be exhaustive: {:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_switch_nested_patterns_incomplete_is_rejected() {
+    // Missing an inner variant (`Wrap(C)`) leaves `Wrap` only partially covered, so the switch is
+    // still non-exhaustive and must be reported.
+    let code = "
+        enum Inner { A(v: int), B, C }
+        enum Outer { Wrap(inner: Inner), Bare }
+        fun describe(o: Outer): int {
+            return switch (o) {
+                Wrap(A(n)) => n,
+                Wrap(B)    => -1,
+                Bare       => 0,
+            };
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Non-exhaustive switch")),
+        "partial nested coverage should be non-exhaustive: {:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
 fn test_hir_emission_async_await() {
     // Async bodies emit with `Await` nodes; an async call carries a `Future` return type.
     let code = "

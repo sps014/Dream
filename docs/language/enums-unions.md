@@ -67,6 +67,19 @@ switch (s) {
 }
 ```
 
+Patterns may **nest**: a variant's payload can itself be matched against a variant. Exhaustiveness is checked recursively, so covering every inner case is treated as covering the outer variant — no `_` needed:
+
+```dream
+enum Inner { A(v: int), B }
+enum Outer { Wrap(inner: Inner), Bare }
+
+switch (o) {
+    Wrap(A(n)) => n,
+    Wrap(B)    => -1,   // Wrap(A) + Wrap(B) together cover Wrap
+    Bare       => 0,
+}
+```
+
 You can also use guards (`if <bool>`) to narrow arms:
 
 ```dream

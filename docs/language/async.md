@@ -27,23 +27,29 @@ async fun main(): void {
 
 `await f()` is just the call composed with `await`: call `f()` to get a `Future<T>`, then suspend on it to get `T`.
 
-### Where `await` is allowed (v1)
+### Where `await` is allowed
 
-In the current version `await` may only appear at a **top-level statement position**:
-
-```dream
-await e;                 // discard the result
-let x = await e;         // bind the result
-return await e;          // complete with the result
-```
-
-Awaiting inside a sub-expression, loop, or branch is a compile-time error in v1:
+`await` may appear in any **unconditionally-evaluated** sub-expression of a top-level statement —
+call arguments, arithmetic operands, an array literal, the awaited value itself:
 
 ```dream
-let y = await f() + 1;   // error: await must be a top-level statement
+await e;                       // discard the result
+let x = await e;               // bind the result
+return await e;                // complete with the result
+let y = await f() + 1;         // in an arithmetic operand
+process(await a(), await b()); // several awaits in call arguments
 ```
 
-`await` outside an `async` function is also an error.
+It is rejected in **conditionally-evaluated** positions, because suspending there would need a full
+control-flow state machine:
+
+```dream
+let y = cond ? await a() : 0;  // error: a ternary arm
+let z = flag && await ready(); // error: right side of && / || / ??
+```
+
+`await` inside a loop or branch body — or in a `switch` expression's arms — is likewise not
+supported yet, and `await` outside an `async` function is always an error.
 
 ## Storing futures (eager execution)
 
@@ -99,8 +105,9 @@ async fun main(): void {
 }
 ```
 
-!!! note "v1 restriction"
-    Async methods are not allowed on **generic** classes (the `Future<T>` machinery is itself generic). Non-generic classes, including `static async` methods, are fully supported.
+Async methods are supported on **generic** classes too: each instantiation (`Box<int>`, `Box<string>`)
+is monomorphized to its own concrete async state machine, so `static async` and generic async methods
+work the same as on non-generic classes.
 
 ## The built-in `Time.sleep`
 

@@ -520,9 +520,14 @@ function decodeJsSlots(inst, ptr, argc) {
       case JS_SLOT.BOOL: out[i] = dv.getInt32(p, true) !== 0; break;
       case JS_SLOT.STRING: out[i] = inst.readString(dv.getInt32(p, true)); break;
       case JS_SLOT.JS: out[i] = inst.derefHandle(dv.getInt32(p, true)); break;
-      case JS_SLOT.FUNC:
-        out[i] = inst.callback(dv.getInt32(p, true), aux === 1 ? "fun(js):void" : "fun():void");
+      case JS_SLOT.FUNC: {
+        // `aux` is the callback's parameter count; each parameter is passed as a `js` handle and the
+        // result is discarded (`void`), so reconstruct `fun(js, js, …): void` of the right arity.
+        const arity = aux > 0 ? aux : 0;
+        const sig = `fun(${Array(arity).fill("js").join(",")}):void`;
+        out[i] = inst.callback(dv.getInt32(p, true), sig);
         break;
+      }
       case JS_SLOT.ARRAY: {
         const arrPtr = dv.getInt32(p, true);
         const elem = JS_ARRAY_ELEM[aux] || "int";
@@ -584,6 +589,13 @@ function defaultDreamModule(getInstance) {
     // registers it as a `js` handle.
     jsFunc: (handler) => handler,
     jsFunc0: (handler) => handler,
+    // Generalized: `index` is the raw funcref-table index (not pre-wrapped) and `arity` the number
+    // of `js` parameters; wrap it as `fun(js, …): void` of that arity.
+    jsFuncN: (index, arity) => {
+      const n = arity > 0 ? arity : 0;
+      const sig = `fun(${Array(n).fill("js").join(",")}):void`;
+      return getInstance().callback(index, sig);
+    },
     // Regex helpers (string-in/string-out; see src/stdlib/text/regex.dream). Mirrored natively in
     // src/execution/host.rs so `Regex` works the same under wasmtime, Node, and the browser.
     regexTest: (pattern, flags, input) => new RegExp(pattern, flags).test(input),

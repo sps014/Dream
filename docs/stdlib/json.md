@@ -159,9 +159,13 @@ fun main(): void {
 Payload field types follow the same rules as class fields (primitives, `string`, and other `@json`
 classes/unions). On deserialize, an unrecognized `"type"` falls back to the first variant.
 
+`@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives
+its own converters, with generic-typed fields routed through `JSON.serialize` / `JSON.deserialize` for
+the concrete type argument.
+
 !!! note "v1 limits"
-    `@json` classes and unions must be non-generic. Class field and union payload types are limited
-    to primitives, `string`, other `@json` classes/unions, and (for classes) arrays of those and
+    Class field and union payload types are limited to primitives, `string`, other `@json`
+    classes/unions, type parameters of a generic `@json` type, and (for classes) arrays of those and
     nullable `string?` / nullable `@json` classes (nullable arrays, and arrays in union payloads,
     are not supported). Calling `JSON.serialize` or `JSON.deserialize` on a type without a derived
     converter is a compile-time error.

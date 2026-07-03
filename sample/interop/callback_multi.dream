@@ -1,0 +1,16 @@
+// Multi-argument callbacks across a dynamic `js` call. A `fun(js, js): void` is auto-wrapped into a
+// JS callable (a FUNC slot carrying arity 2), so a JS iteratee like `Array.forEach((value, index))`
+// can invoke the Dream function with both arguments.
+//
+//   cargo run -- sample/interop/callback_multi.dream
+//   node sample/interop/callback_multi.mjs sample/interop/callback_multi.wasm
+
+fun each(value: js, index: js): void {
+    System.println(index.to_str() + ": " + value.to_str());
+}
+
+fun main(): void {
+    let api = js.global.api;
+    // `api.forEach2(cb)` calls back `cb(value, index)` for each element.
+    api.forEach2(each);
+}

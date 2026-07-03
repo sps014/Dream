@@ -38,6 +38,12 @@ extend js {
     static extern fun func(handler: fun(js): void): js;
     @js("Dream", "jsFunc0")
     static extern fun func0(handler: fun(): void): js;
+    // Generalized boxing for a handler of any arity (two or more `js` parameters, e.g. a
+    // `(value, index)` iteratee or an `(a, b, c)` reducer). The compiler passes the raw funcref-table
+    // index and the parameter count; the host wraps it as `fun(js, …): void`. A bare
+    // `fun(js, js, …): void` passed to a dynamic `js` call auto-wraps through here.
+    @js("Dream", "jsFuncN")
+    static extern fun __funcN(index: int, arity: int): js;
 
     // --- boxing: Dream value -> js handle (used by the compiler when marshaling arguments) ---
     @js("Dream", "jsInt")

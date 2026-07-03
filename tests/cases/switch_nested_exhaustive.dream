@@ -1,0 +1,19 @@
+// Nested patterns over a discriminated union are recognized as exhaustive without a `_` arm:
+// `Wrap(A(n))` + `Wrap(B)` together cover the `Wrap` variant (all of `Inner`), and `Bare` covers
+// the rest of `Outer`. Coverage is computed recursively across arms in `check_exhaustiveness`.
+enum Inner { A(v: int), B }
+enum Outer { Wrap(inner: Inner), Bare }
+
+fun describe(o: Outer): int {
+    return switch (o) {
+        Wrap(A(n)) => n,
+        Wrap(B) => -1,
+        Bare => 0,
+    };
+}
+
+fun main(): void {
+    System.println(describe(Outer.Wrap(Inner.A(42))));
+    System.println(describe(Outer.Wrap(Inner.B)));
+    System.println(describe(Outer.Bare));
+}

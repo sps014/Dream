@@ -54,7 +54,7 @@ Rules:
 - A default must be a **constant literal** — a number (optionally negative, e.g. `-1`), `true`/`false`, a string, a char, or `null`. Arbitrary expressions are not allowed.
 - Defaults must be **trailing**: once a parameter has a default, every parameter after it must also have one. A required parameter cannot follow a defaulted one.
 - A call must still supply all leading required arguments; supplying more than the total parameter count is an error.
-- Default parameters work on free functions, methods, and constructors. A function that uses defaults cannot also be overloaded.
+- Default parameters work on free functions, methods, and constructors, and may be combined with [overloading](invariants.md#overloading): an exact-arity match wins over an overload that fills in a default, and a genuinely ambiguous call is reported.
 
 Defaults are also honored by constructors and methods:
 

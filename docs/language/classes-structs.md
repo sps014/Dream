@@ -55,7 +55,7 @@ v2.x = 10;
 println(v1.x);  // 3 (unaffected)
 ```
 
-Structs do not use heap allocation and have zero garbage collection overhead. However, they cannot be nullable (`Vec2?` is invalid), cannot recursively contain themselves by value, and cannot currently be dynamically upcast to a bare interface or `object` variable without boxing limitations.
+Structs do not use heap allocation and have zero garbage collection overhead, so a struct held by value is never `null` and cannot recursively contain itself by value. When a struct is used where a reference is expected, it is **boxed** into a heap copy: a nullable struct (`Vec2?`) stores a nullable pointer to a boxed value (so `null` is representable, and `??` unboxes it back to an inline struct), and assigning a struct to a bare interface or `object` variable boxes it for dynamic dispatch.
 
 ## Common Features
 

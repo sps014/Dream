@@ -87,12 +87,21 @@ impl<'a> Analyzer<'a> {
                 }
             },
             TyKind::Func(params, _ret) => {
-                // A Dream function handed to a JS API. Canonical shapes are `fun(js): void`
-                // (one JS argument, e.g. an event) and `fun(): void`.
+                // A Dream function handed to a JS API as a persistent handle. Arity 0/1 use the
+                // documented `func0`/`func` convenience bridges; any higher arity routes through the
+                // generalized `__funcN` bridge, which receives the raw funcref-table index plus the
+                // parameter count and wraps it host-side as `fun(js, …): void`. Each parameter is
+                // marshaled as a `js` handle and the result is discarded.
                 match params.len() {
-                    1 => self.js_bridge_call("func", vec![e], js),
                     0 => self.js_bridge_call("func0", vec![e], js),
-                    _ => None,
+                    1 => self.js_bridge_call("func", vec![e], js),
+                    n => {
+                        let arity = HExpr::new(
+                            self.type_ctx.interner.int(),
+                            HExprKind::IntLit(n as i64),
+                        );
+                        self.js_bridge_call("__funcN", vec![e, arity], js)
+                    }
                 }
             }
             // A struct/class deep-copies into a plain JS object; the backend generates a
@@ -160,7 +169,10 @@ impl<'a> Analyzer<'a> {
             TyKind::Js | TyKind::Enum(_) => Some(e),
             TyKind::Prim(PrimTy::Float) => Some(self.cast_prim(e, PrimTy::Double)),
             TyKind::Prim(_) => Some(e),
-            TyKind::Func(params, _) if params.len() <= 1 => Some(e),
+            // A callback slot carries its arity in the slot `aux` word (see `js_abi::slot_desc`), so
+            // the host wraps the funcref as `fun(js, …): void` with the right number of `js`
+            // parameters. Any arity is marshalable through the slot buffer.
+            TyKind::Func(..) => Some(e),
             TyKind::Array(elem) => {
                 let ek = self.type_ctx.interner.kind(self.type_ctx.interner.strip_nullable(elem)).clone();
                 match ek {
