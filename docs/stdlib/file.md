@@ -61,7 +61,7 @@ For non-text data, `read_bytes`/`write_bytes` move raw bytes directly between th
 ```dream
 async fun main(): void {
     let bytes = await File.read_bytes("image.png");   // Result<byte[], string>
-    await File.write_bytes("copy.png", bytes.unwrap_or(Array.new<byte>(0)));
+    await File.write_bytes("copy.png", bytes.unwrap_or(Buffer.alloc<byte>(0)));
 }
 ```
 
@@ -72,7 +72,7 @@ async fun main(): void {
 ```dream
 async fun main(): void {
     let opened = await File.open("notes.txt");           // Result<FileStream, string>
-    let stream = opened.unwrap_or(FileStream(Array.new<byte>(0)));
+    let stream = opened.unwrap_or(FileStream(Buffer.alloc<byte>(0)));
 
     System.println(stream.read(5));        // first 5 bytes as text
     System.println(stream.position());     // 5

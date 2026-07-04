@@ -98,7 +98,7 @@ impl<'a> Analyzer<'a> {
                 &format!("Constructor for '{}'", struct_name),
                 &expected,
                 params_types,
-                name.position.clone(),
+                name.position,
                 diagnostics,
             );
         }

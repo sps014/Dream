@@ -253,7 +253,7 @@ pub enum Rvalue {
     StrLen(Operand),
     /// `string.char_at(i)` via the runtime `$char_at` helper: `.0` is the string, `.1` the index.
     CharAt(Operand, Operand),
-    /// `Array.new<T>(len)` — allocate a zero-initialized `T[]` block of a runtime length.
+    /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]` block of a runtime length.
     ArrayNew {
         elem_ty: TypeId,
         len: Operand,

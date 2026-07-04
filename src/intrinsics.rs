@@ -59,7 +59,7 @@ pub fn is_object_builtin(name: &str) -> bool {
 /// [`SIZE`]); lowered directly to the `$char_at` runtime helper.
 pub const CHAR_AT: &str = "char_at";
 
-/// The generic array-allocation builtin, surfaced as the static method `Array.new<T>(len)`.
+/// The generic array-allocation builtin, surfaced as the static method `Buffer.alloc<T>(len)`.
 pub const ARRAY_NEW: &str = "array_new";
 
 // --- Builtin pseudo-methods on language types -----------------------------------------------
@@ -91,7 +91,7 @@ pub const ATTR_PROMISE_ANY: &str = "promise_any";
 pub const ATTR_PROMISE_RACE: &str = "promise_race";
 pub const ATTR_JSON_SERIALIZE: &str = "json_serialize";
 pub const ATTR_JSON_DESERIALIZE: &str = "json_deserialize";
-/// `Array.new<T>(len)` — allocate a zero-initialized array.
+/// `Buffer.alloc<T>(len)` — allocate a zero-initialized array.
 pub const ATTR_ARRAY_NEW: &str = "array_new";
 /// `Time.sleep(ms)` — the async timer (yields `Future<void>`).
 pub const ATTR_SLEEP: &str = "sleep";
@@ -128,7 +128,7 @@ pub enum IntrinsicOp {
     JsonSerialize,
     /// `JSON.deserialize<T>(s)` — JSON string to `T`.
     JsonDeserialize,
-    /// `Array.new<T>(len)` — allocate a zero-initialized `T[]`.
+    /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]`.
     ArrayNew,
     /// `Time.sleep(ms)` — async timer yielding `Future<void>`.
     Sleep,

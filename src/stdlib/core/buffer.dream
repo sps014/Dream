@@ -1,0 +1,10 @@
+// `Buffer` - low-level, fixed-length array allocation backing a compiler intrinsic. This is the
+// raw primitive the higher-level `Array<T>` collection (and `List`/`Map`/`Set`) build on; user
+// code should normally prefer `Array<T>` and only reach for `Buffer.alloc` for tight, manual
+// storage control.
+
+class Buffer {
+    // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
+    @intrinsic("array_new")
+    static extern fun alloc<T>(len: int): T[];
+}

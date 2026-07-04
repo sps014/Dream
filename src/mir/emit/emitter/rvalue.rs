@@ -542,6 +542,39 @@ impl Emitter<'_> {
         ));
     }
 
+    /// Emits a dynamic interface call to a *value*(`struct`/union)-returning method using the sret
+    /// ABI: the destination address (produced by `dst`) is pushed as the hidden leading argument,
+    /// then the receiver and real arguments, then control transfers to the dispatch trampoline
+    /// (which forwards the sret pointer through to the concrete implementation). Mirrors
+    /// [`emit_value_sret_call`](Self::emit_value_sret_call) for direct calls.
+    pub(super) fn emit_interface_sret_call(
+        &mut self,
+        dst: impl Fn(&mut Self),
+        receiver: &Operand,
+        iface_id: usize,
+        method_slot: usize,
+        sig: TypeId,
+        args: &[Operand],
+    ) {
+        let param_tys: Vec<TypeId> = match self.interner.kind(sig) {
+            TyKind::Func(params, _) => params.clone(),
+            _ => Vec::new(),
+        };
+        dst(self);
+        self.emit_operand(receiver);
+        for (i, a) in args.iter().enumerate() {
+            self.emit_operand(a);
+            // param_tys[0] is the receiver (`this`); real args start at index 1.
+            if let Some(pty) = param_tys.get(i + 1) {
+                self.emit_numeric_conv(self.operand_ty(a), *pty);
+            }
+        }
+        self.line(&format!(
+            "     (call ${})",
+            iface_dispatch_symbol(iface_id, method_slot)
+        ));
+    }
+
     /// Emits the WASM numeric conversion instruction to turn a value of type `from` (already on the
     /// stack) into type `to`, if their WASM value types differ (a no-op otherwise). Shared by explicit
     /// `Cast` and the implicit widening applied to call arguments.

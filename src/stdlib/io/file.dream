@@ -94,7 +94,7 @@ class File {
     public static async fun list(path: string): string[] {
         let joined = File.__dir_list(path);
         if (joined.is_empty()) {
-            return Array.new<string>(0);
+            return Buffer.alloc<string>(0);
         }
         return joined.split('\n');
     }
@@ -122,6 +122,6 @@ class File {
             return Result.Err("file not found: " + path);
         }
         let bytes = await File.read_bytes(path);
-        return Result.Ok(FileStream(bytes.unwrap_or(Array.new<byte>(0))));
+        return Result.Ok(FileStream(bytes.unwrap_or(Buffer.alloc<byte>(0))));
     }
 }

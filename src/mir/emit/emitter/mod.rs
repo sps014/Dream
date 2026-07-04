@@ -208,7 +208,7 @@ impl Emitter<'_> {
         // (`New`/`ArrayLit`). Safe as a single slot: lowering materializes all args into operands,
         // so allocations never nest within a single rvalue.
         self.line("  (local $__obj i32)");
-        // Scratch length for `Array.new<T>(len)`: the count is needed for both the allocation size
+        // Scratch length for `Buffer.alloc<T>(len)`: the count is needed for both the allocation size
         // and the zero-fill, so it is materialized once here.
         self.line("  (local $__len i32)");
         // Scratch holding the previous occupant of a reference field/element across a reassignment, so
@@ -257,7 +257,7 @@ impl Emitter<'_> {
                 // callee's private slot (retaining reference fields), then rebind the param to the slot
                 // so the caller's value is never mutated (copy semantics).
                 self.emit_value_copy(
-                    &slot_addr,
+                    slot_addr,
                     |s| s.line(&format!("     (local.get ${})", l0)),
                     ty,
                 );
@@ -834,7 +834,7 @@ impl Emitter<'_> {
             };
             if self.interner.is_value_type(fty) {
                 let arg = arg.clone();
-                self.emit_value_copy(&field_addr, |s| s.emit_operand_addr(&arg), fty);
+                self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty);
             } else {
                 field_addr(self);
                 self.emit_operand(arg);
@@ -863,6 +863,14 @@ impl Emitter<'_> {
                 ..
             } => self.construct_value_union(&dst, *uty, *variant, args),
             Rvalue::Call { callee, args } => self.emit_value_sret_call(&dst, callee, args),
+            Rvalue::InterfaceCall {
+                receiver,
+                iface_id,
+                method_slot,
+                sig,
+                args,
+                ..
+            } => self.emit_interface_sret_call(&dst, receiver, *iface_id, *method_slot, *sig, args),
             Rvalue::Use(Operand::Copy(src)) => {
                 let src = src.clone();
                 self.emit_value_copy(&dst, |s| s.emit_place_addr(&src), ty);

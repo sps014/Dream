@@ -98,7 +98,7 @@ impl ValueFrame {
             kinds.insert(local, kind);
         }
         // Keep the frame 8-byte aligned so a `double` field in the first slot stays naturally aligned.
-        if size % 8 != 0 {
+        if !size.is_multiple_of(8) {
             size += 8 - size % 8;
         }
         ValueFrame { slots, kinds, size }

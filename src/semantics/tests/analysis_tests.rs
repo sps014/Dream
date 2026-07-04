@@ -1102,3 +1102,37 @@ fn test_js_desugars_to_host_bridges() {
         wat
     );
 }
+
+#[test]
+fn test_extend_sealed_class_is_rejected() {
+    // A `sealed` class may not be targeted by a user `extend` block.
+    let code = "sealed class Locked { public v: int; constructor() { this.v = 0; } } \
+                extend Locked { public fun bump(): int { return this.v + 1; } }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("Cannot extend sealed type 'Locked'")));
+}
+
+#[test]
+fn test_extend_sealed_enum_is_rejected() {
+    let code = "sealed enum Color { Red, Green } \
+                extend Color { public fun label(): int { return 0; } }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("Cannot extend sealed type 'Color'")));
+}
+
+#[test]
+fn test_extend_non_sealed_class_is_allowed() {
+    // The same extend on a non-sealed class analyzes cleanly (baseline for the sealed rejection).
+    let code = "class Open { public v: int; constructor() { this.v = 0; } } \
+                extend Open { public fun bump(): int { return this.v + 1; } }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}

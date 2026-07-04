@@ -83,7 +83,7 @@ async fun main(): void {
 
     // Upload raw bytes.
     let read = await File.read_bytes("logo.png");
-    let payload = read.unwrap_or(Array.new<byte>(0));
+    let payload = read.unwrap_or(Buffer.alloc<byte>(0));
     let res = await http.post_bytes("https://example.com/upload", payload);
     System.println(res.status());
 }

@@ -92,7 +92,7 @@ impl<'a> Analyzer<'a> {
                     return Err(report(
                         diagnostics,
                         format!("Enum '{}' could not be resolved", enum_name),
-                        Some(variant.position.clone()),
+                        Some(variant.position),
                     ));
                 }
             };
@@ -122,7 +122,7 @@ impl<'a> Analyzer<'a> {
                 &variant.text,
                 &field_types,
                 &arg_types,
-                variant.position.clone(),
+                variant.position,
                 diagnostics,
             );
             let result_ty =
@@ -203,7 +203,7 @@ impl<'a> Analyzer<'a> {
             &variant.text,
             &expected_fields,
             &arg_types,
-            variant.position.clone(),
+            variant.position,
             diagnostics,
         );
 

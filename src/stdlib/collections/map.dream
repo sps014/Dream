@@ -15,10 +15,10 @@ class Map<K, V> {
             c = c * 2;
         }
         this.cap = c;
-        this.keys = Array.new<K>(c);
-        this.values = Array.new<V>(c);
-        this.states = Array.new<int>(c);
-        this.defaults = Array.new<V>(1);
+        this.keys = Buffer.alloc<K>(c);
+        this.values = Buffer.alloc<V>(c);
+        this.states = Buffer.alloc<int>(c);
+        this.defaults = Buffer.alloc<V>(1);
         this.count = 0;
         this.used = 0;
     }
@@ -76,9 +76,9 @@ class Map<K, V> {
         if (new_cap < 8) {
             new_cap = 8;
         }
-        this.keys = Array.new<K>(new_cap);
-        this.values = Array.new<V>(new_cap);
-        this.states = Array.new<int>(new_cap);
+        this.keys = Buffer.alloc<K>(new_cap);
+        this.values = Buffer.alloc<V>(new_cap);
+        this.states = Buffer.alloc<int>(new_cap);
         this.cap = new_cap;
         this.count = 0;
         this.used = 0;
@@ -182,9 +182,9 @@ class Map<K, V> {
 
     // Removes all entries.
     public fun clear(): void {
-        this.keys = Array.new<K>(8);
-        this.values = Array.new<V>(8);
-        this.states = Array.new<int>(8);
+        this.keys = Buffer.alloc<K>(8);
+        this.values = Buffer.alloc<V>(8);
+        this.states = Buffer.alloc<int>(8);
         this.count = 0;
         this.used = 0;
         this.cap = 8;
@@ -192,7 +192,7 @@ class Map<K, V> {
 
     // Gets all keys.
     public fun keys(): K[] {
-        let result = Array.new<K>(this.count);
+        let result = Buffer.alloc<K>(this.count);
         let i = 0;
         let j = 0;
         while (i < this.cap) {
@@ -207,7 +207,7 @@ class Map<K, V> {
 
     // Gets all values.
     public fun values(): V[] {
-        let result = Array.new<V>(this.count);
+        let result = Buffer.alloc<V>(this.count);
         let i = 0;
         let j = 0;
         while (i < this.cap) {

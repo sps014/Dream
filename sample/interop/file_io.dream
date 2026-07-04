@@ -21,7 +21,7 @@ async fun main(): void {
     // Buffered, seekable streaming. `open` resolves with a `Result<FileStream, string>`; the empty
     // stream is a harmless fallback that the existence check above rules out in practice.
     let stream_result = await File.open(path);
-    let stream = stream_result.unwrap_or(FileStream(Array.new<char>(0)));
+    let stream = stream_result.unwrap_or(FileStream(Buffer.alloc<char>(0)));
     System.print("first 5: ");
     System.println(stream.read(5));     // "Dream"
     System.print("at pos: ");
@@ -33,7 +33,7 @@ async fun main(): void {
 
     // Raw byte round-trip: read 5 bytes, write them to a second file.
     let head_result = await File.open(path);
-    let head = head_result.unwrap_or(FileStream(Array.new<char>(0)));
+    let head = head_result.unwrap_or(FileStream(Buffer.alloc<char>(0)));
     let bytes = head.read_bytes(5);     // ['D','r','e','a','m']
     await File.write_bytes("scratch_head.bin", bytes);
     let echoed = await File.read("scratch_head.bin");

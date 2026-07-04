@@ -190,7 +190,7 @@ extend string : Comparable<string> {
             }
             i = i + 1;
         }
-        let result = Array.new<string>(parts);
+        let result = Buffer.alloc<string>(parts);
         let start = 0;
         let idx = 0;
         i = 0;

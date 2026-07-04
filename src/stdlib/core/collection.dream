@@ -1,0 +1,38 @@
+// `Collection<T>` - the shared interface implemented by the built-in sequence collections
+// (`Array<T>`, `List<T>`). It captures the two primitive operations every ordered collection can
+// answer - how many elements it holds and how to read one by position - and layers a handful of
+// convenience methods on top as *default* implementations, so a function that accepts any
+// `Collection<T>` can iterate, test emptiness, and peek the ends uniformly.
+//
+//   fun total(xs: Collection<int>): int {
+//       let sum = 0;
+//       let i = 0;
+//       while (i < xs.size()) {
+//           sum = sum + xs.get(i).unwrap_or(0);
+//           i = i + 1;
+//       }
+//       return sum;
+//   }
+
+interface Collection<T> {
+    // Number of elements currently stored.
+    fun size(): int;
+
+    // The element at `index`, or `None` when `index` is out of range.
+    fun get(index: int): Option<T>;
+
+    // True when the collection holds no elements.
+    public fun is_empty(): bool {
+        return this.size() == 0;
+    }
+
+    // The first element, or `None` when empty.
+    public fun first(): Option<T> {
+        return this.get(0);
+    }
+
+    // The last element, or `None` when empty.
+    public fun last(): Option<T> {
+        return this.get(this.size() - 1);
+    }
+}

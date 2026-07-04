@@ -371,7 +371,7 @@ pub enum HExprKind {
         value: Box<HExpr>,
         arms: Vec<(i64, String)>,
     },
-    /// `Array.new<T>(len)` — a zero-initialized `T[]` of a runtime length. `elem_ty` is the element
+    /// `Buffer.alloc<T>(len)` — a zero-initialized `T[]` of a runtime length. `elem_ty` is the element
     /// type; `len` the element count.
     ArrayNew {
         elem_ty: TypeId,

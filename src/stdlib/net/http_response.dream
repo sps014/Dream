@@ -106,7 +106,7 @@ class HttpResponse {
             start = n;
         }
         let count = n - start;
-        let out = Array.new<byte>(count);
+        let out = Buffer.alloc<byte>(count);
         let i = 0;
         while (i < count) {
             out[i] = (byte)this.data[start + i];

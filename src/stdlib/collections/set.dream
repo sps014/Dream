@@ -13,8 +13,8 @@ class Set<T> {
             c = c * 2;
         }
         this.cap = c;
-        this.keys = Array.new<T>(c);
-        this.states = Array.new<int>(c);
+        this.keys = Buffer.alloc<T>(c);
+        this.states = Buffer.alloc<int>(c);
         this.count = 0;
         this.used = 0;
     }
@@ -71,8 +71,8 @@ class Set<T> {
         if (new_cap < 8) {
             new_cap = 8;
         }
-        this.keys = Array.new<T>(new_cap);
-        this.states = Array.new<int>(new_cap);
+        this.keys = Buffer.alloc<T>(new_cap);
+        this.states = Buffer.alloc<int>(new_cap);
         this.cap = new_cap;
         this.count = 0;
         this.used = 0;
@@ -154,8 +154,8 @@ class Set<T> {
 
     // Removes all elements.
     public fun clear(): void {
-        this.keys = Array.new<T>(8);
-        this.states = Array.new<int>(8);
+        this.keys = Buffer.alloc<T>(8);
+        this.states = Buffer.alloc<int>(8);
         this.count = 0;
         this.used = 0;
         this.cap = 8;
@@ -163,7 +163,7 @@ class Set<T> {
 
     // Gets all elements as an array.
     public fun to_array(): T[] {
-        let result = Array.new<T>(this.count);
+        let result = Buffer.alloc<T>(this.count);
         let i = 0;
         let j = 0;
         while (i < this.cap) {

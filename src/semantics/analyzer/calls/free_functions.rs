@@ -92,7 +92,7 @@ impl<'a> Analyzer<'a> {
                 &format!("function value '{}'", name.text),
                 &expected_strs,
                 &params_types,
-                name.position.clone(),
+                name.position,
                 diagnostics,
             );
             self.hir_set_indirect_call(&name.text, arg_hirs, ret.as_ref());
@@ -178,7 +178,7 @@ impl<'a> Analyzer<'a> {
                 None => {
                     diagnostics.report_error(
                         format!("Generic function '{}' could not be resolved", function_name),
-                        Some(name.position.clone()),
+                        Some(name.position),
                     );
                     return Ok(Type::Unknown);
                 }
@@ -256,7 +256,7 @@ impl<'a> Analyzer<'a> {
             &format!("function '{}'", function_name),
             &store_sig.parameters,
             &params_types,
-            name.position.clone(),
+            name.position,
             diagnostics,
         );
 

@@ -67,7 +67,18 @@ pub(super) fn func_sig(
 ) -> Option<(String, Vec<&'static str>, Option<&'static str>)> {
     match interner.kind(interner.strip_nullable(ty)) {
         TyKind::Func(params, ret) => {
-            let ptys: Vec<&'static str> = params.iter().map(|p| wasm_ty_of(interner, *p)).collect();
+            let mut ptys: Vec<&'static str> =
+                params.iter().map(|p| wasm_ty_of(interner, *p)).collect();
+            // A value(`struct`/union)-returning function uses the sret ABI: a hidden leading `i32`
+            // destination pointer, and no WASM result. `call_indirect` (interface trampolines,
+            // first-class function values) must name a `(type ...)` of this exact shape, so model it
+            // here — the single source of truth shared by the signature declarations, the trampolines,
+            // and the callers.
+            if interner.is_value_type(*ret) {
+                ptys.insert(0, "i32");
+                let name = format!("$sig_sret_{}__v", ptys.join("_"));
+                return Some((name, ptys, None));
+            }
             let rty = match interner.kind(*ret) {
                 TyKind::Void => None,
                 _ => Some(wasm_ty_of(interner, *ret)),
@@ -76,6 +87,15 @@ pub(super) fn func_sig(
             Some((name, ptys, rty))
         }
         _ => None,
+    }
+}
+
+/// True when interface method signature `ty` (a `Func(params, ret)`) returns a value type by the
+/// sret ABI, so its dispatch trampoline and call sites carry a hidden leading destination pointer.
+pub(super) fn func_sig_is_sret(interner: &TypeInterner, ty: TypeId) -> bool {
+    match interner.kind(interner.strip_nullable(ty)) {
+        TyKind::Func(_, ret) => interner.is_value_type(*ret),
+        _ => false,
     }
 }
 
@@ -300,6 +320,10 @@ pub(super) fn emit_interface_dispatch(
                 Some(s) => s,
                 None => continue,
             };
+            // With the sret ABI the hidden destination pointer is param 0, so the receiver (`this`,
+            // used to index the itable) is param 1; otherwise the receiver is param 0.
+            let is_sret = func_sig_is_sret(interner, inf.sigs[slot]);
+            let recv_idx = if is_sret { 1 } else { 0 };
             let _ = write!(trampolines, "(func ${}", iface_dispatch_symbol(iid, slot));
             for p in &ptys {
                 let _ = write!(trampolines, " (param {})", p);
@@ -308,12 +332,13 @@ pub(super) fn emit_interface_dispatch(
                 let _ = write!(trampolines, " (result {})", r);
             }
             trampolines.push('\n');
-            // Push the forwarded call arguments (param 0 is the receiver / `this`).
+            // Push the forwarded call arguments (an sret destination pointer first when present,
+            // then the receiver / `this`, then the real args).
             for i in 0..ptys.len() {
                 let _ = writeln!(trampolines, "  (local.get {})", i);
             }
             // idx = itable[base + (object_tag(this) * method_count + slot) * 4]
-            let _ = writeln!(trampolines, "  (local.get 0)");
+            let _ = writeln!(trampolines, "  (local.get {})", recv_idx);
             let _ = writeln!(trampolines, "  (call $object_tag)");
             let _ = writeln!(trampolines, "  (i32.const {}) (i32.mul)", k);
             let _ = writeln!(trampolines, "  (i32.const {}) (i32.add)", slot);

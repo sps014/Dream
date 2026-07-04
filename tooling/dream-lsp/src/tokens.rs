@@ -80,7 +80,7 @@ fn category(kind: TokenKind) -> Option<&'static str> {
         IfToken | ElseToken | ForToken | WhileToken | DoToken | ReturnToken | BreakToken
         | ContinueToken | LetToken | ConstToken | FunToken | StaticToken | ImportToken
         | PublicToken | ExternToken | ClassToken | ExtendToken | IsToken | InToken | EnumToken
-        | TypeToken | SwitchToken | CaseToken | DefaultToken => "keyword",
+        | TypeToken | SwitchToken | CaseToken | DefaultToken | SealedToken => "keyword",
         PlusToken
         | MinusToken
         | SlashToken

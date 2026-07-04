@@ -150,6 +150,8 @@ pub enum TokenKind {
     ClassToken,
     #[token("struct")]
     StructToken,
+    #[token("sealed")]
+    SealedToken,
     #[token("interface")]
     InterfaceToken,
     #[token("extend")]
@@ -261,6 +263,7 @@ impl TokenKind {
             TokenKind::ExternToken => "'extern'",
             TokenKind::ClassToken => "'class'",
             TokenKind::StructToken => "'struct'",
+            TokenKind::SealedToken => "'sealed'",
             TokenKind::InterfaceToken => "'interface'",
             TokenKind::ExtendToken => "'extend'",
             TokenKind::NullToken => "'null'",

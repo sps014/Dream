@@ -31,8 +31,10 @@
     <h1>Dream Regex via JS <code>RegExp</code></h1>
     <p class="muted">
       A Dream program using the stdlib <code>Regex</code> class, which is backed by JavaScript's
-      <code>RegExp</code> through the <code>Dream</code> host module. Serve this folder over HTTP
-      (e.g. <code>npx serve</code>) and open the page.
+      <code>RegExp</code> through the <code>Dream</code> host module. First build the module:
+      <code>cargo run -- sample/interop/regex.dream</code> (writes <code>regex.wasm</code> +
+      <code>regex.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
+      over HTTP (e.g. <code>npx serve .</code>) and open <code>/sample/interop/regex.html</code>.
     </p>
     <div id="log"></div>
 

@@ -38,6 +38,9 @@ impl<'a> Analyzer<'a> {
         // the prelude, which is merged after user code), e.g. `enum Pair { Both(Option<int>) }`.
         for enum_decl in node.enums.iter() {
             let name = &enum_decl.name.text;
+            if enum_decl.is_sealed {
+                self.sealed_types.insert(name.clone());
+            }
             if self.enum_table.contains_key(name)
                 || self.union_table.contains_key(name)
                 || self.generic_unions.contains_key(name)
@@ -318,6 +321,9 @@ impl<'a> Analyzer<'a> {
     ) {
         for struct_decl in node.structs.iter() {
             diagnostics.file_path = file_path_string(&struct_decl.file_path);
+            if struct_decl.is_sealed {
+                self.sealed_types.insert(struct_decl.name.text.clone());
+            }
             let def = self.type_ctx.register(
                 DefKind::Struct,
                 &struct_decl.name.text,
@@ -810,8 +816,8 @@ impl<'a> Analyzer<'a> {
         // Value-struct soundness is checked per instantiation (the template's fields are generic, so
         // whether this monomorphization embeds itself by value or carries a nullable value field is
         // only decidable once `T` is concrete).
-        if new_decl_ref.is_value {
-            if self.value_struct_contains_self(&mangled_name) {
+        if new_decl_ref.is_value
+            && self.value_struct_contains_self(&mangled_name) {
                 diagnostics.report_error(
                     format!(
                         "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
@@ -822,7 +828,6 @@ impl<'a> Analyzer<'a> {
             }
             // A nullable value struct field (`T?`) boxes to a nullable heap pointer, so `null` is
             // representable — no rejection (see the non-generic path above).
-        }
 
         self.register_struct_methods(new_decl_ref, &mangled_name, &bindings, diagnostics);
         self.register_generic_extension_methods(base_name, &mangled_name, args, diagnostics);

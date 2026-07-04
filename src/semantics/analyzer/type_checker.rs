@@ -129,15 +129,15 @@ impl<'a> Analyzer<'a> {
                 self.analyze_assignment(left, right, parent_function, symbol_table, diagnostics)?
             }
             StatementNode::IndexAssignment(left, index, right) => self.analyze_index_assignment(
-                *left,
-                *index,
+                left,
+                index,
                 right,
                 parent_function,
                 symbol_table,
                 diagnostics,
             )?,
             StatementNode::MemberAssignment(obj, member, right) => self.analyze_member_assignment(
-                *obj,
+                obj,
                 member,
                 right,
                 parent_function,

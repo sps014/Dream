@@ -132,11 +132,10 @@ fn simplify(rvalue: &Rvalue) -> Option<Rvalue> {
                 return Some(Rvalue::Use(a.clone())); // 0 & x -> 0
             }
         }
-        BinOp::Shl | BinOp::Shr => {
-            if bc == Some(0) {
+        BinOp::Shl | BinOp::Shr
+            if bc == Some(0) => {
                 return Some(Rvalue::Use(a.clone())); // x << 0 / x >> 0
             }
-        }
         _ => {}
     }
     None

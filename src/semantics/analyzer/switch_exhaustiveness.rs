@@ -156,7 +156,7 @@ impl<'a> Analyzer<'a> {
                     field_types.len(),
                     arg_types.len()
                 ),
-                Some(position.clone()),
+                Some(position),
             );
         }
 
@@ -212,7 +212,7 @@ impl<'a> Analyzer<'a> {
                         subject_base,
                         missing.join(", ")
                     ),
-                    position.clone(),
+                    position,
                 );
             }
         } else if !subject_type.is_unknown() {
@@ -221,7 +221,7 @@ impl<'a> Analyzer<'a> {
                     "Non-exhaustive switch on '{}': add a `_` arm to cover all cases",
                     subject_base
                 ),
-                position.clone(),
+                position,
             );
         }
     }

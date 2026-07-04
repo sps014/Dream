@@ -129,6 +129,16 @@ impl<'a> Analyzer<'a> {
         for ext in node.extends.iter() {
             diagnostics.file_path = file_path_string(&ext.file_path);
             let target = ext.target.text.clone();
+            // `sealed` types reject user-authored `extend` blocks. Compiler-synthesized extends
+            // (interface defaults, `@json` converters) are exempt, so a sealed type may still
+            // implement interfaces with default methods or derive `@json`.
+            if !ext.is_synthesized && self.sealed_types.contains(&target) {
+                diagnostics.report_error(
+                    format!("Cannot extend sealed type '{}'", target),
+                    Some(ext.target.position),
+                );
+                continue;
+            }
             if ext.generic_parameters.is_some() {
                 // Generic extend blocks were stashed by `stash_generic_extensions` and are attached
                 // per instantiation in `ensure_*_instantiated`; here we only validate the target is
@@ -308,7 +318,7 @@ impl<'a> Analyzer<'a> {
                 if method.parameters.len() != 1 {
                     diagnostics.report_error(
                         format!("setter '{}' must declare exactly one parameter", prop),
-                        Some(method.name.position.clone()),
+                        Some(method.name.position),
                     );
                 }
             }

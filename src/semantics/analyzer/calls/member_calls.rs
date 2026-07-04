@@ -89,7 +89,7 @@ impl<'a> Analyzer<'a> {
 
     /// Handles `Type.method(args)` static dispatch when the receiver `id` names a type rather than
     /// a local: discriminated-union variant construction, on-the-fly monomorphization of generic
-    /// static methods (including the `Array.new` and promise-combinator intrinsics), and plain
+    /// static methods (including the `Buffer.alloc` and promise-combinator intrinsics), and plain
     /// static-method resolution. Returns `Ok(Some(type))` when handled, `Ok(None)` when `id` is a
     /// local or names no static member (so the caller falls through to instance dispatch).
     pub(crate) fn try_analyze_static_method(
@@ -164,9 +164,9 @@ impl<'a> Analyzer<'a> {
             // Generic static calls / intrinsics need an `InstanceId` (a later slice); stay out of
             // HIR coverage regardless of which sub-branch handles the call.
             self.hir_none();
-            // `Array.new<T>(len)`: a generic intrinsic that allocates a zero-initialized
+            // `Buffer.alloc<T>(len)`: a generic intrinsic that allocates a zero-initialized
             // `T[]`. The element type comes from the explicit type argument (resolved
-            // through the active monomorphization bindings so `Array.new<T>` inside a
+            // through the active monomorphization bindings so `Buffer.alloc<T>` inside a
             // `List<int>` method yields `int[]`).
             if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
                 == Some(intrinsics::IntrinsicOp::ArrayNew)
@@ -175,7 +175,7 @@ impl<'a> Analyzer<'a> {
                     Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                     None => {
                         diagnostics.report_error(
-                            "'Array.new' requires a type argument, e.g. Array.new<int>(n)"
+                            "'Buffer.alloc' requires a type argument, e.g. Buffer.alloc<int>(n)"
                                 .to_string(),
                             Some(method.position),
                         );
@@ -185,14 +185,14 @@ impl<'a> Analyzer<'a> {
                 if params_types.len() != 1 {
                     diagnostics.report_error(
                         format!(
-                            "'Array.new' expects exactly 1 argument (length), got {}",
+                            "'Buffer.alloc' expects exactly 1 argument (length), got {}",
                             params_types.len()
                         ),
                         Some(method.position),
                     );
                 } else if params_types[0] != "int" && !is_unknown_type_name(&params_types[0]) {
                     diagnostics.report_error(
-                        format!("'Array.new' length must be int, got {}", params_types[0]),
+                        format!("'Buffer.alloc' length must be int, got {}", params_types[0]),
                         Some(method.position),
                     );
                 }
@@ -297,7 +297,7 @@ impl<'a> Analyzer<'a> {
                 Err(_) => {
                     diagnostics.report_error(
                         format!("Function '{}' could not be instantiated", mangled_name),
-                        Some(method.position.clone()),
+                        Some(method.position),
                     );
                     return Ok(Some(Type::Unknown));
                 }
@@ -717,7 +717,7 @@ impl<'a> Analyzer<'a> {
             &format!("function {}", mangled_name),
             &expected_params,
             &arg_types,
-            method.position.clone(),
+            method.position,
             diagnostics,
         );
 

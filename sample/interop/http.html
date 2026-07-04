@@ -31,9 +31,13 @@
     <h1>Dream <code>HttpClient</code> over the Promise bridge</h1>
     <p class="muted">
       A Dream program that <code>await</code>s <code>HttpClient</code> calls, which wrap the
-      browser's <code>fetch</code> via the <code>Dream</code> host module. Serve this folder over
-      HTTP (e.g. <code>npx serve</code>) and open the page. Uses the real <code>fetch</code>, so
-      point the URLs at endpoints that exist (and allow CORS).
+      browser's <code>fetch</code> via the <code>Dream</code> host module. First build the module:
+      <code>cargo run -- sample/interop/http.dream</code> (writes <code>http.wasm</code> +
+      <code>http.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
+      over HTTP (e.g. <code>npx serve .</code>) and open <code>/sample/interop/http.html</code>.
+      This calls the real <code>fetch</code>, so the sample's <code>https://example.com</code> URLs
+      are placeholders: point them at endpoints that exist <em>and</em> send permissive CORS headers,
+      otherwise the browser blocks the request (the Node runner has no CORS restriction).
     </p>
     <div id="log"></div>
 

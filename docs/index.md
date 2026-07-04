@@ -78,7 +78,7 @@ fun main() {
 
     ---
 
-    Essential core utilities: `print`, `println`, `x.to_string()`, `x.hash_code()`, `Array.new`, `Math.*`
+    Essential core utilities: `print`, `println`, `x.to_string()`, `x.hash_code()`, `Array<T>`, `Buffer.alloc`, `Math.*`
 
     [:octicons-arrow-right-24: View Built-ins](stdlib/builtins.md)
 

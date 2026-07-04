@@ -13,7 +13,7 @@ fun __compare_ascending<T : Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }
 
-class List<T> {
+class List<T> : Collection<T> {
     items: T[];
     count: int;
 
@@ -23,7 +23,7 @@ class List<T> {
         if (c < 4) {
             c = 4;
         }
-        this.items = Array.new<T>(c);
+        this.items = Buffer.alloc<T>(c);
         this.count = 0;
     }
 
@@ -44,7 +44,7 @@ class List<T> {
         if (new_cap < 4) {
             new_cap = 4;
         }
-        let bigger = Array.new<T>(new_cap);
+        let bigger = Buffer.alloc<T>(new_cap);
         let i = 0;
         while (i < this.count) {
             bigger[i] = this.items[i];
@@ -146,7 +146,7 @@ class List<T> {
         if (n < 2) {
             return;
         }
-        let buf = Array.new<T>(n);
+        let buf = Buffer.alloc<T>(n);
         let width = 1;
         while (width < n) {
             let i = 0;

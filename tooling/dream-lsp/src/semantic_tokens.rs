@@ -102,7 +102,8 @@ pub fn compute(file_path: Option<&str>, text: &str) -> Vec<SemanticToken> {
                 | TokenKind::CaseToken
                 | TokenKind::DefaultToken
                 | TokenKind::AsyncToken
-                | TokenKind::AwaitToken => Some(0),
+                | TokenKind::AwaitToken
+                | TokenKind::SealedToken => Some(0),
                 TokenKind::DataTypeToken => Some(9),
                 TokenKind::PlusToken
                 | TokenKind::MinusToken

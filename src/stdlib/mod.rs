@@ -6,13 +6,24 @@ use crate::syntax::nodes::Type;
 /// only attach methods to built-in types, so their relative order does not matter.
 pub const PRELUDE_FILES: &[(&str, &str)] = &[
     // Core intrinsic-backed types: raw arrays, `Option`/`Result`, futures, JS interop, math.
-    ("<std>/core/array.dream", include_str!("core/array.dream")),
+    // `Buffer` (the raw `array_new` intrinsic) is merged first; `Array<T>` wraps it, so it must be
+    // defined before the collection classes that construct backing storage.
+    ("<std>/core/buffer.dream", include_str!("core/buffer.dream")),
     // Comparison interfaces (`Equatable`/`Comparable`) come before types that implement them.
     (
         "<std>/core/compare.dream",
         include_str!("core/compare.dream"),
     ),
     ("<std>/core/option.dream", include_str!("core/option.dream")),
+    // The `Collection<T>` interface precedes `Array<T>`/`List<T>` (which implement it) and uses
+    // `Option<T>`, so it is merged after `option.dream`.
+    (
+        "<std>/core/collection.dream",
+        include_str!("core/collection.dream"),
+    ),
+    // `Array<T>` - the general-purpose growable collection - wraps `Buffer`, `Option`, and
+    // `Collection<T>`, so it follows all three.
+    ("<std>/core/array.dream", include_str!("core/array.dream")),
     ("<std>/core/result.dream", include_str!("core/result.dream")),
     (
         "<std>/core/promise.dream",

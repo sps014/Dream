@@ -80,11 +80,10 @@ pub(super) fn strip_dead_functions(module: &str) -> String {
     let mut kept: HashSet<usize> = HashSet::new();
     let mut queue: VecDeque<usize> = VecDeque::new();
     for (i, it) in parsed.iter().enumerate() {
-        if it.is_func && it.force_keep {
-            if kept.insert(i) {
+        if it.is_func && it.force_keep
+            && kept.insert(i) {
                 queue.push_back(i);
             }
-        }
     }
     for n in root_names {
         if let Some(&i) = name_to_idx.get(&n) {

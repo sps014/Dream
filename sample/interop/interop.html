@@ -31,7 +31,13 @@
     <h1>Dream &rarr; JS Interop</h1>
     <p class="muted">
       A Dream program compiled to WebAssembly, calling JavaScript via <code>extern fun</code>.
-      Serve this folder over HTTP (e.g. <code>npx serve</code>) and open the page.
+      First build the module:
+      <code>cargo run -- sample/interop/interop.dream</code> (writes <code>interop.wasm</code> +
+      <code>interop.abi.json</code> beside this page; they are git-ignored, so a fresh checkout has
+      none until you compile). Then serve the <strong>repository root</strong> over HTTP (e.g.
+      <code>npx serve .</code> from the repo root) and open
+      <code>/sample/interop/interop.html</code> &mdash; the page loads the shared runtime from
+      <code>/runtime/dream.js</code>, so it must be reachable from the served root.
     </p>
     <div id="log"></div>
 

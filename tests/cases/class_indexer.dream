@@ -4,7 +4,7 @@ class Grid {
     cells: int[];
 
     constructor(size: int) {
-        this.cells = Array.new<int>(size);
+        this.cells = Buffer.alloc<int>(size);
     }
 
     public fun get(index: int): int {

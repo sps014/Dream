@@ -30,8 +30,8 @@ pub fn link_datetime_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap("Dream", "dateLocalOffsetMinutes", |millis: i64| -> i32 {
         use chrono::{Local, TimeZone};
         match Local.timestamp_millis_opt(millis) {
-            chrono::LocalResult::Single(dt) => (dt.offset().local_minus_utc() / 60) as i32,
-            chrono::LocalResult::Ambiguous(dt, _) => (dt.offset().local_minus_utc() / 60) as i32,
+            chrono::LocalResult::Single(dt) => dt.offset().local_minus_utc() / 60,
+            chrono::LocalResult::Ambiguous(dt, _) => dt.offset().local_minus_utc() / 60,
             chrono::LocalResult::None => 0,
         }
     })?;

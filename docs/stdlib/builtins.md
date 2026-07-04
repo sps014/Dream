@@ -167,10 +167,13 @@ let name = "hello";
 System.println(name.size());    // 5
 ```
 
-## Array.new
+## Buffer.alloc
 
-Allocates a zeroed array of a given size. Mainly used by the standard library internals. You can use it in your own code when you need an array whose size isn't known at compile time:
+Allocates a zeroed, fixed-length `T[]` buffer of a given size. This is the low-level primitive the
+standard-library collections build on. Reach for it directly only when you need a raw array whose
+size isn't known at compile time; otherwise prefer the growable [`Array<T>`](../language/arrays.md)
+collection.
 
 ```dream
-let buf = Array.new<int>(100);   // int[] with 100 zero-initialized slots
+let buf = Buffer.alloc<int>(100);   // int[] with 100 zero-initialized slots
 ```

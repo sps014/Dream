@@ -1,0 +1,24 @@
+// A `sealed` type rejects user `extend` blocks, but compiler-synthesized extends are exempt: a
+// sealed class may still implement an interface and inherit its default methods (which are injected
+// as a synthesized `extend`). This compiles and runs only if that exemption holds.
+
+interface Greeter {
+    fun name(): string;
+    public fun greet(): string {
+        return this.name();
+    }
+}
+
+sealed class Robot : Greeter {
+    public fun name(): string {
+        return "beep";
+    }
+}
+
+fun main(): void {
+    let r = Robot();
+    System.println(r.greet());
+
+    let g: Greeter = (Greeter)r;
+    System.println(g.greet());
+}

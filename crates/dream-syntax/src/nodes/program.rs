@@ -66,6 +66,8 @@ pub struct EnumDeclarationNode {
     /// Generic type parameters for a generic discriminated union (`enum Option<T> { ... }`).
     pub generic_parameters: Option<Vec<SyntaxToken>>,
     pub variants: Vec<EnumVariantNode>,
+    /// True when declared `sealed`: no `extend` block may target this enum (enforced in analysis).
+    pub is_sealed: bool,
 }
 
 impl EnumDeclarationNode {
@@ -80,6 +82,7 @@ impl EnumDeclarationNode {
             name,
             generic_parameters,
             variants,
+            is_sealed: false,
         }
     }
 
@@ -111,6 +114,10 @@ pub struct ExtendNode<'a> {
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,
+    /// True for compiler-synthesized `extend` blocks (interface default methods, `@json`
+    /// converters) rather than user source. These bypass the `sealed` restriction, so a sealed
+    /// type may still implement interfaces with defaults or derive `@json`.
+    pub is_synthesized: bool,
 }
 
 impl<'a> ExtendNode<'a> {
@@ -126,6 +133,7 @@ impl<'a> ExtendNode<'a> {
             methods,
             implements: Vec::new(),
             file_path: None,
+            is_synthesized: false,
         }
     }
 }

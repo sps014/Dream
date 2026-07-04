@@ -1,7 +1,254 @@
-// `Array` - low-level array allocation, backing a compiler intrinsic.
+// Dream standard `Array<T>`, auto-imported into every program.
+//
+// A growable, general-purpose sequence backed by a reference-counted `T[]` buffer that doubles on
+// demand. It is monomorphized per concrete element type, so `Array<int>` compiles to dedicated,
+// allocation-free-dispatch WASM (no boxing, no virtual calls). It implements `Collection<T>`, so it
+// can be passed anywhere a `Collection<T>` is expected.
+//
+//   let xs = Array<int>();
+//   xs.push(1);
+//   xs.push(2);
+//
+// For raw, fixed-length storage with no bookkeeping, drop down to `Buffer.alloc<T>(n)` (which is
+// what `Array<T>` uses internally); prefer `Array<T>` for everyday use.
 
-class Array {
-    // `Array.new<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
-    @intrinsic("array_new")
-    static extern fun new<T>(len: int): T[];
+// Natural-order (ascending) comparator over any `Comparable` type, handed to the single merge-sort
+// in `sort_by` so the algorithm lives in exactly one place.
+fun __array_compare_ascending<T : Comparable<T>>(a: T, b: T): int {
+    return a.compare(b);
+}
+
+class Array<T> : Collection<T> {
+    items: T[];
+    count: int;
+
+    // Allocates an empty array with an initial backing buffer capacity (defaults to 8).
+    constructor(capacity: int = 8) {
+        let c = capacity;
+        if (c < 4) {
+            c = 4;
+        }
+        this.items = Buffer.alloc<T>(c);
+        this.count = 0;
+    }
+
+    // Number of elements currently stored.
+    public fun size(): int {
+        return this.count;
+    }
+
+    // Current capacity of the backing buffer.
+    public fun capacity(): int {
+        return this.items.size();
+    }
+
+    // Doubles the backing buffer, copying existing elements across. Internal to `push`.
+    fun grow(): void {
+        let old_cap = this.items.size();
+        let new_cap = old_cap * 2;
+        if (new_cap < 4) {
+            new_cap = 4;
+        }
+        let bigger = Buffer.alloc<T>(new_cap);
+        let i = 0;
+        while (i < this.count) {
+            bigger[i] = this.items[i];
+            i = i + 1;
+        }
+        this.items = bigger;
+    }
+
+    // Appends a value to the end, growing if necessary.
+    public fun push(value: T): void {
+        if (this.count == this.items.size()) {
+            this.grow();
+        }
+        this.items[this.count] = value;
+        this.count = this.count + 1;
+    }
+
+    // Returns the element at `index`, or `None` if `index` is out of range. Also the `arr[i]`
+    // indexer hook.
+    public fun get(index: int): Option<T> {
+        if ((index < 0) || (index >= this.count)) {
+            return Option.None;
+        }
+        return Option.Some(this.items[index]);
+    }
+
+    // Overwrites the element at `index`, returning true on success or false if `index` is out of
+    // range (no value is written in that case). Also the `arr[i] = v` indexer hook.
+    public fun set(index: int, value: T): bool {
+        if ((index < 0) || (index >= this.count)) {
+            return false;
+        }
+        this.items[index] = value;
+        return true;
+    }
+
+    // Removes and returns the last element, or `None` if the array is empty.
+    public fun pop(): Option<T> {
+        if (this.count == 0) {
+            return Option.None;
+        }
+        let last = this.items[this.count - 1];
+        this.count = this.count - 1;
+        return Option.Some(last);
+    }
+
+    // True if `value` is present (uses value equality, including string contents).
+    public fun contains(value: T): bool {
+        let i = 0;
+        let found = false;
+        while (i < this.count) {
+            if (this.items[i] == value) {
+                found = true;
+            }
+            i = i + 1;
+        }
+        return found;
+    }
+
+    // Index of the first matching element (by value equality), or `None` if absent.
+    public fun index_of(value: T): Option<int> {
+        let i = 0;
+        while (i < this.count) {
+            if (this.items[i] == value) {
+                return Option.Some(i);
+            }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
+    // Logically empties the array.
+    public fun clear(): void {
+        this.count = 0;
+    }
+
+    // Removes the element at `index`, shifting later elements left. Returns true on success, or
+    // false if `index` is out of range (the array is left unchanged in that case).
+    public fun remove_at(index: int): bool {
+        if ((index < 0) || (index >= this.count)) {
+            return false;
+        }
+        let i = index;
+        while (i < this.count - 1) {
+            this.items[i] = this.items[i + 1];
+            i = i + 1;
+        }
+        this.count = this.count - 1;
+        return true;
+    }
+
+    // Enumerator for `for (let x in arr)`. Returns a fresh cursor over the current elements.
+    public fun iterator(): ArrayIterator<T> {
+        return ArrayIterator<T>(this);
+    }
+
+    // Sorts the array in place with the supplied comparator (stable merge sort, O(n log n)).
+    public fun sort_by(cmp: fun(T, T): int): void {
+        let n = this.count;
+        if (n < 2) {
+            return;
+        }
+        let buf = Buffer.alloc<T>(n);
+        let width = 1;
+        while (width < n) {
+            let i = 0;
+            while (i < n) {
+                let mid = i + width;
+                if (mid > n) {
+                    mid = n;
+                }
+                let right = mid + width;
+                if (right > n) {
+                    right = n;
+                }
+                let a = i;
+                let b = mid;
+                let k = i;
+                while ((a < mid) && (b < right)) {
+                    if (cmp(this.items[a], this.items[b]) <= 0) {
+                        buf[k] = this.items[a];
+                        a = a + 1;
+                    } else {
+                        buf[k] = this.items[b];
+                        b = b + 1;
+                    }
+                    k = k + 1;
+                }
+                while (a < mid) {
+                    buf[k] = this.items[a];
+                    a = a + 1;
+                    k = k + 1;
+                }
+                while (b < right) {
+                    buf[k] = this.items[b];
+                    b = b + 1;
+                    k = k + 1;
+                }
+                i = right;
+            }
+            let j = 0;
+            while (j < n) {
+                this.items[j] = buf[j];
+                j = j + 1;
+            }
+            width = width + width;
+        }
+    }
+}
+
+// Cursor produced by `Array.iterator()`.
+class ArrayIterator<T> {
+    source: Array<T>;
+    idx: int;
+
+    constructor(source: Array<T>) {
+        this.source = source;
+        this.idx = 0;
+    }
+
+    public fun next(): Option<T> {
+        if (this.idx >= this.source.size()) {
+            return Option.None;
+        }
+        let value = this.source.get(this.idx);
+        this.idx = this.idx + 1;
+        return value;
+    }
+}
+
+// `sort()`/`binary_search()` are available only when the element type is `Comparable`: this
+// constrained extension attaches to `Array<C>` exactly when `C : Comparable<C>`, so `Array<int>`
+// (int is `Comparable`) sorts out of the box while `Array<SomeType>` without a `Comparable` impl
+// simply does not expose these methods.
+extend Array<T : Comparable<T>> {
+    // Sorts the array in place into ascending order using each element's `compare` method. Hands
+    // the natural-order comparator to `sort_by` so there is a single merge-sort implementation.
+    public fun sort(): void {
+        let cmp: fun(T, T): int = __array_compare_ascending;
+        this.sort_by(cmp);
+    }
+
+    // Binary search over an array already sorted ascending (by `compare`). Returns the index of a
+    // matching element as `Some(index)`, or `None` if `value` is not present. O(log n).
+    public fun binary_search(value: T): Option<int> {
+        let lo = 0;
+        let hi = this.count - 1;
+        while (lo <= hi) {
+            let mid = lo + (hi - lo) / 2;
+            let c = this.items[mid].compare(value);
+            if (c == 0) {
+                return Option.Some(mid);
+            }
+            if (c < 0) {
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return Option.None;
+    }
 }

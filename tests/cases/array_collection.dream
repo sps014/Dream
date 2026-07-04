@@ -1,0 +1,54 @@
+// `Array<T>` as a class-based collection, its `Comparable`-constrained `sort`/`binary_search`, the
+// `for (let x in arr)` enumerator, and polymorphism through the `Collection<T>` interface (shared by
+// both `Array<T>` and `List<T>`, including the interface's default methods).
+
+// Sums any collection through the interface: exercises dynamic dispatch of `size()` and the
+// value-returning `get()` (an sret `Option<int>`) through the itable trampoline.
+fun sum(xs: Collection<int>): int {
+    let total = 0;
+    let i = 0;
+    while (i < xs.size()) {
+        total = total + xs.get(i).unwrap_or(0);
+        i = i + 1;
+    }
+    return total;
+}
+
+fun main(): void {
+    let a = Array<int>();
+    a.push(30);
+    a.push(10);
+    a.push(20);
+
+    System.println(a.size());
+
+    a.sort();
+    for (let x in a) {
+        System.println(x);
+    }
+
+    System.println(a.binary_search(20).unwrap_or(-1));
+    System.println(a.contains(10));
+    System.println(a.index_of(30).unwrap_or(-1));
+
+    // Collection<T> default methods dispatched on the concrete class.
+    System.println(a.is_empty());
+    System.println(a.first().unwrap_or(-1));
+    System.println(a.last().unwrap_or(-1));
+
+    let popped = a.pop();
+    System.println(popped.unwrap_or(-1));
+    System.println(a.size());
+
+    // Polymorphism: an `Array<int>` and a `List<int>` both flow through `Collection<int>`.
+    let b = Array<int>();
+    b.push(1);
+    b.push(2);
+    b.push(3);
+    System.println(sum(b));
+
+    let l = List<int>();
+    l.push(4);
+    l.push(5);
+    System.println(sum(l));
+}

@@ -120,11 +120,13 @@ pub(crate) fn generate_interface_default_impls<'a>(
         if !inherited.is_empty() {
             // A generic class's extension must carry the class's parameters so the inherited default
             // is monomorphized with each instantiation; a non-generic class contributes `None`.
-            synthesized.push(ExtendNode::new(
+            let mut ext = ExtendNode::new(
                 class.name.clone(),
                 class.generic_parameters.clone(),
                 inherited,
-            ));
+            );
+            ext.is_synthesized = true;
+            synthesized.push(ext);
         }
     }
 

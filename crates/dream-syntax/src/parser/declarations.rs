@@ -76,6 +76,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         // attribute. Recover it so the comment still reaches the enum name token for hover/LSP.
         let doc_trivia = Self::recover_doc_trivia(first_trivia, &attributes);
 
+        // Optional `public` / `sealed` modifiers (any order) before the `enum` keyword.
+        let mut is_sealed = false;
+        loop {
+            match self.current_token().kind {
+                TokenKind::PublicToken => {
+                    self.match_token(TokenKind::PublicToken);
+                }
+                TokenKind::SealedToken => {
+                    self.match_token(TokenKind::SealedToken);
+                    is_sealed = true;
+                }
+                _ => break,
+            }
+        }
+
         self.match_token(TokenKind::EnumToken);
         let mut name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut name, doc_trivia);
@@ -126,12 +141,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
         self.match_token(TokenKind::CurlyCloseBracketToken);
-        Ok(crate::nodes::EnumDeclarationNode::new(
-            attributes,
-            name,
-            generic_parameters,
-            variants,
-        ))
+        let mut decl =
+            crate::nodes::EnumDeclarationNode::new(attributes, name, generic_parameters, variants);
+        decl.is_sealed = is_sealed;
+        Ok(decl)
     }
 
     /// Parses a single discriminated-union variant payload field: `name: Type`.
@@ -162,10 +175,22 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let attributes = self.parse_attributes();
 
+        // `public` and `sealed` are modifiers that may appear in either order before the
+        // `class`/`struct` keyword.
         let mut is_public = false;
-        if self.current_token().kind == TokenKind::PublicToken {
-            self.match_token(TokenKind::PublicToken);
-            is_public = true;
+        let mut is_sealed = false;
+        loop {
+            match self.current_token().kind {
+                TokenKind::PublicToken => {
+                    self.match_token(TokenKind::PublicToken);
+                    is_public = true;
+                }
+                TokenKind::SealedToken => {
+                    self.match_token(TokenKind::SealedToken);
+                    is_sealed = true;
+                }
+                _ => break,
+            }
         }
 
         // A value type is introduced with `struct`; a reference type with `class`. Both share the
@@ -280,6 +305,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         );
         decl.implements = implements;
         decl.is_value = is_value;
+        decl.is_sealed = is_sealed;
         decl.generic_constraints = generic_constraints;
         Ok(decl)
     }

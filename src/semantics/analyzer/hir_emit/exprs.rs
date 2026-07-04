@@ -885,10 +885,10 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Records `Array.new<T>(len)` (typed `T[]`): a zero-initialized array allocation. Drops out of
+    /// Records `Buffer.alloc<T>(len)` (typed `T[]`): a zero-initialized array allocation. Drops out of
     /// coverage if the length is not representable.
     /// Records an empty array literal `[]` of element type `elem_ty` as a zero-length allocation
-    /// (equivalent to `Array.new<T>(0)`).
+    /// (equivalent to `Buffer.alloc<T>(0)`).
     pub(in crate::semantics::analyzer) fn hir_set_empty_array(&mut self, elem_ty: &Type) {
         if !self.active() {
             self.hir.last = None;

@@ -31,8 +31,12 @@
     <h1>Dream &rarr; JS Async Interop</h1>
     <p class="muted">
       A Dream program that <code>await</code>s a JavaScript <code>fetch</code> via
-      <code>extern async fun</code>. Serve this folder over HTTP (e.g. <code>npx serve</code>) and
-      open the page. The <code>.then</code> bridge lives entirely in <code>dream.js</code>.
+      <code>extern async fun</code>. First build the module:
+      <code>cargo run -- sample/interop/async_fetch.dream</code> (writes
+      <code>async_fetch.wasm</code> + <code>async_fetch.abi.json</code>, both git-ignored). Then
+      serve the <strong>repository root</strong> over HTTP (e.g. <code>npx serve .</code>) and open
+      <code>/sample/interop/async_fetch.html</code>. The <code>.then</code> bridge lives entirely in
+      <code>dream.js</code>.
     </p>
     <div id="log"></div>
 

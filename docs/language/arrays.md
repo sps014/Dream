@@ -45,15 +45,61 @@ fun fill_zeros(arr: int[]): void {
 
 ## Fixed size
 
-Arrays created from literals are fixed-size. You cannot push or pop from them.
+Arrays created from literals (or via the raw `Buffer.alloc<T>(n)` primitive) are fixed-size — a
+plain `T[]` backing buffer. You cannot push or pop from them.
 
-If you need a growable array, use [`List<T>`](../stdlib/collections.md):
+For a low-level, zero-initialized buffer of a runtime length, use `Buffer.alloc`:
 
 ```dream
-let xs = List<int>();
+let buf = Buffer.alloc<int>(4);   // int[] of length 4, all zero
+buf[0] = 10;
+```
+
+## Growable arrays: `Array<T>`
+
+`Array<T>` is the general-purpose growable collection: a class wrapping a `T[]` buffer that doubles
+on demand. Construct one with `Array<T>()` and use its methods:
+
+```dream
+let xs = Array<int>();
 xs.push(10);
 xs.push(20);
-println(xs.size());   // 2
+println(xs.size());          // 2
+println(xs.get(0).unwrap_or(-1)); // 10
+```
+
+It offers `push`, `pop`, `get`/`set` (also the `xs[i]` indexer), `contains`, `index_of`,
+`remove_at`, `clear`, `iterator` (so `for (let x in xs)` works), and `sort_by`. When the element
+type is `Comparable`, `sort()` and `binary_search()` are also available:
+
+```dream
+let ys = Array<int>();
+ys.push(3);
+ys.push(1);
+ys.push(2);
+ys.sort();                       // 1, 2, 3
+println(ys.binary_search(2).unwrap_or(-1)); // 1
+```
+
+[`List<T>`](../stdlib/collections.md) is a near-identical growable collection; both `Array<T>` and
+`List<T>` implement the shared [`Collection<T>`](#the-collection-interface) interface.
+
+## The `Collection<T>` interface
+
+`Array<T>` and `List<T>` both implement `Collection<T>`, which exposes `size()` and `get(index)`
+plus the default methods `is_empty()`, `first()`, and `last()`. A function can accept any collection
+by that interface and dispatch dynamically:
+
+```dream
+fun sum(xs: Collection<int>): int {
+    let total = 0;
+    let i = 0;
+    while (i < xs.size()) {
+        total = total + xs.get(i).unwrap_or(0);
+        i = i + 1;
+    }
+    return total;
+}
 ```
 
 ## Array of classes

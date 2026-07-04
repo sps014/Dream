@@ -191,7 +191,7 @@ fn generate_json_extend(
                         f = fname, k = json_key, to_e = to_e
                     ));
                     from_prelude.push_str(&format!(
-                        "        let __src_{f} = v.get(\"{k}\").unwrap_or(JsonValue.none());\n        let __{f} = Array.new<{elem}>(__src_{f}.size());\n        let __i_{f} = 0;\n        while (__i_{f} < __src_{f}.size()) {{\n            __{f}[__i_{f}] = {from_e};\n            __i_{f} = __i_{f} + 1;\n        }}\n",
+                        "        let __src_{f} = v.get(\"{k}\").unwrap_or(JsonValue.none());\n        let __{f} = Buffer.alloc<{elem}>(__src_{f}.size());\n        let __i_{f} = 0;\n        while (__i_{f} < __src_{f}.size()) {{\n            __{f}[__i_{f}] = {from_e};\n            __i_{f} = __i_{f} + 1;\n        }}\n",
                         f = fname, k = json_key, elem = elem, from_e = from_e
                     ));
                     from_fields.push(format!("__{f}", f = fname));
@@ -531,6 +531,7 @@ pub(crate) fn generate_json_derives<'a>(
     for extend_decl in program.extends.iter().cloned() {
         let mut extend_decl = extend_decl;
         extend_decl.file_path = Some(file_tag.clone());
+        extend_decl.is_synthesized = true;
         for method in extend_decl.methods.iter_mut() {
             method.file_path = Some(file_tag.clone());
         }

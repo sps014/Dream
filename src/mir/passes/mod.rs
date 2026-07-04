@@ -126,7 +126,7 @@ pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     // makes a future reordering that hoists the inliner above this point fail loudly in dev.
     let _rc_inserted = true;
     debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
-    let inliner = Inliner::default();
+    let inliner = Inliner;
     for _ in 0..MAX_ROUNDS {
         let changed = inliner.run(mir, interner);
         // Drop callees left with no remaining call sites after inlining (plus their transitively

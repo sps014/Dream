@@ -340,7 +340,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut i = 0;
         loop {
             match self.peek_token(i).kind {
-                TokenKind::PublicToken | TokenKind::StaticToken | TokenKind::AsyncToken => i += 1,
+                TokenKind::PublicToken
+                | TokenKind::StaticToken
+                | TokenKind::AsyncToken
+                | TokenKind::SealedToken => i += 1,
                 other => return other,
             }
         }
@@ -353,7 +356,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut i = 0;
         loop {
             match self.peek_token(i).kind {
-                TokenKind::PublicToken | TokenKind::StaticToken | TokenKind::AsyncToken => i += 1,
+                TokenKind::PublicToken
+                | TokenKind::StaticToken
+                | TokenKind::AsyncToken
+                | TokenKind::SealedToken => i += 1,
                 TokenKind::AtToken => {
                     i += 1; // `@`
                     if self.peek_token(i).kind == TokenKind::IdentifierToken {
@@ -427,6 +433,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Err(_) => self.recover_to_next_declaration(),
                 }
             } else if cur == TokenKind::EnumToken
+                || core == TokenKind::EnumToken
                 || (cur == TokenKind::AtToken
                     && self.core_keyword_after_attrs() == TokenKind::EnumToken)
             {
@@ -488,6 +495,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 kind,
                 TokenKind::ClassToken
                     | TokenKind::StructToken
+                    | TokenKind::SealedToken
                     | TokenKind::InterfaceToken
                     | TokenKind::EnumToken
                     | TokenKind::ExtendToken

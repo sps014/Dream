@@ -166,7 +166,7 @@ fn rvalue(r: &Rvalue) -> String {
         } => {
             let m = method
                 .as_ref()
-                .map(|m| operand(m))
+                .map(operand)
                 .unwrap_or_else(|| "*".to_string());
             let a = args
                 .iter()

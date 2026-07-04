@@ -31,7 +31,7 @@ class Regex {
     public fun match(input: string): string[] {
         let joined = Regex.__regex_match_joined(this.pattern, this.flags, input, "\n");
         if (joined.size() == 0) {
-            return Array.new<string>(0);
+            return Buffer.alloc<string>(0);
         }
         return joined.split('\n');
     }

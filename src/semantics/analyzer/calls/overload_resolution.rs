@@ -94,7 +94,7 @@ impl<'a> Analyzer<'a> {
                             expected_type_str,
                             given_type
                         ),
-                        Some(position.clone()),
+                        Some(position),
                     );
                 }
             }

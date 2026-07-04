@@ -587,6 +587,54 @@ fn test_parse_struct_keyword_sets_is_value() {
 }
 
 #[test]
+fn test_parse_sealed_modifier() {
+    // `sealed` may precede `class`/`struct`/`enum` (in either order with `public`) and sets
+    // `is_sealed`; declarations without it leave the flag false.
+    let code = "sealed class Locked { v: int; } \
+                public sealed struct Frozen { x: int; } \
+                sealed enum Color { Red, Green } \
+                class Open { v: int; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+
+    let locked = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Locked")
+        .expect("Locked declaration");
+    assert!(locked.is_sealed, "`sealed class` must set is_sealed = true");
+
+    let frozen = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Frozen")
+        .expect("Frozen declaration");
+    assert!(
+        frozen.is_sealed && frozen.is_value && frozen.is_public,
+        "`public sealed struct` must set is_sealed, is_value, and is_public"
+    );
+
+    let open = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Open")
+        .expect("Open declaration");
+    assert!(
+        !open.is_sealed,
+        "plain `class` must leave is_sealed = false"
+    );
+
+    let color = program
+        .enums
+        .iter()
+        .find(|e| e.name.text == "Color")
+        .expect("Color declaration");
+    assert!(color.is_sealed, "`sealed enum` must set is_sealed = true");
+}
+
+#[test]
 fn test_parse_async_function_and_await() {
     // `async fun` sets `is_async`; `await e;` is an `AwaitStmt` and `let x = await e;` carries an
     // `Await` initializer.

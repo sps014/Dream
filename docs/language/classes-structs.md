@@ -86,6 +86,18 @@ class Config {
 ### Indexers & Enumerators
 You can opt into `obj[i]` syntax by defining `get(index)` and `set(index, value)` methods. You can opt into `for (let x in obj)` loops by defining `iterator()` and `next()` methods.
 
+### Sealed types
+Prefix a `class`, `struct`, or `enum` with `sealed` to forbid `extend` blocks from adding methods to it. This locks the type's method surface to what it declares itself:
+
+```dream
+sealed class Token { public kind: int; }
+
+// error: Cannot extend sealed type 'Token'
+extend Token { public fun describe(): string { return "token"; } }
+```
+
+`sealed` may be combined with `public` in either order (`public sealed class ...`). It only blocks user `extend` blocks — a sealed type may still implement interfaces (including their default methods) and derive `@json`.
+
 ## When to use which?
 
 *   Use a **`struct`** for small, copyable bundles of data with value identity (points, vectors, colors, ranges).

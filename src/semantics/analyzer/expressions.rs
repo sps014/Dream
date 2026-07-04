@@ -115,8 +115,8 @@ impl<'a> Analyzer<'a> {
                     // The synthesized call re-evaluates the receiver, so drop the base HIR taken above.
                     let _ = array_hir;
                     return self.analyze_index_get(
-                        *array_expr,
-                        *index_expr,
+                        array_expr,
+                        index_expr,
                         &array_type,
                         parent_function,
                         symbol_table,
@@ -245,7 +245,7 @@ impl<'a> Analyzer<'a> {
                 let stripped = strip_nullable(&left_name);
                 if left_type.is_unknown() {
                     self.hir_none();
-                } else if stripped == "object" || self.is_interface_name(&stripped) {
+                } else if stripped == "object" || self.is_interface_name(stripped) {
                     self.hir_set_is_type(left_hir, right_type);
                 } else {
                     self.hir_set_bool(stripped == strip_nullable(&right_name));

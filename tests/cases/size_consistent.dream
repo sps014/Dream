@@ -1,7 +1,7 @@
 // `size()` is the single, uniform element-count accessor across every collection: raw arrays,
 // strings, `List`, and `Map` all answer to the same `.size()`.
 fun main(): void {
-    let a = Array.new<int>(4);
+    let a = Buffer.alloc<int>(4);
     System.println(a.size());     // 4  (array)
 
     let s = "hello";

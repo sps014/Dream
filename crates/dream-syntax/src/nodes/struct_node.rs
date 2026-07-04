@@ -39,6 +39,9 @@ pub struct StructDeclarationNode<'a> {
     /// True when declared with the `struct` keyword (a value type): stored inline with copy
     /// semantics rather than as a heap-allocated, reference-counted `class`.
     pub is_value: bool,
+    /// True when declared `sealed`: no `extend` block may target this type. Guards the type's method
+    /// surface against outside extension (enforced during semantic analysis).
+    pub is_sealed: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,
@@ -63,6 +66,7 @@ impl<'a> StructDeclarationNode<'a> {
             implements: Vec::new(),
             is_public,
             is_value: false,
+            is_sealed: false,
             file_path: None,
         }
     }
