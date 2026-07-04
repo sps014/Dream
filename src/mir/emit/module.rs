@@ -53,20 +53,24 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
     let used_slots = used_iface_slots(mir);
     let iface = emit_interface_dispatch(mir, interner, heap_base(&strings), &used_slots);
 
-    // Linear memory + allocator runtime state. The heap bump pointer starts above the itable region.
-    let _ = writeln!(out, "(memory {})", MEMORY_PAGES);
+    // Linear memory + allocator runtime state. Layout (low -> high): static data (strings + itables)
+    // | shadow-stack region (grows down) | heap (grows up, extends memory via memory.grow). The
+    // shadow stack and heap grow away from a shared boundary in opposite directions, so they never
+    // collide. `iface.heap_start` is the end of the static data; the shadow stack occupies the next
+    // SHADOW_STACK_SIZE bytes and the heap begins at the top of that region.
+    let data_end = iface.heap_start;
+    let heap_base = data_end + SHADOW_STACK_SIZE;
+    let initial_pages = heap_base.div_ceil(WASM_PAGE_SIZE) + INITIAL_HEAP_PAGES;
+    let _ = writeln!(out, "(memory {})", initial_pages);
     let _ = writeln!(
         out,
         "(global $heap_ptr (mut i32) (i32.const {}))",
-        iface.heap_start
+        heap_base
     );
     out.push_str("(global $free_list_head (mut i32) (i32.const 0))\n");
-    // Shadow-stack pointer for inline value (`struct`) locals; grows down from the top of memory.
-    let _ = writeln!(
-        out,
-        "(global $__sp (mut i32) (i32.const {}))",
-        SHADOW_STACK_TOP
-    );
+    // Shadow-stack pointer for inline value (`struct`) locals; grows down from the heap base toward
+    // the static data (its region floor).
+    let _ = writeln!(out, "(global $__sp (mut i32) (i32.const {}))", heap_base);
     out.push_str("(global $live_objects (mut i32) (i32.const 0))\n");
     out.push_str("(global $total_allocations (mut i32) (i32.const 0))\n");
 

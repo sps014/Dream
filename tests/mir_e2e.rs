@@ -10,8 +10,8 @@
 
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
-    link_console_functions, link_file_functions, link_http_functions, link_math_functions,
-    link_regex_functions, read_string_from_memory,
+    link_console_functions, link_datetime_functions, link_file_functions, link_http_functions,
+    link_math_functions, link_regex_functions, read_string_from_memory,
 };
 use std::collections::BTreeSet;
 use std::fs;
@@ -102,6 +102,7 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     link_http_functions(&mut linker).unwrap();
     link_regex_functions(&mut linker).unwrap();
     link_console_functions(&mut linker).unwrap();
+    link_datetime_functions(&mut linker).unwrap();
 
     linker
         .define_unknown_imports_as_traps(&module)

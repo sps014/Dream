@@ -42,16 +42,28 @@ pub const HEADER_REFCOUNT_OFFSET: u32 = 8;
 pub const LEN_PREFIX_SIZE: u32 = 4;
 
 // -- Linear memory -------------------------------------------------------------------------------
+//
+// Layout, low -> high address:
+//
+//   [ static data ] [ shadow stack -> grows DOWN ] [ heap -> grows UP (memory.grow) ]
+//   ^ strings+itables ^ SHADOW_STACK_SIZE bytes     ^ heap base == shadow-stack top
+//
+// The shadow stack (inline value-`struct` locals) and the heap share a single boundary and grow
+// away from it in *opposite* directions, so they can never collide. The shadow stack is capped at
+// `SHADOW_STACK_SIZE` (a deep-recursion bound); the heap is effectively unbounded, extending linear
+// memory via `memory.grow` in the allocator's bump path.
 
 /// WASM linear-memory page size, in bytes.
 pub const WASM_PAGE_SIZE: u32 = 65536;
 
-/// Linear-memory size, in WASM pages.
-pub const MEMORY_PAGES: u32 = 16;
+/// Bytes reserved for the shadow stack. It occupies its own region just above the static data and
+/// grows *downward*; the heap base sits at the top of this region. Sized to comfortably hold deep
+/// value-`struct` recursion (overflowing it is a stack-overflow bug, not a heap/stack collision).
+pub const SHADOW_STACK_SIZE: u32 = 16 * WASM_PAGE_SIZE; // 1 MiB
 
-/// Top of the shadow stack (inline value-`struct` locals), which grows *downward* from the top of
-/// linear memory while the heap bump-allocates *upward*.
-pub const SHADOW_STACK_TOP: u32 = MEMORY_PAGES * WASM_PAGE_SIZE;
+/// Pages of heap mapped in the initial memory, beyond the static-data + shadow-stack regions. The
+/// heap grows past this on demand via `memory.grow`, so this is only a starting cushion.
+pub const INITIAL_HEAP_PAGES: u32 = 1;
 
 /// Base address (block start) of the interned string data segment; the heap begins above it.
 pub const STRING_BASE: u32 = 1024;

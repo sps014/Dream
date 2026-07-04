@@ -37,14 +37,17 @@ const HEAP_HEADER_SIZE: u32 = super::abi::HEAP_HEADER_SIZE;
 /// `ptr`; there is no NUL terminator (the length prefix makes it redundant). The heap starts above.
 const STRING_BASE: u32 = super::abi::STRING_BASE;
 
-/// Linear-memory size, in 64 KiB WASM pages.
-const MEMORY_PAGES: u32 = super::abi::MEMORY_PAGES;
+/// Bytes reserved for the shadow stack (inline value-`struct` locals). It grows *downward* from its
+/// region top (which is also the heap base); the heap grows *upward* from there via `memory.grow`.
+/// Each function with value locals reserves its frame by subtracting from `$__sp` in its prologue
+/// and restores `$__sp` before every return. See [`super::abi`] for the full memory layout.
+const SHADOW_STACK_SIZE: u32 = super::abi::SHADOW_STACK_SIZE;
 
-/// The shadow stack (for inline value-`struct` locals) grows *downward* from the top of linear
-/// memory, while the heap bump-allocates *upward* from `heap_start`. `$__sp` is initialized here;
-/// each function that has value locals reserves its frame by subtracting from `$__sp` in its
-/// prologue and restores `$__sp` before every return.
-const SHADOW_STACK_TOP: u32 = super::abi::SHADOW_STACK_TOP;
+/// Pages of heap mapped in the initial linear memory beyond the shadow-stack region.
+const INITIAL_HEAP_PAGES: u32 = super::abi::INITIAL_HEAP_PAGES;
+
+/// WASM linear-memory page size, in bytes.
+const WASM_PAGE_SIZE: u32 = super::abi::WASM_PAGE_SIZE;
 
 /// The fixed allocator runtime (`$malloc`/`$free`/`$retain`/`$release_generic`/`$object_tag`), the
 /// single source of truth for the heap ABI. Its debug-counter placeholders are filled in by
