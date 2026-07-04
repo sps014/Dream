@@ -3,8 +3,11 @@
 //! genuinely require the host: the current time and the OS timezone database. Browser/Node hosts
 //! implement the same names in `runtime/dream.js`.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::OnceLock;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use wasmtime::*;
+
+static START_INSTANT: OnceLock<Instant> = OnceLock::new();
 
 /// Registers the `DateTime` host functions on `linker`. Shared by the CLI runner and the E2E test
 /// harness so the native behavior can never drift.
@@ -14,6 +17,11 @@ pub fn link_datetime_functions(linker: &mut Linker<()>) -> Result<()> {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
             .unwrap_or(0)
+    })?;
+
+    linker.func_wrap("Dream", "timeNowNanos", || -> i64 {
+        let start = START_INSTANT.get_or_init(Instant::now);
+        start.elapsed().as_nanos() as i64
     })?;
 
     // Minutes *east* of UTC for the local system timezone at the given UTC epoch millisecond

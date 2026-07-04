@@ -3,4 +3,9 @@ class Time {
     // Sleeps for `ms` milliseconds.
     @intrinsic("sleep")
     static extern async fun sleep(ms: int): void;
+
+    // Returns a high-resolution, monotonically increasing timestamp in nanoseconds.
+    // Useful for benchmarking and measuring elapsed time.
+    @js("Dream", "timeNowNanos")
+    static extern fun nano_time(): long;
 }

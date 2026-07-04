@@ -649,6 +649,14 @@ function defaultDreamModule(getInstance) {
     // "minutes east of UTC", hence the negation.
     dateNowMillis: () => BigInt(Date.now()),
     dateLocalOffsetMinutes: (millis) => -new Date(Number(millis)).getTimezoneOffset(),
+    // High-resolution monotonic timer (see src/stdlib/system/stopwatch.dream).
+    timeNowNanos: () => {
+      if (isNode) {
+        return process.hrtime.bigint();
+      } else {
+        return BigInt(Math.floor(performance.now() * 1000000));
+      }
+    },
     // Console helpers (see src/stdlib/system/system.dream). Synchronous, mirroring
     // src/execution/host/console.rs. In Node, reads block on fd 0 via `fs.readSync`; there is no
     // synchronous stdin in a browser, so `readLine`/`readKey` fall back to `prompt()` there (and

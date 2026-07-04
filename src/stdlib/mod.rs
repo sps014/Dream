@@ -65,6 +65,7 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
     ("<std>/system/system.dream", include_str!("system/system.dream")),
     ("<std>/system/console_color.dream", include_str!("system/console_color.dream")),
     ("<std>/system/time.dream", include_str!("system/time.dream")),
+    ("<std>/system/stopwatch.dream", include_str!("system/stopwatch.dream")),
     ("<std>/system/datetime.dream", include_str!("system/datetime.dream")),
     ("<std>/system/debug.dream", include_str!("system/debug.dream")),
 ];

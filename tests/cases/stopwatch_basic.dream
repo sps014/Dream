@@ -1,0 +1,52 @@
+fun main() {
+    let sw = Stopwatch();
+    
+    // We can't deterministically test actual elapsed time since CI/environments vary,
+    // but we can test the state transitions and that elapsed time is somewhat monotonic.
+
+    System.println(sw.is_running);
+    
+    sw.stop();
+    System.println(sw.is_running);
+    
+    let e1 = sw.elapsed_nanos();
+    let e2 = sw.elapsed_ms();
+    
+    // Since it's stopped, these should be stable across multiple reads
+    let e3 = sw.elapsed_nanos();
+    System.println(e1 == e3);
+    
+    sw.reset();
+    System.println(sw.is_running);
+    System.println(sw.elapsed_nanos());
+    System.println(sw.elapsed_ms());
+    
+    sw.restart();
+    System.println(sw.is_running);
+    
+    sw.stop();
+    System.println(sw.elapsed_nanos() >= 0L); // Should be >= 0
+    
+    // Test start/stop accumulation
+    sw.reset();
+    sw.start();
+    // Simulate some work...
+    let i = 0;
+    while (i < 1000) {
+        i = i + 1;
+    }
+    sw.stop();
+    
+    let acc1 = sw.elapsed_nanos();
+    System.println(acc1 > 0L);
+    
+    sw.start();
+    let j = 0;
+    while (j < 1000) {
+        j = j + 1;
+    }
+    sw.stop();
+    
+    let acc2 = sw.elapsed_nanos();
+    System.println(acc2 > acc1);
+}
