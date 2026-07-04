@@ -380,3 +380,89 @@ fn debug_toggles_allocator_instrumentation() {
     assert!(runtime_prelude(true).contains("global.set $live_objects"));
     assert!(!runtime_prelude(false).contains("global.set $live_objects"));
 }
+
+/// Builds a one-function module carrying a named local and a `DebugLine` marker, so both the
+/// debug-info and release emissions can be compared.
+fn debug_line_module(i: &TypeInterner) -> crate::mir::Mir {
+    use crate::mir::Statement;
+    let mut b = FunctionBuilder::new("add", i.int());
+    b.set_file(Some("/tmp/thing.dream".to_string()));
+    let a = b.new_param(i.int(), Some("a".into()));
+    let c = b.new_param(i.int(), Some("b".into()));
+    let sum = b.new_local(i.int(), Some("sum".into()));
+    // A source-line marker precedes the statement it annotates.
+    b.push(Statement::DebugLine(2));
+    b.assign(
+        Place::Local(sum),
+        Rvalue::Binary(
+            BinOp::Add,
+            Operand::Copy(Place::Local(a)),
+            Operand::Copy(Place::Local(c)),
+        ),
+    );
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(sum)))));
+    crate::mir::Mir {
+        functions: vec![b.finish()],
+        ..Default::default()
+    }
+}
+
+/// A debug-info build must instrument each `DebugLine` with the `dream_debug` hooks (line/enter/exit),
+/// spill named locals into the exported `$__dbg_v*` pool, and emit a source map describing them; and
+/// the module must still assemble to valid WebAssembly.
+#[test]
+fn debug_info_emits_hooks_and_source_map() {
+    let i = TypeInterner::new();
+    let mir = debug_line_module(&i);
+    let (wat, map) = emit_module_with_debug(&mir, &i, false, true);
+
+    assert!(
+        wat.contains("(import \"dream_debug\" \"line\""),
+        "debug-info must import the line hook:\n{}",
+        wat
+    );
+    assert!(wat.contains("(import \"dream_debug\" \"enter\""));
+    assert!(wat.contains("(import \"dream_debug\" \"exit\""));
+    assert!(
+        wat.contains("(call $__dbg_enter"),
+        "each function announces entry:\n{}",
+        wat
+    );
+    assert!(
+        wat.contains("(call $__dbg_line (i32.const 0) (i32.const 2))"),
+        "the DebugLine(2) marker lowers to a line hook for file 0, line 2:\n{}",
+        wat
+    );
+    assert!(
+        wat.contains("(call $__dbg_exit"),
+        "each return pops the debugger frame:\n{}",
+        wat
+    );
+    assert!(
+        wat.contains("(export \"__dbg_v0\" (global $__dbg_v0))"),
+        "named locals are spilled to an exported global pool:\n{}",
+        wat
+    );
+
+    let map = map.expect("debug-info build must return a source map");
+    assert_eq!(map.files, vec!["/tmp/thing.dream".to_string()]);
+    assert_eq!(map.functions.len(), 1);
+    let func = &map.functions[0];
+    let names: Vec<&str> = func.vars.iter().map(|v| v.name.as_str()).collect();
+    assert_eq!(names, vec!["a", "b", "sum"]);
+
+    wat::parse_str(&wat)
+        .unwrap_or_else(|e| panic!("instrumented module failed to assemble: {}\n{}", e, wat));
+}
+
+/// A release build (no debug-info) must carry none of the debug hooks and no source map, so it pays
+/// zero debugging overhead.
+#[test]
+fn release_build_has_no_debug_hooks() {
+    let i = TypeInterner::new();
+    let mir = debug_line_module(&i);
+    let (wat, map) = emit_module_with_debug(&mir, &i, false, false);
+    assert!(map.is_none(), "release build must not produce a source map");
+    assert!(!wat.contains("dream_debug"), "no debug imports:\n{}", wat);
+    assert!(!wat.contains("__dbg_"), "no debug hooks/pool:\n{}", wat);
+}

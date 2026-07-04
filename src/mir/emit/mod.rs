@@ -71,6 +71,7 @@ const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
 /// always self-contained.
 const RUNTIME_STR_CONSTS: [&str; 3] = ["true", "false", "-"];
 
+pub mod debug_map;
 mod emitter;
 mod js_marshal;
 mod module;
@@ -98,8 +99,9 @@ use wat_dce::*;
 
 // The external API of the backend, at the historical `crate::mir::emit::…` paths.
 pub(crate) use emitter::emit_async_poll;
+pub use debug_map::DebugModule;
 pub use emitter::emit_function;
-pub use module::{emit_module, emit_program};
+pub use module::{emit_module, emit_module_with_debug, emit_program};
 pub(crate) use tables::{func_symbol, poll_symbol};
 pub(crate) use types::wasm_ty_of;
 

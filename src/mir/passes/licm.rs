@@ -277,7 +277,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             args.iter().for_each(|a| operand_reads(a, f));
         }
         Statement::Print { arg, .. } => operand_reads(arg, f),
-        Statement::Nop => {}
+        Statement::Nop | Statement::DebugLine(_) => {}
     }
 }
 

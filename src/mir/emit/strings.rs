@@ -188,7 +188,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             args.iter().for_each(|a| strings_in_operand(a, out));
         }
         Statement::Print { arg, .. } => strings_in_operand(arg, out),
-        Statement::Nop => {}
+        Statement::Nop | Statement::DebugLine(_) => {}
     }
 }
 

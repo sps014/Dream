@@ -122,7 +122,7 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             args.iter().for_each(|a| read_operand(a, read));
         }
         Statement::Print { arg, .. } => read_operand(arg, read),
-        Statement::Nop => {}
+        Statement::Nop | Statement::DebugLine(_) => {}
     }
 }
 

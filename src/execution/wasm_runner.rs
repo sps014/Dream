@@ -21,6 +21,39 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut store = Store::new(&engine, ());
     let mut linker = Linker::new(&engine);
 
+    link_host_functions(&mut linker)?;
+
+    // JS-interop externs (e.g. the `Dream` host module behind the dynamic `js` type/regex/fetch, or any
+    // user `@js(...)` import) have no native implementation. Stub every still-unresolved import
+    // as a trap so modules that merely *declare* them still instantiate and run under wasmtime;
+    // calling one without a JS host traps, matching `runtime/dream.js`'s thrower stubs.
+    linker.define_unknown_imports_as_traps(&module)?;
+
+    let instance = linker.instantiate(&mut store, &module)?;
+
+    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN)
+    {
+        main_func.call(&mut store, ())?;
+    } else {
+        println!("No main function found in module");
+    }
+
+    Ok(())
+}
+
+/// Wires every fixed host binding a compiled Dream module may import — the `print_*` builtins and the
+/// [`super::host`] function modules (math/file/http/regex/console/datetime/worker) — into `linker`.
+/// Shared by the normal runner and the interactive debugger so both expose an identical host ABI.
+pub fn link_host_functions(linker: &mut Linker<()>) -> Result<()> {
+    link_print_functions(linker)?;
+    link_runtime_host_functions(linker)?;
+    Ok(())
+}
+
+/// Wires the `print_*`/`println` builtins to real process stdout. The debugger provides its own
+/// variants that forward to DAP `output` events instead (so program output does not corrupt the DAP
+/// stream on stdout), so this is factored out of [`link_runtime_host_functions`].
+pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap("env", "print_int", |v: i32| {
         print!("{}", v);
     })?;
@@ -66,31 +99,21 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         },
     )?;
+    Ok(())
+}
 
-    link_math_functions(&mut linker)?;
-    link_file_functions(&mut linker)?;
-    link_http_functions(&mut linker)?;
-    link_regex_functions(&mut linker)?;
-    link_console_functions(&mut linker)?;
-    link_datetime_functions(&mut linker)?;
-    link_worker_functions(&mut linker)?;
+/// Wires every host binding *except* the `print_*` builtins: the [`super::host`] function modules
+/// (math/file/http/regex/console/datetime/worker) plus the `strlen`/`debug_get_free_list_head`
+/// stubs. The debugger reuses this and supplies its own print bindings.
+pub fn link_runtime_host_functions(linker: &mut Linker<()>) -> Result<()> {
+    link_math_functions(linker)?;
+    link_file_functions(linker)?;
+    link_http_functions(linker)?;
+    link_regex_functions(linker)?;
+    link_console_functions(linker)?;
+    link_datetime_functions(linker)?;
+    link_worker_functions(linker)?;
     linker.func_wrap("env", "strlen", |_: i32| -> i32 { 0 })?;
     linker.func_wrap("env", "debug_get_free_list_head", || -> i32 { 0 })?;
-
-    // JS-interop externs (e.g. the `Dream` host module behind the dynamic `js` type/regex/fetch, or any
-    // user `@js(...)` import) have no native implementation. Stub every still-unresolved import
-    // as a trap so modules that merely *declare* them still instantiate and run under wasmtime;
-    // calling one without a JS host traps, matching `runtime/dream.js`'s thrower stubs.
-    linker.define_unknown_imports_as_traps(&module)?;
-
-    let instance = linker.instantiate(&mut store, &module)?;
-
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN)
-    {
-        main_func.call(&mut store, ())?;
-    } else {
-        println!("No main function found in module");
-    }
-
     Ok(())
 }

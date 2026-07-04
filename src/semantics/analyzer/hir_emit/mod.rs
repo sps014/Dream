@@ -62,6 +62,15 @@ pub(super) struct HirEmit {
     instance: Vec<TypeId>,
     ret: Option<TypeId>,
     is_async: bool,
+    /// Source file of the function currently being emitted (from `FunctionNode::file_path`), carried
+    /// onto the finished [`HFunction`] for debug-info line attribution.
+    file: Option<String>,
+    /// True when debug-info instrumentation is requested: statement analysis then interleaves
+    /// [`HStmt::DebugLine`] markers so the backend can emit source-line hooks.
+    debug_info: bool,
+    /// The last source line for which a [`HStmt::DebugLine`] marker was emitted in the current
+    /// function, so consecutive statements on the same line do not each emit a redundant marker.
+    last_debug_line: Option<u32>,
     /// Name -> (slot, type) for module-level variables, populated once after globals are analyzed
     /// (see [`Analyzer::hir_register_globals`]). Read by identifier/assignment lowering so a name
     /// that is not a local resolves to a [`Binding::Global`].
@@ -174,6 +183,8 @@ impl<'a> Analyzer<'a> {
         self.hir.name = lookup_name;
         self.hir.name_span = Some(function.name.position);
         self.hir.is_async = function.is_async;
+        self.hir.file = function.file_path.as_ref().map(|f| f.to_string());
+        self.hir.last_debug_line = None;
         self.hir.ret = Some(
             function
                 .return_type
@@ -223,6 +234,7 @@ impl<'a> Analyzer<'a> {
                     locals: std::mem::take(&mut self.hir.local_decls),
                     body,
                     is_async: self.hir.is_async,
+                    file: self.hir.file.take(),
                 });
             }
         } else if self.hir.collecting {
@@ -297,17 +309,42 @@ impl<'a> Analyzer<'a> {
         self.push_stmt(stmt);
     }
 
+    /// Enables debug-info instrumentation: statement analysis will interleave [`HStmt::DebugLine`]
+    /// markers. Set once from the compiler driver before analysis.
+    pub(in crate::semantics::analyzer) fn hir_set_debug_info(&mut self, on: bool) {
+        self.hir.debug_info = on;
+    }
+
+    /// Records a source-line marker for the *next* statement, if debug-info is on. Deduplicates
+    /// consecutive statements sharing a line so a breakpoint stops once per line, not once per
+    /// sub-statement. `line` is 1-based (as produced by [`crate::text::text_span::TextSpan`]).
+    pub(in crate::semantics::analyzer) fn hir_mark_line(&mut self, line: u32) {
+        if !self.hir.debug_info || !self.active() || line == 0 {
+            return;
+        }
+        if self.hir.last_debug_line == Some(line) {
+            return;
+        }
+        self.hir.last_debug_line = Some(line);
+        self.push_stmt(HStmt::DebugLine(line));
+    }
+
     /// Opens a nested statement block (e.g. a loop body). Paired with [`Self::hir_close_block`].
     /// Gated on `collecting` (not `ok`) so push/pop stay balanced even after the function is doomed.
     pub(in crate::semantics::analyzer) fn hir_open_block(&mut self) {
         if self.hir.collecting {
             self.hir.blocks.push(Vec::new());
+            // A nested block starts a fresh line context so its first statement always emits a marker
+            // even when it shares a line with the enclosing control-flow header.
+            self.hir.last_debug_line = None;
         }
     }
 
     /// Closes the innermost block and returns its statements.
     pub(in crate::semantics::analyzer) fn hir_close_block(&mut self) -> Vec<HStmt> {
         if self.hir.collecting {
+            // Re-arm marker emission for the statement that follows the closed block.
+            self.hir.last_debug_line = None;
             self.hir.blocks.pop().unwrap_or_default()
         } else {
             Vec::new()

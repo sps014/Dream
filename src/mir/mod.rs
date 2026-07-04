@@ -80,6 +80,10 @@ pub struct MirFunction {
     pub is_async: bool,
     /// When `is_async`, the full typed HIR function preserved for the coroutine transform.
     pub hir_fn: Option<crate::hir::HFunction>,
+    /// Absolute source-file path this function was declared in (debug-info only; `None` otherwise or
+    /// for synthesized functions). Used by the backend to attribute `DebugLine`s to a file in the
+    /// emitted source map.
+    pub file: Option<String>,
 }
 
 impl MirFunction {
@@ -138,6 +142,11 @@ pub enum Statement {
     },
     /// No-op; left behind by passes that delete statements without renumbering.
     Nop,
+    /// A debug-info source-line marker (1-based line within the function's source file). Emitted only
+    /// under debug-info; the backend lowers it to a `dream_debug.line` host-hook call and it is a
+    /// side-effecting barrier that optimization passes preserve (they must not reorder observable
+    /// operations across it or delete it). Carries no value and reads no locals.
+    DebugLine(u32),
 }
 
 /// How a block transfers control. Every block ends in exactly one terminator.
@@ -417,6 +426,7 @@ mod tests {
             ret: int,
             locals: vec![],
             is_async: false,
+            file: None,
             body: vec![HStmt::Return(Some(HExpr::new(
                 int,
                 HExprKind::Binary {

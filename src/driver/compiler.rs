@@ -25,6 +25,10 @@ pub struct Compiler {
     /// `Debug.total_allocations()` probes report real values. Off by default (release builds pay
     /// no per-allocation cost); enabled via the CLI `--debug` flag or [`Compiler::with_debug`].
     debug: bool,
+    /// When `true`, the compiler threads source-line info through HIR/MIR and the backend emits
+    /// source-line hooks + a `.dbg.json` source map for the interactive debugger. Off by default;
+    /// enabled via the CLI `-g`/`--debug-info` flag or [`Compiler::with_debug_info`].
+    debug_info: bool,
 }
 
 impl Compiler {
@@ -32,12 +36,20 @@ impl Compiler {
         Self {
             target,
             debug: false,
+            debug_info: false,
         }
     }
 
     /// Builder: enable allocator instrumentation for this compilation.
     pub fn with_debug(mut self, on: bool) -> Self {
         self.debug = on;
+        self
+    }
+
+    /// Builder: enable source-level debug-info instrumentation (line hooks + source map) for the
+    /// interactive debugger.
+    pub fn with_debug_info(mut self, on: bool) -> Self {
+        self.debug_info = on;
         self
     }
 
@@ -110,6 +122,7 @@ impl Compiler {
         info!("starting semantic analysis");
 
         let mut analyzer = Analyzer::new(&ast, &arena);
+        analyzer.set_debug_info(self.debug_info);
         // `analyze` reports each error into the bag and returns a typed failure once any error was
         // recorded, short-circuiting before code generation runs on a poisoned program.
         let symbol_info = match analyzer.analyze(&mut diagnostics) {
@@ -127,7 +140,7 @@ impl Compiler {
         // Destructuring moves the owned `hir` out and drops `symbol_info`'s borrowing references,
         // releasing the `&mut analyzer` borrow so the shared interner can be read (the HIR references
         // its `TypeId`s, so both must come from this same analyzer instance).
-        let text = {
+        let (text, debug_map) = {
             let crate::semantics::analyzer::SemanticInfo { hir, .. } = symbol_info;
             let interner = analyzer.interner();
             let mut mir = crate::mir::lower::lower_program(&hir, interner);
@@ -135,13 +148,25 @@ impl Compiler {
             // inlining (see `mir::passes::optimize_module`). RC is inserted there, before inlining,
             // so callee destruction stays deterministic; the per-function pipeline below only cleans
             // up the merged bodies.
-            crate::mir::passes::optimize_module(&mut mir, interner);
-            let pipeline = crate::mir::passes::PassManager::default_pipeline();
+            // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
+            // user variables and per-function call frames survive for the debugger; release builds
+            // use the full optimizing pipeline.
+            crate::mir::passes::optimize_module_opts(&mut mir, interner, !self.debug_info);
+            let pipeline = if self.debug_info {
+                crate::mir::passes::PassManager::debug_pipeline()
+            } else {
+                crate::mir::passes::PassManager::default_pipeline()
+            };
             for f in &mut mir.functions {
                 pipeline.run(f, interner);
             }
             match self.target {
-                Target::Wasm => crate::mir::emit::emit_module(&mir, interner, self.debug),
+                Target::Wasm => crate::mir::emit::emit_module_with_debug(
+                    &mir,
+                    interner,
+                    self.debug,
+                    self.debug_info,
+                ),
             }
         };
 
@@ -149,10 +174,29 @@ impl Compiler {
         fs::write(out_path, &text)?;
         info!("created file: {}", out_path);
 
+        // Emit the debug-info source map next to the `.wat` when debug-info is enabled, so the
+        // interactive debugger can map hook calls back to source lines/variables.
+        if let Some(map) = debug_map {
+            let map_path = debug_map_path(out_path);
+            fs::write(&map_path, map.to_json())?;
+            info!("created debug map: {}", map_path);
+        }
+
         // Also emit a binary `.wasm` (what browsers/Node load) and an `.abi.json` sidecar
         // describing extern imports and exports so the JS runtime can auto-marshal values.
         emit_wasm_and_abi(out_path, &text, ast.get_root())?;
 
         Ok(())
     }
+}
+
+/// Derives the `.dbg.json` debug-map path that sits next to the compiled `.wat` output.
+fn debug_map_path(out_path: &str) -> String {
+    let path = std::path::Path::new(out_path);
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("out");
+    let parent = path.parent().unwrap_or_else(|| std::path::Path::new(""));
+    parent
+        .join(format!("{}.dbg.json", stem))
+        .to_string_lossy()
+        .into_owned()
 }

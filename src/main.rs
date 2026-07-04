@@ -19,6 +19,8 @@ fn main() -> ExitCode {
     let mut verbose = false;
     let mut run_after_compile = false;
     let mut debug = false;
+    let mut debug_info = false;
+    let mut debug_adapter = false;
     let mut show_help = false;
     let mut file_name = None;
 
@@ -30,19 +32,31 @@ fn main() -> ExitCode {
             // `Debug.total_allocations()` probes report real values. Off by default so normal
             // builds carry zero per-allocation overhead.
             debug = true;
+        } else if arg == "-g" || arg == "--debug-info" {
+            // Enable source-level debug-info: line hooks + a `.dbg.json` source map for the
+            // interactive debugger. Off by default (zero overhead in normal builds).
+            debug_info = true;
         } else if arg == "-h" || arg == "--help" {
             show_help = true;
         } else if arg == "run" {
             run_after_compile = true;
+        } else if arg == "debug-adapter" {
+            // Speak the Debug Adapter Protocol over stdio for the given source file (used by editor
+            // debug clients such as the VS Code extension). Implies debug-info.
+            debug_adapter = true;
+            debug_info = true;
         } else if !arg.starts_with('-') {
             file_name = Some(arg);
         }
     }
 
+    // Route logs to stderr so they never corrupt stdout — critical in `debug-adapter` mode, where
+    // stdout carries the framed DAP protocol stream (and harmless/conventional for other modes).
     let subscriber = FmtSubscriber::builder()
         .with_max_level(if verbose { Level::INFO } else { Level::WARN })
         .without_time()
         .with_target(false)
+        .with_writer(std::io::stderr)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
@@ -64,7 +78,9 @@ fn main() -> ExitCode {
     info!("========================");
     info!("Compiling file: {}", file_name);
 
-    let compiler = Compiler::new(Target::Wasm).with_debug(debug);
+    let compiler = Compiler::new(Target::Wasm)
+        .with_debug(debug)
+        .with_debug_info(debug_info);
     let out_path = match get_path_from_file_path(file_name) {
         Some(path) => path,
         None => {
@@ -76,6 +92,16 @@ fn main() -> ExitCode {
     match compiler.compile(file_name, &out_path) {
         Ok(_) => {
             info!("Compilation successful");
+
+            if debug_adapter {
+                // Hand control to the Debug Adapter Protocol server, which loads the just-emitted
+                // `.wat` + `.dbg.json` and drives execution under the debugger over stdio.
+                if let Err(e) = dream::execution::debugger::run_debug_adapter(&out_path) {
+                    error!("Debug adapter failed: {}", e);
+                    return ExitCode::FAILURE;
+                }
+                return ExitCode::SUCCESS;
+            }
 
             if run_after_compile {
                 info!("Executing via Wasmtime...");
@@ -96,13 +122,15 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [-d|--debug] [run] <file>",
+        "Usage: {} [-v|--verbose] [-d|--debug] [-g|--debug-info] [run|debug-adapter] <file>",
         program
     );
-    error!("  -v, --verbose   Print progress information");
-    error!("  -d, --debug     Enable allocator instrumentation for Debug probes");
-    error!("  -h, --help      Show this help message");
-    error!("  run             Execute the compiled module after a successful build");
+    error!("  -v, --verbose      Print progress information");
+    error!("  -d, --debug        Enable allocator instrumentation for Debug probes");
+    error!("  -g, --debug-info   Emit source-level debug info (line hooks + .dbg.json source map)");
+    error!("  -h, --help         Show this help message");
+    error!("  run                Execute the compiled module after a successful build");
+    error!("  debug-adapter      Run the Debug Adapter Protocol server over stdio (implies -g)");
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
 }
 

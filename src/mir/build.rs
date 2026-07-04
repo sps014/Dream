@@ -16,6 +16,7 @@ pub struct FunctionBuilder {
     locals: Vec<LocalDecl>,
     blocks: Vec<BasicBlock>,
     current: BlockId,
+    file: Option<String>,
 }
 
 impl FunctionBuilder {
@@ -32,11 +33,17 @@ impl FunctionBuilder {
             locals: Vec::new(),
             blocks: vec![BasicBlock::default()],
             current: BlockId(0),
+            file: None,
         }
     }
 
     pub fn set_async(&mut self, is_async: bool) {
         self.is_async = is_async;
+    }
+
+    /// Records the source file this function was declared in (debug-info line attribution).
+    pub fn set_file(&mut self, file: Option<String>) {
+        self.file = file;
     }
 
     /// Sets the nominal def and (optional) monomorphization instance args for the emitted symbol.
@@ -119,6 +126,7 @@ impl FunctionBuilder {
             blocks: self.blocks,
             entry: BlockId(0),
             hir_fn: None,
+            file: self.file,
         }
     }
 }

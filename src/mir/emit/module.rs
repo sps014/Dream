@@ -22,6 +22,7 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
             &ftable,
             &value_glue,
             false,
+            None,
         ));
         out.push('\n');
     }
@@ -29,20 +30,64 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
 }
 
 /// Emits a whole MIR program as a single `(module ...)`, exporting every (non-instance) function
-/// under its source name. This is the self-contained unit the driver will hand to the WASM
-/// assembler once the runtime layers are wired in.
+/// under its source name. This is the self-contained unit the driver hands to the WASM assembler.
 pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) -> String {
+    emit_module_with_debug(mir, interner, debug, false).0
+}
+
+/// Like [`emit_module`], but when `debug_info` is set it also instruments every function with the
+/// `dream_debug` source-line hooks + local spilling and returns the [`DebugModule`] source map
+/// describing them. When `debug_info` is false the returned map is `None` and the WAT is identical
+/// to [`emit_module`].
+pub fn emit_module_with_debug(
+    mir: &crate::mir::Mir,
+    interner: &TypeInterner,
+    debug: bool,
+    debug_info: bool,
+) -> (String, Option<crate::mir::emit::debug_map::DebugModule>) {
     let symbols = symbol_table(mir);
     let sigs = signature_table(mir);
     let strings = string_table(mir);
     let tags = struct_tags(mir);
     let ftable = func_table(mir);
     let value_glue = value_glue_types(mir, interner);
+
+    // Debug-info metadata (file table + per-function variable tables + spill-pool width). Built up
+    // front so both the instrumentation below and the returned source map agree on ids/slots.
+    let dbg_module = if debug_info {
+        Some(crate::mir::emit::debug_map::DebugModule::build(
+            mir, interner, &symbols,
+        ))
+    } else {
+        None
+    };
+    // Symbol -> its debug metadata, so the per-function emit can hand the emitter its var table.
+    let dbg_by_symbol: HashMap<&str, &crate::mir::emit::debug_map::DebugFunction> = dbg_module
+        .as_ref()
+        .map(|m| m.functions.iter().map(|f| (f.symbol.as_str(), f)).collect())
+        .unwrap_or_default();
+
     let mut out = String::new();
     out.push_str("(module\n");
 
     // Imports come first (WASM requires imported funcs before defined ones).
     emit_imports(&mut out, mir, interner);
+    // Debug hook imports (only referenced by instrumented functions).
+    if debug_info {
+        let m = crate::mir::emit::debug_map::DEBUG_MODULE;
+        let _ = writeln!(
+            out,
+            "(import \"{m}\" \"line\" (func $__dbg_line (param i32) (param i32)))"
+        );
+        let _ = writeln!(
+            out,
+            "(import \"{m}\" \"enter\" (func $__dbg_enter (param i32)))"
+        );
+        let _ = writeln!(
+            out,
+            "(import \"{m}\" \"exit\" (func $__dbg_exit (param i32)))"
+        );
+    }
 
     // `call_indirect` signature types (declared before use), plus the function table + its export.
     emit_func_signatures(&mut out, interner);
@@ -85,6 +130,15 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
             wasm_ty_of(interner, g.ty),
             zero
         );
+    }
+
+    // Debug-info spill pool: one exported mutable `i64` global per live-local slot. Each named local
+    // is spilled here at every statement boundary so the debugger can read live values from the host.
+    if let Some(m) = &dbg_module {
+        for k in 0..m.global_pool {
+            let _ = writeln!(out, "(global $__dbg_v{k} (mut i64) (i64.const 0))");
+            let _ = writeln!(out, "(export \"__dbg_v{k}\" (global $__dbg_v{k}))");
+        }
     }
 
     out.push_str(&runtime_prelude(debug));
@@ -135,6 +189,7 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
                 debug,
             ));
         } else {
+            let debug_fn = dbg_by_symbol.get(func_symbol(f).as_str()).copied();
             out.push_str(&emit_function_with(
                 f,
                 interner,
@@ -146,6 +201,7 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
                 &ftable,
                 &value_glue,
                 debug,
+                debug_fn,
             ));
         }
         if f.name == crate::mir::lower::INIT_FN_NAME {
@@ -217,12 +273,14 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
     }
     out.push_str(")\n");
     // Whole-module dead-function elimination: drop embedded runtime helpers (and any other funcs)
-    // not reachable from the module's exports / start / function table.
-    if !debug {
+    // not reachable from the module's exports / start / function table. Skipped in debug and
+    // debug-info builds (which prioritize keeping the full module for inspection/debugging).
+    let wat = if !debug && !debug_info {
         strip_dead_functions(&out)
     } else {
         out
-    }
+    };
+    (wat, dbg_module)
 }
 
 /// Emits the module's `(import ...)` declarations: the fixed host `print_*` builtins (which

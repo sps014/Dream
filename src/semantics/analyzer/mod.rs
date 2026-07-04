@@ -58,6 +58,38 @@ fn empty_span() -> TextSpan {
     TextSpan::new((0, 0), &Rc::new(LineText::new(String::new())))
 }
 
+/// Best-effort 1-based source line of a statement, used to place debug-info line markers. Picks a
+/// representative token/expression for each statement kind; returns `None` for statements with no
+/// anchoring token (bare `break`/`continue`, `return;`), which simply carry no breakpoint line.
+pub(super) fn statement_line(
+    statement: &crate::syntax::nodes::StatementNode,
+) -> Option<usize> {
+    use crate::syntax::nodes::StatementNode;
+    let line = |span: Option<TextSpan>| span.map(|s| s.line_no);
+    match statement {
+        StatementNode::Assignment(tok, _)
+        | StatementNode::Declaration(tok, _, _, _)
+        | StatementNode::FunctionInvocation(tok, _, _)
+        | StatementNode::MethodInvocation(_, tok, _, _)
+        | StatementNode::MemberAssignment(_, tok, _)
+        | StatementNode::ForEach(tok, _, _, _, _) => Some(tok.position.line_no),
+        StatementNode::IndexAssignment(arr, _, _) => line(arr.position()),
+        StatementNode::Return(Some(e))
+        | StatementNode::ExpressionStatement(e)
+        | StatementNode::AwaitStmt(e)
+        | StatementNode::While(e, _)
+        | StatementNode::DoWhile(_, e)
+        | StatementNode::IfElse(e, _, _, _)
+        | StatementNode::Switch(e, _, _) => line(e.position()),
+        StatementNode::For(_, Some(cond), _, _) => line(cond.position()),
+        StatementNode::Labeled(_, inner) => statement_line(inner),
+        StatementNode::Return(None)
+        | StatementNode::For(_, None, _, _)
+        | StatementNode::Break(_)
+        | StatementNode::Continue(_) => None,
+    }
+}
+
 /// Creates a token with an empty source span, used when the analyzer synthesizes
 /// AST nodes (injected `this` parameters, monomorphized generic types, etc.).
 fn synthetic_token(kind: TokenKind, text: &str) -> SyntaxToken {
@@ -340,6 +372,12 @@ impl<'a> Analyzer<'a> {
     /// (`SemanticInfo::hir`), so the MIR backend must be handed *this* interner to lower that HIR.
     pub(crate) fn interner(&self) -> &crate::types::TypeInterner {
         &self.type_ctx.interner
+    }
+
+    /// Enables debug-info instrumentation so HIR emission interleaves [`crate::hir::HStmt::DebugLine`]
+    /// source-line markers. Call before [`Self::analyze`].
+    pub fn set_debug_info(&mut self, on: bool) {
+        self.hir_set_debug_info(on);
     }
 
     /// File/module-level visibility test (Axis 2). A `public` declaration is visible everywhere; a

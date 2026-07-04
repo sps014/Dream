@@ -130,6 +130,10 @@ pub struct HFunction {
     pub locals: Vec<HLocal>,
     pub body: Vec<HStmt>,
     pub is_async: bool,
+    /// Absolute path of the source file this function was declared in. Carried for debug-info so the
+    /// backend/source-map can attribute each `DebugLine` to the right file. `None` for synthesized
+    /// functions (module init, tests) that have no originating source file.
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -227,6 +231,10 @@ pub enum HStmt {
     Continue(Option<String>),
     /// `await e;` at statement position (the only legal await position).
     Await(HExpr),
+    /// A debug-info marker recording the 1-based source line of the *next* executable statement.
+    /// Emitted only when the compiler runs with debug-info enabled; lowers to a `Statement::DebugLine`
+    /// in MIR and, ultimately, a call to the host `dream_debug.line` hook. Carries no runtime value.
+    DebugLine(u32),
 }
 
 /// One arm of a `switch`.
@@ -483,6 +491,7 @@ mod tests {
             locals: vec![],
             body,
             is_async: false,
+            file: None,
         };
 
         let hir = Hir {

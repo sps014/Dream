@@ -112,19 +112,95 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
 
             await saveActiveDreamFile(editor);
 
-            const dreamCmd = resolveDreamCliCommand(context);
-            if (!dreamCmd) {
-                return;
-            }
             const filePath = editor.document.uri.fsPath;
-
-            if (!runTerminal || runTerminal.exitStatus !== undefined) {
-                runTerminal = vscode.window.createTerminal('Dream');
-            }
-            runTerminal.show();
-            runTerminal.sendText(`${dreamCmd} --debug run ${quotePath(filePath)}`);
+            // Launch a `dream` debug session; the debug adapter factory below spawns the CLI's
+            // `debug-adapter` subcommand and speaks DAP over stdio.
+            await vscode.debug.startDebugging(
+                vscode.workspace.getWorkspaceFolder(editor.document.uri),
+                {
+                    type: 'dream',
+                    request: 'launch',
+                    name: 'Dream: Debug current file',
+                    program: filePath,
+                    stopOnEntry: false
+                }
+            );
         })
     );
+}
+
+/**
+ * Resolves the path to the bundled `dream` CLI binary (without shell quoting), or `null` if none is
+ * found. Mirrors `resolveDreamCliCommand` but returns a bare path suitable for a
+ * `DebugAdapterExecutable`, which invokes the program directly (no shell).
+ */
+function resolveDreamBinaryPath(context: vscode.ExtensionContext): string | null {
+    const platform = process.platform;
+    const arch = process.arch;
+    const ext = platform === 'win32' ? '.exe' : '';
+
+    const specificBinPath = path.join(context.extensionPath, 'bin', `dream-${platform}-${arch}${ext}`);
+    const genericBinPath = path.join(context.extensionPath, 'bin', `dream${ext}`);
+
+    let binPath = '';
+    if (fs.existsSync(specificBinPath)) {
+        binPath = specificBinPath;
+    } else if (fs.existsSync(genericBinPath)) {
+        binPath = genericBinPath;
+    }
+    if (binPath === '') {
+        return null;
+    }
+    try {
+        fs.chmodSync(binPath, '755');
+    } catch {
+        // Best-effort.
+    }
+    return binPath;
+}
+
+/**
+ * Wires the `dream` debug type to the CLI's `debug-adapter` subcommand: a `DebugConfigurationProvider`
+ * supplies a zero-config launch for the active file (F5 with no launch.json), and a
+ * `DebugAdapterDescriptorFactory` spawns the bundled `dream` binary as the DAP server over stdio.
+ */
+function registerDebugAdapter(context: vscode.ExtensionContext): void {
+    const provider: vscode.DebugConfigurationProvider = {
+        resolveDebugConfiguration(_folder, config) {
+            // Zero-config: if launched with no configuration, debug the active .dream file.
+            if (!config.type && !config.request && !config.name) {
+                const editor = vscode.window.activeTextEditor;
+                if (editor && editor.document.languageId === 'dream') {
+                    config.type = 'dream';
+                    config.request = 'launch';
+                    config.name = 'Dream: Debug current file';
+                    config.program = editor.document.uri.fsPath;
+                    config.stopOnEntry = false;
+                }
+            }
+            if (!config.program) {
+                vscode.window.showErrorMessage('Dream: no "program" set for the debug session.');
+                return undefined;
+            }
+            return config;
+        }
+    };
+    context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider('dream', provider));
+
+    const factory: vscode.DebugAdapterDescriptorFactory = {
+        createDebugAdapterDescriptor(session) {
+            const binPath = resolveDreamBinaryPath(context);
+            if (!binPath) {
+                vscode.window.showErrorMessage(
+                    'Dream: no bundled compiler binary found; cannot start the debugger.'
+                );
+                return undefined;
+            }
+            const program = session.configuration.program as string;
+            return new vscode.DebugAdapterExecutable(binPath, ['debug-adapter', program]);
+        }
+    };
+    context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('dream', factory));
 }
 
 function registerShowWatCommand(context: vscode.ExtensionContext, isRelease: boolean): void {
@@ -233,6 +309,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     registerRunFileCommand(context);
     registerDebugFileCommand(context);
+    registerDebugAdapter(context);
     registerShowWatCommand(context, false);
     registerShowWatCommand(context, true);
 

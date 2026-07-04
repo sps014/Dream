@@ -44,6 +44,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
             locals: vec![],
             body: init_body,
             is_async: false,
+            file: None,
         };
         functions.push(lower_function(&init_fn, interner));
     }
@@ -82,6 +83,7 @@ fn lower_async_stub(func: &HFunction, interner: &TypeInterner) -> MirFunction {
     let mut b = FunctionBuilder::new(func.name.clone(), interner.int());
     b.set_async(true);
     b.set_def(func.def, func.instance.clone());
+    b.set_file(func.file.clone());
     for p in &func.params {
         b.new_param(p.ty, Some(p.name.clone()));
     }
@@ -99,6 +101,7 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
     let mut b = FunctionBuilder::new(func.name.clone(), func.ret);
     b.set_async(func.is_async);
     b.set_def(func.def, func.instance.clone());
+    b.set_file(func.file.clone());
 
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
@@ -136,6 +139,7 @@ pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFu
     let mut b = FunctionBuilder::new(func.name.clone(), func.ret);
     b.set_async(true);
     b.set_def(func.def, func.instance.clone());
+    b.set_file(func.file.clone());
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
         let l = b.new_param(p.ty, Some(p.name.clone()));
@@ -310,6 +314,7 @@ impl Lowerer<'_> {
             } => self.lower_switch(scrutinee, arms, default),
             HStmt::Break(label) => self.lower_break(label.as_deref()),
             HStmt::Continue(label) => self.lower_continue(label.as_deref()),
+            HStmt::DebugLine(line) => self.b.push(Statement::DebugLine(*line)),
         }
     }
 
@@ -1148,6 +1153,7 @@ mod tests {
             ret: int,
             locals: vec![],
             is_async: false,
+            file: None,
             body: vec![
                 HStmt::If {
                     cond: HExpr::new(boolean, HExprKind::Var(Binding::Local(LocalId(0)))),

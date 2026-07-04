@@ -99,6 +99,17 @@ impl PassManager {
         pm
     }
 
+    /// A minimal, value-preserving pipeline for debug-info builds. It deliberately omits every pass
+    /// that can eliminate, fold, or coalesce user locals (const/copy propagation, SCCP, GVN, DCE,
+    /// DSE), so each declared variable still lives in a distinct slot the debugger can read at every
+    /// statement. Only redundant RC is elided (a value-neutral cleanup) and the CFG is tidied.
+    pub fn debug_pipeline() -> Self {
+        let mut pm = PassManager::new();
+        pm.add(SimplifyCfg);
+        pm.add(RcElision);
+        pm
+    }
+
     pub fn add(&mut self, pass: impl MirPass + 'static) {
         self.passes.push(Box::new(pass));
     }
@@ -137,6 +148,14 @@ impl Default for PassManager {
 /// After inlining, [`crate::driver`] runs the per-function [`PassManager`] (copy/const prop, folding,
 /// algebraic, GVN, CFG simplification, DCE, and RC elision) to clean up the merged bodies.
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
+    optimize_module_opts(mir, interner, true)
+}
+
+/// Like [`optimize_module`], but `inline` can be disabled. Debug-info builds turn inlining off so
+/// each user function keeps its own body (and thus its own call-stack frame + local variables),
+/// which the interactive debugger relies on. Reference-counting insertion + dead-function pruning
+/// still run in both modes since they are correctness-relevant, not just optimizations.
+pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool) {
     const MAX_ROUNDS: usize = 8;
     crate::mir::prune_module(mir);
     let rc = RcInsertion;
@@ -148,6 +167,9 @@ pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
     // makes a future reordering that hoists the inliner above this point fail loudly in dev.
     let _rc_inserted = true;
     debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
+    if !inline {
+        return;
+    }
     let inliner = Inliner;
     for _ in 0..MAX_ROUNDS {
         let changed = inliner.run(mir, interner);

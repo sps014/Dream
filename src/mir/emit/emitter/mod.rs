@@ -20,6 +20,7 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         &HashMap::new(),
         &HashSet::new(),
         false,
+        None,
     )
 }
 
@@ -35,6 +36,7 @@ pub(super) fn emit_function_with(
     func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
     value_glue: &HashSet<TypeId>,
     debug: bool,
+    debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
     let frame = ValueFrame::compute(func, interner);
     let mut e = Emitter {
@@ -52,6 +54,7 @@ pub(super) fn emit_function_with(
         async_parent: None,
         async_user_locals: 0,
         debug,
+        debug_fn,
     };
     e.emit();
     e.out
@@ -95,6 +98,8 @@ pub(crate) fn emit_async_poll(
         async_parent: Some(func),
         async_user_locals: user_local_count,
         debug,
+        // Async coroutine bodies are not line-instrumented in v1.
+        debug_fn: None,
     };
     e.emit_async_state_machine(slots, poll_sym);
     e.out
@@ -124,6 +129,9 @@ struct Emitter<'a> {
     async_user_locals: usize,
     /// Generate `@name` annotations
     debug: bool,
+    /// Debug-info metadata for this function when compiled with source-level debug-info (line hooks
+    /// + local spilling). `None` disables all instrumentation (release builds, async bodies).
+    debug_fn: Option<&'a crate::mir::emit::debug_map::DebugFunction>,
 }
 
 impl Emitter<'_> {
@@ -221,8 +229,21 @@ impl Emitter<'_> {
         self.line("  (local $__jsp i32)");
 
         self.emit_value_frame_prologue();
+        // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
+        if let Some(dbg) = self.debug_fn {
+            self.line(&format!("  (call $__dbg_enter (i32.const {}))", dbg.id));
+        }
         self.emit_dispatch();
         self.line(")");
+    }
+
+    /// Emits the `dream_debug.exit` hook (pops the debugger's call-stack frame) right before a return,
+    /// when debug-info is on. Placed at every real return site so the shadow call stack stays
+    /// balanced regardless of which path exits the function.
+    fn emit_debug_exit(&mut self) {
+        if let Some(dbg) = self.debug_fn {
+            self.line(&format!("     (call $__dbg_exit (i32.const {}))", dbg.id));
+        }
     }
 
     /// Reserves this function's shadow-stack frame (for inline value(`struct`) locals): save `$__sp`,
@@ -416,7 +437,55 @@ impl Emitter<'_> {
                 }
             }
             Statement::Nop => {}
+            Statement::DebugLine(line) => self.emit_debug_line(*line),
         }
+    }
+
+    /// Emits the debug-info instrumentation for a source-line boundary: spill every named local into
+    /// the exported `$__dbg_v{k}` global pool (so the host debugger can read live values), then call
+    /// the `dream_debug.line` host hook with `(file_id, line)`. A no-op unless debug-info is on for
+    /// this function.
+    fn emit_debug_line(&mut self, line: u32) {
+        let Some(dbg) = self.debug_fn else {
+            return;
+        };
+        let file_id = dbg.file;
+        // Snapshot the spill descriptors so we can borrow `self` mutably while emitting.
+        let vars: Vec<(u32, u32, crate::mir::emit::debug_map::DebugVarKind)> = dbg
+            .vars
+            .iter()
+            .map(|v| (v.local, v.global, v.kind))
+            .collect();
+        for (local, global, kind) in vars {
+            self.emit_var_spill(local, global, kind);
+        }
+        self.line(&format!(
+            "     (call $__dbg_line (i32.const {}) (i32.const {}))",
+            file_id, line
+        ));
+    }
+
+    /// Spills one named local into its `i64` pool global, widening/reinterpreting to preserve the
+    /// exact bits so the host can decode the value back using the variable's declared kind.
+    fn emit_var_spill(
+        &mut self,
+        local: u32,
+        global: u32,
+        kind: crate::mir::emit::debug_map::DebugVarKind,
+    ) {
+        use crate::mir::emit::debug_map::DebugVarKind as K;
+        let value = match kind {
+            K::Long | K::ULong => format!("(local.get ${})", local),
+            K::Double => format!("(i64.reinterpret_f64 (local.get ${}))", local),
+            K::Float => format!(
+                "(i64.extend_i32_u (i32.reinterpret_f32 (local.get ${})))",
+                local
+            ),
+            // Every other kind lives in an i32 local (ints, bools, chars, enums, pointers): keep the
+            // exact 32 bits via an unsigned extend.
+            _ => format!("(i64.extend_i32_u (local.get ${}))", local),
+        };
+        self.line(&format!("     (global.set $__dbg_v{} {})", global, value));
     }
 
     fn emit_assign(&mut self, place: &Place, rvalue: &Rvalue) {
@@ -992,6 +1061,7 @@ impl Emitter<'_> {
                 self.goto(*default);
             }
             Terminator::Return(Some(o)) => {
+                self.emit_debug_exit();
                 if self.returns_value_struct() {
                     // sret ABI: copy the result into the caller-provided `$__sret` slot (retaining
                     // its reference fields) before the frame teardown drops the source local.
@@ -1011,10 +1081,12 @@ impl Emitter<'_> {
                 }
             }
             Terminator::Return(None) => {
+                self.emit_debug_exit();
                 self.emit_frame_teardown();
                 self.line("     (return)");
             }
             Terminator::TailCall { callee, args } => {
+                self.emit_debug_exit();
                 let sym = self.callee_symbol(callee);
                 if let Some(kind) = async_intrinsic_kind(&sym) {
                     // Async intrinsics have a bespoke calling convention and can't be tail-called;

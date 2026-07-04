@@ -4,5 +4,6 @@
 //! memory marshaling they share. The browser/Node hosts mirror the same function names in
 //! `runtime/dream.js`, so a program behaves identically across runtimes.
 
+pub mod debugger;
 pub mod host;
 pub mod wasm_runner;

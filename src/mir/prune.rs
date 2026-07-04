@@ -122,7 +122,7 @@ fn hir_stmt_edges(stmt: &crate::hir::HStmt, out: &mut HirEdges) {
             }
             hir_body_edges(default, out);
         }
-        HStmt::Break(_) | HStmt::Continue(_) => {}
+        HStmt::Break(_) | HStmt::Continue(_) | HStmt::DebugLine(_) => {}
     }
 }
 
@@ -482,7 +482,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
                 .for_each(|a| collect_global_reads_operand(a, out));
         }
         Statement::Print { arg, .. } => collect_global_reads_operand(arg, out),
-        Statement::Nop => {}
+        Statement::Nop | Statement::DebugLine(_) => {}
     }
 }
 

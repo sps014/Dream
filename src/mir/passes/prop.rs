@@ -75,7 +75,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             c
         }
         Statement::Print { arg, .. } => subst_operand(arg, known),
-        Statement::Nop => false,
+        Statement::Nop | Statement::DebugLine(_) => false,
     }
 }
 

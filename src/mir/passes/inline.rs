@@ -591,7 +591,7 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             }
         }
         Statement::Print { arg, .. } => remap_operand(arg, base),
-        Statement::Nop => {}
+        Statement::Nop | Statement::DebugLine(_) => {}
     }
 }
 

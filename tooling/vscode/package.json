@@ -12,6 +12,61 @@
     "onLanguage:dream"
   ],
   "contributes": {
+    "breakpoints": [
+      {
+        "language": "dream"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "dream",
+        "label": "Dream",
+        "languages": [
+          "dream"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the .dream source file to debug.",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Pause at the first line of the program.",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "dream",
+            "request": "launch",
+            "name": "Dream: Debug current file",
+            "program": "${file}",
+            "stopOnEntry": false
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Dream: Debug current file",
+            "description": "Debug the active .dream file with the Dream debugger",
+            "body": {
+              "type": "dream",
+              "request": "launch",
+              "name": "Dream: Debug current file",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": false
+            }
+          }
+        ]
+      }
+    ],
     "iconThemes": [
       {
         "id": "dream-icons",
@@ -46,7 +101,8 @@
       },
       {
         "command": "dream.debugFile",
-        "title": "Dream: Debug File"
+        "title": "Dream: Debug File",
+        "icon": "$(debug-alt)"
       },
       {
         "command": "dream.showWat",
@@ -67,14 +123,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "dream.showWat",
+          "command": "dream.debugFile",
           "when": "resourceLangId == dream",
           "group": "navigation@2"
         },
         {
-          "command": "dream.showWatRelease",
+          "command": "dream.showWat",
           "when": "resourceLangId == dream",
           "group": "navigation@3"
+        },
+        {
+          "command": "dream.showWatRelease",
+          "when": "resourceLangId == dream",
+          "group": "navigation@4"
         }
       ]
     }

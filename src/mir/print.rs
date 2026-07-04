@@ -51,6 +51,7 @@ fn stmt(s: &Statement) -> String {
             format!("{}({})", f, operand(arg))
         }
         Statement::Nop => "nop".to_string(),
+        Statement::DebugLine(line) => format!("dbg_line {}", line),
     }
 }
 

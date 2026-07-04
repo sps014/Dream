@@ -101,6 +101,11 @@ impl<'a> Analyzer<'a> {
             parent_function,
             symbol_table,
         };
+        // Debug-info: record the source line of this statement before lowering it, so the backend can
+        // emit a host line-hook at each statement boundary. A no-op unless debug-info is enabled.
+        if let Some(line) = super::statement_line(statement) {
+            self.hir_mark_line(line as u32);
+        }
         // Disable HIR collection for statement kinds the interleaved emitter does not yet handle,
         // *before* recursing into any nested body, so a function containing one is skipped cleanly.
         match statement {

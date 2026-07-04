@@ -61,6 +61,7 @@ fn compile_sum_to() -> String {
             },
         ],
         is_async: false,
+        file: None,
         body: vec![
             HStmt::Let {
                 local: i,
