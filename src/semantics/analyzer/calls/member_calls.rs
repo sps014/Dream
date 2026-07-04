@@ -138,6 +138,15 @@ impl<'a> Analyzer<'a> {
                 let decl_file = info.file_path.clone();
                 self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
             }
+        } else if let Some(template) = self.generic_structs.get(&type_name) {
+            let (decl_file, is_public) = (template.file_path.clone(), template.is_public);
+            if !self.visible_across_files(
+                &decl_file,
+                is_public,
+                ctx.parent_function.file_path.as_ref(),
+            ) {
+                self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
+            }
         } else {
             self.check_type_visible(
                 &type_name,
@@ -145,6 +154,40 @@ impl<'a> Analyzer<'a> {
                 id.position,
                 diagnostics,
             );
+        }
+
+        // A static method on a *generic class* (`Cache<int>.make(...)`). The class's type arguments
+        // ride on the call's generic-argument slot (attached by the parser). Monomorphize the class
+        // so its concrete static methods (`Cache_int_make`, ...) are registered, then dispatch the
+        // concrete method through the normal static-call path (which enforces class-level privacy).
+        if self.generic_structs.contains_key(&type_name) {
+            let args: Vec<Type> = match generic_args {
+                Some(a) if !a.is_empty() => a
+                    .iter()
+                    .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
+                    .collect(),
+                _ => {
+                    diagnostics.report_error(
+                        format!(
+                            "Generic class '{}' requires type arguments to call a static method, e.g. {}<int>.{}(...)",
+                            type_name, type_name, method.text
+                        ),
+                        Some(id.position),
+                    );
+                    return Ok(Some(Type::Unknown));
+                }
+            };
+            self.ensure_struct_instantiated(&type_name, &args, &id.position, diagnostics);
+            let mangled_type = mangle_generic(&type_name, &args);
+            let ret = self.analyze_static_call(
+                &mangled_type,
+                method,
+                params,
+                ctx.parent_function,
+                ctx.symbol_table,
+                diagnostics,
+            )?;
+            return Ok(Some(ret));
         }
 
         // Support generic static method calls by monomorphizing them on the fly.

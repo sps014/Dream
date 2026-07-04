@@ -76,6 +76,33 @@ let pts: Pair<int, int>[] = [Pair<int, int>(1, 2)];
 println(pts[0].second);    // 2
 ```
 
+### Static methods on a generic class
+
+A `static` method on a generic class is dispatched by naming the class with concrete type arguments
+on the receiver, `Class<Args>.method(...)`. The compiler monomorphizes the class for those arguments
+and calls the concrete static method (the type parameters are available in its body and signature):
+
+```dream
+class Cache<T> {
+    seed: int;
+    constructor(seed: int) { this.seed = seed; }
+
+    // A static factory that names the class's type parameter in its return type.
+    public static fun make(seed: int): Cache<T> {
+        return Cache<T>(seed);
+    }
+}
+
+fun main(): void {
+    let c = Cache<int>.make(5);   // monomorphizes Cache<int>, calls Cache<int>.make
+    println(c.seed);              // 5
+}
+```
+
+As with any static member, the method must be `public` to be called from another file, and the
+generic class itself must be `public` to be referenced across files at all (see
+[visibility](imports.md)).
+
 ## Generic methods
 
 Methods on generic classes automatically have access to the class's type parameters:

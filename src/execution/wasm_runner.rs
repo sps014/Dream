@@ -1,6 +1,7 @@
 use super::host::{
     enable_ansi_support, link_console_functions, link_datetime_functions, link_file_functions,
-    link_http_functions, link_math_functions, link_regex_functions, read_string_from_memory,
+    link_http_functions, link_math_functions, link_regex_functions, link_worker_functions,
+    read_string_from_memory, set_worker_module,
 };
 use std::fs;
 use wasmtime::*;
@@ -9,6 +10,10 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     enable_ansi_support();
     let wat_content = fs::read_to_string(wat_path)?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
+
+    // Make the module bytes available to `WebWorker` spawns on this thread (workers instantiate a
+    // fresh copy of the same module).
+    set_worker_module(&wasm_bytes);
 
     let engine = Engine::default();
     let module = Module::new(&engine, &wasm_bytes)?;
@@ -68,6 +73,7 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     link_regex_functions(&mut linker)?;
     link_console_functions(&mut linker)?;
     link_datetime_functions(&mut linker)?;
+    link_worker_functions(&mut linker)?;
     linker.func_wrap("env", "strlen", |_: i32| -> i32 { 0 })?;
     linker.func_wrap("env", "debug_get_free_list_head", || -> i32 { 0 })?;
 

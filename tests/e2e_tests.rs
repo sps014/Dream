@@ -1,7 +1,8 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
     link_console_functions, link_datetime_functions, link_file_functions, link_http_functions,
-    link_math_functions, link_regex_functions, read_string_from_memory,
+    link_math_functions, link_regex_functions, link_worker_functions, read_string_from_memory,
+    set_worker_module,
 };
 use pretty_assertions::assert_eq;
 use std::fs;
@@ -78,6 +79,10 @@ fn run_test_case(dream_file: &Path, debug: bool) {
     // 2. Parse WAT to Wasm binary
     let wasm_bytes = wat::parse_str(&wat_content).expect("Failed to parse WAT");
 
+    // Make the module bytes available to `WebWorker` spawns on this thread (a thread-local, so the
+    // parallel debug/release suites never race on module identity).
+    set_worker_module(&wasm_bytes);
+
     // 3. Setup Wasmtime
     let engine = Engine::default();
     let module = Module::new(&engine, &wasm_bytes).expect("Failed to create module");
@@ -146,6 +151,7 @@ fn run_test_case(dream_file: &Path, debug: bool) {
     link_regex_functions(&mut linker).unwrap();
     link_console_functions(&mut linker).unwrap();
     link_datetime_functions(&mut linker).unwrap();
+    link_worker_functions(&mut linker).unwrap();
     linker
         .func_wrap("env", "strlen", |_: i32| -> i32 { 0 })
         .unwrap();

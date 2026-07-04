@@ -1,0 +1,30 @@
+// Real parallel WebWorkers with separate memory spaces. Each worker runs a top-level
+// `fun(string): string` body on its own OS thread (native) / Web Worker (browser); messages cross
+// the boundary as copied strings. `send` is post+await; `post`/`receive` let several workers run
+// concurrently.
+
+fun shout(msg: string): string {
+    return msg + "!";
+}
+
+fun twice(msg: string): string {
+    return msg + msg;
+}
+
+async fun main(): void {
+    // Request/response on a single worker.
+    let w = WebWorker(shout);
+    System.println(await w.send("hello"));
+    System.println(await w.send("world"));
+    w.terminate();
+
+    // Two workers running concurrently: post to both, then collect the replies.
+    let a = WebWorker(shout);
+    let b = WebWorker(twice);
+    a.post("A");
+    b.post("B");
+    System.println(await a.receive());
+    System.println(await b.receive());
+    a.terminate();
+    b.terminate();
+}

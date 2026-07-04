@@ -18,6 +18,7 @@ mod http;
 mod math;
 mod memory;
 mod regex;
+mod worker;
 
 pub use console::{enable_ansi_support, link_console_functions};
 pub use datetime::link_datetime_functions;
@@ -26,6 +27,7 @@ pub use http::link_http_functions;
 pub use math::link_math_functions;
 pub use memory::{read_string_from_memory, write_bytes_to_memory, write_string_to_memory};
 pub use regex::link_regex_functions;
+pub use worker::{link_worker_functions, set_worker_module};
 
 #[cfg(test)]
 mod contract_tests {
@@ -47,6 +49,7 @@ mod contract_tests {
         include_str!("file.rs"),
         include_str!("http.rs"),
         include_str!("regex.rs"),
+        include_str!("worker.rs"),
     ];
 
     /// Extracts the field name in each `"<HOST_MODULE>", "<name>"` pair, tolerating the line break

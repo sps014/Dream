@@ -77,6 +77,7 @@ nav:
     - Generics: language/generics.md
     - Interfaces: language/interfaces.md
     - Async/Await: language/async.md
+    - WebWorkers: language/webworkers.md
     - Imports & Modules: language/imports.md
     - Memory Management: language/memory.md
     - Interop:

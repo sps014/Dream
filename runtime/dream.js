@@ -345,8 +345,22 @@ export class DreamInstance {
       const out = fn(...raw);
       return wasmToJs(this, result, out);
     };
+    // Expose the raw table index so callers that need the portable funcref value itself (e.g.
+    // `WebWorker` shipping a body to another instance of the same module) can recover it.
+    wrapper.__dreamFuncIndex = index;
     this._callbackWrappers.set(cacheKey, wrapper);
     return wrapper;
+  }
+
+  /**
+   * Runs one `fun(string): string` worker body: writes `msg` into this instance's memory, calls the
+   * exported `__dream_worker_invoke` trampoline (a single `call_indirect` on the body funcref
+   * `fnIndex`), and reads back the reply string. Used by the Web Worker bootstrap.
+   */
+  __workerInvoke(fnIndex, msg) {
+    const ptr = this.writeString(msg == null ? "" : String(msg));
+    const replyPtr = this.exports.__dream_worker_invoke(fnIndex, ptr);
+    return this.readString(replyPtr);
   }
 
   /** Calls the exported `main`, if present. Returns its result (if any). */
@@ -838,6 +852,102 @@ async function loadAbi(abi) {
 }
 
 /**
+ * Source of the Web Worker bootstrap module. It imports this same `dream.js` (so the worker reuses
+ * all the env/`Dream` import wiring, including nested workers) and, on `init`, instantiates the very
+ * same `.wasm` bytes into its OWN linear memory. Thereafter each `msg` runs the `fun(string):string`
+ * body via `__workerInvoke` and posts the reply back. This is the browser half of real parallelism:
+ * a genuinely separate instance/heap on another thread, messages copied as strings.
+ */
+function workerBootSource(dreamUrl) {
+  return `import * as Dream from ${JSON.stringify(dreamUrl)};
+let inst = null, fnIdx = 0;
+self.onmessage = async (e) => {
+  const m = e.data;
+  if (m.t === 'init') {
+    fnIdx = m.fnIdx;
+    inst = await Dream.load(m.bytes, { abi: m.abi });
+    self.postMessage({ t: 'ready' });
+  } else if (m.t === 'msg') {
+    self.postMessage({ t: 'reply', data: inst.__workerInvoke(fnIdx, m.data) });
+  } else if (m.t === 'term') {
+    self.close();
+  }
+};`;
+}
+
+/**
+ * Builds the `Dream`-module worker host functions (`workerSpawn`/`workerPost`/`workerRecv`/
+ * `workerTerminate`) behind `src/stdlib/core/webworker.dream`. Browser only: each worker is a real
+ * `Worker` running a fresh instance of the same module. `workerRecv` is `extern async`, so it simply
+ * returns a Promise that settles when the matching reply arrives (FIFO) - `wrapAsyncImport` bridges
+ * it into Dream's scheduler. Under Node, use the native wasmtime runtime for parallelism.
+ */
+function makeWorkerModule(wasmBytes, abi) {
+  const reg = new Map();
+  let nextId = 1;
+
+  const spawn = (fnIndex) => {
+    if (typeof Worker === "undefined") {
+      throw new Error(
+        "WebWorker is only supported in the browser under dream.js; use the native runtime for parallel workers under Node/CLI",
+      );
+    }
+    const url = URL.createObjectURL(
+      new Blob([workerBootSource(import.meta.url)], { type: "text/javascript" }),
+    );
+    const worker = new Worker(url, { type: "module" });
+    const state = { worker, pending: [], replies: [], ready: false, queued: [] };
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.t === "ready") {
+        state.ready = true;
+        for (const q of state.queued) worker.postMessage({ t: "msg", data: q });
+        state.queued = [];
+      } else if (m.t === "reply") {
+        if (state.pending.length > 0) state.pending.shift()(m.data);
+        else state.replies.push(m.data);
+      }
+    };
+    worker.postMessage({ t: "init", bytes: wasmBytes, abi, fnIdx: fnIndex });
+    const id = nextId++;
+    reg.set(id, state);
+    return id;
+  };
+
+  return {
+    // `body` arrives marshaled as a JS callable wrapping the Dream funcref; recover its raw index.
+    workerSpawn: (body) =>
+      spawn(body && body.__dreamFuncIndex != null ? body.__dreamFuncIndex : body),
+    workerPost: (id, msg) => {
+      const s = reg.get(id);
+      if (!s) return;
+      if (s.ready) s.worker.postMessage({ t: "msg", data: msg });
+      else s.queued.push(msg);
+    },
+    // extern async: resolve with the next reply (or "" if the worker is gone).
+    workerRecv: (id) =>
+      new Promise((resolve) => {
+        const s = reg.get(id);
+        if (!s) return resolve("");
+        if (s.replies.length > 0) resolve(s.replies.shift());
+        else s.pending.push(resolve);
+      }),
+    workerTerminate: (id) => {
+      const s = reg.get(id);
+      if (!s) return;
+      try {
+        s.worker.postMessage({ t: "term" });
+        s.worker.terminate();
+      } catch (_) {
+        /* already gone */
+      }
+      for (const p of s.pending) p("");
+      reg.delete(id);
+    },
+  };
+}
+
+/**
  * Loads and instantiates a Dream module.
  *
  * @param {string|ArrayBuffer|Uint8Array} source - URL/path to `.wasm`, or raw bytes.
@@ -872,7 +982,9 @@ export async function load(source, options = {}) {
   if (abi) for (const e of abi.externs) sigByName.set(e.name, e);
 
   // Built-in `Dream` host module (dynamic `js` / regex / fetch helpers). User-supplied imports still win.
-  const builtinDream = defaultDreamModule(getInstance);
+  // The `WebWorker` host functions need the raw module bytes + abi so a worker can instantiate a
+  // fresh copy of the same module in its own thread/heap.
+  const builtinDream = { ...defaultDreamModule(getInstance), ...makeWorkerModule(wasmBytes, abi) };
 
   const wrapFor = (fn, sig) =>
     sig && sig.async ? wrapAsyncImport(getInstance, fn, sig) : wrapImport(getInstance, fn, sig);

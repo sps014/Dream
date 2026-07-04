@@ -166,4 +166,4 @@ A complete runnable example lives in [`sample/interop/async_fetch.dream`](https:
 
 ## Limitations (v1)
 
-- There is no `.then()`/callback chaining and no `spawn`/channels yet.
+- There is no `.then()`/callback chaining. `async`/`await` is a single-threaded cooperative scheduler: tasks interleave at `await` points but run on one thread. For *real* parallelism across threads/cores (separate memory spaces, message passing), see [WebWorkers](webworkers.md).

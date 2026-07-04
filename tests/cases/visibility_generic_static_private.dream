@@ -1,0 +1,8 @@
+// `OpenCache` is public (Axis 2 ok), but its `locked` static method is class-private (Axis 1):
+// calling it from outside the class is a compile error even when the class is fully visible.
+import helpers.vis_lib;
+
+fun main(): void {
+    let c = OpenCache<int>.locked(1);
+    System.println(c.v);
+}

@@ -1,0 +1,27 @@
+// Static methods on a generic class are dispatchable by supplying the class type arguments on the
+// receiver: `Pair<int>.of(...)`. The class is monomorphized and the concrete static method called.
+class Pair<T> {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+
+    public static fun of(a: int, b: int): Pair<T> {
+        return Pair<T>(a, b);
+    }
+
+    public fun sum(): int {
+        return this.a + this.b;
+    }
+}
+
+fun main(): void {
+    let p = Pair<int>.of(3, 4);
+    System.println(p.sum());
+
+    let q = Pair<int>.of(10, 20);
+    System.println(q.sum());
+}

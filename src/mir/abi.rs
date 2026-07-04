@@ -91,3 +91,10 @@ pub const EXPORT_MEMORY: &str = "memory";
 pub const EXPORT_RUN_LOOP: &str = "__dream_run_loop";
 pub const EXPORT_RESOLVE: &str = "__dream_resolve";
 pub const EXPORT_NEW_FUTURE: &str = "__dream_new_future";
+
+/// Worker-thread trampoline export (see `src/stdlib/core/webworker.dream`). The host worker driver
+/// (native `execution/host/worker.rs` and `runtime/dream.js`) calls this with a body funcref index
+/// and a message string pointer; it performs one `call_indirect` on the `fun(string): string` body
+/// and returns the reply string pointer. Kept a fixed export so a freshly instantiated worker
+/// instance of the same module can be driven entirely from the host.
+pub const EXPORT_WORKER_INVOKE: &str = "__dream_worker_invoke";

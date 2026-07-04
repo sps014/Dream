@@ -1,0 +1,69 @@
+// Real OS-parallel workers with separate memory spaces.
+//
+// A `WebWorker` runs a top-level `fun(string): string` body on its own thread (native wasmtime)
+// or Web Worker (browser/Node). Each worker instantiates its OWN copy of the module, so it has a
+// separate linear memory and fresh globals - nothing is shared. Messages cross the boundary as
+// serialized strings (use `JSON.serialize`/`JSON.deserialize` at the call site for structured
+// data). The body's funcref index is portable across instances because every worker loads the
+// same module, and Dream functions capture no state.
+//
+//   fun echo(msg: string): string { return msg + "!"; }
+//
+//   async fun main(): void {
+//       let w = WebWorker(echo);
+//       let reply = await w.send("hello");   // "hello!", computed on another thread
+//       System.println(reply);
+//   }
+public class WebWorker {
+    // Opaque host handle identifying this worker's thread/instance and its message channels.
+    id: int;
+
+    // Spawn a worker running `body`; returns the host handle id.
+    @js("Dream", "workerSpawn")
+    static extern fun __spawn(body: fun(string): string): int;
+
+    // Enqueue `msg` to the worker's inbox (does not wait for a reply).
+    @js("Dream", "workerPost")
+    static extern fun __post(id: int, msg: string): void;
+
+    // Await the next reply from the worker. Native blocks the host call until the reply is ready
+    // and pre-resolves the future; the browser resolves it from the worker's `onmessage`.
+    @js("Dream", "workerRecv")
+    static extern async fun __recv(id: int): string;
+
+    // Terminate the worker's thread/instance. Idempotent.
+    @js("Dream", "workerTerminate")
+    static extern fun __terminate(id: int): void;
+
+    // Spawn a worker running `body` (a top-level `fun(string): string`).
+    constructor(body: fun(string): string) {
+        this.id = WebWorker.__spawn(body);
+    }
+
+    // Post a message to the worker without waiting for its reply. Pair with `receive()` to collect
+    // replies later - posting to several workers first lets them run in parallel.
+    public fun post(msg: string): void {
+        WebWorker.__post(this.id, msg);
+    }
+
+    // Await the next reply the worker produces (FIFO).
+    public async fun receive(): string {
+        return await WebWorker.__recv(this.id);
+    }
+
+    // Post `msg` and await the matching reply in one call (request/response).
+    public async fun send(msg: string): string {
+        WebWorker.__post(this.id, msg);
+        return await WebWorker.__recv(this.id);
+    }
+
+    // Stop the worker and release its thread/instance.
+    public fun terminate(): void {
+        WebWorker.__terminate(this.id);
+    }
+
+    // Terminate the worker when this handle is destroyed.
+    del() {
+        WebWorker.__terminate(this.id);
+    }
+}

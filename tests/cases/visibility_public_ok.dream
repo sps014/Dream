@@ -6,4 +6,6 @@ fun main(): void {
     let b = PublicBox(40);
     System.println(b.get());
     System.println(Gadget.make(9));
+    let c = OpenCache<int>.make(11);
+    System.println(c.v);
 }

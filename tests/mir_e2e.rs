@@ -11,7 +11,8 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
     link_console_functions, link_datetime_functions, link_file_functions, link_http_functions,
-    link_math_functions, link_regex_functions, read_string_from_memory,
+    link_math_functions, link_regex_functions, link_worker_functions, read_string_from_memory,
+    set_worker_module,
 };
 use std::collections::BTreeSet;
 use std::fs;
@@ -58,6 +59,8 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     let _ = fs::remove_file(wat_path.with_extension("abi.json"));
 
     let wasm = wat::parse_str(&wat).map_err(|e| format!("assemble: {e}"))?;
+    // Make the module bytes available to `WebWorker` spawns on this thread.
+    set_worker_module(&wasm);
     let engine = Engine::default();
     let module = Module::new(&engine, &wasm).map_err(|e| format!("module: {e:#}"))?;
     let mut store = Store::new(&engine, ());
@@ -103,6 +106,7 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     link_regex_functions(&mut linker).unwrap();
     link_console_functions(&mut linker).unwrap();
     link_datetime_functions(&mut linker).unwrap();
+    link_worker_functions(&mut linker).unwrap();
 
     linker
         .define_unknown_imports_as_traps(&module)

@@ -31,6 +31,38 @@ class PrivateBox {
     }
 }
 
+// File-private generic class: its static methods are not reachable from another file (Axis 2),
+// even though `make` is itself `public`.
+class HiddenCache<T> {
+    public v: int;
+
+    constructor(v: int) {
+        this.v = v;
+    }
+
+    public static fun make(v: int): HiddenCache<T> {
+        return HiddenCache<T>(v);
+    }
+}
+
+// Public generic class exposing a public static factory but keeping another static method
+// class-private (Axis 1): `locked` is only callable from `OpenCache`'s own methods.
+public class OpenCache<T> {
+    public v: int;
+
+    constructor(v: int) {
+        this.v = v;
+    }
+
+    public static fun make(v: int): OpenCache<T> {
+        return OpenCache<T>(v);
+    }
+
+    static fun locked(v: int): OpenCache<T> {
+        return OpenCache<T>(v);
+    }
+}
+
 public class Gadget {
     public static fun make(seed: int): int {
         return seed;

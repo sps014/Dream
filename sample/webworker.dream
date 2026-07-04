@@ -1,0 +1,44 @@
+// Real parallel WebWorkers - separate memory spaces, typed message passing.
+//
+// Run natively:   dream run sample/webworker.dream
+//
+// Each worker body is a top-level `fun(string): string`. A worker runs on its own OS thread
+// (native) / Web Worker (browser) with its OWN linear memory - nothing is shared, so messages are
+// copied across the boundary as strings. Use `JSON.serialize`/`JSON.deserialize` at the call site
+// for structured payloads.
+
+fun greet(name: string): string {
+    return "hello, " + name + "!";
+}
+
+// A CPU-bound body: burn a few million iterations (so the work is really running off the main
+// thread) and then transform the message.
+fun work(input: string): string {
+    let i = 0;
+    while (i < 5000000) {
+        i = i + 1;
+    }
+    return input.to_upper();
+}
+
+async fun main(): void {
+    // 1) Request/response on one worker.
+    let g = WebWorker(greet);
+    System.println(await g.send("dream"));
+    g.terminate();
+
+    // 2) Fan work out to several workers that run concurrently: post to all first, then collect the
+    //    replies. The three loops run in parallel on three threads.
+    let w1 = WebWorker(work);
+    let w2 = WebWorker(work);
+    let w3 = WebWorker(work);
+    w1.post("alpha");
+    w2.post("beta");
+    w3.post("gamma");
+    System.println(await w1.receive());
+    System.println(await w2.receive());
+    System.println(await w3.receive());
+    w1.terminate();
+    w2.terminate();
+    w3.terminate();
+}

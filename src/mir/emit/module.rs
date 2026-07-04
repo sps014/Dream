@@ -173,6 +173,16 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
         out.push('\n');
     }
 
+    // Worker-thread trampoline: given a `fun(string): string` body funcref index and a message
+    // string pointer, perform one indirect call and return the reply pointer. Emitted for every
+    // module (it only depends on the always-present `$__ft` table) so a freshly instantiated worker
+    // of the same module can be driven from the host (see `src/stdlib/core/webworker.dream`).
+    out.push_str("(type $__worker_sig (func (param i32) (result i32)))\n");
+    let _ = writeln!(
+        out,
+        "(func $__dream_worker_invoke (param $fn i32) (param $arg i32) (result i32)\n local.get $arg\n local.get $fn\n call_indirect $__ft (type $__worker_sig))"
+    );
+
     // Run global initializers before any entry point.
     if has_init {
         let _ = writeln!(out, "(start ${})", crate::mir::lower::INIT_FN_NAME);
@@ -183,6 +193,11 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
     let _ = writeln!(out, "(export \"{}\" (memory 0))", abi::EXPORT_MEMORY);
     let _ = writeln!(out, "(export \"{}\" (func $malloc))", abi::EXPORT_MALLOC);
     let _ = writeln!(out, "(export \"{}\" (func $free))", abi::EXPORT_FREE);
+    let _ = writeln!(
+        out,
+        "(export \"{}\" (func $__dream_worker_invoke))",
+        abi::EXPORT_WORKER_INVOKE
+    );
     if crate::mir::async_emit::module_has_async(&mir.functions) {
         let _ = writeln!(
             out,

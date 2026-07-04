@@ -29,6 +29,11 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
         "<std>/core/promise.dream",
         include_str!("core/promise.dream"),
     ),
+    // Real OS-parallel workers (needs `Future`, hence after `promise.dream`).
+    (
+        "<std>/core/webworker.dream",
+        include_str!("core/webworker.dream"),
+    ),
     ("<std>/core/js.dream", include_str!("core/js.dream")),
     ("<std>/core/math.dream", include_str!("core/math.dream")),
     // Collections (`List`/`Map` and their cursors), one class per file under `collections/`.

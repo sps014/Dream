@@ -113,6 +113,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         //parse identifiers
         else if self.current_token().kind == IdentifierToken {
             let mut is_invocation = false;
+            // `Cache<int>.make(...)`: a generic *class* named as a static-call receiver, where the
+            // type arguments belong to the class (not the method). Distinguished from a generic
+            // constructor call (`Test<int>(...)`) by a `.` — rather than `(` — after the `<...>`.
+            let mut is_generic_static = false;
 
             if self.peek_token(1).kind == TokenKind::OpenParenthesisToken {
                 is_invocation = true;
@@ -120,8 +124,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // Generic invocation like `Test<int>(...)`, tracking generic nesting so
                 // `make<Pair<Box<int>, int>>(...)` is recognized as a call.
                 if let Some(after) = self.scan_generic_args(2) {
-                    if self.peek_token(after).kind == TokenKind::OpenParenthesisToken {
-                        is_invocation = true;
+                    match self.peek_token(after).kind {
+                        TokenKind::OpenParenthesisToken => is_invocation = true,
+                        TokenKind::DotToken => is_generic_static = true,
+                        _ => {}
                     }
                 }
             }
@@ -131,6 +137,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // `HttpClient(url)`) can still be the base of a postfix chain like
                 // `HttpClient(url).set_header(...)` or `make().field`.
                 let expr = self.parse_invocation_expression()?;
+                return self.parse_postfix_chain(expr);
+            } else if is_generic_static {
+                let receiver = self.next_token();
+                self.match_token(TokenKind::SmallerThanToken);
+                let class_args = self.parse_generic_args()?;
+                let expr = self.parse_generic_static_step(receiver, class_args)?;
                 return self.parse_postfix_chain(expr);
             } else {
                 // A bare identifier may be followed by an index/member/method postfix chain.
@@ -311,6 +323,35 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.arena.alloc(base),
                 member,
                 generic_args,
+                params,
+            ))
+        } else {
+            Ok(ExpressionNode::MemberAccess(self.arena.alloc(base), member))
+        }
+    }
+
+    /// Parses the `.method(args)` (or bare `.member`) step of a generic-class static receiver whose
+    /// type arguments (`class_args`) were parsed just before the `.`, e.g. the `.make(1)` in
+    /// `Cache<int>.make(1)`. The class type arguments ride on the resulting [`MethodCall`]'s
+    /// generic-argument slot; the analyzer interprets them as the receiver class's arguments (the
+    /// class is monomorphized and the concrete static method dispatched).
+    fn parse_generic_static_step(
+        &mut self,
+        receiver: SyntaxToken,
+        class_args: Vec<Type>,
+    ) -> Result<ExpressionNode<'a>, Error> {
+        self.match_token(TokenKind::DotToken);
+        let member = self.match_member_name();
+        let base = ExpressionNode::Identifier(receiver);
+        if self.current_token().kind == TokenKind::OpenParenthesisToken {
+            self.match_token(TokenKind::OpenParenthesisToken);
+            let params = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
+                p.parse_expression(0)
+            })?;
+            Ok(ExpressionNode::MethodCall(
+                self.arena.alloc(base),
+                member,
+                Some(class_args),
                 params,
             ))
         } else {
