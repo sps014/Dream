@@ -26,15 +26,30 @@ impl TestEnv {
     }
 }
 
-fn run_test_case(dream_file: &Path) {
+/// Cases that read `Debug.live_objects()` / `total_allocations()`. Those probes only return real
+/// counts when the allocator is instrumented (`--debug`), so they only produce correct output in
+/// debug. The release suite runs these in debug (bypassing release) rather than release, so their
+/// full output stays asserted.
+const DEBUG_ONLY_CASES: &[&str] = &[
+    "struct_rc",
+    "memory_advanced",
+    "struct_container_rc",
+    "value_union_option",
+    "gc_complete",
+];
+
+fn run_test_case(dream_file: &Path, debug: bool) {
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
 
-    // Enable allocator instrumentation for the whole suite so the GC/leak cases (e.g.
-    // `gc_complete.dream`) get real `Debug.live_objects()`/`total_allocations()` counts. It is a
-    // no-op for cases that never read those probes.
-    let compiler = Compiler::new(Target::Wasm).with_debug(true);
-    let wat_path = dream_file.with_extension("wat");
+    // Debug enables allocator instrumentation (so GC/leak probes report real counts) and keeps every
+    // runtime helper; release runs the same program through `strip_dead_functions` and the
+    // uninstrumented hot path, so this second mode is what actually exercises structural WAT DCE.
+    let compiler = Compiler::new(Target::Wasm).with_debug(debug);
+    // Mode-specific output path so the debug and release passes never race on the same file when
+    // cargo runs the two suite tests in parallel.
+    let wat_ext = if debug { "wat" } else { "release.wat" };
+    let wat_path = dream_file.with_extension(wat_ext);
 
     let dream_file_str = dream_file.to_str().unwrap().to_string();
     let wat_path_str = wat_path.to_str().unwrap().to_string();
@@ -192,13 +207,45 @@ fn run_all_e2e_cases() {
 
         if path.extension().and_then(|s| s.to_str()) == Some("dream") {
             println!("Running E2E test: {:?}", path);
-            run_test_case(&path);
+            run_test_case(&path, true);
             ran_any = true;
         }
     }
 
     if !ran_any {
         println!("No .dream files found in tests/cases/");
+    }
+}
+
+/// The whole suite run through the *release* backend (`with_debug(false)`), the only path that
+/// enables structural WAT dead-function elimination and the uninstrumented allocator. This guards
+/// against a case that passes in debug but breaks in release because DCE trimmed a live function or
+/// the hot path diverged. EVERY case runs here with full output asserted: instrumentation-probe
+/// cases (`DEBUG_ONLY_CASES`) run in debug (their counts are debug-specific), all others in release.
+#[test]
+fn run_all_e2e_cases_release() {
+    let cases_dir = Path::new("tests/cases");
+    if !cases_dir.exists() {
+        return;
+    }
+
+    for entry in fs::read_dir(cases_dir).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+
+        if path.extension().and_then(|s| s.to_str()) != Some("dream") {
+            continue;
+        }
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        // The instrumentation-probe cases only produce correct output with the debug allocator, so
+        // bypass release for them and run them in debug with the full output assertion — they are
+        // important and must stay fully checked, not relaxed to a smoke test.
+        let debug = DEBUG_ONLY_CASES.contains(&stem);
+        println!(
+            "Running release E2E test: {:?} (debug={})",
+            path, debug
+        );
+        run_test_case(&path, debug);
     }
 }
 

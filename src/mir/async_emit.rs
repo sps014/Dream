@@ -61,6 +61,7 @@ pub fn async_runtime_wat() -> String {
     const F_REMAINING: i32 = 36;
     const KIND_ALL: i32 = 2;
     const KIND_ANY: i32 = 3;
+    const STATUS_CANCELLED: i32 = 2;
     RUNTIME_ASYNC
         .replace("{F_POLL}", &F_POLL.to_string())
         .replace("{F_KIND}", &F_KIND.to_string())
@@ -77,6 +78,7 @@ pub fn async_runtime_wat() -> String {
         .replace("{F_SLOTS}", &F_SLOTS.to_string())
         .replace("{KIND_ALL}", &KIND_ALL.to_string())
         .replace("{KIND_ANY}", &KIND_ANY.to_string())
+        .replace("{STATUS_CANCELLED}", &STATUS_CANCELLED.to_string())
         .replace("{tag_array}", &super::abi::TAG_ARRAY.to_string())
 }
 

@@ -55,6 +55,9 @@
 (func $dream_complete (param $f i32) (param $res i32)
     (local $w i32)
     local.get $f
+    i32.load offset={F_STATUS}
+    br_if 0
+    local.get $f
     local.get $res
     i32.store offset={F_RESULT}
     local.get $f
@@ -66,6 +69,9 @@
     local.get $w
     i32.eqz
     br_if 0
+    local.get $f
+    i32.const 0
+    i32.store offset={F_WAKER}
     local.get $w
     local.get $f
     call $dream_wake
@@ -103,6 +109,64 @@
     local.get $f
     local.get $res
     call $dream_complete
+)
+(func $dream_cancel (param $c i32)
+    (local $cur i32)
+    (local $nxt i32)
+    local.get $c
+    i32.eqz
+    br_if 0
+    local.get $c
+    i32.load offset={F_STATUS}
+    br_if 0
+    local.get $c
+    i32.const {STATUS_CANCELLED}
+    i32.store offset={F_STATUS}
+    local.get $c
+    i32.const 0
+    i32.store offset={F_WAKER}
+    ;; unlink $c from the timer list so a pending timer never fires it
+    global.get $timer_head
+    local.get $c
+    i32.eq
+    (if
+        (then
+            local.get $c
+            i32.load offset={F_NEXT}
+            global.set $timer_head
+        )
+        (else
+            global.get $timer_head
+            local.set $cur
+            (block $unlinked
+                (loop $scan
+                    local.get $cur
+                    i32.eqz
+                    br_if $unlinked
+                    local.get $cur
+                    i32.load offset={F_NEXT}
+                    local.set $nxt
+                    local.get $nxt
+                    local.get $c
+                    i32.eq
+                    (if
+                        (then
+                            local.get $cur
+                            local.get $c
+                            i32.load offset={F_NEXT}
+                            i32.store offset={F_NEXT}
+                            br $unlinked
+                        )
+                    )
+                    local.get $nxt
+                    local.set $cur
+                    br $scan
+                )
+            )
+        )
+    )
+    local.get $c
+    call $release_generic
 )
 (func $dream_set_timer (param $f i32) (param $delay i32)
     (local $due i32)
@@ -198,6 +262,10 @@
                     local.get $f
                     i32.const 0
                     i32.store offset={F_NEXT}
+                    ;; a cancelled/settled future may still sit in the ready queue; never poll it
+                    local.get $f
+                    i32.load offset={F_STATUS}
+                    br_if $drain
                     local.get $f
                     local.get $f
                     i32.load offset={F_POLL}
@@ -314,6 +382,33 @@
                     local.get $w
                     local.get $arr
                     i32.store offset={F_RESULTS}
+                    ;; ownership of each result pointer has transferred into $arr; drop the
+                    ;; parent's strong ref on every child frame now that its result is copied out
+                    i32.const 0
+                    local.set $i
+                    (block $rdone
+                        (loop $rloop
+                            local.get $i
+                            local.get $n
+                            i32.ge_s
+                            br_if $rdone
+                            local.get $w
+                            i32.load offset={F_CHILDREN}
+                            i32.const 4
+                            i32.add
+                            local.get $i
+                            i32.const 4
+                            i32.mul
+                            i32.add
+                            i32.load
+                            call $release_generic
+                            local.get $i
+                            i32.const 1
+                            i32.add
+                            local.set $i
+                            br $rloop
+                        )
+                    )
                     local.get $w
                     local.get $arr
                     call $dream_complete
@@ -330,6 +425,48 @@
                     local.get $child
                     i32.load offset={F_RESULT}
                     call $dream_complete
+                    ;; cancel every remaining loser, then drop the parent's strong ref on the winner
+                    local.get $w
+                    i32.load offset={F_COUNT}
+                    local.set $n
+                    local.get $w
+                    i32.load offset={F_CHILDREN}
+                    local.set $arr
+                    i32.const 0
+                    local.set $i
+                    (block $cdone
+                        (loop $cloop
+                            local.get $i
+                            local.get $n
+                            i32.ge_s
+                            br_if $cdone
+                            local.get $arr
+                            i32.const 4
+                            i32.add
+                            local.get $i
+                            i32.const 4
+                            i32.mul
+                            i32.add
+                            i32.load
+                            local.set $c
+                            local.get $c
+                            local.get $child
+                            i32.ne
+                            (if
+                                (then
+                                    local.get $c
+                                    call $dream_cancel
+                                )
+                            )
+                            local.get $i
+                            i32.const 1
+                            i32.add
+                            local.set $i
+                            br $cloop
+                        )
+                    )
+                    local.get $child
+                    call $release_generic
                 )
             )
         )
@@ -366,6 +503,32 @@
             call $dream_complete
             local.get $w
             return
+        )
+    )
+    ;; take a strong ref on every child up front so the parent owns them all before any
+    ;; synchronous completion can fire progress (and, for `any`, cancel the losers)
+    i32.const 0
+    local.set $i
+    (block $retdone
+        (loop $retloop
+            local.get $i
+            local.get $n
+            i32.ge_s
+            br_if $retdone
+            local.get $arr
+            i32.const 4
+            i32.add
+            local.get $i
+            i32.const 4
+            i32.mul
+            i32.add
+            i32.load
+            call $retain
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $retloop
         )
     )
     i32.const 0
@@ -428,6 +591,32 @@
     local.get $w
     local.get $n
     i32.store offset={F_REMAINING}
+    ;; take a strong ref on every child up front so the parent owns them all before any
+    ;; synchronous completion can fire progress (and, for `any`, cancel the losers)
+    i32.const 0
+    local.set $i
+    (block $retdone
+        (loop $retloop
+            local.get $i
+            local.get $n
+            i32.ge_s
+            br_if $retdone
+            local.get $arr
+            i32.const 4
+            i32.add
+            local.get $i
+            i32.const 4
+            i32.mul
+            i32.add
+            i32.load
+            call $retain
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $retloop
+        )
+    )
     i32.const 0
     local.set $i
     (block $done
