@@ -5,6 +5,7 @@ import json, subprocess, sys, threading, queue, time
 BIN = sys.argv[1]
 SRC = sys.argv[2]
 BP_LINES = [int(x) for x in sys.argv[3].split(",")]
+STOP_TIMEOUT = float(sys.argv[4]) if len(sys.argv) > 4 else 6.0
 
 proc = subprocess.Popen([BIN, "debug-adapter", SRC],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -73,7 +74,7 @@ s = send("configurationDone"); wait_response(s)
 
 for _ in range(len(BP_LINES) + 2):
     try:
-        st = wait_event("stopped", timeout=6)
+        st = wait_event("stopped", timeout=STOP_TIMEOUT)
     except TimeoutError:
         print("no more stops")
         break

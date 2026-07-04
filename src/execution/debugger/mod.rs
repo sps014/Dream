@@ -26,9 +26,10 @@ use crate::execution::wasm_runner::link_runtime_host_functions;
 use protocol::{read_message, DapWriter};
 use serde_json::{json, Value};
 use sourcemap::{ScalarKind, SourceMap, TypeDesc};
-use state::{FrameState, Inner, RunMode, Shared, ThreadState, VarValue, VAR_REF_BASE};
+use state::{FrameState, Inner, RunMode, Shared, ThreadHot, ThreadState, VarValue, VAR_REF_BASE};
 use std::collections::HashMap;
 use std::io::{self, Stdout};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use wasmtime::*;
@@ -172,6 +173,10 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
                 if let Some(t) = shared.inner.lock().unwrap().threads.get_mut(&tid) {
                     t.pause_requested = true;
                 }
+                // Arm the lock-free flag so the next line hook on that thread escalates and stops.
+                if let Some(hot) = shared.hot_get(tid) {
+                    hot.pause.store(true, Ordering::Relaxed);
+                }
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
             }
             "disconnect" | "terminate" => {
@@ -245,7 +250,8 @@ fn handle_threads(shared: &Arc<Shared>) -> Value {
     json!({ "threads": list })
 }
 
-/// Sets a thread's run mode and releases its paused hook (if any).
+/// Sets a thread's run mode and releases its paused hook (if any). Mirrors the mode into the
+/// lock-free hot state so the fast path enforces it without locking.
 fn resume(shared: &Arc<Shared>, thread_id: u32, mode: RunMode) {
     {
         let mut inner = shared.inner.lock().unwrap();
@@ -253,6 +259,9 @@ fn resume(shared: &Arc<Shared>, thread_id: u32, mode: RunMode) {
             t.mode = mode;
             t.resume = true;
         }
+    }
+    if let Some(hot) = shared.hot_get(thread_id) {
+        hot.set_mode(mode);
     }
     shared.cv.notify_all();
 }
@@ -265,6 +274,9 @@ fn resume_all(shared: &Arc<Shared>) {
             t.mode = RunMode::Continue;
             t.resume = true;
         }
+    }
+    for hot in shared.hot.lock().unwrap().values() {
+        hot.set_mode(RunMode::Continue);
     }
     shared.cv.notify_all();
 }
@@ -293,6 +305,8 @@ fn handle_set_breakpoints(msg: &Value, shared: &Arc<Shared>, sm: &SourceMap) -> 
             inner.breakpoints.insert((fid, line));
         }
     }
+    // Refresh the lock-free filter the per-statement line hook probes.
+    shared.bp_filter.rebuild(&inner.breakpoints);
     drop(inner);
 
     let verified = file_id.is_some();
@@ -454,6 +468,10 @@ fn spawn_execution(
                 t.mode = RunMode::StepIn;
             }
         }
+        if stop_on_entry {
+            // Mirror into the lock-free hot state so the very first line hook escalates and stops.
+            shared.hot_for(MAIN_THREAD).set_mode(RunMode::StepIn);
+        }
         let _ = writer.lock().unwrap().event(
             "thread",
             json!({ "reason": "started", "threadId": MAIN_THREAD }),
@@ -612,16 +630,29 @@ fn link_debug_hooks(
     writer: &Writer,
     thread_id: u32,
 ) -> Result<()> {
+    // The lock-free hot state this thread's hooks read on every line without touching the mutex.
+    let hot = shared.hot_for(thread_id);
+
     let sh = shared.clone();
+    let hot_enter = hot.clone();
     linker.func_wrap(
         "dream_debug",
         "enter",
         move |_c: Caller<'_, ()>, id: i32| {
+            hot_enter.depth.fetch_add(1, Ordering::Relaxed);
             let mut inner = sh.inner.lock().unwrap();
             let t = inner
                 .threads
                 .entry(thread_id)
                 .or_insert_with(|| ThreadState::new(thread_name(thread_id)));
+            // Freeze the caller's current line (from the lock-free position) into its frame before
+            // pushing the callee — so the caller shows its call site even though most of its lines ran
+            // on the mutex-free fast path.
+            if let Some(caller_frame) = t.call_stack.last_mut() {
+                let packed = hot_enter.pos.load(Ordering::Relaxed);
+                caller_frame.file = (packed >> 32) as u32;
+                caller_frame.line = packed as u32;
+            }
             t.call_stack.push(FrameState {
                 func_id: id as u32,
                 file: 0,
@@ -631,10 +662,12 @@ fn link_debug_hooks(
     )?;
 
     let sh = shared.clone();
+    let hot_exit = hot.clone();
     linker.func_wrap(
         "dream_debug",
         "exit",
         move |_c: Caller<'_, ()>, _id: i32| {
+            hot_exit.depth.fetch_sub(1, Ordering::Relaxed);
             let mut inner = sh.inner.lock().unwrap();
             if let Some(t) = inner.threads.get_mut(&thread_id) {
                 t.call_stack.pop();
@@ -645,10 +678,24 @@ fn link_debug_hooks(
     let sh = shared.clone();
     let sm = source_map.clone();
     let wr = writer.clone();
+    let hot_line = hot.clone();
     linker.func_wrap(
         "dream_debug",
         "line",
         move |mut caller: Caller<'_, ()>, file_id: i32, line: i32| {
+            // Hot path: record the current position lock-free, then bail unless something might want to
+            // stop here (a breakpoint at this line, an active step, or a pending pause). This is what
+            // keeps tight loops running at near-native speed under the debugger.
+            hot_line
+                .pos
+                .store(ThreadHot::pack_pos(file_id as u32, line as u32), Ordering::Relaxed);
+            let maybe_stop = hot_line.pause.load(Ordering::Relaxed)
+                || hot_line.step_wants_stop()
+                || sh.bp_filter.probe(file_id as u32, line as u32);
+            if !maybe_stop {
+                return;
+            }
+
             let stop = {
                 let mut inner = sh.inner.lock().unwrap();
                 let Inner {
@@ -668,6 +715,8 @@ fn link_debug_hooks(
             let Some(reason) = stop else {
                 return;
             };
+            // A stop is happening: clear the lock-free pause flag now that it has been consumed.
+            hot_line.pause.store(false, Ordering::Relaxed);
             // Snapshot this thread's current frame (and expandable children) while we still hold the
             // wasm caller; references are namespaced in the thread's range.
             let var_refs = snapshot_locals(&mut caller, &sh, &sm, thread_id);

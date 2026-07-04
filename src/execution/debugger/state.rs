@@ -10,7 +10,8 @@
 //! (servicing the client's per-thread `continue`/`next`/... requests) releases it.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Condvar, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 
 /// Reference-namespacing stride. A thread `tid` owns `variablesReference`/`frameId` values in
 /// `[tid * VAR_REF_BASE, (tid + 1) * VAR_REF_BASE)`: `tid * VAR_REF_BASE` is its top-frame Locals
@@ -124,14 +125,137 @@ pub struct Inner {
     pub terminated: bool,
 }
 
+/// Step-mode encodings stored in [`ThreadHot::step_mode`] (mirrors [`RunMode`] for the lock-free path).
+pub const STEP_CONTINUE: u8 = 0;
+pub const STEP_IN: u8 = 1;
+pub const STEP_OVER: u8 = 2;
+pub const STEP_OUT: u8 = 3;
+
+/// Number of `u64` words in the breakpoint filter (→ 64× bits).
+const BP_FILTER_WORDS: usize = 1024;
+const BP_FILTER_BITS: u64 = (BP_FILTER_WORDS as u64) * 64;
+
+/// A lock-free approximate membership filter over breakpoint `(file, line)` pairs, so the per-statement
+/// line hook can reject the overwhelmingly common "no breakpoint here" case with a single atomic load
+/// (no mutex, no hashing of the whole set). False positives merely fall through to the exact locked
+/// check; there are never false negatives, so no breakpoint is ever missed.
+pub struct BpFilter {
+    words: Vec<AtomicU64>,
+}
+
+impl Default for BpFilter {
+    fn default() -> Self {
+        BpFilter {
+            words: (0..BP_FILTER_WORDS).map(|_| AtomicU64::new(0)).collect(),
+        }
+    }
+}
+
+impl BpFilter {
+    fn bit_index(file: u32, line: u32) -> u64 {
+        // Cheap mix of (file, line); collisions only cost an extra locked check.
+        let h = (file as u64).wrapping_mul(0x9E3779B1).wrapping_add(line as u64);
+        h % BP_FILTER_BITS
+    }
+
+    /// Rebuilds the filter from the exact breakpoint set (called on every `setBreakpoints`).
+    pub fn rebuild(&self, breakpoints: &HashSet<(u32, u32)>) {
+        for w in &self.words {
+            w.store(0, Ordering::Relaxed);
+        }
+        for &(file, line) in breakpoints {
+            let i = Self::bit_index(file, line);
+            self.words[(i / 64) as usize].fetch_or(1u64 << (i % 64), Ordering::Relaxed);
+        }
+    }
+
+    /// True if `(file, line)` *might* be a breakpoint (exact check still required on the slow path).
+    pub fn probe(&self, file: u32, line: u32) -> bool {
+        let i = Self::bit_index(file, line);
+        self.words[(i / 64) as usize].load(Ordering::Relaxed) & (1u64 << (i % 64)) != 0
+    }
+}
+
+/// Lock-free per-thread state read on the hot line-hook path, so a thread running freely (no
+/// breakpoint at the current line, not stepping, no pause pending) never touches the shared mutex.
+/// The main thread keeps these in sync with the authoritative [`ThreadState`] when it changes a
+/// thread's run mode.
+#[derive(Debug, Default)]
+pub struct ThreadHot {
+    /// The last executed statement, packed as `(file_id << 32) | line`. Updated on every line hook so
+    /// a stack trace taken at the next stop has accurate frame lines without per-line locking.
+    pub pos: AtomicU64,
+    /// Current call depth (incremented on `enter`, decremented on `exit`), for step gating.
+    pub depth: AtomicUsize,
+    /// One of `STEP_*`; drives whether the fast path must escalate to the locked stop check.
+    pub step_mode: AtomicU8,
+    /// The reference call depth captured when a `StepOver`/`StepOut` began.
+    pub step_ref: AtomicUsize,
+    /// Set when an explicit `pause` is pending for this thread.
+    pub pause: AtomicBool,
+}
+
+impl ThreadHot {
+    pub fn pack_pos(file: u32, line: u32) -> u64 {
+        ((file as u64) << 32) | (line as u64)
+    }
+
+    /// Mirrors a [`RunMode`] into the lock-free step fields.
+    pub fn set_mode(&self, mode: RunMode) {
+        match mode {
+            RunMode::Continue => self.step_mode.store(STEP_CONTINUE, Ordering::Relaxed),
+            RunMode::StepIn => self.step_mode.store(STEP_IN, Ordering::Relaxed),
+            RunMode::StepOver(d) => {
+                self.step_ref.store(d, Ordering::Relaxed);
+                self.step_mode.store(STEP_OVER, Ordering::Relaxed);
+            }
+            RunMode::StepOut(d) => {
+                self.step_ref.store(d, Ordering::Relaxed);
+                self.step_mode.store(STEP_OUT, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Whether the current line must escalate to the locked stop check because this thread is stepping.
+    pub fn step_wants_stop(&self) -> bool {
+        match self.step_mode.load(Ordering::Relaxed) {
+            STEP_IN => true,
+            STEP_OVER => self.depth.load(Ordering::Relaxed) <= self.step_ref.load(Ordering::Relaxed),
+            STEP_OUT => self.depth.load(Ordering::Relaxed) < self.step_ref.load(Ordering::Relaxed),
+            _ => false,
+        }
+    }
+}
+
 /// The condvar-guarded shared state handed to every thread (via `Arc`).
 #[derive(Default)]
 pub struct Shared {
     pub inner: Mutex<Inner>,
     pub cv: Condvar,
+    /// Lock-free breakpoint filter, rebuilt on `setBreakpoints`.
+    pub bp_filter: BpFilter,
+    /// Lock-free per-thread hot state, keyed by DAP `threadId`. Populated when a thread's hooks are
+    /// linked; read on the hot path via the `Arc` each hook closure captures.
+    pub hot: Mutex<HashMap<u32, Arc<ThreadHot>>>,
 }
 
 impl Shared {
+    /// Returns (creating if needed) the lock-free hot state for a thread, registering it so the main
+    /// thread can flip its step/pause flags.
+    pub fn hot_for(&self, thread_id: u32) -> Arc<ThreadHot> {
+        self.hot
+            .lock()
+            .unwrap()
+            .entry(thread_id)
+            .or_insert_with(|| Arc::new(ThreadHot::default()))
+            .clone()
+    }
+
+    /// Looks up a thread's hot state without creating it.
+    pub fn hot_get(&self, thread_id: u32) -> Option<Arc<ThreadHot>> {
+        self.hot.lock().unwrap().get(&thread_id).cloned()
+    }
+
     /// Decides whether a line hook on thread `t` should stop, given the active mode and call depth.
     /// Consumes a pending explicit pause. Called with the lock held; `breakpoints` and `t` are
     /// disjoint borrows of [`Inner`].
