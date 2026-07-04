@@ -1,5 +1,5 @@
 // FileStream: a buffered, seekable cursor over a file's bytes.
-class FileStream {
+public class FileStream {
     data: byte[];
     pos: int;
 

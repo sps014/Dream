@@ -1,0 +1,6 @@
+// Calling a non-public free function from another file is a compile error.
+import helpers.vis_lib;
+
+fun main(): void {
+    System.println(private_secret());
+}

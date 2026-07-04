@@ -68,6 +68,15 @@ impl<'a> Analyzer<'a> {
             return Ok(None);
         }
 
+        // File/module-level visibility (Axis 2): a non-public enum is only referenceable from its
+        // declaring file.
+        self.check_type_visible(
+            enum_name,
+            parent_function.file_path.as_ref(),
+            variant.position,
+            diagnostics,
+        );
+
         // The declared payload field types of the named variant (templated for generic unions).
         let field_types: Vec<Type> = if is_generic {
             let template = *self.generic_unions.get(enum_name).unwrap();

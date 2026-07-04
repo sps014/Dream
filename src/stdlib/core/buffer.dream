@@ -3,7 +3,7 @@
 // code should normally prefer `Array<T>` and only reach for `Buffer.alloc` for tight, manual
 // storage control.
 
-class Buffer {
+public class Buffer {
     // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
     @intrinsic("array_new")
     static extern fun alloc<T>(len: int): T[];

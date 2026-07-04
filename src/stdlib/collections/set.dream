@@ -1,5 +1,5 @@
 // A generic open-addressing hash set.
-class Set<T> {
+public class Set<T> {
     keys: T[];
     states: int[];
     count: int;

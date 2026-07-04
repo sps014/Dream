@@ -218,6 +218,23 @@ impl<'a> Analyzer<'a> {
             }
         };
 
+        // File/module-level visibility (Axis 2): a non-public free function is only callable from
+        // its own file. Static methods dispatched here (mangled `Type_method`) keep their own
+        // class-level check in `analyze_static_call`.
+        if !self.visible_across_files(
+            &store_sig.declaring_file,
+            store_sig.is_public,
+            parent_function.file_path.as_ref(),
+        ) {
+            self.report_not_public(
+                "Function",
+                &name.text,
+                &store_sig.declaring_file,
+                name.position,
+                diagnostics,
+            );
+        }
+
         let required = store_sig.required_params();
         let total = store_sig.parameters.len();
         let given = params_types.len();
@@ -409,6 +426,7 @@ impl<'a> Analyzer<'a> {
                 is_static: template.is_static,
                 is_public: template.is_public,
                 intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
+                declaring_file: template.file_path.clone(),
             };
 
             let _ = self.function_table.add_function(mangled_name.clone(), info);

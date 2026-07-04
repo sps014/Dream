@@ -1,5 +1,5 @@
 // An iterator for traversing a `Set`.
-class SetIterator<T> {
+public class SetIterator<T> {
     elements: T[];
     index: int;
 

@@ -1,5 +1,5 @@
 // A generic open-addressing hash map.
-class Map<K, V> {
+public class Map<K, V> {
     keys: K[];
     values: V[];
     states: int[];

@@ -23,6 +23,9 @@ pub struct StructInfo {
     /// True for `struct` (value) types: stored inline with copy semantics, not heap-allocated and
     /// reference-counted. Unions are always reference types (`false`).
     pub is_value: bool,
+    /// Source file this type was declared in, for file/module-level visibility: a non-public type
+    /// is only referenceable from its own file. `None` for synthesized types (always visible).
+    pub file_path: Option<std::rc::Rc<str>>,
 }
 
 #[derive(Debug, Clone)]
@@ -105,6 +108,7 @@ impl StructTable {
                 size: current_offset,
                 is_public: struct_decl.is_public,
                 is_value: struct_decl.is_value,
+                file_path: struct_decl.file_path.clone(),
             },
         );
 
@@ -115,7 +119,13 @@ impl StructTable {
     /// flat field map (their payload layout is variant-dependent and lives in the union table),
     /// but they still need an entry here so they receive a runtime type tag, count as a reference
     /// type, and get a (discriminant-aware) `$release_*` helper generated.
-    pub fn add_union(&mut self, name: &str, size: usize, is_public: bool) -> Result<(), String> {
+    pub fn add_union(
+        &mut self,
+        name: &str,
+        size: usize,
+        is_public: bool,
+        file_path: Option<std::rc::Rc<str>>,
+    ) -> Result<(), String> {
         if self.structs.contains_key(name) {
             return Err(format!("Type '{}' is already defined", name));
         }
@@ -127,6 +137,7 @@ impl StructTable {
                 size,
                 is_public,
                 is_value: false,
+                file_path,
             },
         );
         Ok(())

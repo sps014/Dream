@@ -83,6 +83,8 @@ pub fn collect_declarations<'a>(
         all_interfaces.push(interface_decl);
     }
     for enum_decl in program.enums.iter().cloned() {
+        let mut enum_decl = enum_decl;
+        enum_decl.file_path = Some(tag.clone());
         all_enums.push(enum_decl);
     }
     for extend_decl in program.extends.iter().cloned() {

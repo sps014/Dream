@@ -1,5 +1,5 @@
 // Promise utilities for async tasks.
-class Promise {
+public class Promise {
     // Waits for all promises in the array to resolve.
     @intrinsic("promise_all")
     static extern async fun all<T>(promises: T[]): T[];

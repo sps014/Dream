@@ -1,5 +1,5 @@
 // Cursor produced by `Map.iterator()`.
-class MapIterator<K, V> {
+public class MapIterator<K, V> {
     keys: K[];
     values: V[];
     idx: int;

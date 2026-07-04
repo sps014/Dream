@@ -1,5 +1,5 @@
 // A calendar date and time of day.
-class DateTime {
+public class DateTime {
     @js("Dream", "dateNowMillis")
     static extern fun __now_millis(): long;
 
@@ -386,7 +386,7 @@ class DateTime {
 }
 
 // A (year, month, day) tuple.
-class _DateTimeYmd {
+public class _DateTimeYmd {
     public year: int;
     public month: int;
     public day: int;

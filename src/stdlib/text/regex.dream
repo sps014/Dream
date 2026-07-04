@@ -1,5 +1,5 @@
 // Regular expressions.
-class Regex {
+public class Regex {
     pattern: string;
     flags: string;
 

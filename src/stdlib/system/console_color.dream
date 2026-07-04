@@ -1,5 +1,5 @@
 // Standard console colors.
-enum ConsoleColor {
+public enum ConsoleColor {
     Black,
     DarkBlue,
     DarkGreen,

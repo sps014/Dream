@@ -1,5 +1,5 @@
 // One key/value entry.
-class KeyValuePair<K, V> {
+public class KeyValuePair<K, V> {
     public key: K;
     public value: V;
 

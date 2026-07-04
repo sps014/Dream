@@ -155,7 +155,7 @@ Closures (capturing surrounding variables) are not yet supported.
 
 ## Public functions
 
-Functions are **private by default** — callable within their own module but not exposed to the host. Mark a function `public` to make it module-visible and export it to the WebAssembly host environment:
+Functions are **file-private by default** — callable anywhere within their own `.dream` file, but neither visible to other files that `import` it nor exposed to the host. Mark a function `public` to make it importable from other files and to export it to the WebAssembly host environment (see [Imports > Visibility](imports.md#visibility)):
 
 ```dream
 public fun compute(n: int): int {

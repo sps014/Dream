@@ -68,6 +68,13 @@ pub struct EnumDeclarationNode {
     pub variants: Vec<EnumVariantNode>,
     /// True when declared `sealed`: no `extend` block may target this enum (enforced in analysis).
     pub is_sealed: bool,
+    /// True when the enum is marked `public`: visible to other modules. Private (the default)
+    /// enums are file-internal.
+    pub is_public: bool,
+    /// Source file this declaration came from; set during multi-file merge so semantic
+    /// diagnostics and cross-file visibility checks can identify the declaring module. `None`
+    /// for synthesized nodes.
+    pub file_path: Option<Rc<str>>,
 }
 
 impl EnumDeclarationNode {
@@ -83,6 +90,8 @@ impl EnumDeclarationNode {
             generic_parameters,
             variants,
             is_sealed: false,
+            is_public: false,
+            file_path: None,
         }
     }
 

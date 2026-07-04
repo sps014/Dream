@@ -1,5 +1,5 @@
 // `Option<T>` - a value that is either present (`Some`) or absent (`None`).
-enum Option<T> {
+public enum Option<T> {
     Some(value: T),
     None,
 }

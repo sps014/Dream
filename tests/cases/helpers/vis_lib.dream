@@ -1,0 +1,46 @@
+// Support module for the file/module-level visibility tests. Only the `public` declarations here
+// are meant to be reachable from an importing file; the others are file-private.
+
+public fun public_add(a: int, b: int): int {
+    return a + b;
+}
+
+// File-private free function: only callable from within this file.
+fun private_secret(): int {
+    return 99;
+}
+
+public class PublicBox {
+    public value: int;
+
+    constructor(v: int) {
+        this.value = v;
+    }
+
+    public fun get(): int {
+        return this.value;
+    }
+}
+
+// File-private class: not constructible from another file.
+class PrivateBox {
+    public value: int;
+
+    constructor(v: int) {
+        this.value = v;
+    }
+}
+
+public class Gadget {
+    public static fun make(seed: int): int {
+        return seed;
+    }
+
+    // Generic static method (it carries its OWN type parameter), so it is registered in the
+    // `generic_functions` map and dispatched through the generic-static branch of
+    // `try_analyze_static_method`. It is not `public`, so it is class-private: callable only from
+    // Gadget's own methods. This is the branch whose privacy check was previously bypassed.
+    static fun hidden<T>(x: int): int {
+        return x;
+    }
+}

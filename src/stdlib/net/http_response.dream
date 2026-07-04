@@ -1,5 +1,5 @@
 // A parsed view over HTTP response bytes.
-class HttpResponse {
+public class HttpResponse {
     data: char[];
     boundary: int;
     scanned: bool;

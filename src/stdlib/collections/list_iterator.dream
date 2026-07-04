@@ -1,5 +1,5 @@
 // Cursor produced by `List.iterator()`.
-class ListIterator<T> {
+public class ListIterator<T> {
     list: List<T>;
     idx: int;
 

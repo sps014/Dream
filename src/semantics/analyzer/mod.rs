@@ -203,6 +203,9 @@ pub struct GlobalSymbol {
     pub is_const: bool,
     pub is_public: bool,
     pub is_static: bool,
+    /// Source file this global was declared in, for file/module-level visibility. `None` for
+    /// synthesized globals (always visible).
+    pub file_path: Option<Rc<str>>,
 }
 
 pub struct SemanticInfo<'a> {
@@ -262,6 +265,10 @@ pub struct Analyzer<'a> {
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target
     /// any of these; compiler-synthesized extends (interface defaults) are exempt.
     sealed_types: std::collections::HashSet<String>,
+    /// File/module-level visibility for enums and interfaces (types not tracked in the struct
+    /// table): type name -> (declaring file, is_public). A non-public entry is only referenceable
+    /// from its declaring file. Absent or `None` file means always visible.
+    type_visibility: HashMap<String, (Option<Rc<str>>, bool)>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
     /// annotation or `return` type). Used to resolve the type arguments of a generic union's
     /// nullary variant (`let o: Option<int> = Option.None;`), where they cannot be inferred from
@@ -279,6 +286,10 @@ pub struct Analyzer<'a> {
     pending_loop_label: Option<String>,
     /// True while analyzing the body of an `async fun`. Gates the use of `await`.
     current_function_is_async: bool,
+    /// The source file of the function whose body is currently being analyzed, used for
+    /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
+    /// bare-identifier global reads). `None` outside any function body.
+    current_file: Option<Rc<str>>,
     /// Resolved top-level variables, in declaration order. Surfaced to codegen via [`SemanticInfo`].
     globals: Vec<GlobalSymbol>,
     /// The module-level symbol scope holding every top-level variable. It is the root parent of
@@ -310,12 +321,14 @@ impl<'a> Analyzer<'a> {
             interface_methods: IndexMap::new(),
             generic_interfaces: HashMap::new(),
             sealed_types: std::collections::HashSet::new(),
+            type_visibility: HashMap::new(),
             implements: HashMap::new(),
             current_expected_type: None,
             current_generic_bindings: GenericBindings::new(),
             loop_labels: Vec::new(),
             pending_loop_label: None,
             current_function_is_async: false,
+            current_file: None,
             globals: Vec::new(),
             global_symbol_table: Rc::new(RefCell::new(SymbolTable::new(None))),
             type_ctx: TypeCtx::new(),
@@ -327,6 +340,64 @@ impl<'a> Analyzer<'a> {
     /// (`SemanticInfo::hir`), so the MIR backend must be handed *this* interner to lower that HIR.
     pub(crate) fn interner(&self) -> &crate::types::TypeInterner {
         &self.type_ctx.interner
+    }
+
+    /// File/module-level visibility test (Axis 2). A `public` declaration is visible everywhere; a
+    /// non-public one is only visible from the file it was declared in. Synthesized declarations
+    /// (no declaring file) and use sites with no known file are always treated as visible.
+    pub(crate) fn visible_across_files(
+        &self,
+        decl_file: &Option<Rc<str>>,
+        is_public: bool,
+        caller_file: Option<&Rc<str>>,
+    ) -> bool {
+        if is_public {
+            return true;
+        }
+        match (decl_file, caller_file) {
+            (Some(decl), Some(caller)) => decl.as_ref() == caller.as_ref(),
+            _ => true,
+        }
+    }
+
+    /// Reports a cross-file visibility violation for a top-level declaration referenced from
+    /// another file without being `public`.
+    pub(crate) fn report_not_public(
+        &self,
+        kind: &str,
+        name: &str,
+        decl_file: &Option<Rc<str>>,
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let where_ = decl_file
+            .as_ref()
+            .map(|f| format!(" (declared in '{}')", f))
+            .unwrap_or_default();
+        diagnostics.report_error(
+            format!(
+                "{} '{}' is not 'public'; it is private to its file{} and cannot be used from another file",
+                kind, name, where_
+            ),
+            Some(position),
+        );
+    }
+
+    /// Checks that a referenced enum/interface type is visible from `caller_file`, reporting an
+    /// error otherwise. Types absent from `type_visibility` (structs/classes, primitives, generics,
+    /// synthesized types) are handled elsewhere or always visible here.
+    pub(crate) fn check_type_visible(
+        &self,
+        type_name: &str,
+        caller_file: Option<&Rc<str>>,
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if let Some((decl_file, is_public)) = self.type_visibility.get(type_name) {
+            if !self.visible_across_files(decl_file, *is_public, caller_file) {
+                self.report_not_public("Type", type_name, decl_file, position, diagnostics);
+            }
+        }
     }
 
     /// Builds the `Future<T>` type carrying inner type `inner`. Async-call results are this type,

@@ -1,5 +1,5 @@
 // Cursor produced by `string.iterator()`.
-class StringIterator {
+public class StringIterator {
     text: string;
     idx: int;
 

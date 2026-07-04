@@ -533,7 +533,10 @@ pub(crate) fn generate_json_derives<'a>(
         extend_decl.file_path = Some(file_tag.clone());
         extend_decl.is_synthesized = true;
         for method in extend_decl.methods.iter_mut() {
-            method.file_path = Some(file_tag.clone());
+            // Synthesized `@json` codecs legitimately reference the user's own (possibly file-private)
+            // types across the synthetic derive "file". Leaving their declaring file unset marks them
+            // as compiler-synthesized so file/module-level visibility checks treat them as exempt.
+            method.file_path = None;
         }
         all_extends.push(extend_decl);
     }

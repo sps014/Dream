@@ -78,10 +78,12 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         // Optional `public` / `sealed` modifiers (any order) before the `enum` keyword.
         let mut is_sealed = false;
+        let mut is_public = false;
         loop {
             match self.current_token().kind {
                 TokenKind::PublicToken => {
                     self.match_token(TokenKind::PublicToken);
+                    is_public = true;
                 }
                 TokenKind::SealedToken => {
                     self.match_token(TokenKind::SealedToken);
@@ -144,6 +146,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut decl =
             crate::nodes::EnumDeclarationNode::new(attributes, name, generic_parameters, variants);
         decl.is_sealed = is_sealed;
+        decl.is_public = is_public;
         Ok(decl)
     }
 

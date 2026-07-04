@@ -1,6 +1,6 @@
 // `File` - a small cross-runtime filesystem API.
 
-class File {
+public class File {
     // --- host bridge: synchronous externs (real WASM imports; no @intrinsic) -------------------
     @js("Dream", "fileRead")
     static extern fun __file_read(path: string): string;

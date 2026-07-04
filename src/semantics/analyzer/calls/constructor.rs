@@ -47,6 +47,19 @@ impl<'a> Analyzer<'a> {
             }
         };
 
+        // File/module-level visibility (Axis 2): a non-public class is only constructible from its
+        // own file.
+        if let Some(info) = self.struct_table.get_struct(&struct_name) {
+            if !self.visible_across_files(
+                &info.file_path,
+                info.is_public,
+                parent_function.file_path.as_ref(),
+            ) {
+                let decl_file = info.file_path.clone();
+                self.report_not_public("Class", &name.text, &decl_file, name.position, diagnostics);
+            }
+        }
+
         let init_name = constructor_fn(&struct_name);
         // `expected` are the constructor's parameter types (a user `constructor` skips its implicit
         // `this`); `expected_defaults` are the parallel default values. A class with no explicit

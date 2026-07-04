@@ -1,11 +1,11 @@
 // Core comparison interfaces.
 
 // Value equality. `a == b` / `a != b` on a type that implements `Equatable<T>` dispatch here.
-interface Equatable<T> {
+public interface Equatable<T> {
     fun equals(other: T): bool;
 }
 
 // Total ordering. `compare` returns a negative number when `this < other`, zero when equal, and a positive number otherwise.
-interface Comparable<T> {
+public interface Comparable<T> {
     fun compare(other: T): int;
 }

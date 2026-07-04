@@ -1,5 +1,5 @@
 // A cross-runtime HTTP client returning HttpResponse.
-class HttpClient {
+public class HttpClient {
     base_url: string;
     default_headers: string;
 

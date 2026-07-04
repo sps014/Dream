@@ -127,6 +127,26 @@ impl<'a> Analyzer<'a> {
             .to_string();
         let base = method_fn(&type_name, &method.text);
 
+        // File/module-level visibility (Axis 2): reaching a static member requires the type itself
+        // to be visible. A non-public class/struct is only referenceable from its declaring file.
+        if let Some(info) = self.struct_table.get_struct(&type_name) {
+            if !self.visible_across_files(
+                &info.file_path,
+                info.is_public,
+                ctx.parent_function.file_path.as_ref(),
+            ) {
+                let decl_file = info.file_path.clone();
+                self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
+            }
+        } else {
+            self.check_type_visible(
+                &type_name,
+                ctx.parent_function.file_path.as_ref(),
+                id.position,
+                diagnostics,
+            );
+        }
+
         // Support generic static method calls by monomorphizing them on the fly.
         if self.generic_functions.contains_key(&base) {
             let template = *self.generic_functions.get(&base).unwrap();
@@ -283,6 +303,16 @@ impl<'a> Analyzer<'a> {
                 let parsed = self.hir_take();
                 self.hir_set_call(&method_fn(&struct_name, "from_json"), vec![parsed], &t_type);
                 return Ok(Some(t_type));
+            }
+
+            // Class-level privacy (Axis 1): a non-public generic static method is private to its
+            // declaring type, exactly like the non-generic path in `analyze_static_call`. Without
+            // this the generic branch below would return early and skip the check entirely.
+            if !template.is_public && !self.in_methods_of(ctx.parent_function, &type_name) {
+                diagnostics.report_error(
+                    format!("'{}' is private to '{}'", method.text, type_name),
+                    Some(method.position),
+                );
             }
 
             if self.function_table.get_function(&mangled_name).is_err() {

@@ -1,5 +1,5 @@
 // Native JSON value tree.
-class JsonValue {
+public class JsonValue {
     public kind: int;
     public bool_val: bool;
     public num_val: double;

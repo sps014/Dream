@@ -14,7 +14,7 @@
 //       return sum;
 //   }
 
-interface Collection<T> {
+public interface Collection<T> {
     // Number of elements currently stored.
     fun size(): int;
 

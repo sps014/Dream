@@ -1,5 +1,5 @@
 // Mathematical functions.
-class Math {
+public class Math {
     // Returns the absolute value of `x`.
     public static fun abs(x: double): double {
         if (x < 0.0d) {

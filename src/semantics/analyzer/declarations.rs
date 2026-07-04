@@ -41,6 +41,10 @@ impl<'a> Analyzer<'a> {
             if enum_decl.is_sealed {
                 self.sealed_types.insert(name.clone());
             }
+            self.type_visibility.insert(
+                name.clone(),
+                (enum_decl.file_path.clone(), enum_decl.is_public),
+            );
             if self.enum_table.contains_key(name)
                 || self.union_table.contains_key(name)
                 || self.generic_unions.contains_key(name)
@@ -164,7 +168,9 @@ impl<'a> Analyzer<'a> {
         let size = block_end.div_ceil(8) * 8;
 
         self.type_ctx.register(DefKind::Union, union_name, vec![]);
-        if let Err(e) = self.struct_table.add_union(union_name, size, true) {
+        // Data-enum unions are treated as always visible here; C-style enum visibility is tracked
+        // separately in `enum_visibility` and checked at type-reference sites.
+        if let Err(e) = self.struct_table.add_union(union_name, size, true, None) {
             diagnostics.report_error(e, None);
             return;
         }
@@ -536,6 +542,7 @@ impl<'a> Analyzer<'a> {
                 is_const: global.is_const,
                 is_public: global.is_public,
                 is_static: global.is_static,
+                file_path: global.file_path.clone(),
             });
             // Register the HIR slot now (in declaration order) so a subsequent global's initializer
             // can resolve this one as a `Binding::Global`.
@@ -806,6 +813,7 @@ impl<'a> Analyzer<'a> {
             template.is_public,
         );
         new_decl.is_value = template.is_value;
+        new_decl.file_path = template.file_path.clone();
 
         let new_decl_ref: &'a StructDeclarationNode<'a> = self.arena.alloc(new_decl);
 

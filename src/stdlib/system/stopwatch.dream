@@ -1,5 +1,5 @@
 // A high-resolution timer for measuring elapsed time, useful for benchmarking.
-class Stopwatch {
+public class Stopwatch {
     public is_running: bool;
     
     _start_time: long;

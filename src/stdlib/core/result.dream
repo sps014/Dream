@@ -1,5 +1,5 @@
 // `Result<T, E>` - the outcome of an operation that may fail.
-enum Result<T, E> {
+public enum Result<T, E> {
     Ok(value: T),
     Err(error: E),
 }

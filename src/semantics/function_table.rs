@@ -253,6 +253,10 @@ pub struct FunctionTableInfo {
     /// (private methods may only be called from within their declaring type). Defaults to `true`
     /// for synthesized/stdlib entries so they are callable everywhere.
     pub is_public: bool,
+    /// Source file the declaration came from, used for file/module-level visibility: a non-public
+    /// declaration is only reachable from its own file. `None` for synthesized/stdlib entries,
+    /// which are always visible.
+    pub declaring_file: Option<std::rc::Rc<str>>,
 }
 
 impl FunctionTableInfo {
@@ -271,6 +275,7 @@ impl FunctionTableInfo {
             is_static: false,
             intrinsic_name: None,
             is_public: true,
+            declaring_file: None,
         }
     }
     pub fn from(func: &FunctionNode) -> Self {
@@ -292,6 +297,7 @@ impl FunctionTableInfo {
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.
         info.is_public = func.is_public || func.is_extern;
+        info.declaring_file = func.file_path.clone();
         info
     }
 

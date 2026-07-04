@@ -53,10 +53,10 @@ fun main(): void {
 }
 ```
 
-Like class members, top-level variables are **private by default** — visible throughout their own module but not exported. Two modifiers adjust this:
+Top-level variables are **file-private by default** — readable anywhere within their own `.dream` file but not visible to other files that `import` it, and not exported. Two modifiers adjust this:
 
-- `public` — also export the variable to the WebAssembly host and make it module-visible.
-- `static` — keep the variable file-local.
+- `public` — make the variable importable from other files and export it to the WebAssembly host.
+- `static` — keep the variable file-local (its current meaning; a non-public variable is already file-private).
 
 `public` and `static` are mutually exclusive on the same declaration:
 

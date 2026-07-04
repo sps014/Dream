@@ -62,7 +62,7 @@ Structs do not use heap allocation and have zero garbage collection overhead, so
 Both classes and structs support the following features:
 
 ### Visibility
-Members are **private by default**. Mark them `public` to allow outside access.
+Members are **class-private by default**: accessible only from the class's own methods, regardless of file. Mark a member `public` to allow access from outside the class. Separately, the class (or struct/enum/interface) itself is **file-private by default** and must be marked `public` to be usable from another file — see [Imports > Visibility](imports.md#visibility) for how the two axes compose.
 
 ### Methods
 Define methods using `fun`. They automatically receive a `this` parameter.

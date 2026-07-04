@@ -1,0 +1,9 @@
+// Using only `public` declarations from another file must compile and run.
+import helpers.vis_lib;
+
+fun main(): void {
+    System.println(public_add(2, 3));
+    let b = PublicBox(40);
+    System.println(b.get());
+    System.println(Gadget.make(9));
+}

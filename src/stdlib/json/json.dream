@@ -1,6 +1,6 @@
 // The public JSON API.
 
-class JSON {
+public class JSON {
     @intrinsic("json_serialize")
     static extern fun serialize<T>(value: T): string;
 

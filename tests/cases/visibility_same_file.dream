@@ -1,0 +1,22 @@
+// A non-public function and class may be freely used from anywhere in their OWN file.
+fun helper(x: int): int {
+    return x * 2;
+}
+
+class Widget {
+    public n: int;
+
+    constructor(n: int) {
+        this.n = n;
+    }
+
+    public fun value(): int {
+        return this.n;
+    }
+}
+
+fun main(): void {
+    System.println(helper(21));
+    let w = Widget(5);
+    System.println(w.value());
+}

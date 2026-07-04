@@ -1,5 +1,5 @@
 // A cursor over the input text used by the recursive-descent JSON parser.
-class JsonParser {
+public class JsonParser {
     src: string;
     pos: int;
     n: int;

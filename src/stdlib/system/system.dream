@@ -1,5 +1,5 @@
 // System utilities for console I/O, process control, and terminal colors.
-class System {
+public class System {
     // Prints a value to standard output.
     @intrinsic("print")
     static extern fun print<T>(value: T): void;

@@ -16,6 +16,7 @@ impl<'a> Analyzer<'a> {
         let param_table = Rc::new(RefCell::new(
             self.add_function_param_table(function, diagnostics)?,
         ));
+        self.current_file = function.file_path.clone();
         let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
         self.with_async_flag(function.is_async, |s| {
