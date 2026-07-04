@@ -11,7 +11,6 @@
 //! reuses for liveness of `async` bodies and string/itable shaking.
 
 use super::{Global, Mir, Operand, Place, Rvalue, Statement, Terminator};
-use crate::mir::js_abi;
 use crate::mir::lower;
 use crate::types::{DefId, TypeId};
 use std::collections::{HashMap, HashSet};
@@ -240,13 +239,11 @@ fn hir_expr_edges(e: &crate::hir::HExpr, out: &mut HirEdges) {
 
 /// Removes functions unreachable from the module's entry points, then tree-shakes the module's other
 /// symbol tables. Dead pure stores to never-read globals are removed (then the now-unreferenced
-/// globals are dropped), and `extern` imports that no surviving function calls are dropped. See
-/// [`prune_functions`] for the reachability core; the extra shaking lives in [`prune_dead_globals`]
-/// and [`prune_dead_imports`].
+/// globals are dropped). See [`prune_functions`] for the reachability core; the extra shaking lives
+/// in [`prune_dead_globals`].
 pub fn prune_module(mir: &mut Mir) {
     prune_functions(mir);
     prune_dead_globals(mir);
-    prune_dead_imports(mir);
 }
 
 /// Removes functions unreachable from the module's entry points (the reachability core of
@@ -543,52 +540,4 @@ fn collect_global_reads_operand(op: &Operand, out: &mut HashSet<Global>) {
             Place::Local(_) | Place::Field { .. } => {}
         }
     }
-}
-
-/// Drops `extern` imports that no surviving function references. Import call sites carry the import's
-/// `DefId` in their `Callee`; `FuncRef`/`New` constructors are scanned too. Async stubs contribute
-/// their preserved-HIR call edges. Keeping only referenced imports removes dead `(import ...)`
-/// declarations from the emitted module. The fixed host `print_*` builtins are emitted separately and
-/// are unaffected.
-fn prune_dead_imports(mir: &mut Mir) {
-    if mir.imports.is_empty() {
-        return;
-    }
-    let mut referenced: HashSet<DefId> = HashSet::new();
-    for f in &mir.functions {
-        let mut keys: Vec<FnKey> = Vec::new();
-        for b in &f.blocks {
-            for s in &b.stmts {
-                match s {
-                    Statement::Call { callee, .. } => keys.push((callee.def, callee.args.clone())),
-                    Statement::Assign(_, rv) => rvalue_callees(rv, &mut keys),
-                    _ => {}
-                }
-            }
-        }
-        if f.is_async {
-            if let Some(hir_fn) = &f.hir_fn {
-                let mut edges = HirEdges::default();
-                hir_body_edges(&hir_fn.body, &mut edges);
-                keys.extend(edges.callees);
-            }
-        }
-        for (def, _) in keys {
-            referenced.insert(def);
-        }
-    }
-    // The generated struct/class <-> JS object marshalers (`emit::js_marshal`) are raw WAT that call
-    // the `js*` boxing/property bridges directly, so no MIR call edge keeps their imports. Whenever
-    // the program does any JS interop (some live `Dream`-module bridge) and defines a struct/class
-    // that could be marshaled, force-keep the marshaler bridge set (identified by `DefId` via
-    // `js_abi`, not by ad-hoc name matching) so a surviving struct<->js `Cast` always links. A bridge
-    // left unused is harmless — the host always provides it.
-    let uses_js = mir
-        .imports
-        .iter()
-        .any(|imp| imp.module == js_abi::HOST_MODULE && referenced.contains(&imp.def));
-    if uses_js && !mir.layouts.structs.is_empty() {
-        referenced.extend(js_abi::marshal_bridge_defs(mir));
-    }
-    mir.imports.retain(|imp| referenced.contains(&imp.def));
 }

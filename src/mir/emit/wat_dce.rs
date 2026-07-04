@@ -37,7 +37,7 @@ pub(super) fn strip_dead_functions(module: &str) -> String {
     let mut func_names: HashSet<String> = HashSet::new();
     for &(s, e) in &items {
         let text = &module[s..e];
-        let is_func = text.trim_start().starts_with("(func");
+        let is_func = is_func_item(text);
         let name = if is_func { func_name(text) } else { None };
         if let Some(n) = &name {
             func_names.insert(n.clone());
@@ -164,19 +164,79 @@ fn parse_module(b: &[u8]) -> Option<(usize, Vec<(usize, usize)>, usize)> {
     }
 }
 
-/// Extracts the `$name` of a `(func …)` item, or `None` for an anonymous function.
+/// Extracts the `$name` of a `(func …)` or `(import … (func …))` item, or `None` for an anonymous function.
 fn func_name(item: &str) -> Option<String> {
     let b = item.as_bytes();
-    let mut i = skip_trivia(b, 1); // past '('
-    i = skip_atom(b, i); // past `func`
+    let n = b.len();
+    let mut i = skip_trivia(b, 0);
+    if i >= n || b[i] != b'(' { return None; }
+    i += 1;
     i = skip_trivia(b, i);
-    if i < b.len() && b[i] == b'$' {
+    let start = i;
+    i = skip_atom(b, i);
+    let keyword = &b[start..i];
+
+    if keyword == b"import" {
+        i = skip_trivia(b, i);
+        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        i = skip_trivia(b, i);
+        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        i = skip_trivia(b, i);
+        if i < n && b[i] == b'(' {
+            i += 1;
+            i = skip_trivia(b, i);
+            let start = i;
+            i = skip_atom(b, i);
+            if &b[start..i] != b"func" { return None; }
+        } else {
+            return None;
+        }
+    } else if keyword != b"func" {
+        return None;
+    }
+
+    i = skip_trivia(b, i);
+    if i < n && b[i] == b'$' {
         let start = i;
         let end = skip_atom(b, i);
         Some(item[start..end].to_string())
     } else {
         None
     }
+}
+
+/// Returns true if this top-level list is a `(func …)` or `(import … (func …))` definition.
+fn is_func_item(text: &str) -> bool {
+    let b = text.as_bytes();
+    let n = b.len();
+    let mut i = skip_trivia(b, 0);
+    if i >= n || b[i] != b'(' { return false; }
+    i += 1;
+    i = skip_trivia(b, i);
+    let start = i;
+    i = skip_atom(b, i);
+    let keyword = &b[start..i];
+
+    if keyword == b"func" {
+        return true;
+    }
+    if keyword == b"import" {
+        i = skip_trivia(b, i);
+        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        i = skip_trivia(b, i);
+        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        i = skip_trivia(b, i);
+        if i < n && b[i] == b'(' {
+            i += 1;
+            i = skip_trivia(b, i);
+            let start = i;
+            i = skip_atom(b, i);
+            if &b[start..i] == b"func" {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Every `$…` token in `s`, ignoring string literals and `;;` line comments. Block comments are not

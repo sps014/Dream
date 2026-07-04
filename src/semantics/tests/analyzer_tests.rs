@@ -541,20 +541,6 @@ fn test_hir_emission_global_initializer_runs_in_start() {
     wat::parse_str(&wat).expect("module with a start-based initializer should assemble");
 }
 
-#[test]
-fn test_hir_emission_host_print_imports_present() {
-    // Every module declares the fixed `print_*` host builtins (what `print`/`println` lower to), so
-    // a program that uses none of them still emits the import prelude and assembles.
-    let wat = emit_hir_to_module("fun get(): int { return 1; }");
-    for name in ["print_string", "print_int", "print_float", "print_double", "print_char"] {
-        assert!(
-            wat.contains(&format!("(import \"env\" \"{name}\" (func ${name}")),
-            "missing host import {name}:\n{}",
-            wat
-        );
-    }
-    wat::parse_str(&wat).expect("module with the host import prelude should assemble");
-}
 
 #[test]
 fn test_hir_emission_extern_import_and_call() {

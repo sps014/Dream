@@ -7,12 +7,12 @@
 //! marshalers ([`mir::emit::js_marshal`](crate::mir::emit)), and the host bridge set those marshalers
 //! call ([`marshal_bridge_defs`], consumed by [`prune`](crate::mir::prune)).
 
-use crate::mir::Mir;
-use crate::types::{method_fn, DefId, PrimTy, TyKind, TypeId, TypeInterner};
+use crate::types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
 
 /// The host module every `@js` bridge is imported from: matches the first argument of the
 /// `@js("Dream", …)` attributes in `stdlib/core/js.dream` and the module object installed by
 /// `runtime/dream.js`.
+#[allow(dead_code)]
 pub(crate) const HOST_MODULE: &str = "Dream";
 
 /// The Dream type name whose stdlib methods back every interop bridge. Combined with a method name
@@ -25,41 +25,6 @@ pub(crate) const JS_TYPE: &str = "js";
 /// derived through the one canonical mangler so the generated marshalers never hard-code the scheme.
 pub(crate) fn bridge_sym(method: &str) -> String {
     format!("${}", method_fn(JS_TYPE, method))
-}
-
-/// The `js` stdlib methods the generated marshalers (`emit::js_marshal`) call. Single source of
-/// truth: the marshaler WAT references each via [`bridge_sym`], and [`marshal_bridge_defs`] keeps the
-/// matching imports from being tree-shaken when a struct<->js cast survives.
-const MARSHAL_METHODS: [&str; 16] = [
-    "object",
-    "array",
-    "__set",
-    "__get",
-    "__index_set",
-    "__index_get",
-    "__box_int",
-    "__box_long",
-    "__box_double",
-    "__box_bool",
-    "__box_string",
-    "__as_int",
-    "__as_long",
-    "__as_double",
-    "__as_bool",
-    "__as_string",
-];
-
-/// The `DefId`s of the bridge imports the generated struct/array marshalers depend on. The marshalers
-/// are raw WAT (no MIR call edge references them), so [`prune`](crate::mir::prune) uses this to keep
-/// their imports alive whenever a struct<->js cast survives. Matches each import's mangled `name`
-/// against the [`MARSHAL_METHODS`] set via the shared [`method_fn`] mangler — no ad-hoc name parsing.
-pub(crate) fn marshal_bridge_defs(mir: &Mir) -> Vec<DefId> {
-    let wanted: Vec<String> = MARSHAL_METHODS.iter().map(|m| method_fn(JS_TYPE, m)).collect();
-    mir.imports
-        .iter()
-        .filter(|imp| imp.module == HOST_MODULE && wanted.contains(&imp.name))
-        .map(|imp| imp.def)
-        .collect()
 }
 
 // -- Generated-marshaler symbol names ------------------------------------------------------------
