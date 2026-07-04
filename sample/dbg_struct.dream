@@ -1,0 +1,20 @@
+class Point {
+    public x: int;
+    public y: int;
+    public label: string;
+
+    constructor(x: int, y: int, label: string) {
+        this.x = x;
+        this.y = y;
+        this.label = label;
+    }
+}
+
+fun main(): void {
+    let p = Point(3, 7, "origin");
+    let name = "hello";
+    let nums = [10, 20, 30];
+    System.println(p.x);
+    System.println(name);
+    System.println(nums[0]);
+}

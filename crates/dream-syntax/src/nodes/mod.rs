@@ -26,6 +26,16 @@ pub struct AttributeNode {
     pub args: Vec<SyntaxToken>,
 }
 
+/// A *kind* bound on a generic parameter: `T : struct` requires a value type (a `struct` or a
+/// non-`string` primitive; the compiler further requires it to be blittable where that matters),
+/// and `T : class` requires a reference type. Orthogonal to the interface `bounds` and combinable
+/// with them via `+` (e.g. `T : struct + Comparable<T>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstraintKind {
+    Struct,
+    Class,
+}
+
 /// A bound on a generic type parameter (`T : Comparable<T>` or `T : Equatable<T> + Comparable<T>`).
 /// The bare parameter name is still carried by the declaration's `generic_parameters`; this records
 /// the interface types the concrete argument must implement. Each generic declaration (class/struct,
@@ -36,4 +46,6 @@ pub struct GenericConstraint {
     pub param: SyntaxToken,
     /// The interfaces `param` must implement; at least one when a `:` clause is present.
     pub bounds: Vec<Type>,
+    /// Kind constraints (`struct`/`class`) parsed from the same `:`-clause, e.g. `T : struct`.
+    pub kinds: Vec<ConstraintKind>,
 }

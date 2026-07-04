@@ -6,7 +6,7 @@
 //! the condvar until the main thread (servicing the client's `continue`/`next`/... requests) sets a
 //! new [`RunMode`] and releases it.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Condvar, Mutex};
 
 /// How execution should proceed after a stop. `StepOver`/`StepOut` carry the call-stack depth at the
@@ -33,13 +33,17 @@ pub struct FrameState {
     pub line: u32,
 }
 
-/// A decoded local variable captured at a stop, ready to serialize into a DAP `variables` response.
+/// A decoded variable captured at a stop, ready to serialize into a DAP `variables` response. Rich
+/// values (structs, unions, arrays) are expandable: `variables_reference` is non-zero and its
+/// children are registered in [`Inner::var_refs`] under that reference.
 #[derive(Debug, Clone)]
 pub struct VarValue {
     pub name: String,
     pub value: String,
-    /// The variable's type tag, for display (e.g. `int`, `string`).
+    /// The variable's type tag, for display (e.g. `int`, `string`, `Shape`).
     pub type_name: String,
+    /// Non-zero when this variable can be expanded to reveal child fields/elements.
+    pub variables_reference: i64,
 }
 
 /// Why the reason the debuggee last stopped (mapped to the DAP `stopped` event `reason`).
@@ -80,6 +84,9 @@ pub struct Inner {
     pub terminated: bool,
     /// Decoded locals of the innermost frame at the current stop (empty while running).
     pub locals: Vec<VarValue>,
+    /// Children of every expandable value decoded at the current stop, keyed by the
+    /// `variablesReference` handed to the client. Rebuilt on each stop.
+    pub var_refs: HashMap<i64, Vec<VarValue>>,
 }
 
 impl Default for Inner {
@@ -93,6 +100,7 @@ impl Default for Inner {
             resume: false,
             terminated: false,
             locals: Vec::new(),
+            var_refs: HashMap::new(),
         }
     }
 }

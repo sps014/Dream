@@ -155,7 +155,102 @@ impl<'a> Analyzer<'a> {
                     );
                 }
             }
+            for kind in &constraint.kinds {
+                if !self.type_satisfies_kind(concrete, *kind) {
+                    let (want, why) = match kind {
+                        crate::syntax::nodes::ConstraintKind::Struct => (
+                            "struct",
+                            "it is not a value (struct) type with only blittable fields",
+                        ),
+                        crate::syntax::nodes::ConstraintKind::Class => {
+                            ("class", "it is not a reference type")
+                        }
+                    };
+                    diagnostics.report_error(
+                        format!(
+                            "type '{}' does not satisfy the '{}' constraint on generic parameter '{}' ({})",
+                            concrete.get_type(),
+                            want,
+                            constraint.param.text,
+                            why
+                        ),
+                        Some(*position),
+                    );
+                }
+            }
         }
+    }
+
+    /// True when `concrete` satisfies a `struct`/`class` kind constraint. `struct` requires a
+    /// *blittable value type* (a non-`string` scalar primitive, or a value `struct` all of whose
+    /// fields are themselves blittable and non-nullable, recursively - so it is a self-contained run
+    /// of bytes with no inner heap pointers); `class` requires a reference type.
+    pub(super) fn type_satisfies_kind(
+        &self,
+        concrete: &Type,
+        kind: crate::syntax::nodes::ConstraintKind,
+    ) -> bool {
+        let name = concrete.get_type();
+        let base = crate::syntax::nodes::types::strip_nullable(&name);
+        match kind {
+            crate::syntax::nodes::ConstraintKind::Struct => {
+                // A nullable value struct is boxed to a heap pointer, so it is not blittable.
+                !name.ends_with('?')
+                    && self.name_is_blittable_value(base, &mut std::collections::HashSet::new())
+            }
+            crate::syntax::nodes::ConstraintKind::Class => self.name_is_reference_type(base),
+        }
+    }
+
+    fn name_is_blittable_value(
+        &self,
+        name: &str,
+        seen: &mut std::collections::HashSet<String>,
+    ) -> bool {
+        if name.ends_with("[]") {
+            return false; // arrays are heap references
+        }
+        if crate::syntax::nodes::types::is_boxable_primitive(name) {
+            return true; // non-string scalar primitive
+        }
+        if name == "string" {
+            return false;
+        }
+        let Some(info) = self.struct_table.get_struct(name) else {
+            return false; // class / unknown / generic param
+        };
+        if !info.is_value {
+            return false;
+        }
+        if !seen.insert(name.to_string()) {
+            return true; // cycle guard (value structs cannot actually recurse by value)
+        }
+        for f in info.fields.values() {
+            let fname = f.type_.get_type();
+            if fname.ends_with('?') {
+                return false; // nullable field is a boxed/nullable pointer
+            }
+            let fbase = crate::syntax::nodes::types::strip_nullable(&fname);
+            if !self.name_is_blittable_value(fbase, seen) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn name_is_reference_type(&self, name: &str) -> bool {
+        if name.ends_with("[]") || name == "string" {
+            return true;
+        }
+        if crate::syntax::nodes::types::is_boxable_primitive(name) {
+            return false;
+        }
+        // A declared value `struct` is not a reference; a `class` is. Unions/object/js/interfaces
+        // and unknown names default to reference types.
+        self.struct_table
+            .get_struct(name)
+            .map(|s| !s.is_value)
+            .unwrap_or(true)
     }
 
     /// True when `concrete` implements the interface named by `bound` (after substituting the

@@ -243,22 +243,36 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let iter = self.current_token_index;
             let param = self.match_token(TokenKind::IdentifierToken);
-            // Optional bounds: `T : Comparable<T>` or `T : Equatable<T> + Comparable<T>`.
+            // Optional bounds: interface bounds (`T : Comparable<T>`), kind bounds
+            // (`T : struct` / `T : class`), or a `+`-combined mix (`T : struct + Comparable<T>`).
             if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
                 let mut bounds = Vec::new();
-                if let Ok(first) = self.parse_type() {
-                    bounds.push(first);
-                }
-                while self.current_token().kind == TokenKind::PlusToken {
-                    self.match_token(TokenKind::PlusToken);
-                    if let Ok(next) = self.parse_type() {
-                        bounds.push(next);
+                let mut kinds = Vec::new();
+                loop {
+                    match self.current_token().kind {
+                        TokenKind::StructToken => {
+                            self.match_token(TokenKind::StructToken);
+                            kinds.push(crate::nodes::ConstraintKind::Struct);
+                        }
+                        TokenKind::ClassToken => {
+                            self.match_token(TokenKind::ClassToken);
+                            kinds.push(crate::nodes::ConstraintKind::Class);
+                        }
+                        _ => match self.parse_type() {
+                            Ok(t) => bounds.push(t),
+                            Err(_) => break,
+                        },
                     }
+                    if self.current_token().kind != TokenKind::PlusToken {
+                        break;
+                    }
+                    self.match_token(TokenKind::PlusToken);
                 }
                 constraints.push(crate::nodes::GenericConstraint {
                     param: param.clone(),
                     bounds,
+                    kinds,
                 });
             }
             params.push(param);

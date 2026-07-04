@@ -291,6 +291,9 @@ impl<'a> Analyzer<'a> {
                 c.bounds
                     .iter()
                     .all(|bound| self.type_satisfies_bound(concrete, bound, bindings))
+                    && c.kinds
+                        .iter()
+                        .all(|kind| self.type_satisfies_kind(concrete, *kind))
             })
         })
     }

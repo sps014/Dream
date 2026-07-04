@@ -19,5 +19,6 @@ node_modules/
 
 # VS Code Extension generated files
 *.vsix
+*.dbg.json
 tooling/vscode/out/
 tooling/vscode/bin/

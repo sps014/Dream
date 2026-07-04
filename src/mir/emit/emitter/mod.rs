@@ -451,10 +451,10 @@ impl Emitter<'_> {
         };
         let file_id = dbg.file;
         // Snapshot the spill descriptors so we can borrow `self` mutably while emitting.
-        let vars: Vec<(u32, u32, crate::mir::emit::debug_map::DebugVarKind)> = dbg
+        let vars: Vec<(u32, u32, crate::mir::emit::debug_map::SpillKind)> = dbg
             .vars
             .iter()
-            .map(|v| (v.local, v.global, v.kind))
+            .map(|v| (v.local, v.global, v.spill))
             .collect();
         for (local, global, kind) in vars {
             self.emit_var_spill(local, global, kind);
@@ -471,19 +471,19 @@ impl Emitter<'_> {
         &mut self,
         local: u32,
         global: u32,
-        kind: crate::mir::emit::debug_map::DebugVarKind,
+        kind: crate::mir::emit::debug_map::SpillKind,
     ) {
-        use crate::mir::emit::debug_map::DebugVarKind as K;
+        use crate::mir::emit::debug_map::SpillKind as K;
         let value = match kind {
-            K::Long | K::ULong => format!("(local.get ${})", local),
-            K::Double => format!("(i64.reinterpret_f64 (local.get ${}))", local),
-            K::Float => format!(
+            K::I64 => format!("(local.get ${})", local),
+            K::F64 => format!("(i64.reinterpret_f64 (local.get ${}))", local),
+            K::F32 => format!(
                 "(i64.extend_i32_u (i32.reinterpret_f32 (local.get ${})))",
                 local
             ),
-            // Every other kind lives in an i32 local (ints, bools, chars, enums, pointers): keep the
+            // i32 locals (ints, bools, chars, enums, string/aggregate/reference pointers): keep the
             // exact 32 bits via an unsigned extend.
-            _ => format!("(i64.extend_i32_u (local.get ${}))", local),
+            K::I32 => format!("(i64.extend_i32_u (local.get ${}))", local),
         };
         self.line(&format!("     (global.set $__dbg_v{} {})", global, value));
     }
