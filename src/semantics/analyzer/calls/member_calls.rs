@@ -19,7 +19,9 @@ use std::rc::Rc;
 
 /// Outcome of looking up an indexer/enumerator "hook" method (`get`/`set`/`iterator`/`next`) on a
 /// struct receiver, for the desugaring of `obj[i]`, `obj[i] = v`, and `for (let x in obj)`.
-
+// One variant carries a resolved method descriptor while others are unit-like; the value is
+// short-lived and never stored en masse, so the size spread does not warrant boxing.
+#[allow(clippy::large_enum_variant)]
 enum HookResolution {
     /// The receiver is not a struct, or it has no method with that name: the sugar is unavailable.
     Absent,
@@ -851,6 +853,7 @@ impl<'a> Analyzer<'a> {
     /// pending value when `clear_value`), then reports `ineligible(reason)` or `absent()` at `span`.
     /// Centralizes the identical Ineligible/Absent arms every desugaring site (`obj[i]`, `obj[i] = v`,
     /// `for..in`) previously spelled out; callers keep only their `Eligible` logic.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_hook_or_diagnose(
         &mut self,
         obj_type: &Type,

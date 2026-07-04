@@ -1,5 +1,8 @@
 use super::*;
 
+/// A struct lowered for layout: `(interned type id, name, [(field name, interned field type)])`.
+type LoweredStruct = (TypeId, String, Vec<(String, TypeId)>);
+
 impl<'a> Analyzer<'a> {
     /// Turns on HIR collection so a top-level variable's initializer expression is captured while it
     /// is analyzed. There is no enclosing function, so there are no locals/blocks — only the top
@@ -96,8 +99,7 @@ impl<'a> Analyzer<'a> {
         // Lower every struct's fields to interned ids up front. Keyed by the struct's interned type id
         // (`lower_str` canonicalizes both plain names and mangled generic instances like `Box_int` to
         // `struct_ty(def, args)`), so each monomorphization gets its own layout.
-        let mut lowered: Vec<(TypeId, String, Vec<(String, TypeId)>)> =
-            Vec::with_capacity(struct_snapshot.len());
+        let mut lowered: Vec<LoweredStruct> = Vec::with_capacity(struct_snapshot.len());
         for (name, fields) in struct_snapshot {
             let ty = self.type_ctx.lower_str(&name);
             let defs: Vec<(String, TypeId)> = fields

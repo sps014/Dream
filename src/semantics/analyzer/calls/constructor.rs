@@ -13,13 +13,11 @@ use crate::types::constructor_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Outcome of looking up an indexer/enumerator "hook" method (`get`/`set`/`iterator`/`next`) on a
-/// struct receiver, for the desugaring of `obj[i]`, `obj[i] = v`, and `for (let x in obj)`.
-
 impl<'a> Analyzer<'a> {
     /// Type-checks a constructor call `Struct(args)`. When the struct defines a custom `constructor`
     /// the call is checked against `init`'s parameters; otherwise the class has an implicit zero-arg
     /// default constructor (`Struct()`) that leaves every field at its zero value.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn analyze_constructor_call(
         &mut self,
         name: &SyntaxToken,

@@ -188,11 +188,11 @@ impl Emitter<'_> {
             if i < param_count {
                 continue;
             }
-            if self.debug && decl.name.is_some() {
+            if let (true, Some(name)) = (self.debug, decl.name.as_ref()) {
                 self.line(&format!(
                     "  (local ${} (@name \"{}\") {})",
                     i,
-                    decl.name.as_ref().unwrap(),
+                    name,
                     self.wasm_ty(decl.ty)
                 ));
             } else {

@@ -816,18 +816,17 @@ impl<'a> Analyzer<'a> {
         // Value-struct soundness is checked per instantiation (the template's fields are generic, so
         // whether this monomorphization embeds itself by value or carries a nullable value field is
         // only decidable once `T` is concrete).
-        if new_decl_ref.is_value
-            && self.value_struct_contains_self(&mangled_name) {
-                diagnostics.report_error(
+        if new_decl_ref.is_value && self.value_struct_contains_self(&mangled_name) {
+            diagnostics.report_error(
                     format!(
                         "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
                         mangled_name
                     ),
                     Some(*position),
                 );
-            }
-            // A nullable value struct field (`T?`) boxes to a nullable heap pointer, so `null` is
-            // representable — no rejection (see the non-generic path above).
+        }
+        // A nullable value struct field (`T?`) boxes to a nullable heap pointer, so `null` is
+        // representable — no rejection (see the non-generic path above).
 
         self.register_struct_methods(new_decl_ref, &mangled_name, &bindings, diagnostics);
         self.register_generic_extension_methods(base_name, &mangled_name, args, diagnostics);

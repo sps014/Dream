@@ -186,10 +186,9 @@ fn needs_glue(
         if let Some(u) = mir.layouts.unions.get(&ty) {
             for v in &u.variants {
                 for f in &v.fields {
-                    if interner.is_reference(f.ty) {
-                        needs = true;
-                    } else if interner.is_value_type(f.ty)
-                        && needs_glue(f.ty, mir, interner, fn_names, out, visiting)
+                    if interner.is_reference(f.ty)
+                        || (interner.is_value_type(f.ty)
+                            && needs_glue(f.ty, mir, interner, fn_names, out, visiting))
                     {
                         needs = true;
                     }
@@ -208,10 +207,9 @@ fn needs_glue(
     };
     let mut needs = fn_names.contains(format!("{}_del", layout.name).as_str());
     for f in &layout.fields {
-        if interner.is_reference(f.ty) {
-            needs = true;
-        } else if interner.is_value_type(f.ty)
-            && needs_glue(f.ty, mir, interner, fn_names, out, visiting)
+        if interner.is_reference(f.ty)
+            || (interner.is_value_type(f.ty)
+                && needs_glue(f.ty, mir, interner, fn_names, out, visiting))
         {
             needs = true;
         }

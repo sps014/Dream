@@ -46,6 +46,9 @@ pub fn resolve_import_path(base_dir: &Path, module_name: &str) -> std::path::Pat
 /// Clones every top-level declaration of `program` into the accumulators, tagging each with
 /// `file_tag` so semantic diagnostics can be attributed to the right source file. Shared by the
 /// recursive loader, the prelude merge, and the LSP front-end so the tagging logic never drifts.
+// The many parameters are parallel per-declaration-kind accumulators; grouping them into a struct
+// would just move the same field list elsewhere without improving call sites.
+#[allow(clippy::too_many_arguments)]
 pub fn collect_declarations<'a>(
     program: &ProgramNode<'a>,
     file_tag: &str,

@@ -80,10 +80,9 @@ pub(super) fn strip_dead_functions(module: &str) -> String {
     let mut kept: HashSet<usize> = HashSet::new();
     let mut queue: VecDeque<usize> = VecDeque::new();
     for (i, it) in parsed.iter().enumerate() {
-        if it.is_func && it.force_keep
-            && kept.insert(i) {
-                queue.push_back(i);
-            }
+        if it.is_func && it.force_keep && kept.insert(i) {
+            queue.push_back(i);
+        }
     }
     for n in root_names {
         if let Some(&i) = name_to_idx.get(&n) {
@@ -124,9 +123,12 @@ pub(super) fn strip_dead_functions(module: &str) -> String {
     out
 }
 
-/// Parses the outer `(module …)`, returning `(byte offset of the first top-level item, the byte
+/// Parsed layout of the outer `(module …)`: `(byte offset of the first top-level item, the byte
 /// ranges of every top-level list item, the byte offset of the outer closing paren)`.
-fn parse_module(b: &[u8]) -> Option<(usize, Vec<(usize, usize)>, usize)> {
+type ModuleLayout = (usize, Vec<(usize, usize)>, usize);
+
+/// Parses the outer `(module …)` into its [`ModuleLayout`].
+fn parse_module(b: &[u8]) -> Option<ModuleLayout> {
     let n = b.len();
     let mut i = skip_trivia(b, 0);
     if i >= n || b[i] != b'(' {

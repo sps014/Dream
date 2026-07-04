@@ -4,9 +4,6 @@
 use super::super::*;
 use crate::semantics::function_table::{FunctionTableInfo, OverloadResolution};
 
-/// Outcome of looking up an indexer/enumerator "hook" method (`get`/`set`/`iterator`/`next`) on a
-/// struct receiver, for the desugaring of `obj[i]`, `obj[i] = v`, and `for (let x in obj)`.
-
 impl<'a> Analyzer<'a> {
     /// Resolves an overloaded base name against the concrete `arg_types`, returning the selected
     /// signature or a human-readable error (no match / ambiguous). Used by both free-function and

@@ -14,9 +14,6 @@ use crate::types::constructor_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Outcome of looking up an indexer/enumerator "hook" method (`get`/`set`/`iterator`/`next`) on a
-/// struct receiver, for the desugaring of `obj[i]`, `obj[i] = v`, and `for (let x in obj)`.
-
 impl<'a> Analyzer<'a> {
     pub(crate) fn analyze_function_call(
         &mut self,

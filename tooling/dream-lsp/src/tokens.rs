@@ -32,12 +32,12 @@ pub fn classify(text: &str) -> Vec<TokenOut> {
         // `this` lexes as an identifier but reads as a keyword inside methods; `get`/`set` are
         // contextual accessor keywords, highlighted only in `get <name>(` / `set <name>(` position
         // (so ordinary method calls like `list.get(0)` stay classified as identifiers).
-        let kind = if token.kind == TokenKind::IdentifierToken && token.text == "this" {
-            "keyword"
-        } else if token.kind == TokenKind::IdentifierToken
-            && (token.text == "get" || token.text == "set")
-            && is_accessor_position(&tokens, i)
-        {
+        let is_contextual_keyword = (token.kind == TokenKind::IdentifierToken
+            && token.text == "this")
+            || (token.kind == TokenKind::IdentifierToken
+                && (token.text == "get" || token.text == "set")
+                && is_accessor_position(&tokens, i));
+        let kind = if is_contextual_keyword {
             "keyword"
         } else {
             match category(token.kind) {

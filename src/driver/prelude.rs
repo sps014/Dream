@@ -13,6 +13,9 @@ use crate::syntax::parser::Parser;
 
 /// Parses the embedded standard-collections prelude and merges its declarations into the
 /// program. Uses the same arena as the user's files so all AST nodes share a lifetime.
+// The many parameters are parallel per-declaration-kind accumulators; grouping them into a struct
+// would just move the same field list elsewhere without improving call sites.
+#[allow(clippy::too_many_arguments)]
 pub fn merge_prelude<'a>(
     arena: &'a Bump,
     all_functions: &mut Vec<crate::syntax::nodes::FunctionNode<'a>>,

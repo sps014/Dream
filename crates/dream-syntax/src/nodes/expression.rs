@@ -53,6 +53,9 @@ pub struct SwitchArm<'a> {
 }
 
 /// The body of a pattern-matching `switch` arm.
+// The `Expr` variant embeds a full `ExpressionNode`, which is larger than the slice-backed `Block`
+// variant; boxing it would penalize the common expression form for no real memory win in the AST.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum SwitchArmBody<'a> {
     /// `=> expr` - yields the expression's value (the only form allowed in expression position).

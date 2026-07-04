@@ -618,6 +618,7 @@ impl<'a> Analyzer<'a> {
     /// arguments; its return value is discarded). A same-named `set` that is static/async/wrong
     /// arity is left as an ordinary method and this site reports why the value is not
     /// index-assignable.
+    #[allow(clippy::too_many_arguments)]
     fn analyze_index_set(
         &mut self,
         arr: &'a ExpressionNode<'a>,

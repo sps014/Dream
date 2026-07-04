@@ -43,9 +43,8 @@ impl Emitter<'_> {
     pub(super) fn emit_async_state_machine(&mut self, slots: &AsyncSlots, poll_sym: &str) {
         if self.debug {
             self.line(&format!(
-                "(func ${} (@name \"{}\") (param $self i32) (result i32)",
-                poll_sym,
-                format!("{}__poll", self.func.name)
+                "(func ${} (@name \"{}__poll\") (param $self i32) (result i32)",
+                poll_sym, self.func.name
             ));
         } else {
             self.line(&format!(
@@ -54,11 +53,11 @@ impl Emitter<'_> {
             ));
         }
         for (i, decl) in self.func.locals.iter().enumerate() {
-            if self.debug && decl.name.is_some() {
+            if let (true, Some(name)) = (self.debug, decl.name.as_ref()) {
                 self.line(&format!(
                     " (local ${} (@name \"{}\") {})",
                     i,
-                    decl.name.as_ref().unwrap(),
+                    name,
                     self.wasm_ty(decl.ty)
                 ));
             } else {

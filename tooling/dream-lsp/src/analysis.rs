@@ -152,6 +152,9 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
 
 /// Parses each embedded prelude file and merges its declarations, tagging them with their
 /// `<std>` path so their diagnostics can be filtered out of the user-facing list.
+// The many parameters are parallel per-declaration-kind accumulators; grouping them into a struct
+// would just move the same field list elsewhere without improving call sites.
+#[allow(clippy::too_many_arguments)]
 fn merge_prelude<'a>(
     arena: &'a Bump,
     file_path: Option<&str>,
