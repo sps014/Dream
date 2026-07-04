@@ -8,20 +8,25 @@
 //! those hooks pause execution at breakpoints / steps. While paused it snapshots the current frame's
 //! locals so the DAP main thread can answer `stackTrace`/`scopes`/`variables`/`evaluate` requests.
 //!
+//! Every wasm execution thread — the main instance (`threadId` 1) and each spawned `WebWorker` — is
+//! surfaced as its own DAP thread with an independent [`state::ThreadState`]; the hooks are tagged
+//! with the thread id they run on, so workers stop/resume and report call stacks and variables
+//! independently. Breakpoints are shared across threads.
+//!
 //! ```text
-//!  client (VS Code)  <--DAP/stdio-->  main thread  <--Shared+Condvar-->  wasm thread (hooks)
+//!  client (VS Code) <--DAP/stdio--> main thread <--Shared+Condvar--> {main, worker…} wasm threads
 //! ```
 
 mod protocol;
 mod sourcemap;
 mod state;
 
-use crate::execution::host::read_string_from_memory;
+use crate::execution::host::{read_string_from_memory, WorkerDebug};
 use crate::execution::wasm_runner::link_runtime_host_functions;
 use protocol::{read_message, DapWriter};
 use serde_json::{json, Value};
 use sourcemap::{ScalarKind, SourceMap, TypeDesc};
-use state::{FrameState, RunMode, Shared, VarValue};
+use state::{FrameState, Inner, RunMode, Shared, ThreadState, VarValue, VAR_REF_BASE};
 use std::collections::HashMap;
 use std::io::{self, Stdout};
 use std::sync::{Arc, Mutex};
@@ -29,6 +34,18 @@ use std::thread::JoinHandle;
 use wasmtime::*;
 
 type Writer = Arc<Mutex<DapWriter<Stdout>>>;
+
+/// The DAP thread id of the main wasm instance. Workers are assigned `worker_registry_id + 1`.
+const MAIN_THREAD: u32 = 1;
+
+/// A human-readable name for a DAP thread id (`main`, or `worker N`).
+fn thread_name(thread_id: u32) -> String {
+    if thread_id == MAIN_THREAD {
+        "main".to_string()
+    } else {
+        format!("worker {}", thread_id - 1)
+    }
+}
 
 /// Entry point for the `dream debug-adapter <file>` subcommand: `wat_path` is the compiled `.wat`
 /// (its `.dbg.json` sibling holds the source map). Speaks DAP over stdin/stdout until the client
@@ -39,9 +56,18 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
     let shared = Arc::new(Shared::default());
     let writer: Writer = Arc::new(Mutex::new(DapWriter::new(io::stdout())));
 
+    // Attach the debugger to worker threads: each spawned worker becomes its own DAP thread with the
+    // real debug hooks linked into its instance (see `WorkerAttach`).
+    crate::execution::host::set_worker_debug(Arc::new(WorkerAttach {
+        shared: shared.clone(),
+        source_map: source_map.clone(),
+        writer: writer.clone(),
+    }));
+
     let stdin = io::stdin();
     let mut reader = stdin.lock();
     let mut wasm_thread: Option<JoinHandle<()>> = None;
+    let mut stop_on_entry = false;
 
     while let Some(msg) = read_message(&mut reader)? {
         let command = msg
@@ -55,14 +81,11 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
                 writer.lock().unwrap().event("initialized", json!({}))?;
             }
             "launch" => {
-                // `stopOnEntry` makes the program pause at its first line.
-                let stop_on_entry = msg
+                // `stopOnEntry` makes the main thread pause at its first line.
+                stop_on_entry = msg
                     .pointer("/arguments/stopOnEntry")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                if stop_on_entry {
-                    shared.inner.lock().unwrap().mode = RunMode::StepIn;
-                }
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
             }
             "setBreakpoints" => {
@@ -84,17 +107,17 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
                         shared.clone(),
                         source_map.clone(),
                         writer.clone(),
+                        stop_on_entry,
                     ));
                 }
             }
             "threads" => {
-                writer
-                    .lock()
-                    .unwrap()
-                    .respond(&msg, json!({ "threads": [ { "id": 1, "name": "main" } ] }))?;
+                let body = handle_threads(&shared);
+                writer.lock().unwrap().respond(&msg, body)?;
             }
             "stackTrace" => {
-                let body = handle_stack_trace(&shared, &source_map);
+                let tid = arg_thread_id(&msg);
+                let body = handle_stack_trace(&shared, &source_map, tid);
                 writer.lock().unwrap().respond(&msg, body)?;
             }
             "scopes" => {
@@ -120,34 +143,41 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
                 writer.lock().unwrap().respond(&msg, body)?;
             }
             "continue" => {
-                resume(&shared, RunMode::Continue);
+                let tid = arg_thread_id(&msg);
+                resume(&shared, tid, RunMode::Continue);
                 writer
                     .lock()
                     .unwrap()
-                    .respond(&msg, json!({ "allThreadsContinued": true }))?;
+                    .respond(&msg, json!({ "allThreadsContinued": false }))?;
             }
             "next" => {
-                let depth = shared.inner.lock().unwrap().call_stack.len();
-                resume(&shared, RunMode::StepOver(depth));
+                let tid = arg_thread_id(&msg);
+                let depth = thread_depth(&shared, tid);
+                resume(&shared, tid, RunMode::StepOver(depth));
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
             }
             "stepIn" => {
-                resume(&shared, RunMode::StepIn);
+                let tid = arg_thread_id(&msg);
+                resume(&shared, tid, RunMode::StepIn);
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
             }
             "stepOut" => {
-                let depth = shared.inner.lock().unwrap().call_stack.len();
-                resume(&shared, RunMode::StepOut(depth));
+                let tid = arg_thread_id(&msg);
+                let depth = thread_depth(&shared, tid);
+                resume(&shared, tid, RunMode::StepOut(depth));
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
             }
             "pause" => {
-                shared.inner.lock().unwrap().pause_requested = true;
+                let tid = arg_thread_id(&msg);
+                if let Some(t) = shared.inner.lock().unwrap().threads.get_mut(&tid) {
+                    t.pause_requested = true;
+                }
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
             }
             "disconnect" | "terminate" => {
                 writer.lock().unwrap().respond(&msg, Value::Null)?;
-                // Release any paused hook so the wasm thread can unwind and exit.
-                resume(&shared, RunMode::Continue);
+                // Release every paused thread so all wasm threads can unwind and exit.
+                resume_all(&shared);
                 break;
             }
             _ => {
@@ -175,11 +205,67 @@ fn capabilities() -> Value {
     })
 }
 
-/// Sets the run mode and releases a paused hook (if any).
-fn resume(shared: &Arc<Shared>, mode: RunMode) {
-    let mut inner = shared.inner.lock().unwrap();
-    inner.mode = mode;
-    inner.resume = true;
+/// The `threadId` argument of a request, defaulting to the main thread.
+fn arg_thread_id(msg: &Value) -> u32 {
+    msg.pointer("/arguments/threadId")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(MAIN_THREAD)
+}
+
+/// The current call depth of a thread (for `StepOver`/`StepOut` reference depths).
+fn thread_depth(shared: &Arc<Shared>, thread_id: u32) -> usize {
+    shared
+        .inner
+        .lock()
+        .unwrap()
+        .threads
+        .get(&thread_id)
+        .map(|t| t.call_stack.len())
+        .unwrap_or(0)
+}
+
+/// Lists every live execution thread. Falls back to a lone `main` before execution has started.
+fn handle_threads(shared: &Arc<Shared>) -> Value {
+    let inner = shared.inner.lock().unwrap();
+    let mut threads: Vec<(u32, String)> = inner
+        .threads
+        .iter()
+        .map(|(id, t)| (*id, t.name.clone()))
+        .collect();
+    drop(inner);
+    if threads.is_empty() {
+        threads.push((MAIN_THREAD, "main".to_string()));
+    }
+    threads.sort_by_key(|(id, _)| *id);
+    let list: Vec<Value> = threads
+        .into_iter()
+        .map(|(id, name)| json!({ "id": id, "name": name }))
+        .collect();
+    json!({ "threads": list })
+}
+
+/// Sets a thread's run mode and releases its paused hook (if any).
+fn resume(shared: &Arc<Shared>, thread_id: u32, mode: RunMode) {
+    {
+        let mut inner = shared.inner.lock().unwrap();
+        if let Some(t) = inner.threads.get_mut(&thread_id) {
+            t.mode = mode;
+            t.resume = true;
+        }
+    }
+    shared.cv.notify_all();
+}
+
+/// Releases every thread (used on disconnect so the whole program can unwind).
+fn resume_all(shared: &Arc<Shared>) {
+    {
+        let mut inner = shared.inner.lock().unwrap();
+        for t in inner.threads.values_mut() {
+            t.mode = RunMode::Continue;
+            t.resume = true;
+        }
+    }
     shared.cv.notify_all();
 }
 
@@ -217,10 +303,15 @@ fn handle_set_breakpoints(msg: &Value, shared: &Arc<Shared>, sm: &SourceMap) -> 
     json!({ "breakpoints": breakpoints })
 }
 
-fn handle_stack_trace(shared: &Arc<Shared>, sm: &SourceMap) -> Value {
+fn handle_stack_trace(shared: &Arc<Shared>, sm: &SourceMap, thread_id: u32) -> Value {
     let inner = shared.inner.lock().unwrap();
-    // DAP wants the innermost frame first; our call stack has the outermost first.
-    let frames: Vec<Value> = inner
+    let Some(t) = inner.threads.get(&thread_id) else {
+        return json!({ "stackFrames": [], "totalFrames": 0 });
+    };
+    let base = ThreadState::base_ref(thread_id);
+    // DAP wants the innermost frame first; our call stack has the outermost first. Frame ids are
+    // namespaced per thread (`base + index`) so `scopes`/`variables` never collide across threads.
+    let frames: Vec<Value> = t
         .call_stack
         .iter()
         .rev()
@@ -231,7 +322,7 @@ fn handle_stack_trace(shared: &Arc<Shared>, sm: &SourceMap) -> Value {
                 .map(|fi| fi.name.clone())
                 .unwrap_or_else(|| format!("fn#{}", f.func_id));
             let mut frame = json!({
-                "id": i,
+                "id": base + i as i64,
                 "name": name,
                 "line": f.line,
                 "column": 1,
@@ -252,12 +343,15 @@ fn handle_stack_trace(shared: &Arc<Shared>, sm: &SourceMap) -> Value {
     json!({ "stackFrames": frames, "totalFrames": total })
 }
 
-/// The `variablesReference` handed out for the innermost frame's Locals scope. Non-top frames use 0
-/// (their spilled globals have been overwritten, so no live values are available).
-const TOP_LOCALS_REF: i64 = 1000;
-
+/// Resolves a frame's Locals scope. A frame id is `thread_base + frame_index`; only the innermost
+/// frame (index 0, i.e. `frame_id % VAR_REF_BASE == 0`) has live locals — its `variablesReference` is
+/// the thread's base. Non-top frames return 0 (their spilled globals have been overwritten).
 fn scopes_body(frame_id: i64) -> Value {
-    let reference = if frame_id == 0 { TOP_LOCALS_REF } else { 0 };
+    let reference = if frame_id > 0 && frame_id % VAR_REF_BASE == 0 {
+        frame_id
+    } else {
+        0
+    };
     json!({
         "scopes": [
             {
@@ -270,14 +364,13 @@ fn scopes_body(frame_id: i64) -> Value {
 }
 
 fn handle_variables(shared: &Arc<Shared>, reference: i64) -> Value {
+    // The owning thread is recovered from the reference's high part (see `VAR_REF_BASE`).
+    let thread_id = (reference / VAR_REF_BASE) as u32;
     let inner = shared.inner.lock().unwrap();
-    // The innermost frame's Locals scope, or the children of a previously expanded aggregate.
-    let list = if reference == TOP_LOCALS_REF {
-        Some(&inner.locals)
-    } else {
-        inner.var_refs.get(&reference)
-    };
-    let variables: Vec<Value> = list
+    let variables: Vec<Value> = inner
+        .threads
+        .get(&thread_id)
+        .and_then(|t| t.var_refs.get(&reference))
         .map(|vs| vs.iter().map(var_to_json).collect())
         .unwrap_or_default();
     json!({ "variables": variables })
@@ -298,16 +391,30 @@ fn handle_evaluate(msg: &Value, shared: &Arc<Shared>) -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .trim();
+    // Evaluate against the requested frame's thread (default: main). `frameId` is `thread_base + idx`.
+    let frame_id = msg
+        .pointer("/arguments/frameId")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(VAR_REF_BASE);
+    let thread_id = (frame_id / VAR_REF_BASE).max(1) as u32;
+    let base = ThreadState::base_ref(thread_id);
+
     let inner = shared.inner.lock().unwrap();
+    let Some(t) = inner.threads.get(&thread_id) else {
+        return json!({ "result": "<not available>", "variablesReference": 0 });
+    };
     // Support simple dotted field paths (`a.field.sub`) by walking the decoded variable tree.
     let mut parts = expr.split('.');
     let Some(head) = parts.next() else {
         return json!({ "result": "<not available>", "variablesReference": 0 });
     };
-    let mut current = inner.locals.iter().find(|v| v.name == head);
+    let mut current = t
+        .var_refs
+        .get(&base)
+        .and_then(|top| top.iter().find(|v| v.name == head));
     for seg in parts {
         current = match current {
-            Some(v) if v.variables_reference != 0 => inner
+            Some(v) if v.variables_reference != 0 => t
                 .var_refs
                 .get(&v.variables_reference)
                 .and_then(|children| children.iter().find(|c| c.name == seg)),
@@ -332,8 +439,26 @@ fn spawn_execution(
     shared: Arc<Shared>,
     source_map: Arc<SourceMap>,
     writer: Writer,
+    stop_on_entry: bool,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
+        // Register the main instance as DAP thread 1 (with a StepIn mode if `stopOnEntry`) before any
+        // hook fires, and announce it to the client.
+        {
+            let mut inner = shared.inner.lock().unwrap();
+            let t = inner
+                .threads
+                .entry(MAIN_THREAD)
+                .or_insert_with(|| ThreadState::new("main"));
+            if stop_on_entry {
+                t.mode = RunMode::StepIn;
+            }
+        }
+        let _ = writer.lock().unwrap().event(
+            "thread",
+            json!({ "reason": "started", "threadId": MAIN_THREAD }),
+        );
+
         let result = run_program(&wat_path, &shared, &source_map, &writer);
         shared.inner.lock().unwrap().terminated = true;
         let mut w = writer.lock().unwrap();
@@ -369,7 +494,7 @@ fn run_program(
     // Program output is routed to DAP `output` events (stdout is reserved for the DAP stream).
     link_debug_print_functions(&mut linker, writer)?;
     link_runtime_host_functions(&mut linker)?;
-    link_debug_hooks(&mut linker, shared, source_map, writer)?;
+    link_debug_hooks(&mut linker, shared, source_map, writer, MAIN_THREAD)?;
     linker.define_unknown_imports_as_traps(&module)?;
 
     let instance = linker.instantiate(&mut store, &module)?;
@@ -378,6 +503,59 @@ fn run_program(
         main_func.call(&mut store, ())?;
     }
     Ok(())
+}
+
+/// The debugger's attachment to worker threads (installed via [`crate::execution::host::set_worker_debug`]).
+/// Each spawned worker is mapped to `worker_registry_id + 1` and, when it starts, registered as its own
+/// DAP thread with the real debug hooks + DAP-routed output linked into its instance.
+struct WorkerAttach {
+    shared: Arc<Shared>,
+    source_map: Arc<SourceMap>,
+    writer: Writer,
+}
+
+impl WorkerDebug for WorkerAttach {
+    fn dap_thread_id(&self, worker_id: u32) -> u32 {
+        worker_id + 1
+    }
+
+    fn on_start(&self, thread_id: u32) {
+        {
+            let mut inner = self.shared.inner.lock().unwrap();
+            inner
+                .threads
+                .entry(thread_id)
+                .or_insert_with(|| ThreadState::new(thread_name(thread_id)));
+        }
+        let _ = self.writer.lock().unwrap().event(
+            "thread",
+            json!({ "reason": "started", "threadId": thread_id }),
+        );
+    }
+
+    fn on_exit(&self, thread_id: u32) {
+        {
+            let mut inner = self.shared.inner.lock().unwrap();
+            inner.threads.remove(&thread_id);
+        }
+        // Wake anyone (e.g. the main thread's condvar waiters) and notify the client.
+        self.shared.cv.notify_all();
+        let _ = self.writer.lock().unwrap().event(
+            "thread",
+            json!({ "reason": "exited", "threadId": thread_id }),
+        );
+    }
+
+    fn install(&self, linker: &mut Linker<()>, thread_id: u32) {
+        let _ = link_debug_print_functions(linker, &self.writer);
+        let _ = link_debug_hooks(
+            linker,
+            &self.shared,
+            &self.source_map,
+            &self.writer,
+            thread_id,
+        );
+    }
 }
 
 /// The `print_*`/`println` builtins wired to DAP `output` events instead of process stdout.
@@ -425,12 +603,14 @@ fn link_debug_print_functions(linker: &mut Linker<()>, writer: &Writer) -> Resul
 }
 
 /// Wires the compiler-inserted `dream_debug.enter/line/exit` hooks into `linker`, closing over the
-/// shared debug state so line hooks can pause execution and snapshot locals.
+/// shared debug state and the DAP `thread_id` this instance runs as. Line hooks operate only on that
+/// thread's [`ThreadState`], so the main instance and each worker stop/resume independently.
 fn link_debug_hooks(
     linker: &mut Linker<()>,
     shared: &Arc<Shared>,
     source_map: &Arc<SourceMap>,
     writer: &Writer,
+    thread_id: u32,
 ) -> Result<()> {
     let sh = shared.clone();
     linker.func_wrap(
@@ -438,7 +618,11 @@ fn link_debug_hooks(
         "enter",
         move |_c: Caller<'_, ()>, id: i32| {
             let mut inner = sh.inner.lock().unwrap();
-            inner.call_stack.push(FrameState {
+            let t = inner
+                .threads
+                .entry(thread_id)
+                .or_insert_with(|| ThreadState::new(thread_name(thread_id)));
+            t.call_stack.push(FrameState {
                 func_id: id as u32,
                 file: 0,
                 line: 0,
@@ -452,7 +636,9 @@ fn link_debug_hooks(
         "exit",
         move |_c: Caller<'_, ()>, _id: i32| {
             let mut inner = sh.inner.lock().unwrap();
-            inner.call_stack.pop();
+            if let Some(t) = inner.threads.get_mut(&thread_id) {
+                t.call_stack.pop();
+            }
         },
     )?;
 
@@ -465,39 +651,55 @@ fn link_debug_hooks(
         move |mut caller: Caller<'_, ()>, file_id: i32, line: i32| {
             let stop = {
                 let mut inner = sh.inner.lock().unwrap();
-                if let Some(frame) = inner.call_stack.last_mut() {
+                let Inner {
+                    breakpoints,
+                    threads,
+                    ..
+                } = &mut *inner;
+                let Some(t) = threads.get_mut(&thread_id) else {
+                    return;
+                };
+                if let Some(frame) = t.call_stack.last_mut() {
                     frame.file = file_id as u32;
                     frame.line = line as u32;
                 }
-                Shared::should_stop(&mut inner)
+                Shared::should_stop(breakpoints, t)
             };
             let Some(reason) = stop else {
                 return;
             };
-            // Snapshot the current frame's locals (and expandable children) while we still hold the
-            // wasm caller.
-            let (locals, var_refs) = snapshot_locals(&mut caller, &sh, &sm);
+            // Snapshot this thread's current frame (and expandable children) while we still hold the
+            // wasm caller; references are namespaced in the thread's range.
+            let var_refs = snapshot_locals(&mut caller, &sh, &sm, thread_id);
             {
                 let mut inner = sh.inner.lock().unwrap();
-                inner.locals = locals;
-                inner.var_refs = var_refs;
-                inner.paused = true;
-                inner.resume = false;
+                if let Some(t) = inner.threads.get_mut(&thread_id) {
+                    t.var_refs = var_refs;
+                    t.paused = true;
+                    t.resume = false;
+                }
             }
             let _ = wr.lock().unwrap().event(
                 "stopped",
                 json!({
                     "reason": reason.as_str(),
-                    "threadId": 1,
-                    "allThreadsStopped": true,
+                    "threadId": thread_id,
+                    "allThreadsStopped": false,
                 }),
             );
-            // Park until the client resumes (continue/step/disconnect).
+            // Park until the client resumes *this* thread (continue/step/disconnect).
             let mut inner = sh.inner.lock().unwrap();
-            while !inner.resume {
+            loop {
+                match inner.threads.get(&thread_id) {
+                    Some(t) if t.resume => break,
+                    None => return,
+                    _ => {}
+                }
                 inner = sh.cv.wait(inner).unwrap();
             }
-            inner.paused = false;
+            if let Some(t) = inner.threads.get_mut(&thread_id) {
+                t.paused = false;
+            }
         },
     )?;
     Ok(())
@@ -510,20 +712,26 @@ const MAX_DECODE_DEPTH: usize = 4;
 const MAX_FIELDS: usize = 128;
 const MAX_ELEMS: usize = 200;
 
-/// Reads and decodes every named local of the innermost frame from the spill-pool globals, walking
-/// linear memory to expand strings, structs, unions, and arrays. Returns the top-level locals plus a
-/// map of `variablesReference -> children` for every expandable value it produced.
+/// Reads and decodes every named local of `thread_id`'s innermost frame from the spill-pool globals,
+/// walking linear memory to expand strings, structs, unions, and arrays. Returns the thread's stop-time
+/// `variablesReference -> children` map, keyed within the thread's range: the thread base holds the
+/// top-frame locals, expandable children get base+1.. . An empty map means nothing to show.
 fn snapshot_locals(
     caller: &mut Caller<'_, ()>,
     shared: &Arc<Shared>,
     sm: &SourceMap,
-) -> (Vec<VarValue>, HashMap<i64, Vec<VarValue>>) {
+    thread_id: u32,
+) -> HashMap<i64, Vec<VarValue>> {
+    let base = ThreadState::base_ref(thread_id);
     let func_id = {
         let inner = shared.inner.lock().unwrap();
-        inner.call_stack.last().map(|f| f.func_id)
+        inner
+            .threads
+            .get(&thread_id)
+            .and_then(|t| t.call_stack.last().map(|f| f.func_id))
     };
     let Some(info) = func_id.and_then(|id| sm.function(id)) else {
-        return (Vec::new(), HashMap::new());
+        return HashMap::new();
     };
 
     // Read the raw spilled slots first (needs `&mut caller`), then decode against memory.
@@ -540,14 +748,14 @@ fn snapshot_locals(
         .collect();
 
     let Some(mem) = caller.get_export("memory").and_then(Extern::into_memory) else {
-        return (Vec::new(), HashMap::new());
+        return HashMap::new();
     };
     let mut dec = Decoder {
         caller: &*caller,
         mem,
         types: &sm.types,
         refs: HashMap::new(),
-        next_ref: TOP_LOCALS_REF + 1,
+        next_ref: base + 1,
     };
     let mut locals = Vec::with_capacity(raws.len());
     for (name, type_id, raw) in raws {
@@ -559,7 +767,9 @@ fn snapshot_locals(
             variables_reference: vref,
         });
     }
-    (locals, dec.refs)
+    // The top-frame locals live under the thread's base reference (returned by `scopes`).
+    dec.refs.insert(base, locals);
+    dec.refs
 }
 
 /// Reads the raw `i64` bits spilled into the `$__dbg_v{global}` pool global.

@@ -27,7 +27,7 @@ pub use http::link_http_functions;
 pub use math::link_math_functions;
 pub use memory::{read_string_from_memory, write_bytes_to_memory, write_string_to_memory};
 pub use regex::link_regex_functions;
-pub use worker::{link_worker_functions, set_worker_module};
+pub use worker::{link_worker_functions, set_worker_debug, set_worker_module, WorkerDebug};
 
 #[cfg(test)]
 mod contract_tests {

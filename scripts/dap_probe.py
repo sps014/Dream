@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Ad-hoc DAP client to smoke-test live variable inspection of the Dream debugger."""
-import json, subprocess, sys, threading, queue
+"""Ad-hoc DAP client to smoke-test the Dream debugger (async + workers)."""
+import json, subprocess, sys, threading, queue, time
 
 BIN = sys.argv[1]
 SRC = sys.argv[2]
-BP_LINE = int(sys.argv[3])
+BP_LINES = [int(x) for x in sys.argv[3].split(",")]
 
 proc = subprocess.Popen([BIN, "debug-adapter", SRC],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -45,16 +45,15 @@ def send(cmd, args=None):
     proc.stdin.flush()
     return s
 
-def wait_response(s, timeout=5):
-    import time
+def wait_response(s, timeout=8):
     t = time.time()
     while time.time() - t < timeout:
         if s in responses:
             return responses[s]
+        time.sleep(0.005)
     raise TimeoutError(f"no response for seq {s}")
 
-def wait_event(name, timeout=5):
-    import time
+def wait_event(name, timeout=8):
     t = time.time()
     while time.time() - t < timeout:
         try:
@@ -69,20 +68,31 @@ s = send("initialize", {"adapterID": "dream"}); wait_response(s)
 wait_event("initialized")
 s = send("launch", {"program": SRC}); wait_response(s)
 s = send("setBreakpoints", {"source": {"path": SRC},
-                             "breakpoints": [{"line": BP_LINE}]}); print("bp:", wait_response(s)["body"])
+                             "breakpoints": [{"line": l} for l in BP_LINES]}); print("bp:", wait_response(s)["body"])
 s = send("configurationDone"); wait_response(s)
 
-wait_event("stopped")
-s = send("stackTrace", {"threadId": 1}); frames = wait_response(s)["body"]["stackFrames"]
-print("stack:", [(f["name"], f["line"]) for f in frames])
-s = send("scopes", {"frameId": 0}); ref = wait_response(s)["body"]["scopes"][0]["variablesReference"]
-s = send("variables", {"variablesReference": ref}); vars = wait_response(s)["body"]["variables"]
-for v in vars:
-    print(f"  {v['name']}: {v['value']}   [{v['type']}] ref={v['variablesReference']}")
-    if v["variablesReference"]:
-        s = send("variables", {"variablesReference": v["variablesReference"]})
-        for c in wait_response(s)["body"]["variables"]:
-            print(f"      .{c['name']}: {c['value']}   [{c['type']}] ref={c['variablesReference']}")
+for _ in range(len(BP_LINES) + 2):
+    try:
+        st = wait_event("stopped", timeout=6)
+    except TimeoutError:
+        print("no more stops")
+        break
+    tid = st["body"].get("threadId", 1)
+    print(f"\n== stopped thread {tid} reason={st['body'].get('reason')} ==")
+    s = send("threads"); ths = wait_response(s)["body"]["threads"]; print("threads:", ths)
+    s = send("stackTrace", {"threadId": tid}); frames = wait_response(s)["body"]["stackFrames"]
+    print("stack:", [(f["name"], f["line"]) for f in frames])
+    if frames:
+        s = send("scopes", {"frameId": frames[0]["id"]}); ref = wait_response(s)["body"]["scopes"][0]["variablesReference"]
+        s = send("variables", {"variablesReference": ref}); vars = wait_response(s)["body"]["variables"]
+        for v in vars:
+            print(f"   {v['name']}: {v['value']}  [{v['type']}] ref={v['variablesReference']}")
+    send("continue", {"threadId": tid})
 
-send("continue")
+time.sleep(0.5)
+send("disconnect")
+time.sleep(0.3)
 proc.terminate()
+err = proc.stderr.read(600)
+if err:
+    print("STDERR:", err.decode(errors="replace")[:600])

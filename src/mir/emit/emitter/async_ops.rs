@@ -25,6 +25,9 @@ impl Emitter<'_> {
                 }
             }
         }
+        // Debug-info: the coroutine is finishing, so pop its shadow call-stack frame. This is the only
+        // exit path (awaits return without popping), so the frame count stays balanced.
+        self.emit_debug_exit();
         self.line("     (local.get $self)");
         match value {
             Some(v) => self.emit_operand(v),
@@ -100,6 +103,16 @@ impl Emitter<'_> {
         self.line(" local.get $self");
         self.line(&format!(" i32.load offset={}", F_STATE));
         self.line(" local.set $__pc");
+        // Debug-info: announce entry once, on the *initial* poll (state/pc still 0). Resume polls
+        // (pc != 0, after an `await`) must not re-push the frame, and suspends must not pop it - the
+        // frame is popped only on completion (see `emit_poll_complete`), keeping the shadow call
+        // stack balanced across awaits.
+        if let Some(dbg) = self.debug_fn {
+            self.line(&format!(
+                " (if (i32.eqz (local.get $__pc)) (then (call $__dbg_enter (i32.const {}))))",
+                dbg.id
+            ));
+        }
         self.line(" (block $__exit");
         self.line("  (loop $__loop");
         for i in (0..n).rev() {

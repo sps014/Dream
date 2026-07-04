@@ -47,6 +47,18 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 pub fn link_host_functions(linker: &mut Linker<()>) -> Result<()> {
     link_print_functions(linker)?;
     link_runtime_host_functions(linker)?;
+    link_noop_debug_hooks(linker)?;
+    Ok(())
+}
+
+/// No-op `dream_debug` hooks for the normal (non-debugger) runner. A module compiled with `-g`
+/// imports `dream_debug.enter/line/exit`; without an attached debugger these must resolve to
+/// harmless no-ops rather than trapping via `define_unknown_imports_as_traps`. The interactive
+/// debugger deliberately does *not* call this — it links its own hooks that pause execution.
+pub fn link_noop_debug_hooks(linker: &mut Linker<()>) -> Result<()> {
+    linker.func_wrap("dream_debug", "enter", |_id: i32| {})?;
+    linker.func_wrap("dream_debug", "exit", |_id: i32| {})?;
+    linker.func_wrap("dream_debug", "line", |_file: i32, _line: i32| {})?;
     Ok(())
 }
 

@@ -177,6 +177,7 @@ pub fn emit_module_with_debug(
     let mut has_init = false;
     for f in &mir.functions {
         if f.is_async {
+            let debug_fn = dbg_by_symbol.get(func_symbol(f).as_str()).copied();
             out.push_str(&crate::mir::async_emit::emit_async_function(
                 f,
                 interner,
@@ -187,6 +188,7 @@ pub fn emit_module_with_debug(
                 &ftable,
                 *polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
                 debug,
+                debug_fn,
             ));
         } else {
             let debug_fn = dbg_by_symbol.get(func_symbol(f).as_str()).copied();

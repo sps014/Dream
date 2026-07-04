@@ -76,6 +76,7 @@ pub(crate) fn emit_async_poll(
     poll_sym: &str,
     user_local_count: usize,
     debug: bool,
+    debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
     // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
     // elsewhere); empty maps disable those paths without extra plumbing through the transform.
@@ -98,8 +99,7 @@ pub(crate) fn emit_async_poll(
         async_parent: Some(func),
         async_user_locals: user_local_count,
         debug,
-        // Async coroutine bodies are not line-instrumented in v1.
-        debug_fn: None,
+        debug_fn,
     };
     e.emit_async_state_machine(slots, poll_sym);
     e.out

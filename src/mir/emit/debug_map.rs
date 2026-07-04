@@ -284,23 +284,49 @@ impl DebugModule {
             }
         };
 
+        // Standard-library/prelude source files (e.g. `<std>/core/string.dream`); functions from
+        // these are hidden from the debugger so the call stack shows only user frames and stepping
+        // never descends into stdlib. Async functions ARE instrumented (their poll body carries the
+        // same line markers), so `is_async` is deliberately not a skip condition here.
+        let prelude_files: std::collections::HashSet<&str> = crate::stdlib::PRELUDE_FILES
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+
         let mut registry = TypeRegistry::new(interner, &mir.layouts);
         let mut functions = Vec::new();
         let mut global_pool = 0u32;
         for f in &mir.functions {
-            // Async functions are not line-instrumented in v1; skip them (and any function with no
-            // source file, e.g. the synthesized module-init).
-            if f.is_async || f.file.is_none() {
-                continue;
+            // Skip functions with no source file (e.g. the synthesized module-init and generated
+            // glue) and any function defined in a stdlib/prelude file.
+            match f.file.as_deref() {
+                None => continue,
+                Some(path) if prelude_files.contains(path) => continue,
+                _ => {}
             }
+            // For async functions the MIR `f` is only a stub: the real body (and, crucially, the
+            // local numbering the poll uses) is rebuilt from `hir_fn`. Lower it exactly like the
+            // emitter does so `DebugVar::local` indices line up with the poll's WASM locals.
+            let lowered;
+            let body: &MirFunction = if f.is_async {
+                match f.hir_fn.as_ref() {
+                    Some(hir) => {
+                        lowered = crate::mir::lower::lower_async_poll_body(hir, interner);
+                        &lowered
+                    }
+                    None => continue,
+                }
+            } else {
+                f
+            };
             // Only functions that actually carry a line marker are debuggable; skip the rest so
             // runtime helpers merged without markers do not clutter the map.
-            if !function_has_debug_line(f) {
+            if !function_has_debug_line(body) {
                 continue;
             }
             let path = f.file.as_deref().unwrap();
             let fid = file_id(path, &mut files);
-            let vars = debug_vars(f, interner, &mut registry);
+            let vars = debug_vars(body, interner, &mut registry);
             global_pool = global_pool.max(vars.len() as u32);
             let symbol = symbols
                 .get(&(f.def, f.instance.clone()))

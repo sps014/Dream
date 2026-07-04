@@ -24,6 +24,34 @@ use crate::mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
 
 use super::memory::{read_arg_string, read_string_from_memory, write_string_to_memory};
 
+/// Hook by which the debugger attaches to worker threads. Implemented in `execution::debugger` (which
+/// owns the shared debug state); kept as a trait here so `host` has no dependency on `debugger`. When
+/// registered via [`set_worker_debug`], each spawned worker is surfaced as its own DAP thread and its
+/// instance is linked with the real `dream_debug` hooks + DAP-routed output. When absent, workers get
+/// no-op debug hooks so a `-g` build never traps on the `dream_debug.*` imports.
+pub trait WorkerDebug: Send + Sync {
+    /// Maps a worker registry id (from `workerSpawn`) to a stable DAP thread id.
+    fn dap_thread_id(&self, worker_id: u32) -> u32;
+    /// Announces a worker thread starting (emit DAP `thread` `started`, register its state).
+    fn on_start(&self, thread_id: u32);
+    /// Announces a worker thread exiting (emit DAP `thread` `exited`, drop its state).
+    fn on_exit(&self, thread_id: u32);
+    /// Links the real debug hooks (`dream_debug.enter/line/exit`) and DAP-routed `print_*` into a
+    /// worker instance's linker, tagged with the worker's DAP thread id.
+    fn install(&self, linker: &mut Linker<()>, thread_id: u32);
+}
+
+static WORKER_DEBUG: OnceLock<Arc<dyn WorkerDebug>> = OnceLock::new();
+
+/// Registers the debugger's worker-attach hook. Called once by the debug adapter before execution.
+pub fn set_worker_debug(d: Arc<dyn WorkerDebug>) {
+    let _ = WORKER_DEBUG.set(d);
+}
+
+fn worker_debug() -> Option<Arc<dyn WorkerDebug>> {
+    WORKER_DEBUG.get().cloned()
+}
+
 const TAG_STRING: i32 = abi::TAG_STRING;
 const LEN_PREFIX: i32 = abi::LEN_PREFIX_SIZE as i32;
 
@@ -132,9 +160,21 @@ fn worker_thread(
     fn_idx: i32,
     job_rx: Receiver<Job>,
     reply_tx: Sender<String>,
+    dap_tid: Option<u32>,
 ) {
     // Re-establish the module bytes on this thread so a worker can itself spawn sub-workers.
     WASM_BYTES.with(|c| *c.borrow_mut() = Some(bytes.clone()));
+
+    // Announce thread exit to the debugger on every return path from this point on.
+    struct ExitGuard(Option<u32>);
+    impl Drop for ExitGuard {
+        fn drop(&mut self) {
+            if let (Some(d), Some(tid)) = (worker_debug(), self.0) {
+                d.on_exit(tid);
+            }
+        }
+    }
+    let _exit_guard = ExitGuard(dap_tid);
 
     let engine = Engine::default();
     let Ok(module) = Module::new(&engine, &bytes[..]) else {
@@ -142,7 +182,7 @@ fn worker_thread(
     };
     let mut store = Store::new(&engine, ());
     let mut linker: Linker<()> = Linker::new(&engine);
-    build_worker_linker(&mut linker);
+    build_worker_linker(&mut linker, dap_tid);
     if linker.define_unknown_imports_as_traps(&module).is_err() {
         return;
     }
@@ -184,10 +224,26 @@ fn worker_thread(
     }
 }
 
-/// Minimal host imports for a worker instance: printing to real stdout plus the worker functions
-/// themselves (so a worker can spawn sub-workers). Everything else is stubbed as a trap by the
-/// caller via `define_unknown_imports_as_traps`, so compute-only workers instantiate cleanly.
-fn build_worker_linker(linker: &mut Linker<()>) {
+/// Host imports for a worker instance: printing plus the worker functions themselves (so a worker can
+/// spawn sub-workers). Everything else is stubbed as a trap by the caller via
+/// `define_unknown_imports_as_traps`, so compute-only workers instantiate cleanly.
+///
+/// When a debugger is attached, the real `dream_debug` hooks (and DAP-routed `print_*`) are linked
+/// via [`WorkerDebug::install`]; otherwise plain-stdout print plus **no-op** debug hooks are linked so
+/// a `-g` build (whose module imports `dream_debug.*`) never traps inside a worker.
+fn build_worker_linker(linker: &mut Linker<()>, dap_tid: Option<u32>) {
+    match (worker_debug(), dap_tid) {
+        (Some(d), Some(tid)) => d.install(linker, tid),
+        _ => {
+            link_plain_print(linker);
+            link_noop_debug_hooks(linker);
+        }
+    }
+    let _ = link_worker_functions(linker);
+}
+
+/// The default worker `print_*` imports: write straight to the process's real stdout.
+fn link_plain_print(linker: &mut Linker<()>) {
     let _ = linker.func_wrap("env", "print_int", |v: i32| print!("{}", v));
     let _ = linker.func_wrap("env", "print_float", |v: f32| print!("{}", v));
     let _ = linker.func_wrap("env", "print_double", |v: f64| print!("{}", v));
@@ -208,7 +264,14 @@ fn build_worker_linker(linker: &mut Linker<()>) {
             Ok(())
         },
     );
-    let _ = link_worker_functions(linker);
+}
+
+/// No-op `dream_debug` hooks, so a debug-info (`-g`) module instantiated in a worker without an
+/// attached debugger does not trap on the (otherwise unlinked) hook imports.
+fn link_noop_debug_hooks(linker: &mut Linker<()>) {
+    let _ = linker.func_wrap("dream_debug", "enter", |_id: i32| {});
+    let _ = linker.func_wrap("dream_debug", "exit", |_id: i32| {});
+    let _ = linker.func_wrap("dream_debug", "line", |_file: i32, _line: i32| {});
 }
 
 /// Registers the `WebWorker` host functions on `linker` (the owner side). Safe to call on both the
@@ -223,8 +286,15 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
                 module_bytes().ok_or_else(|| Error::msg("worker module bytes not initialized"))?;
             let (job_tx, job_rx) = channel::<Job>();
             let (reply_tx, reply_rx) = channel::<String>();
-            std::thread::spawn(move || worker_thread(bytes, fn_idx, job_rx, reply_tx));
             let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+            // If a debugger is attached, surface this worker as its own DAP thread and thread its id
+            // through to the worker's instance so its debug hooks report against the right thread.
+            let dbg = worker_debug();
+            let dap_tid = dbg.as_ref().map(|d| d.dap_thread_id(id));
+            if let (Some(d), Some(tid)) = (&dbg, dap_tid) {
+                d.on_start(tid);
+            }
+            std::thread::spawn(move || worker_thread(bytes, fn_idx, job_rx, reply_tx, dap_tid));
             workers().lock().unwrap().insert(
                 id,
                 WorkerHandle {
