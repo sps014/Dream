@@ -80,6 +80,7 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
     matches!(
         rvalue,
         Rvalue::Use(_)
+            | Rvalue::Select { .. }
             | Rvalue::Binary(..)
             | Rvalue::Unary(..)
             | Rvalue::ArrayLen(_)
@@ -142,6 +143,15 @@ fn read_place_base(place: &Place, read: &mut HashSet<Local>) {
 
 fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
     match rvalue {
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => {
+            read_operand(cond, read);
+            read_operand(then_val, read);
+            read_operand(else_val, read);
+        }
         Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
@@ -192,6 +202,7 @@ fn read_terminator(t: &Terminator, read: &mut HashSet<Local>) {
         Terminator::Switch { value, .. } => read_operand(value, read),
         Terminator::Return(Some(o)) => read_operand(o, read),
         Terminator::AsyncComplete(Some(o)) => read_operand(o, read),
+        Terminator::TailCall { args, .. } => args.iter().for_each(|a| read_operand(a, read)),
         _ => {}
     }
 }

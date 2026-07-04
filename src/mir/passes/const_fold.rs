@@ -35,7 +35,7 @@ fn as_const(op: &Operand) -> Option<&Const> {
     }
 }
 
-fn fold(rvalue: &Rvalue) -> Option<Const> {
+pub(super) fn fold(rvalue: &Rvalue) -> Option<Const> {
     match rvalue {
         Rvalue::Binary(op, a, b) => fold_binary(*op, as_const(a)?, as_const(b)?),
         Rvalue::Unary(op, a) => fold_unary(*op, as_const(a)?),

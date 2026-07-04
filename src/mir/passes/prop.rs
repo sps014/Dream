@@ -56,7 +56,7 @@ fn subst_place_reads(place: &mut Place, known: &HashMap<Local, Operand>) -> bool
     false
 }
 
-fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Operand>) -> bool {
+pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Operand>) -> bool {
     match stmt {
         Statement::Assign(place, rvalue) => {
             let mut c = subst_place_reads(place, known);
@@ -81,6 +81,11 @@ fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Operand>) -> bo
 
 fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> bool {
     match rvalue {
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => subst_operand(cond, known) | subst_operand(then_val, known) | subst_operand(else_val, known),
         Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
@@ -135,18 +140,21 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
     }
 }
 
-fn subst_terminator_reads(t: &mut Terminator, known: &HashMap<Local, Operand>) -> bool {
+pub(super) fn subst_terminator_reads(t: &mut Terminator, known: &HashMap<Local, Operand>) -> bool {
     match t {
         Terminator::If { cond, .. } => subst_operand(cond, known),
         Terminator::Switch { value, .. } => subst_operand(value, known),
         Terminator::Return(Some(o)) => subst_operand(o, known),
         Terminator::AsyncComplete(Some(o)) => subst_operand(o, known),
+        Terminator::TailCall { args, .. } => args
+            .iter_mut()
+            .fold(false, |c, a| c | subst_operand(a, known)),
         _ => false,
     }
 }
 
 /// Updates the known-value map after a statement executes.
-fn update_known(stmt: &Statement, known: &mut HashMap<Local, Operand>) {
+pub(super) fn update_known(stmt: &Statement, known: &mut HashMap<Local, Operand>) {
     if let Statement::Assign(Place::Local(dest), rvalue) = stmt {
         // The destination's old value is gone, and any entry that *copied* it is now stale.
         invalidate(*dest, known);

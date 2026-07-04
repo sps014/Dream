@@ -9,6 +9,17 @@ impl Emitter<'_> {
     pub(super) fn emit_rvalue(&mut self, rvalue: &Rvalue) {
         match rvalue {
             Rvalue::Use(o) => self.emit_operand(o),
+            Rvalue::Select {
+                cond,
+                then_val,
+                else_val,
+            } => {
+                // WASM `select` pops [val1, val2, cond] and yields val1 when cond != 0.
+                self.emit_operand(then_val);
+                self.emit_operand(else_val);
+                self.emit_operand(cond);
+                self.line("     (select)");
+            }
             Rvalue::Binary(op, a, b) => {
                 let ty = self.operand_ty(a);
                 // String equality compares contents, not pointers, via the runtime `$string_eq`.

@@ -4,9 +4,9 @@
 //! `is`-folding the old backend did inline.
 
 use super::MirPass;
-use crate::mir::{BlockId, Const, MirFunction, Operand, Terminator};
+use crate::mir::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use crate::types::TypeInterner;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub struct SimplifyCfg;
 
@@ -15,13 +15,156 @@ impl MirPass for SimplifyCfg {
         "simplify-cfg"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
         let mut changed = fold_constant_branches(func);
         changed |= collapse_same_target_branches(func);
         changed |= thread_empty_jumps(func);
+        changed |= thread_branch_targets(func);
+        changed |= if_convert(func, interner);
         changed |= merge_single_pred_blocks(func);
         changed
     }
+}
+
+/// Jump threading: redirects every edge that targets an empty forwarding block (`{ } goto Z`)
+/// straight to `Z`, following chains. Unlike `thread_empty_jumps` (which only rewrites `Goto`
+/// terminators), this threads the targets of `If`/`Switch`/`Await` too.
+fn thread_branch_targets(func: &mut MirFunction) -> bool {
+    // One-hop forwarding target of each block (empty block ending in a non-self `Goto`).
+    let forward: Vec<Option<BlockId>> = (0..func.blocks.len())
+        .map(|i| {
+            let blk = &func.blocks[i];
+            match blk.terminator {
+                Terminator::Goto(t) if blk.stmts.is_empty() && t.0 as usize != i => Some(t),
+                _ => None,
+            }
+        })
+        .collect();
+
+    let chase = |start: BlockId| -> BlockId {
+        let mut cur = start;
+        let mut seen = HashSet::new();
+        while seen.insert(cur) {
+            match forward[cur.0 as usize] {
+                Some(t) => cur = t,
+                None => break,
+            }
+        }
+        cur
+    };
+
+    let mut changed = false;
+    for i in 0..func.blocks.len() {
+        let mut edit = |b: &mut BlockId| {
+            let t = chase(*b);
+            if t != *b {
+                *b = t;
+                changed = true;
+            }
+        };
+        match &mut func.blocks[i].terminator {
+            Terminator::Goto(b) => edit(b),
+            Terminator::If {
+                then_blk, else_blk, ..
+            } => {
+                edit(then_blk);
+                edit(else_blk);
+            }
+            Terminator::Switch {
+                targets, default, ..
+            } => {
+                for (_, b) in targets {
+                    edit(b);
+                }
+                edit(default);
+            }
+            Terminator::Await { resume, .. } => edit(resume),
+            Terminator::Return(_)
+            | Terminator::AsyncComplete(_)
+            | Terminator::TailCall { .. }
+            | Terminator::Unreachable => {}
+        }
+    }
+    changed
+}
+
+/// If-conversion: collapses a diamond that only chooses between two side-effect-free scalar values
+/// into a branchless `select`.
+///
+/// `H: if cond goto T else E`, where `T = { x = a; goto J }` and `E = { x = b; goto J }` (same `x`
+/// and `J`, each with `H` as its only predecessor, `a`/`b` constants or plain local reads, `x` a
+/// scalar) becomes `H: x = select(cond, a, b); goto J`, and `T`/`E` are dropped.
+fn if_convert(func: &mut MirFunction, interner: &TypeInterner) -> bool {
+    let preds = predecessor_counts(func);
+    let mut changed = false;
+    for i in 0..func.blocks.len() {
+        let Terminator::If {
+            cond,
+            then_blk,
+            else_blk,
+        } = &func.blocks[i].terminator
+        else {
+            continue;
+        };
+        let (cond, t, e) = (cond.clone(), *then_blk, *else_blk);
+        if t == e || t.0 as usize == i || e.0 as usize == i {
+            continue;
+        }
+        // Each arm must be exclusively reached from this branch.
+        if preds.get(&t).copied().unwrap_or(0) != 1 || preds.get(&e).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        let Some((xt, at, jt)) = single_select_arm(func, t) else {
+            continue;
+        };
+        let Some((xe, ae, je)) = single_select_arm(func, e) else {
+            continue;
+        };
+        if xt != xe || jt != je {
+            continue;
+        }
+        if interner.is_value_type(func.local_ty(xt)) {
+            continue; // `select` is scalar-only
+        }
+
+        func.blocks[i].stmts.push(Statement::Assign(
+            Place::Local(xt),
+            Rvalue::Select {
+                cond,
+                then_val: at,
+                else_val: ae,
+            },
+        ));
+        func.blocks[i].terminator = Terminator::Goto(jt);
+        // Detach the now-dead arms (DCE reclaims them).
+        for arm in [t, e] {
+            let blk = &mut func.blocks[arm.0 as usize];
+            blk.stmts.clear();
+            blk.terminator = Terminator::Unreachable;
+        }
+        changed = true;
+    }
+    changed
+}
+
+/// Matches an arm block of the form `{ x = <const|local>; goto J }`, returning `(x, value, J)`.
+fn single_select_arm(func: &MirFunction, b: BlockId) -> Option<(crate::mir::Local, Operand, BlockId)> {
+    let block = func.block(b);
+    if block.stmts.len() != 1 {
+        return None;
+    }
+    let Statement::Assign(Place::Local(x), Rvalue::Use(val)) = &block.stmts[0] else {
+        return None;
+    };
+    // Only pure, always-safe-to-evaluate operands (no memory loads that could fault when the branch
+    // would not have taken them).
+    if !matches!(val, Operand::Const(_) | Operand::Copy(Place::Local(_))) {
+        return None;
+    }
+    let Terminator::Goto(j) = block.terminator else {
+        return None;
+    };
+    Some((*x, val.clone(), j))
 }
 
 /// Collapses a branch whose outcomes all jump to the same block into an unconditional `Goto` (the

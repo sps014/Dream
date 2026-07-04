@@ -1014,6 +1014,28 @@ impl Emitter<'_> {
                 self.emit_frame_teardown();
                 self.line("     (return)");
             }
+            Terminator::TailCall { callee, args } => {
+                let sym = self.callee_symbol(callee);
+                if let Some(kind) = async_intrinsic_kind(&sym) {
+                    // Async intrinsics have a bespoke calling convention and can't be tail-called;
+                    // fall back to `f(args); return`. (The `tco` pass avoids this, so it is only a
+                    // safety net.)
+                    self.emit_async_intrinsic(kind, args);
+                    if !self.wasm_returns_value() {
+                        self.line("     (drop)");
+                    }
+                    self.emit_frame_teardown();
+                    self.line("     (return)");
+                } else {
+                    // Arguments are all scalar (the pass guarantees no value-struct/sret ABI), so
+                    // the frame teardown below never touches them: it only drops this frame's inline
+                    // value-struct slots and restores `$__sp`, leaving the pushed args intact for
+                    // `return_call` to consume.
+                    self.emit_call_args(callee, args);
+                    self.emit_frame_teardown();
+                    self.line(&format!("     (return_call ${})", sym));
+                }
+            }
             Terminator::Unreachable => self.line("     (unreachable)"),
             Terminator::AsyncComplete(_) => self.line("     (unreachable) ;; async in sync fn"),
             Terminator::Await { .. } => self.line("     (unreachable) ;; await in sync fn"),

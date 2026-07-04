@@ -170,6 +170,14 @@ pub enum Terminator {
         dest: Option<Local>,
         resume: BlockId,
     },
+    /// A tail call in return position (`return f(args);`), emitted as WASM `return_call $f`.
+    /// Introduced by the `tco` pass only for all-scalar signatures (no value-struct/sret ABI), so
+    /// the current frame's teardown never invalidates an argument. Has no successor blocks — control
+    /// leaves the function.
+    TailCall {
+        callee: Callee,
+        args: Vec<Operand>,
+    },
     /// Statically unreachable (e.g. after a diverging call); the placeholder default.
     #[default]
     Unreachable,
@@ -191,9 +199,10 @@ impl Terminator {
                 s
             }
             Terminator::Await { resume, .. } => vec![*resume],
-            Terminator::Return(_) | Terminator::AsyncComplete(_) | Terminator::Unreachable => {
-                vec![]
-            }
+            Terminator::Return(_)
+            | Terminator::AsyncComplete(_)
+            | Terminator::TailCall { .. }
+            | Terminator::Unreachable => vec![],
         }
     }
 }
@@ -246,6 +255,14 @@ pub enum Const {
 #[derive(Debug, Clone)]
 pub enum Rvalue {
     Use(Operand),
+    /// Branchless selection `cond ? then_val : else_val`, lowered to WASM `select`. Both value
+    /// operands are evaluated eagerly, so if-conversion only produces this for side-effect- and
+    /// trap-free scalar operands (constants / plain local reads).
+    Select {
+        cond: Operand,
+        then_val: Operand,
+        else_val: Operand,
+    },
     Binary(BinOp, Operand, Operand),
     Unary(UnOp, Operand),
     /// `string.len()` via a runtime `$strlen` call (O(1): the length word is stored at the string's

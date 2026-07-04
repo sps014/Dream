@@ -176,6 +176,8 @@ impl Emitter<'_> {
                 let v = v.clone();
                 self.emit_poll_complete(v.as_ref());
             }
+            // TCO never runs on async bodies, so a tail call cannot appear in a poll function.
+            Terminator::TailCall { .. } => self.line("     (unreachable) ;; tail call in async fn"),
             Terminator::Unreachable => self.line("     (unreachable)"),
         }
     }

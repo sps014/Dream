@@ -115,6 +115,15 @@ pub(super) fn strings_in_operand(op: &Operand, out: &mut Vec<String>) {
 
 pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
     match rv {
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => {
+            strings_in_operand(cond, out);
+            strings_in_operand(then_val, out);
+            strings_in_operand(else_val, out);
+        }
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)

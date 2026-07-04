@@ -480,6 +480,15 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
 
 fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
     match rv {
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => {
+            collect_global_reads_operand(cond, out);
+            collect_global_reads_operand(then_val, out);
+            collect_global_reads_operand(else_val, out);
+        }
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)

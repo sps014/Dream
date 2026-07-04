@@ -509,6 +509,15 @@ fn remap_operand(op: &mut Operand, base: u32) {
 
 fn remap_rvalue(rv: &mut Rvalue, base: u32) {
     match rv {
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => {
+            remap_operand(cond, base);
+            remap_operand(then_val, base);
+            remap_operand(else_val, base);
+        }
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)
@@ -622,6 +631,11 @@ fn remap_terminator(t: &mut Terminator, local_base: u32, block_base: u32) {
                 d.0 += local_base;
             }
             resume.0 += block_base;
+        }
+        Terminator::TailCall { args, .. } => {
+            for a in args {
+                remap_operand(a, local_base);
+            }
         }
         Terminator::Return(None) | Terminator::AsyncComplete(None) | Terminator::Unreachable => {}
     }

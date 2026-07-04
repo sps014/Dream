@@ -101,6 +101,9 @@ fn terminator(t: &Terminator) -> String {
             dest.map(|d| format!(" into _{}", d.0)).unwrap_or_default(),
             resume.0
         ),
+        Terminator::TailCall { callee, args } => {
+            format!("tail_call def{}({})", callee.def.0, ops(args))
+        }
         Terminator::Unreachable => "unreachable".to_string(),
     }
 }
@@ -108,6 +111,16 @@ fn terminator(t: &Terminator) -> String {
 fn rvalue(r: &Rvalue) -> String {
     match r {
         Rvalue::Use(o) => operand(o),
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => format!(
+            "select({}, {}, {})",
+            operand(cond),
+            operand(then_val),
+            operand(else_val)
+        ),
         Rvalue::Binary(op, a, b) => format!("{:?}({}, {})", op, operand(a), operand(b)),
         Rvalue::Unary(op, a) => format!("{:?}({})", op, operand(a)),
         Rvalue::Call { callee, args } => format!("call def{}({})", callee.def.0, ops(args)),

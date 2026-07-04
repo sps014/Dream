@@ -4,8 +4,8 @@
 //! signed-zero / NaN pitfalls, and signed division-by-shift is unsound so it is not attempted.
 
 use super::MirPass;
-use crate::mir::{BinOp, Const, MirFunction, Operand, Rvalue, Statement};
-use crate::types::TypeInterner;
+use crate::mir::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement};
+use crate::types::{PrimTy, TyKind, TypeId, TypeInterner};
 
 pub struct Algebraic;
 
@@ -14,12 +14,20 @@ impl MirPass for Algebraic {
         "algebraic"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
+        // Snapshot local types so the mutable walk of `func.blocks` below doesn't re-borrow `func`.
+        let local_tys: Vec<TypeId> = func.locals.iter().map(|d| d.ty).collect();
         let mut changed = false;
         for block in &mut func.blocks {
             for stmt in &mut block.stmts {
-                if let Statement::Assign(_, rvalue) = stmt {
-                    if let Some(simpler) = simplify(rvalue) {
+                if let Statement::Assign(place, rvalue) = stmt {
+                    // The destination's scalar type disambiguates signed vs. unsigned strength
+                    // reduction (only unsigned `/`,`%` by a power of two are sound as shift/mask).
+                    let unsigned = match place {
+                        Place::Local(l) => is_unsigned(interner, local_tys[l.0 as usize]),
+                        _ => false,
+                    };
+                    if let Some(simpler) = simplify(rvalue, unsigned) {
                         *rvalue = simpler;
                         changed = true;
                     }
@@ -27,6 +35,22 @@ impl MirPass for Algebraic {
             }
         }
         changed
+    }
+}
+
+/// True for the unsigned integer primitives, whose `/` and `%` map to `shr_u` / `and`.
+fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
+    matches!(
+        interner.kind(interner.strip_nullable(ty)),
+        TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
+    )
+}
+
+/// The bool value of a constant operand, if any.
+fn bool_val(op: &Operand) -> Option<bool> {
+    match op {
+        Operand::Const(Const::Bool(b)) => Some(*b),
+        _ => None,
     }
 }
 
@@ -60,12 +84,44 @@ fn log2_pow2(v: i64) -> Option<i64> {
     }
 }
 
-fn simplify(rvalue: &Rvalue) -> Option<Rvalue> {
+/// `2^k - 1` mask for an unsigned `% 2^k`, matching the operand width.
+fn mask_const(operand: &Operand, k: i64) -> Operand {
+    let m = (1i64 << k) - 1;
+    match operand {
+        Operand::Const(Const::Long(_)) => Operand::Const(Const::Long(m)),
+        _ => Operand::Const(Const::Int(m)),
+    }
+}
+
+fn simplify(rvalue: &Rvalue, unsigned: bool) -> Option<Rvalue> {
     let Rvalue::Binary(op, a, b) = rvalue else {
         return None;
     };
     let ac = int_val(a);
     let bc = int_val(b);
+    match op {
+        // Boolean identities against a constant (feeds SimplifyCfg's branch folding).
+        BinOp::And if bool_val(b) == Some(true) => return Some(Rvalue::Use(a.clone())),
+        BinOp::And if bool_val(a) == Some(true) => return Some(Rvalue::Use(b.clone())),
+        BinOp::And if bool_val(b) == Some(false) || bool_val(a) == Some(false) => {
+            return Some(Rvalue::Use(Operand::Const(Const::Bool(false))));
+        }
+        BinOp::Or if bool_val(b) == Some(false) => return Some(Rvalue::Use(a.clone())),
+        BinOp::Or if bool_val(a) == Some(false) => return Some(Rvalue::Use(b.clone())),
+        BinOp::Or if bool_val(b) == Some(true) || bool_val(a) == Some(true) => {
+            return Some(Rvalue::Use(Operand::Const(Const::Bool(true))));
+        }
+        // `x == true`/`x != false` -> x ; `x == false`/`x != true` -> !x.
+        BinOp::Eq if bool_val(b) == Some(true) => return Some(Rvalue::Use(a.clone())),
+        BinOp::Eq if bool_val(a) == Some(true) => return Some(Rvalue::Use(b.clone())),
+        BinOp::Ne if bool_val(b) == Some(false) => return Some(Rvalue::Use(a.clone())),
+        BinOp::Ne if bool_val(a) == Some(false) => return Some(Rvalue::Use(b.clone())),
+        BinOp::Eq if bool_val(b) == Some(false) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, a.clone())),
+        BinOp::Eq if bool_val(a) == Some(false) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, b.clone())),
+        BinOp::Ne if bool_val(b) == Some(true) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, a.clone())),
+        BinOp::Ne if bool_val(a) == Some(true) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, b.clone())),
+        _ => {}
+    }
     match op {
         BinOp::Add => {
             if bc == Some(0) {
@@ -106,6 +162,21 @@ fn simplify(rvalue: &Rvalue) -> Option<Rvalue> {
         BinOp::Div => {
             if bc == Some(1) {
                 return Some(Rvalue::Use(a.clone())); // x / 1
+            }
+            // Unsigned x / 2^k -> x >> k (emits `shr_u` for the unsigned destination). Signed
+            // division rounds toward zero, so a shift would be wrong for negatives — skip it.
+            if unsigned {
+                if let Some(k) = bc.and_then(log2_pow2) {
+                    return Some(Rvalue::Binary(BinOp::Shr, a.clone(), shift_const(b, k)));
+                }
+            }
+        }
+        BinOp::Rem => {
+            // Unsigned x % 2^k -> x & (2^k - 1).
+            if unsigned {
+                if let Some(k) = bc.and_then(log2_pow2) {
+                    return Some(Rvalue::Binary(BinOp::BitAnd, a.clone(), mask_const(b, k)));
+                }
             }
         }
         BinOp::BitOr => {

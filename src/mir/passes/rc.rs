@@ -189,6 +189,15 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         }
     };
     match rvalue {
+        Rvalue::Select {
+            cond,
+            then_val,
+            else_val,
+        } => {
+            check(cond);
+            check(then_val);
+            check(else_val);
+        }
         Rvalue::Use(o)
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)

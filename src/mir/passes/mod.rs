@@ -1,23 +1,38 @@
 //! The MIR optimization pass manager and passes.
 
 mod algebraic;
+mod cfg;
 mod const_fold;
 mod dce;
+mod dse;
+mod global_prop;
 mod gvn;
 mod inline;
+mod licm;
+mod loop_unroll;
 mod prop;
 mod rc;
+mod sccp;
 mod simplify_cfg;
+mod sroa;
+mod tco;
 
 pub use algebraic::Algebraic;
 pub use const_fold::ConstFold;
 pub(crate) use dce::is_pure;
 pub use dce::Dce;
+pub use dse::Dse;
+pub use global_prop::GlobalProp;
 pub use gvn::Gvn;
 pub use inline::Inliner;
+pub use licm::Licm;
+pub use loop_unroll::LoopUnroll;
 pub use prop::CopyConstProp;
 pub use rc::{RcElision, RcInsertion};
+pub use sccp::Sccp;
 pub use simplify_cfg::SimplifyCfg;
+pub use sroa::Sroa;
+pub use tco::Tco;
 
 use super::{Mir, MirFunction};
 use crate::types::TypeInterner;
@@ -57,10 +72,17 @@ impl PassManager {
     pub fn default_pipeline() -> Self {
         let mut pm = PassManager::new();
         pm.add(CopyConstProp);
+        pm.add(GlobalProp);
+        pm.add(Sccp);
         pm.add(ConstFold);
         pm.add(Algebraic);
         pm.add(Gvn);
+        pm.add(Licm);
+        pm.add(LoopUnroll);
+        pm.add(Sroa);
+        pm.add(Dse);
         pm.add(SimplifyCfg);
+        pm.add(Tco);
         pm.add(Dce);
         pm.add(RcElision);
         // RC *insertion* is a module-wide phase that must run once before inlining (see

@@ -1,21 +1,32 @@
 //! Whole-module dead-function elimination on the emitted WAT text.
 //!
 //! The backend embeds a fixed runtime (allocator, strings, object protocol, formatters, async
-//! scheduler) verbatim in every module. Most programs use only a slice of it. This pass parses the
-//! finished `(module …)` text, builds the call graph among its `(func …)` definitions, and drops
-//! every function not transitively reachable from the module's roots (exports, `(start …)`, and the
-//! function-table `(elem …)` entries).
+//! scheduler) verbatim in every module. Most programs use only a slice of it. This pass builds the
+//! call graph among the module's functions and drops every function not transitively reachable from
+//! the module's roots (exports, `(start …)`, and the function-table `(elem …)` entries).
 //!
-//! It is deliberately conservative — it never *adds* references and treats every `$name` token in a
-//! kept function's body that matches a defined function as a reference, so it over-keeps rather than
-//! risk dropping something live. Imports, memory, globals, types, tables, data, and every non-`func`
-//! item are always preserved, so the module stays structurally valid; `wat::parse_str` in the driver
-//! is the final correctness gate.
+//! Reachability is computed **structurally** from the real WAT AST (`wast`): each function's call
+//! edges come from its actual `call` / `return_call` / `ref.func` instructions — not from a
+//! heuristic scan for `$tokens`, which over-approximated (any `$name` appearing anywhere, even
+//! inside a string literal or comment, kept the function alive). Precise edges mean tighter
+//! trimming.
+//!
+//! The AST is used only to decide *which* function definitions are live; the surviving text is
+//! spliced from the original module by top-level item byte-ranges, so formatting is preserved
+//! exactly. Imports, memory, globals, types, tables, data, and every non-`func` item are always
+//! kept, so the module stays structurally valid; `wat::parse_str` in the driver is the final
+//! correctness gate. If the module cannot be parsed as a single core module, the input is returned
+//! unchanged (no trimming — always sound).
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use wast::core::{ElemPayload, Func, FuncKind, Instruction, ModuleField, ModuleKind};
+use wast::parser::{self, ParseBuffer};
+use wast::token::Index;
+use wast::Wat;
 
 /// Removes unreachable `(func …)` definitions from a complete WAT module. Returns the input
-/// unchanged if it does not parse as a single `(module …)` with at least one top-level item.
+/// unchanged if it does not parse as a single `(module …)` with at least one top-level item, or if
+/// structural reachability cannot be computed.
 pub(super) fn strip_dead_functions(module: &str) -> String {
     let b = module.as_bytes();
     let Some((prefix_end, items, outer_close)) = parse_module(b) else {
@@ -25,90 +36,29 @@ pub(super) fn strip_dead_functions(module: &str) -> String {
         return module.to_string();
     }
 
-    // Classify items and index functions by name.
-    struct Item {
-        text: String,
-        is_func: bool,
-        name: Option<String>,
-        force_keep: bool,
-        refs: Vec<String>,
-    }
-    let mut parsed: Vec<Item> = Vec::with_capacity(items.len());
-    let mut func_names: HashSet<String> = HashSet::new();
-    for &(s, e) in &items {
-        let text = &module[s..e];
-        let is_func = is_func_item(text);
-        let name = if is_func { func_name(text) } else { None };
-        if let Some(n) = &name {
-            func_names.insert(n.clone());
-        }
-        parsed.push(Item {
-            text: text.to_string(),
-            is_func,
-            name,
-            force_keep: false,
-            refs: Vec::new(),
-        });
-    }
+    // Structural reachability over the real AST. On any parse failure, keep everything (sound).
+    let Some(live) = live_function_names(module) else {
+        return module.to_string();
+    };
 
-    // Resolve references (dollar tokens that name a defined function) and roots.
-    let mut name_to_idx: HashMap<String, usize> = HashMap::new();
-    for (i, it) in parsed.iter().enumerate() {
-        if let Some(n) = &it.name {
-            name_to_idx.insert(n.clone(), i);
-        }
-    }
-    let mut root_names: Vec<String> = Vec::new();
-    for it in &mut parsed {
-        let tokens: Vec<String> = dollar_tokens(&it.text)
-            .into_iter()
-            .filter(|t| func_names.contains(t))
-            .collect();
-        if it.is_func {
-            // A function exported inline (`(func $x (export "x") …)`) or an anonymous exported shim
-            // is a root; everything it calls must be kept.
-            it.force_keep = it.text.contains("(export");
-            it.refs = tokens;
-        } else {
-            // export / start / elem / anything else: its function tokens are roots. Non-func items
-            // are always kept, so we don't store them as refs, only as roots.
-            root_names.extend(tokens);
-        }
-    }
-
-    // Reachability over function items.
-    let mut kept: HashSet<usize> = HashSet::new();
-    let mut queue: VecDeque<usize> = VecDeque::new();
-    for (i, it) in parsed.iter().enumerate() {
-        if it.is_func && it.force_keep && kept.insert(i) {
-            queue.push_back(i);
-        }
-    }
-    for n in root_names {
-        if let Some(&i) = name_to_idx.get(&n) {
-            if kept.insert(i) {
-                queue.push_back(i);
-            }
-        }
-    }
-    while let Some(i) = queue.pop_front() {
-        // Clone refs to avoid borrowing `parsed` while mutating `kept`/`queue`.
-        let refs = parsed[i].refs.clone();
-        for r in refs {
-            if let Some(&j) = name_to_idx.get(&r) {
-                if kept.insert(j) {
-                    queue.push_back(j);
-                }
-            }
-        }
-    }
-
-    // Rebuild: keep every non-func item and every reachable func, preserving order.
+    // Rebuild: keep every non-func item, every anonymous func (may be referenced by index or is an
+    // exported shim), and every reachable named func — preserving order.
     let mut out = String::with_capacity(module.len());
     out.push_str(&module[..prefix_end]);
     let mut first = true;
-    for (i, it) in parsed.iter().enumerate() {
-        let keep = !it.is_func || kept.contains(&i);
+    for &(s, e) in &items {
+        let text = &module[s..e];
+        let keep = if is_func_item(text) {
+            match func_name(text) {
+                // A named function survives iff it is reachable from a root.
+                Some(name) => live.contains(name.trim_start_matches('$')),
+                // Anonymous functions (e.g. the exported `main` shim) can't be named as dead, so
+                // keep them — there is at most a handful and they are always roots anyway.
+                None => true,
+            }
+        } else {
+            true
+        };
         if !keep {
             continue;
         }
@@ -116,19 +66,117 @@ pub(super) fn strip_dead_functions(module: &str) -> String {
             out.push('\n');
         }
         first = false;
-        out.push_str(&it.text);
+        out.push_str(text);
     }
     out.push('\n');
     out.push_str(&module[outer_close..]);
     out
 }
 
-/// Parsed layout of the outer `(module …)`: `(byte offset of the first top-level item, the byte
-/// ranges of every top-level list item, the byte offset of the outer closing paren)`.
-type ModuleLayout = (usize, Vec<(usize, usize)>, usize);
+/// Parses `module` with the `wast` AST and returns the set of function names (without the leading
+/// `$`) transitively reachable from the module roots. Returns `None` if the text does not parse as
+/// a single core module.
+fn live_function_names(module: &str) -> Option<HashSet<String>> {
+    let buf = ParseBuffer::new(module).ok()?;
+    let wat = parser::parse::<Wat>(&buf).ok()?;
+    let Wat::Module(m) = wat else { return None };
+    let ModuleKind::Text(fields) = &m.kind else {
+        return None;
+    };
 
-/// Parses the outer `(module …)` into its [`ModuleLayout`].
-fn parse_module(b: &[u8]) -> Option<ModuleLayout> {
+    // Call graph over named functions, plus the initial root set.
+    let mut edges: HashMap<String, Vec<String>> = HashMap::new();
+    let mut roots: Vec<String> = Vec::new();
+
+    for field in fields {
+        match field {
+            ModuleField::Func(f) => {
+                if let Some(name) = func_id(f) {
+                    edges.insert(name.clone(), func_refs(f));
+                    // Inline `(func $x (export "x") …)` is itself a root.
+                    if !f.exports.names.is_empty() {
+                        roots.push(name);
+                    }
+                }
+            }
+            ModuleField::Export(e) => {
+                if let Index::Id(id) = &e.item {
+                    roots.push(id.name().to_string());
+                }
+            }
+            ModuleField::Start(Index::Id(id)) => roots.push(id.name().to_string()),
+            ModuleField::Elem(elem) => match &elem.payload {
+                ElemPayload::Indices(indices) => {
+                    for idx in indices {
+                        if let Index::Id(id) = idx {
+                            roots.push(id.name().to_string());
+                        }
+                    }
+                }
+                ElemPayload::Exprs { exprs, .. } => {
+                    for expr in exprs {
+                        collect_expr_refs(&expr.instrs, &mut roots);
+                    }
+                }
+            },
+            _ => {}
+        }
+    }
+
+    // BFS over the call graph from the roots.
+    let mut live: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
+    for r in roots {
+        if live.insert(r.clone()) {
+            queue.push_back(r);
+        }
+    }
+    while let Some(name) = queue.pop_front() {
+        let Some(refs) = edges.get(&name) else {
+            continue;
+        };
+        for r in refs.clone() {
+            if live.insert(r.clone()) {
+                queue.push_back(r);
+            }
+        }
+    }
+    Some(live)
+}
+
+/// The `$name` (without `$`) a function is defined under, or `None` for an anonymous function.
+fn func_id(f: &Func) -> Option<String> {
+    f.id.map(|id| id.name().to_string())
+}
+
+/// The names of every function this function references via `call` / `return_call` / `ref.func`.
+fn func_refs(f: &Func) -> Vec<String> {
+    let mut refs = Vec::new();
+    if let FuncKind::Inline { expression, .. } = &f.kind {
+        collect_expr_refs(&expression.instrs, &mut refs);
+    }
+    refs
+}
+
+/// Appends every function name referenced by these (flattened) instructions. `call_indirect` /
+/// `return_call_indirect` reference a *type*, not a function, so they are intentionally ignored.
+fn collect_expr_refs(instrs: &[Instruction], out: &mut Vec<String>) {
+    for instr in instrs {
+        if let Instruction::Call(Index::Id(id))
+        | Instruction::ReturnCall(Index::Id(id))
+        | Instruction::RefFunc(Index::Id(id)) = instr
+        {
+            out.push(id.name().to_string());
+        }
+    }
+}
+
+/// `(byte offset of the first top-level item, the byte ranges of every top-level list item, the
+/// byte offset of the outer closing paren)`.
+type ModuleItems = (usize, Vec<(usize, usize)>, usize);
+
+/// Parses the outer `(module …)`, splitting it into its top-level items.
+fn parse_module(b: &[u8]) -> Option<ModuleItems> {
     let n = b.len();
     let mut i = skip_trivia(b, 0);
     if i >= n || b[i] != b'(' {
@@ -252,34 +300,6 @@ fn is_func_item(text: &str) -> bool {
         }
     }
     false
-}
-
-/// Every `$…` token in `s`, ignoring string literals and `;;` line comments. Block comments are not
-/// specially handled: a stray token inside one can only cause a function to be *kept*, which is safe.
-fn dollar_tokens(s: &str) -> Vec<String> {
-    let b = s.as_bytes();
-    let n = b.len();
-    let mut i = 0;
-    let mut out = Vec::new();
-    while i < n {
-        match b[i] {
-            b'"' => i = skip_string(b, i),
-            b';' if i + 1 < n && b[i + 1] == b';' => {
-                i += 2;
-                while i < n && b[i] != b'\n' {
-                    i += 1;
-                }
-            }
-            b'$' => {
-                let start = i;
-                let end = skip_atom(b, i);
-                out.push(s[start..end].to_string());
-                i = end;
-            }
-            _ => i += 1,
-        }
-    }
-    out
 }
 
 /// Reads a balanced `( … )` list starting at `b[start] == '('`; returns the index just past the
@@ -429,5 +449,54 @@ mod tests {
         let out = strip_dead_functions(m);
         assert!(out.contains("$indirect"), "table entry kept:\n{}", out);
         assert!(!out.contains("$dead"), "dead func removed:\n{}", out);
+    }
+
+    #[test]
+    fn inline_export_is_root() {
+        let m = "(module\n\
+                 (func $keep (export \"keep\") (result i32) call $helper)\n\
+                 (func $helper (result i32) i32.const 3)\n\
+                 (func $gone (result i32) i32.const 4)\n\
+                 )\n";
+        let out = strip_dead_functions(m);
+        assert!(out.contains("$keep"), "inline-exported kept:\n{}", out);
+        assert!(out.contains("$helper"), "callee of export kept:\n{}", out);
+        assert!(!out.contains("$gone"), "dead func removed:\n{}", out);
+    }
+
+    #[test]
+    fn name_only_in_string_literal_is_not_a_reference() {
+        // The old `$token` scanner kept `$ghost` alive because its name appears inside a data-style
+        // string literal. Structural parsing sees no real `call`, so it must be dropped.
+        let m = "(module\n\
+                 (func (export \"main\") (result i32)\n\
+                   i32.const 0\n\
+                   drop\n\
+                   i32.const 1)\n\
+                 (func $ghost (result i32) i32.const 42)\n\
+                 (data (i32.const 0) \"call $ghost\")\n\
+                 )\n";
+        let out = strip_dead_functions(m);
+        assert!(
+            !out.contains("func $ghost"),
+            "func referenced only inside a string literal must be dropped:\n{}",
+            out
+        );
+        // The data segment (a non-func item) is always preserved verbatim.
+        assert!(out.contains("\"call $ghost\""), "data kept:\n{}", out);
+    }
+
+    #[test]
+    fn name_only_in_comment_is_not_a_reference() {
+        let m = "(module\n\
+                 (func (export \"main\") (result i32) i32.const 1)\n\
+                 (func $commented (result i32) i32.const 2) ;; call $commented later maybe\n\
+                 )\n";
+        let out = strip_dead_functions(m);
+        assert!(
+            !out.contains("func $commented"),
+            "func mentioned only in a comment must be dropped:\n{}",
+            out
+        );
     }
 }
