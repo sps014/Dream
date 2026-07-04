@@ -200,7 +200,10 @@ fn generate_json_extend(
                     diagnostics.report_error(
                         format!(
                             "@json class '{}' field '{}' has unsupported array element type '{}'{}",
-                            name, fname, elem, missing_json_hint(elem, jsonable)
+                            name,
+                            fname,
+                            elem,
+                            missing_json_hint(elem, jsonable)
                         ),
                         Some(field.name.position),
                     );
@@ -243,7 +246,10 @@ fn generate_json_extend(
                     diagnostics.report_error(
                         format!(
                             "@json class '{}' field '{}' has unsupported type '{}'{}",
-                            name, fname, ftype, missing_json_hint(ftype, jsonable)
+                            name,
+                            fname,
+                            ftype,
+                            missing_json_hint(ftype, jsonable)
                         ),
                         Some(field.name.position),
                     );
@@ -299,7 +305,8 @@ fn generate_json_union(
     let is_type_param = |t: &str| generic_params.iter().any(|p| p == t);
 
     // `to_json`: a `switch` over the variant fills a tagged dict. Block arms run for effect.
-    let mut to_body = String::from("        let __o = JsonValue.dict();\n        switch (this) {\n");
+    let mut to_body =
+        String::from("        let __o = JsonValue.dict();\n        switch (this) {\n");
     // `from_json`: dispatch on the `"type"` tag, reconstructing the matching variant.
     let mut from_arms = String::new();
 
@@ -338,7 +345,11 @@ fn generate_json_union(
                     diagnostics.report_error(
                         format!(
                             "@json union '{}' variant '{}' field '{}' has unsupported type '{}'{}",
-                            name, vname, fname, ftype, missing_json_hint(ftype, jsonable)
+                            name,
+                            vname,
+                            fname,
+                            ftype,
+                            missing_json_hint(ftype, jsonable)
                         ),
                         Some(field.name.position),
                     );
@@ -358,7 +369,10 @@ fn generate_json_union(
                 let ftype = field.type_token.text.as_str();
                 let jexpr = format!("v.get(\"{}\").unwrap_or(JsonValue.none())", fname);
                 let from_expr = if is_type_param(ftype) {
-                    Some(format!("JSON.deserialize<{}>(JSON.stringify({}))", ftype, jexpr))
+                    Some(format!(
+                        "JSON.deserialize<{}>(JSON.stringify({}))",
+                        ftype, jexpr
+                    ))
                 } else {
                     json_from_expr(ftype, &jexpr, json_names)
                 };
@@ -396,7 +410,10 @@ fn generate_json_union(
             let ftype = field.type_token.text.as_str();
             // Field types were already validated in the loop above.
             if is_type_param(ftype) {
-                args.push(format!("JSON.deserialize<{}>(JSON.stringify({}))", ftype, jexpr));
+                args.push(format!(
+                    "JSON.deserialize<{}>(JSON.stringify({}))",
+                    ftype, jexpr
+                ));
             } else {
                 args.push(json_from_expr(ftype, &jexpr, json_names)?);
             }
@@ -467,7 +484,8 @@ pub(crate) fn generate_json_derives<'a>(
 
     let mut source = String::new();
     for struct_decl in all_structs.iter().filter(|s| has_json_attr(&s.attributes)) {
-        if let Some(block) = generate_json_extend(struct_decl, &json_names, &jsonable, diagnostics) {
+        if let Some(block) = generate_json_extend(struct_decl, &json_names, &jsonable, diagnostics)
+        {
             source.push_str(&block);
             source.push('\n');
         }

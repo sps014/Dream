@@ -10,17 +10,17 @@ use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::types::{
     canonical_type_name, is_numeric_primitive, is_unknown_type_name, mangle_generic, strip_nullable,
 };
-use crate::types::method_fn;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::types::method_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Outcome of looking up an indexer/enumerator "hook" method (`get`/`set`/`iterator`/`next`) on a
 /// struct receiver, for the desugaring of `obj[i]`, `obj[i] = v`, and `for (let x in obj)`.
 
-pub(crate) enum HookResolution {
+enum HookResolution {
     /// The receiver is not a struct, or it has no method with that name: the sugar is unavailable.
     Absent,
     /// A method with that name exists but cannot serve as a hook; carries a human-readable reason
@@ -29,7 +29,6 @@ pub(crate) enum HookResolution {
     /// A usable hook: an accessible instance, non-async method with the requested declared arity.
     Eligible(FunctionTableInfo),
 }
-
 
 impl<'a> Analyzer<'a> {
     pub(crate) fn analyze_method_call(
@@ -87,7 +86,6 @@ impl<'a> Analyzer<'a> {
 
         self.analyze_instance_method(&obj_type, method, params, ctx, recv, diagnostics)
     }
-
 
     /// Handles `Type.method(args)` static dispatch when the receiver `id` names a type rather than
     /// a local: discriminated-union variant construction, on-the-fly monomorphization of generic
@@ -251,7 +249,11 @@ impl<'a> Analyzer<'a> {
                     .unwrap_or_default();
                 let value = arg_hirs.into_iter().next().flatten();
                 // `<T>.to_json(value)` (a `this`-taking method, called free with the receiver as arg0).
-                self.hir_set_call(&method_fn(&struct_name, "to_json"), vec![value], &named("JsonValue"));
+                self.hir_set_call(
+                    &method_fn(&struct_name, "to_json"),
+                    vec![value],
+                    &named("JsonValue"),
+                );
                 let to_json = self.hir_take();
                 self.hir_set_call("JSON_stringify", vec![to_json], &named("string"));
                 return Ok(Some(named("string")));
@@ -286,8 +288,7 @@ impl<'a> Analyzer<'a> {
                 Self::substitute_generic_signature(&mut specialized, &bindings);
                 let specialized_ref: &'a FunctionNode<'a> = self.arena.alloc(specialized);
                 let info = FunctionTableInfo::from(specialized_ref);
-                let _ = self.function_table
-                    .add_function(mangled_name.clone(), info);
+                let _ = self.function_table.add_function(mangled_name.clone(), info);
                 self.instantiated_generics
                     .insert(mangled_name.clone(), (bindings, specialized_ref));
             }
@@ -322,7 +323,6 @@ impl<'a> Analyzer<'a> {
 
         Ok(None)
     }
-
 
     /// Type-checks the builtin methods available on every (or every primitive/array) receiver:
     /// `size()`, `str.char_at(i)`, and the `to_string`/`hash_code` object protocol (a C-style enum's
@@ -445,7 +445,6 @@ impl<'a> Analyzer<'a> {
         Ok(None)
     }
 
-
     /// Resolves and type-checks an instance method call `obj.method(args)` once the receiver type
     /// (`obj_type`) is known and the builtins/static cases have been ruled out: monomorphizes the
     /// receiver, selects the (possibly overloaded) `{Type}_{method}`, enforces privacy and the
@@ -460,7 +459,6 @@ impl<'a> Analyzer<'a> {
             None
         }
     }
-
 
     /// Dispatches a method call on an interface-typed receiver. Resolves `method` against the
     /// interface's ordered signature list (yielding its local slot index and return type),
@@ -540,10 +538,7 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let iface_id = self
-            .interface_methods
-            .get_index_of(iface_name)
-            .unwrap_or(0);
+        let iface_id = self.interface_methods.get_index_of(iface_name).unwrap_or(0);
         // The `call_indirect` signature is `fun(this, params...): ret`, with `this` typed as
         // `object` (an `i32` pointer, matching every concrete implementation's receiver).
         let sig = self.interface_dispatch_sig(im);
@@ -551,11 +546,13 @@ impl<'a> Analyzer<'a> {
         Ok(ret_type)
     }
 
-
     /// Interns the `fun(this, params...): ret` function type used to `call_indirect` an interface
     /// method: `this` is `object` (a tagged pointer), followed by the method's declared parameters
     /// and its return type. The same signature is used to declare the WASM `call_indirect` type.
-    pub(crate) fn interface_dispatch_sig(&mut self, method: &FunctionNode<'a>) -> crate::types::TypeId {
+    pub(crate) fn interface_dispatch_sig(
+        &mut self,
+        method: &FunctionNode<'a>,
+    ) -> crate::types::TypeId {
         let mut params = vec![self.type_ctx.interner.object()];
         for p in &method.parameters {
             let id = self.type_ctx.lower(&p.type_);
@@ -574,7 +571,6 @@ impl<'a> Analyzer<'a> {
         };
         self.type_ctx.interner.func(params, ret)
     }
-
 
     pub(crate) fn analyze_instance_method(
         &mut self,
@@ -772,7 +768,6 @@ impl<'a> Analyzer<'a> {
             || base_name.starts_with(&format!("{}_", this_base))
     }
 
-
     /// Resolves a hook method named `method_name` (with declared arity `declared_arity`, i.e.
     /// excluding the implicit `this`) on struct receiver `obj_type`, ensuring the receiver's generic
     /// instance is registered first. Return-type shape checks (non-void for `get`, `Option<T>` for
@@ -780,7 +775,7 @@ impl<'a> Analyzer<'a> {
     /// matches the requested arity. A same-named method that is `static`, `async`, or of the wrong
     /// arity yields `Ineligible` (so `obj[i]`/`for..in` never silently hijack an ordinary method),
     /// while a call like `obj.get(i)` keeps resolving through the normal method path.
-    pub(crate) fn resolve_hook_method(
+    fn resolve_hook_method(
         &mut self,
         obj_type: &Type,
         method_name: &str,
@@ -851,6 +846,35 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Resolves a hook (see [`Analyzer::resolve_hook_method`]) and, when it is unusable, emits the
+    /// site-specific diagnostic for you and returns `None`: marks HIR failed (also clearing the
+    /// pending value when `clear_value`), then reports `ineligible(reason)` or `absent()` at `span`.
+    /// Centralizes the identical Ineligible/Absent arms every desugaring site (`obj[i]`, `obj[i] = v`,
+    /// `for..in`) previously spelled out; callers keep only their `Eligible` logic.
+    pub(crate) fn resolve_hook_or_diagnose(
+        &mut self,
+        obj_type: &Type,
+        method_name: &str,
+        declared_arity: usize,
+        span: Option<crate::text::text_span::TextSpan>,
+        clear_value: bool,
+        diagnostics: &mut DiagnosticBag,
+        ineligible: impl FnOnce(&str) -> String,
+        absent: impl FnOnce() -> String,
+    ) -> Option<FunctionTableInfo> {
+        let message =
+            match self.resolve_hook_method(obj_type, method_name, declared_arity, diagnostics) {
+                HookResolution::Eligible(info) => return Some(info),
+                HookResolution::Ineligible(reason) => ineligible(&reason),
+                HookResolution::Absent => absent(),
+            };
+        self.hir_fail();
+        if clear_value {
+            self.hir_none();
+        }
+        diagnostics.report_error(message, span);
+        None
+    }
 
     /// Analyzes a static-method call `Type.method(args)` (resolved by the caller to the type
     /// `type_name`). Static methods have no implicit `this`, so the explicit arguments map 1:1 to
@@ -958,6 +982,4 @@ impl<'a> Analyzer<'a> {
         }
         Ok(ret_type)
     }
-
-
 }

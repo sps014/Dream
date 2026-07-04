@@ -89,7 +89,11 @@ pub(super) fn unbox_fn_for(p: PrimTy) -> Option<&'static str> {
 /// The runtime tag a value of type `ty` carries when boxed as an `object`: a fixed constant for
 /// primitives/string, or the struct/union's assigned tag (from `tags`). Used to lower a runtime
 /// `x is T` test to an `$object_tag` comparison.
-pub(super) fn runtime_tag_for(interner: &TypeInterner, tags: &HashMap<TypeId, i32>, ty: TypeId) -> Option<i32> {
+pub(super) fn runtime_tag_for(
+    interner: &TypeInterner,
+    tags: &HashMap<TypeId, i32>,
+    ty: TypeId,
+) -> Option<i32> {
     use crate::mir::abi as t;
     let stripped = interner.strip_nullable(ty);
     match interner.kind(stripped) {

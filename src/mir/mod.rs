@@ -19,9 +19,9 @@ mod prune;
 pub mod relooper;
 
 pub use crate::hir::{BinOp, UnOp};
+use crate::types::{DefId, TypeId};
 pub use prune::prune_module;
 pub(crate) use prune::{hir_body_edges, HirEdges};
-use crate::types::{DefId, TypeId};
 
 /// A basic block within a function body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -119,10 +119,7 @@ pub enum Statement {
     /// Decrement the refcount of a reference operand (and free at zero).
     Release(Operand),
     /// A call evaluated for its effect only (return value discarded).
-    Call {
-        callee: Callee,
-        args: Vec<Operand>,
-    },
+    Call { callee: Callee, args: Vec<Operand> },
     /// An interface method call evaluated for effect only (result dropped if any). See
     /// [`Rvalue::InterfaceCall`].
     InterfaceCall {
@@ -183,14 +180,20 @@ impl Terminator {
     pub fn successors(&self) -> Vec<BlockId> {
         match self {
             Terminator::Goto(b) => vec![*b],
-            Terminator::If { then_blk, else_blk, .. } => vec![*then_blk, *else_blk],
-            Terminator::Switch { targets, default, .. } => {
+            Terminator::If {
+                then_blk, else_blk, ..
+            } => vec![*then_blk, *else_blk],
+            Terminator::Switch {
+                targets, default, ..
+            } => {
                 let mut s: Vec<BlockId> = targets.iter().map(|(_, b)| *b).collect();
                 s.push(*default);
                 s
             }
             Terminator::Await { resume, .. } => vec![*resume],
-            Terminator::Return(_) | Terminator::AsyncComplete(_) | Terminator::Unreachable => vec![],
+            Terminator::Return(_) | Terminator::AsyncComplete(_) | Terminator::Unreachable => {
+                vec![]
+            }
         }
     }
 }
@@ -201,9 +204,15 @@ pub enum Place {
     Local(Local),
     Global(Global),
     /// `base.field` — `field` is the resolved field index.
-    Field { base: Local, field: usize },
+    Field {
+        base: Local,
+        field: usize,
+    },
     /// `base[index]`.
-    Index { base: Local, index: Box<Operand> },
+    Index {
+        base: Local,
+        index: Box<Operand>,
+    },
 }
 
 /// A readable value: a local/global read or a constant. (All complex computation is an [`Rvalue`].)
@@ -245,7 +254,10 @@ pub enum Rvalue {
     /// `string.char_at(i)` via the runtime `$char_at` helper: `.0` is the string, `.1` the index.
     CharAt(Operand, Operand),
     /// `Array.new<T>(len)` — allocate a zero-initialized `T[]` block of a runtime length.
-    ArrayNew { elem_ty: TypeId, len: Operand },
+    ArrayNew {
+        elem_ty: TypeId,
+        len: Operand,
+    },
     /// The object-protocol `x.hash_code()` — dispatch on the operand's static type to a hash helper.
     HashCode(Operand),
     /// The object-protocol `x.to_string()` — dispatch on the operand's static type to a formatter.
@@ -260,9 +272,15 @@ pub enum Rvalue {
         arms: Vec<(i64, String)>,
     },
     /// A direct call returning a value.
-    Call { callee: Callee, args: Vec<Operand> },
+    Call {
+        callee: Callee,
+        args: Vec<Operand>,
+    },
     /// An indirect call through a function-pointer operand.
-    IndirectCall { target: Operand, args: Vec<Operand> },
+    IndirectCall {
+        target: Operand,
+        args: Vec<Operand>,
+    },
     /// A dynamically-dispatched interface method call. Lowered to a call to the generated dispatch
     /// trampoline for `(iface_id, method_slot)`, which reads the receiver's tag, indexes the
     /// interface's itable, and `call_indirect`s the concrete method. `receiver` is `this` (arg 0),
@@ -297,7 +315,10 @@ pub enum Rvalue {
         args: Vec<Operand>,
     },
     /// Allocate an array literal of `elem_ty` from the given element operands.
-    ArrayLit { elem_ty: TypeId, elems: Vec<Operand> },
+    ArrayLit {
+        elem_ty: TypeId,
+        elems: Vec<Operand>,
+    },
     /// The stored length of an array.
     ArrayLen(Operand),
     /// A numeric/object coercion. Carries `(value, from_ty, to_ty)`; the source type is captured at
@@ -365,8 +386,16 @@ mod tests {
             name: "add".into(),
             instance: vec![],
             params: vec![
-                HParam { local: LocalId(0), name: "a".into(), ty: int },
-                HParam { local: LocalId(1), name: "b".into(), ty: int },
+                HParam {
+                    local: LocalId(0),
+                    name: "a".into(),
+                    ty: int,
+                },
+                HParam {
+                    local: LocalId(1),
+                    name: "b".into(),
+                    ty: int,
+                },
             ],
             ret: int,
             locals: vec![],

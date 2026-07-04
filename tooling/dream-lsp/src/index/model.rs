@@ -110,7 +110,12 @@ pub(crate) fn signature(func: &FunctionNode) -> String {
         .iter()
         .map(|p| {
             if let Some(def) = &p.default {
-                format!("{}: {} = {}", p.name.text, p.type_.display_name(), def.display_name())
+                format!(
+                    "{}: {} = {}",
+                    p.name.text,
+                    p.type_.display_name(),
+                    def.display_name()
+                )
             } else {
                 format!("{}: {}", p.name.text, p.type_.display_name())
             }

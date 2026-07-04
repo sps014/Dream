@@ -1,3 +1,10 @@
+//! Top-level declaration registration: the analyzer passes that populate the type/symbol tables
+//! before bodies are checked. Covers structs (fields, layout, value-vs-reference classification),
+//! enums, discriminated unions (variants + discriminants), globals, and generic-struct
+//! instantiation (`ensure_*_instantiated`). Interface registration lives in the sibling
+//! `register_interfaces` module and method/`extend` registration in `register_methods`; both are
+//! `impl Analyzer` blocks split out of this file to keep each focused.
+
 use super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
@@ -8,10 +15,10 @@ use crate::semantics::union_table::{
 };
 use crate::syntax::nodes::struct_node::{StructDeclarationNode, StructFieldNode};
 use crate::syntax::nodes::types::{mangle_generic, strip_array, strip_nullable};
-use crate::types::{method_fn, value_size_align};
 use crate::syntax::nodes::{EnumVariantNode, FunctionNode, ProgramNode, Type};
-use crate::text::text_span::TextSpan;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::text::text_span::TextSpan;
+use crate::types::value_size_align;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -45,8 +52,11 @@ impl<'a> Analyzer<'a> {
             if enum_decl.is_data_enum() {
                 // Generic discriminated unions are templates, monomorphized on first use.
                 if enum_decl.generic_parameters.is_some() {
-                    self.type_ctx
-                        .register(DefKind::Union, name, generic_param_names(&enum_decl.generic_parameters));
+                    self.type_ctx.register(
+                        DefKind::Union,
+                        name,
+                        generic_param_names(&enum_decl.generic_parameters),
+                    );
                     self.generic_unions.insert(name.clone(), enum_decl);
                 }
                 continue;
@@ -160,9 +170,11 @@ impl<'a> Analyzer<'a> {
         // allocation) when every variant payload is itself value/primitive. Decided here, per
         // (monomorphized) instance, because `Option<int>` (value) and `Option<string>` (heap) share
         // one `DefId`. The inline layout is finalized later in `hir_build_layouts` (value-aware sizes).
-        let all_value = variant_infos
-            .iter()
-            .all(|v| v.fields.iter().all(|f| self.payload_type_is_value(&f.type_)));
+        let all_value = variant_infos.iter().all(|v| {
+            v.fields
+                .iter()
+                .all(|f| self.payload_type_is_value(&f.type_))
+        });
         if all_value {
             let union_tid = self.type_ctx.lower_str(union_name);
             self.type_ctx.interner.mark_value_union(union_tid);
@@ -298,351 +310,6 @@ impl<'a> Analyzer<'a> {
             .copied()
     }
 
-    /// Pass: register every interface's `DefId` and its method signatures. Interfaces declare
-    /// method signatures only (no fields, no default bodies) in v1; generic interfaces are rejected.
-    /// The declaration order of methods is their local index (used later for itable slots).
-    pub(super) fn register_interfaces(
-        &mut self,
-        node: &'a ProgramNode<'a>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        for iface in node.interfaces.iter() {
-            diagnostics.file_path = file_path_string(&iface.file_path);
-            self.type_ctx.register(
-                DefKind::Interface,
-                &iface.name.text,
-                generic_param_names(&iface.generic_parameters),
-            );
-            // `static` methods are rejected on any interface (interface methods are dynamically
-            // dispatched instance methods). `async` interface methods are supported: they dispatch
-            // to a concrete async implementation that returns a `Future<T>`.
-            for method in iface.methods.iter() {
-                if method.is_static {
-                    diagnostics.report_error(
-                        format!(
-                            "Interface method '{}' cannot be 'static' (interface methods are dynamically dispatched instance methods)",
-                            method.name.text
-                        ),
-                        Some(method.name.position),
-                    );
-                }
-            }
-
-            // Generic interfaces are stashed as templates and monomorphized on demand (see
-            // `ensure_interface_instantiated`); only concrete instances get itable method slots.
-            if iface.generic_parameters.is_some() {
-                if self
-                    .generic_interfaces
-                    .insert(iface.name.text.clone(), iface)
-                    .is_some()
-                {
-                    diagnostics.report_error(
-                        format!("Interface '{}' is already defined", iface.name.text),
-                        Some(iface.name.position),
-                    );
-                }
-                continue;
-            }
-
-            let methods: Vec<&'a FunctionNode<'a>> =
-                iface.methods.iter().filter(|m| !m.is_static).collect();
-            if self
-                .interface_methods
-                .insert(iface.name.text.clone(), methods)
-                .is_some()
-            {
-                diagnostics.report_error(
-                    format!("Interface '{}' is already defined", iface.name.text),
-                    Some(iface.name.position),
-                );
-            }
-        }
-    }
-
-    /// Instantiates a generic interface `base<args>` into a concrete `interface_methods` entry
-    /// (e.g. `Container<int>` -> `Container_int`) by substituting the type parameters through every
-    /// method signature. Mirrors [`ensure_struct_instantiated`]; idempotent. The concrete instance
-    /// becomes an ordinary interface with its own itable slots at `hir_build_interfaces` time.
-    pub(super) fn ensure_interface_instantiated(
-        &mut self,
-        base_name: &str,
-        args: &[Type],
-        position: &TextSpan,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        let mangled = mangle_generic(base_name, args);
-        // Canonicalize the mangled name to the structured `(base def, args)` interface id, and
-        // register the mangled name as a nominal interface so `is_interface_name` recognizes it.
-        self.type_ctx
-            .register_instance(DefKind::Interface, base_name, args);
-        self.type_ctx.register(DefKind::Interface, &mangled, Vec::new());
-        if self.interface_methods.contains_key(&mangled) {
-            return;
-        }
-        let template = match self.generic_interfaces.get(base_name) {
-            Some(t) => *t,
-            None => return,
-        };
-        let params = template.generic_parameters.as_deref().unwrap_or(&[]);
-        if args.len() != params.len() {
-            diagnostics.report_error(
-                format!(
-                    "Generic interface '{}' expects {} type argument(s), but {} were provided",
-                    base_name,
-                    params.len(),
-                    args.len()
-                ),
-                Some(*position),
-            );
-        }
-        let bindings = generic_bindings(params, args);
-        let mut methods: Vec<&'a FunctionNode<'a>> = Vec::new();
-        for method in template.methods.iter().filter(|m| !m.is_static) {
-            let mut m = method.clone();
-            Self::substitute_generic_signature(&mut m, &bindings);
-            methods.push(self.arena.alloc(m));
-        }
-        self.interface_methods.insert(mangled, methods);
-    }
-
-    /// Builds the interface dispatch metadata carried into codegen: the ordered interfaces (index =
-    /// `iface_id`) with each method slot's `call_indirect` signature, and, per implementing class,
-    /// the concrete method symbol filling each `(interface, slot)`.
-    pub(super) fn hir_build_interfaces(&mut self) -> crate::hir::InterfaceTable {
-        use crate::hir::{InterfaceImpl, InterfaceInfo, InterfaceTable};
-
-        let iface_order: Vec<(String, Vec<&'a FunctionNode<'a>>)> = self
-            .interface_methods
-            .iter()
-            .map(|(name, methods)| (name.clone(), methods.clone()))
-            .collect();
-
-        let mut name_to_id: HashMap<String, usize> = HashMap::new();
-        let mut interfaces = Vec::with_capacity(iface_order.len());
-        for (id, (name, methods)) in iface_order.iter().enumerate() {
-            name_to_id.insert(name.clone(), id);
-            let sigs: Vec<crate::types::TypeId> = methods
-                .iter()
-                .map(|m| self.interface_dispatch_sig(m))
-                .collect();
-            interfaces.push(InterfaceInfo {
-                name: name.clone(),
-                method_count: methods.len(),
-                sigs,
-            });
-        }
-
-        let class_impls: Vec<(String, Vec<String>)> = self
-            .implements
-            .iter()
-            .map(|(class, ifaces)| (class.clone(), ifaces.clone()))
-            .collect();
-        let mut impls = Vec::new();
-        for (class, ifaces) in class_impls {
-            let class_ty = self.type_ctx.lower_str(&class);
-            let mut entries = Vec::new();
-            for iface in ifaces {
-                let Some(&id) = name_to_id.get(&iface) else {
-                    continue;
-                };
-                let methods = self.interface_methods.get(&iface).cloned().unwrap_or_default();
-                let symbols: Vec<String> = methods
-                    .iter()
-                    .map(|m| method_fn(&class, &m.name.text))
-                    .collect();
-                entries.push((id, symbols));
-            }
-            impls.push(InterfaceImpl { class_ty, entries });
-        }
-
-        InterfaceTable { interfaces, impls }
-    }
-
-    /// True when `name` (a bare type name, no nullable/array suffix) is a registered interface.
-    /// Recognizes both plain interfaces (`Animal`) and mangled generic interface instances
-    /// (`Container_int`), even before the latter has been instantiated.
-    pub(super) fn is_interface_name(&self, name: &str) -> bool {
-        self.type_ctx.nominal_kind(name) == Some(DefKind::Interface)
-            || self.demangle_generic_interface(name).is_some()
-    }
-
-    /// True when `name` is the base name of a declared generic interface (`Container`).
-    pub(super) fn is_generic_interface(&self, name: &str) -> bool {
-        self.generic_interfaces.contains_key(name)
-    }
-
-    /// Splits a mangled generic interface name (e.g. `Container_int`) into its base name and
-    /// concrete type argument, choosing the split so the base is a registered generic interface.
-    /// Mirrors [`demangle_generic_struct`].
-    fn demangle_generic_interface(&self, mangled: &str) -> Option<(String, String)> {
-        let parts: Vec<&str> = mangled.split('_').collect();
-        for split in 1..parts.len() {
-            let base = parts[..split].join("_");
-            if self.generic_interfaces.contains_key(&base) {
-                return Some((base, parts[split..].join("_")));
-            }
-        }
-        None
-    }
-
-    /// True when class `class_name` was validated as implementing interface `iface_name`.
-    pub(super) fn class_implements(&self, class_name: &str, iface_name: &str) -> bool {
-        self.implements
-            .get(class_name)
-            .is_some_and(|ifaces| ifaces.iter().any(|i| i == iface_name))
-    }
-
-    /// True when a value of type `value` may be implicitly converted to interface-typed `target`
-    /// (an upcast): `target` names an interface and `value`'s concrete class implements it.
-    /// Nullable wrappers on either side are ignored.
-    pub(super) fn value_assignable_to_interface(&self, target: &Type, value: &Type) -> bool {
-        let iface = strip_nullable(&target.get_type()).to_string();
-        if !self.is_interface_name(&iface) {
-            return false;
-        }
-        let val = strip_nullable(&value.get_type()).to_string();
-        self.implements_as_interface_ref(&val, &iface)
-    }
-
-    /// True when `class_name` may be implicitly/explicitly widened to an interface *reference*
-    /// (`iface_name`). A reference class upcasts by identity (same tagged pointer); a value
-    /// (`struct`) type is *boxed* into a fresh tagged heap object at the upcast site (see the value
-    /// struct case in `emit_cast`), so it too may become an interface reference.
-    pub(super) fn implements_as_interface_ref(&self, class_name: &str, iface_name: &str) -> bool {
-        self.class_implements(class_name, iface_name)
-    }
-
-    /// True when `iface_method` and `class_method` have matching signatures (same parameter types
-    /// in order, the same return type, and the same async-ness). Both are compared using their
-    /// surface type spellings. An `async` interface method must be implemented by an `async` method
-    /// (and vice versa) because the two dispatch to different code shapes (a `Future`-producing
-    /// constructor vs. a plain call).
-    fn interface_method_matches(iface_method: &FunctionNode, class_method: &FunctionNode) -> bool {
-        if iface_method.is_async != class_method.is_async {
-            return false;
-        }
-        if iface_method.parameters.len() != class_method.parameters.len() {
-            return false;
-        }
-        for (a, b) in iface_method
-            .parameters
-            .iter()
-            .zip(class_method.parameters.iter())
-        {
-            if a.type_.get_type() != b.type_.get_type() {
-                return false;
-            }
-        }
-        let ret = |m: &FunctionNode| {
-            m.return_type
-                .as_ref()
-                .map(|t| t.get_type())
-                .unwrap_or_else(|| "void".to_string())
-        };
-        ret(iface_method) == ret(class_method)
-    }
-
-    /// Validates a class's `implements` clause: every listed type must name an interface, and the
-    /// class must provide an instance method with a matching signature for each interface method.
-    /// Records the validated (mangled) interface list in `self.implements` under `class_name`.
-    ///
-    /// Works uniformly for non-generic classes (`bindings` empty) and monomorphized generic classes
-    /// (`bindings` maps the class's type parameters to concrete types). For a monomorphized class,
-    /// the `implements` entries are expected to already be substituted (e.g. `Container<int>`) while
-    /// `methods` are the unsubstituted template methods, substituted here for signature comparison.
-    /// Generic interfaces named in the clause are instantiated on demand.
-    fn validate_implements(
-        &mut self,
-        class_name: &str,
-        implements: &[Type],
-        methods: &[FunctionNode<'a>],
-        bindings: &GenericBindings,
-        class_pos: TextSpan,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        if implements.is_empty() {
-            return;
-        }
-        let mut validated: Vec<String> = Vec::new();
-        for iface_ty in implements {
-            let span = iface_ty.get_span().unwrap_or(class_pos);
-            let (base, args) = match Self::resolve_struct_parts(iface_ty) {
-                Some(parts) => parts,
-                None => continue,
-            };
-            if !self.is_interface_name(&base) {
-                diagnostics.report_error(
-                    format!(
-                        "'{}' is not an interface (class '{}' can only implement interfaces)",
-                        base, class_name
-                    ),
-                    Some(span),
-                );
-                continue;
-            }
-            let iface_name = if args.is_empty() {
-                base.clone()
-            } else {
-                self.ensure_interface_instantiated(&base, &args, &span, diagnostics);
-                mangle_generic(&base, &args)
-            };
-            let iface_methods = match self.interface_methods.get(&iface_name) {
-                Some(m) => m.clone(),
-                None => continue,
-            };
-            for im in &iface_methods {
-                match methods
-                    .iter()
-                    .find(|cm| cm.name.text == im.name.text && !cm.is_static)
-                {
-                    Some(cm) => {
-                        let matches = if bindings.is_empty() {
-                            Self::interface_method_matches(im, cm)
-                        } else {
-                            let mut sub = cm.clone();
-                            Self::substitute_generic_signature(&mut sub, bindings);
-                            Self::interface_method_matches(im, &sub)
-                        };
-                        if !matches {
-                            diagnostics.report_error(
-                                format!(
-                                    "class '{}' method '{}' does not match the signature required by interface '{}'",
-                                    class_name, im.name.text, iface_name
-                                ),
-                                Some(cm.name.position),
-                            );
-                        }
-                    }
-                    None if im.is_default_impl => {
-                        // Satisfied by the interface's default body, which is injected as an
-                        // `extend <class> { ... }` method before analysis (see
-                        // `generate_interface_default_impls`), so the class need not declare it.
-                    }
-                    None => {
-                        diagnostics.report_error(
-                            format!(
-                                "class '{}' does not implement method '{}' required by interface '{}'",
-                                class_name, im.name.text, iface_name
-                            ),
-                            Some(class_pos),
-                        );
-                    }
-                }
-            }
-            if !validated.contains(&iface_name) {
-                validated.push(iface_name);
-            }
-        }
-        // Merge into any interfaces already recorded for this type (a class may gain further
-        // interfaces through an `extend : Iface` block) rather than replacing them.
-        let entry = self.implements.entry(class_name.to_string()).or_default();
-        for iface in validated {
-            if !entry.contains(&iface) {
-                entry.push(iface);
-            }
-        }
-    }
-
     /// Pass 0: register every (non-generic) struct and its methods; stash generic templates.
     pub(super) fn register_structs(
         &mut self,
@@ -725,7 +392,10 @@ impl<'a> Analyzer<'a> {
     /// True when the (unadorned) type name resolves to a declared value (`struct`) type.
     #[allow(dead_code)]
     pub(super) fn is_value_type_name(&self, name: &str) -> bool {
-        self.struct_table.get_struct(name).map(|s| s.is_value).unwrap_or(false)
+        self.struct_table
+            .get_struct(name)
+            .map(|s| s.is_value)
+            .unwrap_or(false)
     }
 
     /// True when value struct `start` transitively embeds itself by value. Only value-typed,
@@ -890,9 +560,9 @@ impl<'a> Analyzer<'a> {
                 self.check_public_visibility(function, diagnostics);
             }
             let info = FunctionTableInfo::from(function);
-            if let Err(e) = self
-                .function_table
-                .add_overload(&function.name.text, info, &mut self.type_ctx)
+            if let Err(e) =
+                self.function_table
+                    .add_overload(&function.name.text, info, &mut self.type_ctx)
             {
                 diagnostics.report_error(e.to_string(), Some(function.name.position));
             }
@@ -909,9 +579,11 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|p| p.type_.get_type())
                 .collect();
-            let emitted = self
-                .function_table
-                .resolve_emitted_name(&function.name.text, &param_types, &mut self.type_ctx);
+            let emitted = self.function_table.resolve_emitted_name(
+                &function.name.text,
+                &param_types,
+                &mut self.type_ctx,
+            );
             self.type_ctx.register(DefKind::Function, &emitted, vec![]);
         }
         // The entry point is exported under the fixed name `main`. It may be declared as `main()`
@@ -982,9 +654,11 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|p| p.type_.get_type())
                 .collect();
-            let key = self
-                .function_table
-                .resolve_emitted_name(&function.name.text, &param_types, &mut self.type_ctx);
+            let key = self.function_table.resolve_emitted_name(
+                &function.name.text,
+                &param_types,
+                &mut self.type_ctx,
+            );
             symbol_table_map.insert(key, table);
         }
         Ok(())
@@ -1023,8 +697,9 @@ impl<'a> Analyzer<'a> {
                     None => continue,
                 };
                 diagnostics.file_path = file_path_string(&template.file_path);
-                let table =
-                    self.with_generic_bindings(bindings, |s| s.analyze_function(template, diagnostics))?;
+                let table = self.with_generic_bindings(bindings, |s| {
+                    s.analyze_function(template, diagnostics)
+                })?;
                 symbol_table_map.insert(mangled_name, table);
                 progressed = true;
             }
@@ -1034,8 +709,8 @@ impl<'a> Analyzer<'a> {
                 let (method, bindings) = self.struct_methods[method_index].clone();
                 method_index += 1;
                 diagnostics.file_path = file_path_string(&method.file_path);
-                let table =
-                    self.with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
+                let table = self
+                    .with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
                 // Key by the emitted name so overloaded methods each get a distinct entry (the
                 // parameter list includes the implicit `this`).
                 let param_types: Vec<String> = method
@@ -1043,9 +718,11 @@ impl<'a> Analyzer<'a> {
                     .iter()
                     .map(|p| p.type_.get_type())
                     .collect();
-                let key = self
-                    .function_table
-                    .resolve_emitted_name(&method.name.text, &param_types, &mut self.type_ctx);
+                let key = self.function_table.resolve_emitted_name(
+                    &method.name.text,
+                    &param_types,
+                    &mut self.type_ctx,
+                );
                 symbol_table_map.insert(key, table);
                 progressed = true;
             }
@@ -1167,316 +844,6 @@ impl<'a> Analyzer<'a> {
                 *position,
                 diagnostics,
             );
-        }
-    }
-
-    pub(super) fn register_struct_methods(
-        &mut self,
-        struct_decl: &'a StructDeclarationNode<'a>,
-        struct_type_str: &str,
-        bindings: &GenericBindings,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        self.register_methods_for(struct_type_str, &struct_decl.methods, bindings, diagnostics);
-    }
-
-    /// Registers a list of methods against `target_type_str` (a struct, a monomorphized generic
-    /// struct, or a primitive/`object` extended via an `extend` block). Each method is renamed to
-    /// `{target}_{method}`, given an implicit `this` parameter of the target type, queued for
-    /// codegen, and recorded in the function table. Shared by struct declarations and `extend`
-    /// blocks so they lower identically.
-    pub(super) fn register_methods_for(
-        &mut self,
-        target_type_str: &str,
-        methods: &'a [FunctionNode<'a>],
-        bindings: &GenericBindings,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        // Collect the mangled name + full parameter list (with the implicit `this`) of each method so
-        // overloaded methods can be registered under their signature-mangled *emitted* names in a
-        // second pass, once the whole overload set for this target is known.
-        let mut registered: Vec<(String, Vec<String>)> = Vec::new();
-        for method in methods {
-            // Validate object-protocol overrides once (on the non-monomorphized declaration).
-            if bindings.is_empty() {
-                self.validate_protocol_override(method, diagnostics);
-                self.validate_accessor(method, diagnostics);
-            }
-            // Property accessors (`get`/`set`) are registered under a `$`-tagged internal name that a
-            // user identifier can never spell, so `obj.prop`/`obj.prop = v` resolve to them without a
-            // regular method (or the indexer `get`/`set` hooks) ever colliding.
-            let member_name = accessor_member_name(method);
-            let mangled_name = method_fn(target_type_str, &member_name);
-            self.type_ctx.register(
-                DefKind::Function,
-                &mangled_name,
-                generic_param_names(&method.generic_parameters),
-            );
-
-            if method.generic_parameters.is_some() {
-                self.generic_functions.insert(mangled_name.clone(), method);
-            }
-
-            let mut new_method = method.clone();
-            new_method.name = synthetic_token(TokenKind::IdentifierToken, &mangled_name);
-
-            if !bindings.is_empty() {
-                Self::substitute_generic_signature(&mut new_method, bindings);
-            }
-
-            // Static methods have no implicit receiver; instance methods get `this` at index 0.
-            if !new_method.is_static {
-                new_method
-                    .parameters
-                    .insert(0, Self::make_this_param(target_type_str));
-            }
-
-            let param_types: Vec<String> =
-                new_method.parameters.iter().map(|p| p.type_.get_type()).collect();
-            let method_ref = self.arena.alloc(new_method);
-            self.struct_methods.push((method_ref, bindings.clone()));
-
-            let info = FunctionTableInfo::from(method_ref);
-            if let Err(e) = self
-                .function_table
-                .add_overload(&mangled_name, info, &mut self.type_ctx)
-            {
-                diagnostics.report_error(e.to_string(), Some(method.name.position));
-            }
-            if method.generic_parameters.is_none() {
-                registered.push((mangled_name, param_types));
-            }
-        }
-        // Register a distinct `DefId` for each overloaded method under its emitted (signature-mangled)
-        // name, so overloads don't collide on the single base-mangled def (mirrors free functions).
-        for (mangled_name, param_types) in registered {
-            let emitted = self
-                .function_table
-                .resolve_emitted_name(&mangled_name, &param_types, &mut self.type_ctx);
-            if emitted != mangled_name {
-                self.type_ctx
-                    .register(DefKind::Function, &emitted, vec![]);
-            }
-        }
-    }
-
-    /// Returns true if `name` is a type that an `extend` block may attach methods to: a
-    /// primitive, `object`, a registered struct, a generic struct template, or an enum.
-    pub(super) fn is_extendable_target(&self, name: &str) -> bool {
-        matches!(
-            name,
-            "int"
-                | "float"
-                | "double"
-                | "string"
-                | "bool"
-                | "char"
-                | "object"
-                | "js"
-                | "long"
-                | "uint"
-                | "ulong"
-                | "byte"
-        ) || self.struct_table.get_struct(name).is_some()
-            || self.generic_structs.contains_key(name)
-            || self.enum_table.contains_key(name)
-    }
-
-    /// Pass: register every `extend Type { ... }` block's methods. Extension methods are lowered
-    /// exactly like struct methods (`{target}_{method}` + implicit `this`) but the target's
-    /// runtime representation is untouched (it is NOT added to the struct table), so primitives
-    /// keep their value/reference semantics.
-    pub(super) fn register_extensions(
-        &mut self,
-        node: &'a ProgramNode<'a>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        for ext in node.extends.iter() {
-            diagnostics.file_path = file_path_string(&ext.file_path);
-            let target = ext.target.text.clone();
-            if ext.generic_parameters.is_some() {
-                // Generic extend blocks were stashed by `stash_generic_extensions` and are attached
-                // per instantiation in `ensure_*_instantiated`; here we only validate the target is
-                // a known generic union or struct.
-                if !self.generic_unions.contains_key(&target)
-                    && !self.generic_structs.contains_key(&target)
-                {
-                    diagnostics.report_error(
-                        format!(
-                            "Cannot extend unknown generic type '{}' (no generic union or class by that name)",
-                            target
-                        ),
-                        Some(ext.target.position),
-                    );
-                }
-                continue;
-            }
-            if !self.is_extendable_target(&target) {
-                diagnostics.report_error(
-                    format!("Cannot extend unknown type '{}'", target),
-                    Some(ext.target.position),
-                );
-                continue;
-            }
-            self.register_methods_for(&target, &ext.methods, &GenericBindings::new(), diagnostics);
-            // An `extend Type : Iface { ... }` block records that its target implements the
-            // interface(s), so the target (including a primitive like `int`) participates in
-            // interface dispatch and satisfies generic constraints (`T : Comparable<T>`). The
-            // block's own methods supply the required signatures.
-            if !ext.implements.is_empty() {
-                self.validate_implements(
-                    &target,
-                    &ext.implements,
-                    &ext.methods,
-                    &GenericBindings::new(),
-                    ext.target.position,
-                    diagnostics,
-                );
-            }
-        }
-    }
-
-    /// Pre-pass: stash every generic `extend Type<...> { ... }` block keyed by its target type
-    /// name, so the methods are available to monomorphize at the first instantiation of that type
-    /// (which can happen as early as `register_enums`). Validation of the target is deferred to
-    /// `register_extensions`, once all type templates are registered.
-    pub(super) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
-        for ext in node.extends.iter() {
-            if ext.generic_parameters.is_some() {
-                // A generic type may have several `extend` blocks (e.g. a base `extend List<T>` plus a
-                // constrained `extend List<T : Comparable<T>>`); keep them all and attach each whose
-                // constraints the concrete instance satisfies.
-                self.generic_extends
-                    .entry(ext.target.text.clone())
-                    .or_default()
-                    .push(ext);
-            }
-        }
-    }
-
-    /// Validates an `@override` object-protocol method: `@override` may only mark `to_string`
-    /// / `hash_code`, those must be exported with the exact protocol signature, and a method
-    /// that shadows a protocol name must carry `@override`.
-    pub(super) fn validate_protocol_override(
-        &self,
-        method: &FunctionNode<'a>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        let name = method.name.text.as_str();
-
-        // Constructors/destructors: `del` takes no parameters and neither declares a return type.
-        if name == crate::syntax::nodes::types::DESTRUCTOR_NAME && !method.parameters.is_empty() {
-            diagnostics.report_error(
-                "destructor 'del' must not declare parameters".to_string(),
-                Some(method.name.position),
-            );
-        }
-        if crate::syntax::nodes::types::is_special_member_name(name) && method.return_type.is_some()
-        {
-            diagnostics.report_error(
-                format!("'{}' must not declare a return type", name),
-                Some(method.name.position),
-            );
-        }
-
-        let is_protocol =
-            name == crate::intrinsics::TO_STRING || name == crate::intrinsics::HASH_CODE;
-
-        let is_override = method.attributes.iter().any(|a| a.name.text == "override");
-
-        if is_override && !is_protocol {
-            diagnostics.report_error(
-                format!("'@override' can only be applied to object-protocol methods (to_string, hash_code), not '{}'", name),
-                Some(method.name.position),
-            );
-            return;
-        }
-
-        if is_protocol && !is_override {
-            diagnostics.report_error(
-                format!(
-                    "method '{}' overrides an object-protocol method; mark it with '@override'",
-                    name
-                ),
-                Some(method.name.position),
-            );
-            return;
-        }
-
-        if is_override && is_protocol {
-            if !method.is_public {
-                diagnostics.report_error(
-                    format!(
-                        "overridden object-protocol method '{}' must be declared 'public'",
-                        name
-                    ),
-                    Some(method.name.position),
-                );
-            }
-            if !method.parameters.is_empty() {
-                diagnostics.report_error(
-                    format!(
-                        "overridden object-protocol method '{}' must not declare parameters",
-                        name
-                    ),
-                    Some(method.name.position),
-                );
-            }
-            let return_type = method.return_type.as_ref().map(|t| t.get_type());
-            let expected = if name == "to_string" { "string" } else { "int" };
-            if return_type.as_deref() != Some(expected) {
-                diagnostics.report_error(
-                    format!("overridden '{}' must return '{}'", name, expected),
-                    Some(method.name.position),
-                );
-            }
-        }
-    }
-
-    /// Validates a TypeScript-style property accessor (`get`/`set`): a getter takes no parameters
-    /// and returns a non-`void` value; a setter takes exactly one parameter; neither may be `static`
-    /// or `async`. Non-accessor methods are ignored.
-    pub(super) fn validate_accessor(
-        &self,
-        method: &FunctionNode<'a>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        let Some(kind) = method.accessor else {
-            return;
-        };
-        let prop = &method.name.text;
-        // Static accessors are permitted: `static get`/`static set` are read/written through the
-        // type (`Type.prop` / `Type.prop = v`) with no `this`. `async` accessors are not: a getter
-        // read must yield the property value directly, not a `Future`.
-        if method.is_async {
-            diagnostics.report_error(
-                format!("property accessor '{}' cannot be 'async'", prop),
-                Some(method.name.position),
-            );
-        }
-        match kind {
-            crate::syntax::nodes::function::AccessorKind::Get => {
-                if !method.parameters.is_empty() {
-                    diagnostics.report_error(
-                        format!("getter '{}' must not declare parameters", prop),
-                        Some(method.name.position),
-                    );
-                }
-                if matches!(method.return_type, None | Some(Type::Void)) {
-                    diagnostics.report_error(
-                        format!("getter '{}' must declare a non-void return type", prop),
-                        Some(method.name.position),
-                    );
-                }
-            }
-            crate::syntax::nodes::function::AccessorKind::Set => {
-                if method.parameters.len() != 1 {
-                    diagnostics.report_error(
-                        format!("setter '{}' must declare exactly one parameter", prop),
-                        Some(method.name.position.clone()),
-                    );
-                }
-            }
         }
     }
 }

@@ -13,7 +13,11 @@ impl<'a> Analyzer<'a> {
     }
     /// Appends an assignment to an already-allocated local slot (used by the match-expression
     /// desugar's result temporary).
-    pub(in crate::semantics::analyzer) fn hir_assign_local_id(&mut self, local: LocalId, value: Option<HExpr>) {
+    pub(in crate::semantics::analyzer) fn hir_assign_local_id(
+        &mut self,
+        local: LocalId,
+        value: Option<HExpr>,
+    ) {
         if !self.active() {
             return;
         }
@@ -72,7 +76,12 @@ impl<'a> Analyzer<'a> {
 
     /// Appends a `let` binding, allocating a fresh local slot. Fails the function if the initializer
     /// was not representable.
-    pub(in crate::semantics::analyzer) fn hir_declare_local(&mut self, name: &str, ty: &Type, value: Option<HExpr>) {
+    pub(in crate::semantics::analyzer) fn hir_declare_local(
+        &mut self,
+        name: &str,
+        ty: &Type,
+        value: Option<HExpr>,
+    ) {
         if !self.active() {
             return;
         }
@@ -131,7 +140,9 @@ impl<'a> Analyzer<'a> {
         // primitive/`string`, at this typed binding boundary (so `let x: js = 5` and
         // `let n: int = el.count` work without an explicit conversion).
         if matches!(target_k, TyKind::Js) && matches!(val_k, TyKind::Prim(_) | TyKind::Struct(..)) {
-            return self.box_to_js(value).unwrap_or_else(|| HExpr::new(target, HExprKind::IntLit(0)));
+            return self
+                .box_to_js(value)
+                .unwrap_or_else(|| HExpr::new(target, HExprKind::IntLit(0)));
         }
         if matches!(val_k, TyKind::Js) && matches!(target_k, TyKind::Prim(_) | TyKind::Struct(..)) {
             return self.unbox_from_js(value, target);
@@ -162,7 +173,11 @@ impl<'a> Analyzer<'a> {
 
     /// Appends an assignment to a local or module-global. Fails the function for an unresolved name
     /// or a non-representable value.
-    pub(in crate::semantics::analyzer) fn hir_assign_local(&mut self, name: &str, value: Option<HExpr>) {
+    pub(in crate::semantics::analyzer) fn hir_assign_local(
+        &mut self,
+        name: &str,
+        value: Option<HExpr>,
+    ) {
         if !self.active() {
             return;
         }
@@ -213,7 +228,12 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Appends a `while (cond) { body }`. Fails the function if the condition was not representable.
-    pub(in crate::semantics::analyzer) fn hir_while(&mut self, cond: Option<HExpr>, body: Vec<HStmt>, label: Option<String>) {
+    pub(in crate::semantics::analyzer) fn hir_while(
+        &mut self,
+        cond: Option<HExpr>,
+        body: Vec<HStmt>,
+        label: Option<String>,
+    ) {
         if !self.active() {
             return;
         }
@@ -278,14 +298,12 @@ impl<'a> Analyzer<'a> {
             return;
         }
         match (elem, iterable) {
-            (Some(elem), Some(iterable)) => {
-                self.push_stmt(HStmt::Foreach {
-                    elem,
-                    iterable,
-                    body,
-                    label,
-                })
-            }
+            (Some(elem), Some(iterable)) => self.push_stmt(HStmt::Foreach {
+                elem,
+                iterable,
+                body,
+                label,
+            }),
             _ => self.hir.ok = false,
         }
     }
@@ -324,7 +342,11 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Builds a `Const` switch arm from a label expression (the case value).
-    pub(in crate::semantics::analyzer) fn hir_const_arm(&self, label: Option<HExpr>, body: Vec<HStmt>) -> Option<HArm> {
+    pub(in crate::semantics::analyzer) fn hir_const_arm(
+        &self,
+        label: Option<HExpr>,
+        body: Vec<HStmt>,
+    ) -> Option<HArm> {
         label.map(|label| HArm {
             pattern: HPattern::Const(label),
             body,

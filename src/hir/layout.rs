@@ -60,17 +60,29 @@ impl TypeLayout {
         for (field_name, ty) in field_defs {
             let (size, align) = scalar_size(interner, ty);
             offset = align_up(offset, align);
-            fields.push(FieldLayout { offset, ty, name: field_name });
+            fields.push(FieldLayout {
+                offset,
+                ty,
+                name: field_name,
+            });
             offset += size;
             max_align = max_align.max(align);
         }
-        TypeLayout { name: name.into(), fields, size: align_up(offset, max_align) }
+        TypeLayout {
+            name: name.into(),
+            fields,
+            size: align_up(offset, max_align),
+        }
     }
 }
 
 fn align_up(offset: u32, align: u32) -> u32 {
     let rem = offset % align;
-    if rem == 0 { offset } else { offset + (align - rem) }
+    if rem == 0 {
+        offset
+    } else {
+        offset + (align - rem)
+    }
 }
 
 /// The layout of one variant of a discriminated union: its discriminant plus its payload fields.

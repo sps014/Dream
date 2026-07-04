@@ -135,9 +135,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     /// Parses a single discriminated-union variant payload field: `name: Type`.
-    fn parse_variant_field(
-        &mut self,
-    ) -> Result<crate::nodes::struct_node::StructFieldNode, Error> {
+    fn parse_variant_field(&mut self) -> Result<crate::nodes::struct_node::StructFieldNode, Error> {
         let field_name = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::ColonToken);
         let type_position = self.current_token().position;
@@ -225,8 +223,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             let is_ctor_dtor = core.kind == TokenKind::IdentifierToken
                 && crate::nodes::types::is_special_member_name(&core.text)
                 && self.peek_token(m + 1).kind == TokenKind::OpenParenthesisToken;
-            
-                // TypeScript-style property accessor: `get name(...)` / `set name(...)`. `get`/`set`
+
+            // TypeScript-style property accessor: `get name(...)` / `set name(...)`. `get`/`set`
             // are contextual keywords (still ordinary identifiers/field names elsewhere), so this
             // only binds when the next token is a property name followed by a parameter list.
             let is_accessor = core.kind == TokenKind::IdentifierToken

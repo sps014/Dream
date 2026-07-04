@@ -8,10 +8,10 @@ use crate::intrinsics;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::types::{mangle_generic, strip_nullable};
-use crate::types::method_fn;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, StatementNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::types::method_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -93,7 +93,14 @@ impl<'a> Analyzer<'a> {
             && (Self::resolve_struct_parts(&iterable_type).is_some()
                 || matches!(iterable_type, Type::String(_)))
         {
-            return self.analyze_foreach_iter(element, &iterable_type, iter_hir, body, ctx, diagnostics);
+            return self.analyze_foreach_iter(
+                element,
+                &iterable_type,
+                iter_hir,
+                body,
+                ctx,
+                diagnostics,
+            );
         }
 
         let element_type = match &iterable_type {
@@ -261,6 +268,11 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         let label = self.pending_loop_label.take();
+        // An `is`-with-binding in the loop condition narrows a local for the body: the body only runs
+        // when the condition holds, so the cast is sound and is re-established at the top of each
+        // iteration. Covers a bare `while (x is T name)` and top-level `&&` chains, like `if`.
+        let mut bindings: Vec<(&SyntaxToken, &Type, &ExpressionNode<'a>)> = Vec::new();
+        Self::collect_is_bindings(condition, &mut bindings);
         let cond_type = self
             .analyze_expression(condition, parent_function, symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
@@ -271,8 +283,14 @@ impl<'a> Analyzer<'a> {
                 condition.position(),
             );
         }
+        let body_scope = self.branch_scope(symbol_table);
+        let ctx = super::AnalyzerContext {
+            parent_function,
+            symbol_table,
+        };
         self.hir_open_block();
-        self.analyze_body(body, parent_function, Some(symbol_table), true, diagnostics)?;
+        self.declare_is_bindings(&bindings, &body_scope, &ctx, diagnostics)?;
+        self.analyze_body(body, parent_function, Some(&body_scope), true, diagnostics)?;
         let body_hir = self.hir_close_block();
         self.hir_while(cond_hir, body_hir, label);
         Ok(())
@@ -292,7 +310,10 @@ impl<'a> Analyzer<'a> {
         let cond_hir = self.hir_take();
         if !cond_type.is_unknown() && !cond_type.is_bool() {
             diagnostics.report_error(
-                format!("do/while condition must be bool, got {}", cond_type.get_type()),
+                format!(
+                    "do/while condition must be bool, got {}",
+                    cond_type.get_type()
+                ),
                 condition.position(),
             );
         }
@@ -428,7 +449,7 @@ impl<'a> Analyzer<'a> {
             if elements.is_empty() && !type_annotation.as_ref().is_some_and(|t| t.is_array()) {
                 self.hir_fail();
                 diagnostics.report_error(
-                    "Empty array literal requires an array type annotation, e.g. `let xs: int[] = [];`".to_string(),
+                    "cannot infer the element type of an empty array literal; add an array type annotation, e.g. `let xs: int[] = [];`".to_string(),
                     Some(left.position),
                 );
                 return Ok(());
@@ -607,45 +628,39 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        match self.resolve_hook_method(obj_type, "set", 2, diagnostics) {
-            super::calls::HookResolution::Eligible(_) => {
-                let set_tok = synthetic_token(TokenKind::IdentifierToken, "set");
-                let call = ExpressionNode::MethodCall(
-                    arr,
-                    set_tok,
-                    None,
-                    vec![(*index).clone(), right.clone()],
-                );
-                let _ =
-                    self.analyze_expression(&call, parent_function, symbol_table, diagnostics)?;
-                let call_hir = self.hir_take();
-                self.hir_expr_stmt(call_hir);
-                Ok(())
-            }
-            super::calls::HookResolution::Ineligible(reason) => {
-                self.hir_fail();
-                diagnostics.report_error(
+        if self
+            .resolve_hook_or_diagnose(
+                obj_type,
+                "set",
+                2,
+                arr.position(),
+                false,
+                diagnostics,
+                |reason| {
                     format!(
                         "type '{}' is not index-assignable: {}",
                         obj_type.get_type(),
                         reason
-                    ),
-                    arr.position(),
-                );
-                Ok(())
-            }
-            super::calls::HookResolution::Absent => {
-                self.hir_fail();
-                diagnostics.report_error(
+                    )
+                },
+                || {
                     format!(
                         "type '{}' is not index-assignable (define 'public fun set(index, value)' to allow obj[index] = value)",
                         obj_type.get_type()
-                    ),
-                    arr.position(),
-                );
-                Ok(())
-            }
+                    )
+                },
+            )
+            .is_none()
+        {
+            return Ok(());
         }
+        let set_tok = synthetic_token(TokenKind::IdentifierToken, "set");
+        let call =
+            ExpressionNode::MethodCall(arr, set_tok, None, vec![(*index).clone(), right.clone()]);
+        let _ = self.analyze_expression(&call, parent_function, symbol_table, diagnostics)?;
+        let call_hir = self.hir_take();
+        self.hir_expr_stmt(call_hir);
+        Ok(())
     }
 
     pub(super) fn analyze_member_assignment(
@@ -672,14 +687,9 @@ impl<'a> Analyzer<'a> {
                         TokenKind::IdentifierToken,
                         &setter_member_name(&member.text),
                     );
-                    let call =
-                        ExpressionNode::MethodCall(obj, set_tok, None, vec![right.clone()]);
-                    let _ = self.analyze_expression(
-                        &call,
-                        parent_function,
-                        symbol_table,
-                        diagnostics,
-                    )?;
+                    let call = ExpressionNode::MethodCall(obj, set_tok, None, vec![right.clone()]);
+                    let _ =
+                        self.analyze_expression(&call, parent_function, symbol_table, diagnostics)?;
                     let call_hir = self.hir_take();
                     self.hir_expr_stmt(call_hir);
                     return Ok(());
@@ -698,7 +708,13 @@ impl<'a> Analyzer<'a> {
                 .analyze_expression(right, parent_function, symbol_table, diagnostics)
                 .unwrap_or(Type::Unknown);
             let value_hir = self.hir_take();
-            self.desugar_js_set(obj_hir, &member.text, value_hir, Some(member.position), diagnostics);
+            self.desugar_js_set(
+                obj_hir,
+                &member.text,
+                value_hir,
+                Some(member.position),
+                diagnostics,
+            );
             return Ok(());
         }
 
@@ -743,16 +759,13 @@ impl<'a> Analyzer<'a> {
                 // check, and its (discarded) result becomes the assignment statement.
                 let setter = method_fn(&struct_name, &setter_member_name(&member.text));
                 if self.function_table.get_function(&setter).is_ok() {
-                    let set_tok =
-                        synthetic_token(TokenKind::IdentifierToken, &setter_member_name(&member.text));
-                    let call =
-                        ExpressionNode::MethodCall(obj, set_tok, None, vec![right.clone()]);
-                    let _ = self.analyze_expression(
-                        &call,
-                        parent_function,
-                        symbol_table,
-                        diagnostics,
-                    )?;
+                    let set_tok = synthetic_token(
+                        TokenKind::IdentifierToken,
+                        &setter_member_name(&member.text),
+                    );
+                    let call = ExpressionNode::MethodCall(obj, set_tok, None, vec![right.clone()]);
+                    let _ =
+                        self.analyze_expression(&call, parent_function, symbol_table, diagnostics)?;
                     let call_hir = self.hir_take();
                     self.hir_expr_stmt(call_hir);
                     return Ok(());
@@ -819,15 +832,13 @@ impl<'a> Analyzer<'a> {
             .chain(else_if.iter().map(|i| (&i.0, i.0.position(), &i.1)));
 
         for (cond_expr, cond_pos, body) in branches {
-            // An `is`-with-binding condition (`if (x is T name)`) declares a narrowed local `name: T`
-            // scoped to the taken branch only. Capture the binding parts so both the compile-time fold
-            // and the runtime path can introduce it into that branch's scope.
-            let is_binding: Option<(&SyntaxToken, &Type, &ExpressionNode<'a>)> = match cond_expr {
-                ExpressionNode::IsExpression(left, right_type, Some(name)) => {
-                    Some((name, right_type, left))
-                }
-                _ => None,
-            };
+            // An `is`-with-binding condition declares a narrowed local `name: T` scoped to the taken
+            // branch only. This covers a bare `if (x is T name)` and every `is`-binding reachable
+            // through a top-level `&&` chain (`if (a && x is T name)`), each of which is guaranteed to
+            // hold in the then-branch. Both the compile-time fold and the runtime path introduce them
+            // into that branch's scope.
+            let mut bindings: Vec<(&SyntaxToken, &Type, &ExpressionNode<'a>)> = Vec::new();
+            Self::collect_is_bindings(cond_expr, &mut bindings);
 
             // `is` fold: an operand with a concrete (non-`object`, non-interface) static type resolves
             // at compile time, so a branch is either taken unconditionally or is dead. An `object` or
@@ -838,14 +849,13 @@ impl<'a> Analyzer<'a> {
                     .analyze_expression(left, ctx.parent_function, ctx.symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
                 let left_name = strip_nullable(&left_t.get_type()).to_string();
-                let runtime = left_t.is_object()
-                    || left_t.is_unknown()
-                    || self.is_interface_name(&left_name);
+                let runtime =
+                    left_t.is_object() || left_t.is_unknown() || self.is_interface_name(&left_name);
                 if !runtime {
                     if left_t.get_type() == right_type.get_type() {
                         let branch_scope = self.branch_scope(ctx.symbol_table);
                         self.hir_open_block();
-                        self.declare_is_binding(&is_binding, &branch_scope, ctx, diagnostics)?;
+                        self.declare_is_bindings(&bindings, &branch_scope, ctx, diagnostics)?;
                         self.analyze_body(
                             body,
                             ctx.parent_function,
@@ -864,7 +874,12 @@ impl<'a> Analyzer<'a> {
             }
 
             let cond_type = self
-                .analyze_expression(cond_expr, ctx.parent_function, ctx.symbol_table, diagnostics)
+                .analyze_expression(
+                    cond_expr,
+                    ctx.parent_function,
+                    ctx.symbol_table,
+                    diagnostics,
+                )
                 .unwrap_or(Type::Unknown);
             let cond_hir = self.hir_take();
             if !cond_type.is_unknown() && !cond_type.is_bool() {
@@ -875,7 +890,7 @@ impl<'a> Analyzer<'a> {
             }
             let branch_scope = self.branch_scope(ctx.symbol_table);
             self.hir_open_block();
-            self.declare_is_binding(&is_binding, &branch_scope, ctx, diagnostics)?;
+            self.declare_is_bindings(&bindings, &branch_scope, ctx, diagnostics)?;
             self.analyze_body(
                 body,
                 ctx.parent_function,
@@ -922,30 +937,66 @@ impl<'a> Analyzer<'a> {
     /// A fresh child symbol scope of `parent`, used for a single `if`/`else if` branch so an
     /// `is`-with-binding local lives only inside that branch and never leaks to `else`/the enclosing
     /// scope. Outer names stay visible through the parent link.
-    fn branch_scope(
-        &self,
-        parent: &Rc<RefCell<SymbolTable>>,
-    ) -> Rc<RefCell<SymbolTable>> {
+    fn branch_scope(&self, parent: &Rc<RefCell<SymbolTable>>) -> Rc<RefCell<SymbolTable>> {
         let scope = Rc::new(RefCell::new(SymbolTable::new(Some(Rc::clone(parent)))));
         (*parent).borrow_mut().add_child(scope.clone());
         scope
     }
 
-    /// Introduces an `is`-with-binding local into a branch: it declares `name: T` (added to
-    /// `branch_scope` for type-checking) initialized by an implicit `(T)operand` cast. Reusing the
-    /// cast path means reference/interface targets alias the same pointer (identity) while value-type
-    /// targets (`int`, `bool`, …) unbox the operand — exactly the narrowing `is` implies. A no-op when
-    /// the condition has no binding. Must be called inside the branch's open HIR block, before its body.
-    fn declare_is_binding(
+    /// Collects the `is`-with-binding conditions that are guaranteed true whenever `cond` is true:
+    /// a bare `x is T name`, and every such test reachable through a top-level `&&` chain (descending
+    /// through parentheses). `||`, negation, and other operators are *not* descended into, because a
+    /// binding under them is not guaranteed to hold when the whole condition is true. The collected
+    /// bindings are declared into the taken branch (or loop body) by [`Self::declare_is_bindings`].
+    fn collect_is_bindings<'e>(
+        cond: &'e ExpressionNode<'a>,
+        out: &mut Vec<(&'e SyntaxToken, &'e Type, &'e ExpressionNode<'a>)>,
+    ) {
+        match cond {
+            ExpressionNode::IsExpression(left, right_type, Some(name)) => {
+                out.push((name, right_type, left));
+            }
+            ExpressionNode::Parenthesized(inner) => Self::collect_is_bindings(inner, out),
+            ExpressionNode::Binary(left, op, right)
+                if op.kind == TokenKind::AmpersandAmpersandToken =>
+            {
+                Self::collect_is_bindings(left, out);
+                Self::collect_is_bindings(right, out);
+            }
+            _ => {}
+        }
+    }
+
+    /// Declares each collected `is`-binding into `branch_scope` (see [`Self::declare_is_binding`]).
+    /// A no-op when there are no bindings. Must be called inside the target block's open HIR block,
+    /// before its body, so the narrowed-local declarations lead the block.
+    fn declare_is_bindings(
         &mut self,
-        binding: &Option<(&SyntaxToken, &Type, &ExpressionNode<'a>)>,
+        bindings: &[(&SyntaxToken, &Type, &ExpressionNode<'a>)],
         branch_scope: &Rc<RefCell<SymbolTable>>,
         ctx: &super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        let Some((name, target_ty, operand)) = binding else {
-            return Ok(());
-        };
+        for &(name, target_ty, operand) in bindings {
+            self.declare_is_binding(name, target_ty, operand, branch_scope, ctx, diagnostics)?;
+        }
+        Ok(())
+    }
+
+    /// Introduces an `is`-with-binding local into a branch: it declares `name: T` (added to
+    /// `branch_scope` for type-checking) initialized by an implicit `(T)operand` cast. Reusing the
+    /// cast path means reference/interface targets alias the same pointer (identity) while value-type
+    /// targets (`int`, `bool`, …) unbox the operand — exactly the narrowing `is` implies. Must be
+    /// called inside the branch's open HIR block, before its body.
+    fn declare_is_binding(
+        &mut self,
+        name: &SyntaxToken,
+        target_ty: &Type,
+        operand: &ExpressionNode<'a>,
+        branch_scope: &Rc<RefCell<SymbolTable>>,
+        ctx: &super::AnalyzerContext<'a, '_>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<(), SemanticError> {
         self.check_reserved_name(name, "variable", diagnostics);
         // Model the narrowed initializer as `(target_ty)operand`, reusing all cast validation +
         // codegen (reference identity vs. primitive unbox).
@@ -960,7 +1011,7 @@ impl<'a> Analyzer<'a> {
         self.hir_declare_local(&name.text, target_ty, init);
         if let Err(e) = (*branch_scope)
             .borrow_mut()
-            .add_symbol(name.text.clone(), (*target_ty).clone())
+            .add_symbol(name.text.clone(), target_ty.clone())
         {
             diagnostics.report_error(e.to_string(), Some(name.position));
         }

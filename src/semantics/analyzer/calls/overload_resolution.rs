@@ -26,11 +26,9 @@ impl<'a> Analyzer<'a> {
             crate::types::overload_compatible(&type_ctx.interner, p, a)
         };
         match self.function_table.select_overload(base, arg_types, compat) {
-            OverloadResolution::Unique(key) => {
-                match self.function_table.get_function(&key) {
-                    Ok(info) => Ok(info),
-                    Err(_) => Err(format!("Could not resolve function '{}'", key)),
-                }
+            OverloadResolution::Unique(key) => match self.function_table.get_function(&key) {
+                Ok(info) => Ok(info),
+                Err(_) => Err(format!("Could not resolve function '{}'", key)),
             },
             OverloadResolution::None => Err(format!(
                 "No overload of '{}' matches argument types ({})",
@@ -45,7 +43,6 @@ impl<'a> Analyzer<'a> {
             )),
         }
     }
-
 
     /// String-level assignability check for argument vs. parameter/field types, mirroring the
     /// rules in [`compare_data_type`] (which works on `Type`). An `expected` type accepts a `given`
@@ -77,9 +74,6 @@ impl<'a> Analyzer<'a> {
         }
         false
     }
-
-
-
 
     pub(crate) fn validate_arguments(
         &mut self,

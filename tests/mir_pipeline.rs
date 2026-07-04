@@ -6,11 +6,11 @@
 use dream::hir::{
     BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId,
 };
+use dream::mir::emit::emit_program;
 use dream::mir::lower::lower_program;
 use dream::mir::passes::{
     ConstFold, CopyConstProp, Dce, PassManager, RcElision, RcInsertion, SimplifyCfg,
 };
-use dream::mir::emit::emit_program;
 use dream::types::{DefKind, TypeCtx};
 
 /// Builds, lowers, optimizes, and emits the following program, returning the WAT text:
@@ -42,20 +42,44 @@ fn compile_sum_to() -> String {
         def,
         name: "sum_to".into(),
         instance: vec![],
-        params: vec![HParam { local: n, name: "n".into(), ty: int }],
+        params: vec![HParam {
+            local: n,
+            name: "n".into(),
+            ty: int,
+        }],
         ret: int,
         locals: vec![
-            dream::hir::HLocal { id: i, name: "i".into(), ty: int },
-            dream::hir::HLocal { id: acc, name: "acc".into(), ty: int },
+            dream::hir::HLocal {
+                id: i,
+                name: "i".into(),
+                ty: int,
+            },
+            dream::hir::HLocal {
+                id: acc,
+                name: "acc".into(),
+                ty: int,
+            },
         ],
         is_async: false,
         body: vec![
-            HStmt::Let { local: i, ty: int, value: HExpr::new(int, HExprKind::IntLit(0)) },
-            HStmt::Let { local: acc, ty: int, value: HExpr::new(int, HExprKind::IntLit(0)) },
+            HStmt::Let {
+                local: i,
+                ty: int,
+                value: HExpr::new(int, HExprKind::IntLit(0)),
+            },
+            HStmt::Let {
+                local: acc,
+                ty: int,
+                value: HExpr::new(int, HExprKind::IntLit(0)),
+            },
             HStmt::While {
                 cond: HExpr::new(
                     boolean,
-                    HExprKind::Binary { op: BinOp::Lt, lhs: Box::new(var(i)), rhs: Box::new(var(n)) },
+                    HExprKind::Binary {
+                        op: BinOp::Lt,
+                        lhs: Box::new(var(i)),
+                        rhs: Box::new(var(n)),
+                    },
                 ),
                 body: vec![
                     HStmt::Assign {
@@ -87,7 +111,12 @@ fn compile_sum_to() -> String {
         ],
     };
 
-    let hir = Hir { functions: vec![func], globals: vec![], instances: vec![], ..Default::default() };
+    let hir = Hir {
+        functions: vec![func],
+        globals: vec![],
+        instances: vec![],
+        ..Default::default()
+    };
 
     let mut mir = lower_program(&hir, &ctx.interner);
 
@@ -111,13 +140,29 @@ fn compile_sum_to() -> String {
 fn hir_to_wat_pipeline_emits_expected_shape() {
     let wat = compile_sum_to();
 
-    assert!(wat.contains("(func $sum_to"), "missing function header:\n{}", wat);
-    assert!(wat.contains("(param $0 i32)"), "missing typed parameter:\n{}", wat);
-    assert!(wat.contains("(result i32)"), "missing typed result:\n{}", wat);
+    assert!(
+        wat.contains("(func $sum_to"),
+        "missing function header:\n{}",
+        wat
+    );
+    assert!(
+        wat.contains("(param $0 i32)"),
+        "missing typed parameter:\n{}",
+        wat
+    );
+    assert!(
+        wat.contains("(result i32)"),
+        "missing typed result:\n{}",
+        wat
+    );
     // The loop body's two additions survive optimization (they are live).
     assert!(wat.contains("i32.add"), "missing arithmetic:\n{}", wat);
     // The loop comparison lowers to a signed less-than.
-    assert!(wat.contains("i32.lt_s"), "missing loop comparison:\n{}", wat);
+    assert!(
+        wat.contains("i32.lt_s"),
+        "missing loop comparison:\n{}",
+        wat
+    );
     // A multi-block CFG is emitted via the block-dispatch loop.
     assert!(wat.contains("br_table"), "missing CFG dispatch:\n{}", wat);
 }
@@ -126,5 +171,8 @@ fn hir_to_wat_pipeline_emits_expected_shape() {
 fn hir_to_wat_pipeline_is_deterministic() {
     let first = compile_sum_to();
     let second = compile_sum_to();
-    assert_eq!(first, second, "the new backend pipeline must be byte-for-byte deterministic");
+    assert_eq!(
+        first, second,
+        "the new backend pipeline must be byte-for-byte deterministic"
+    );
 }

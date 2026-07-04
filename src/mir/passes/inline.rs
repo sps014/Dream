@@ -545,7 +545,12 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
                 remap_operand(a, base);
             }
         }
-        Rvalue::JsCall { target, method, args, .. } => {
+        Rvalue::JsCall {
+            target,
+            method,
+            args,
+            ..
+        } => {
             remap_operand(target, base);
             if let Some(m) = method {
                 remap_operand(m, base);
@@ -607,7 +612,11 @@ fn remap_terminator(t: &mut Terminator, local_base: u32, block_base: u32) {
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
             remap_operand(o, local_base)
         }
-        Terminator::Await { future, dest, resume } => {
+        Terminator::Await {
+            future,
+            dest,
+            resume,
+        } => {
             remap_operand(future, local_base);
             if let Some(d) = dest {
                 d.0 += local_base;

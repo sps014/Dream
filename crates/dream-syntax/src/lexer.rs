@@ -1,8 +1,8 @@
+use crate::token::syntax_token::SyntaxToken;
+use crate::token::token_kind::TokenKind;
 use dream_diagnostics::DiagnosticBag;
 use dream_text::line_text::LineText;
 use dream_text::text_span::TextSpan;
-use crate::token::syntax_token::SyntaxToken;
-use crate::token::token_kind::TokenKind;
 use logos::Logos;
 use std::rc::Rc;
 
@@ -49,8 +49,7 @@ impl Lexer {
                 continue;
             } else if kind == TokenKind::LineCommentToken || kind == TokenKind::BlockCommentToken {
                 let text_span = TextSpan::new((span.start, span.end), &self.line_text);
-                let trivia =
-                    crate::token::syntax_trivia::SyntaxTrivia::new(kind, text_span, text);
+                let trivia = crate::token::syntax_trivia::SyntaxTrivia::new(kind, text_span, text);
                 let comment_line = self.line_text.get_point(span.start).0;
 
                 if !res.is_empty()

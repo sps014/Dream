@@ -37,18 +37,30 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     linker.func_wrap(
         "env",
         "print_string",
-        |mut caller: Caller<'_, ()>, ptr: i32| {
-            let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
+        |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
+            let memory = caller
+                .get_export("memory")
+                .and_then(Extern::into_memory)
+                .ok_or_else(|| Error::msg("module must export `memory`"))?;
             let s = read_string_from_memory(&memory, &caller, ptr);
             print!("{}", s);
+            Ok(())
         },
     )?;
 
-    linker.func_wrap("env", "println", |mut caller: Caller<'_, ()>, ptr: i32| {
-        let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
-        let s = read_string_from_memory(&memory, &caller, ptr);
-        println!("{}", s);
-    })?;
+    linker.func_wrap(
+        "env",
+        "println",
+        |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
+            let memory = caller
+                .get_export("memory")
+                .and_then(Extern::into_memory)
+                .ok_or_else(|| Error::msg("module must export `memory`"))?;
+            let s = read_string_from_memory(&memory, &caller, ptr);
+            println!("{}", s);
+            Ok(())
+        },
+    )?;
 
     link_math_functions(&mut linker)?;
     link_file_functions(&mut linker)?;
@@ -67,8 +79,7 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     let instance = linker.instantiate(&mut store, &module)?;
 
-    if let Ok(main_func) =
-        instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN)
+    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN)
     {
         main_func.call(&mut store, ())?;
     } else {

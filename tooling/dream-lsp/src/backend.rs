@@ -233,10 +233,13 @@ impl LanguageServer for Backend {
         let key = uri.to_string();
 
         let text = {
-            let mut entry = self.documents.entry(key.clone()).or_insert_with(|| Document {
-                text: String::new(),
-                version: 0,
-            });
+            let mut entry = self
+                .documents
+                .entry(key.clone())
+                .or_insert_with(|| Document {
+                    text: String::new(),
+                    version: 0,
+                });
 
             for change in params.content_changes {
                 apply_change(&mut entry.text, change.range, &change.text);
@@ -616,7 +619,7 @@ impl LanguageServer for Backend {
                     start: map_position(line_index.position(decl.start)),
                     end: map_position(line_index.position(decl.end)),
                 };
-                
+
                 // Add Run CodeLens
                 lenses.push(CodeLens {
                     range,
@@ -627,7 +630,7 @@ impl LanguageServer for Backend {
                     }),
                     data: None,
                 });
-                
+
                 // Add Debug CodeLens
                 lenses.push(CodeLens {
                     range,
@@ -640,7 +643,7 @@ impl LanguageServer for Backend {
                 });
             }
         }
-        
+
         Ok(Some(lenses))
     }
 }
@@ -689,8 +692,14 @@ mod tests {
         let mut text = "hello world\nnew line".to_string();
         // Replace "world" with "there"
         let range = Range {
-            start: Position { line: 0, character: 6 },
-            end: Position { line: 0, character: 11 },
+            start: Position {
+                line: 0,
+                character: 6,
+            },
+            end: Position {
+                line: 0,
+                character: 11,
+            },
         };
         apply_change(&mut text, Some(range), "there");
         assert_eq!(text, "hello there\nnew line");
@@ -701,8 +710,14 @@ mod tests {
         let mut text = "line 1\nline 2\nline 3".to_string();
         // Replace from end of line 1 to start of line 3
         let range = Range {
-            start: Position { line: 0, character: 6 },
-            end: Position { line: 2, character: 0 },
+            start: Position {
+                line: 0,
+                character: 6,
+            },
+            end: Position {
+                line: 2,
+                character: 0,
+            },
         };
         apply_change(&mut text, Some(range), " inserted ");
         assert_eq!(text, "line 1 inserted line 3");

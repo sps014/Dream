@@ -137,8 +137,6 @@ pub fn foreach_array_local(n: usize) -> String {
 /// the async machinery keys on (the structured `Future<T>` type and its `Future_<inner>` mangling).
 pub const FUTURE_TYPE: &str = "Future";
 
-
-
 /// Represents a data type in the language
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {

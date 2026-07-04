@@ -24,9 +24,9 @@ type FnKey = (DefId, Vec<TypeId>);
 /// refs, and user constructors) into `out`.
 fn rvalue_callees(rv: &Rvalue, out: &mut Vec<FnKey>) {
     match rv {
-        Rvalue::Call { callee, .. }
-        | Rvalue::FuncRef(callee)
-        | Rvalue::JsCall { callee, .. } => out.push((callee.def, callee.args.clone())),
+        Rvalue::Call { callee, .. } | Rvalue::FuncRef(callee) | Rvalue::JsCall { callee, .. } => {
+            out.push((callee.def, callee.args.clone()))
+        }
         Rvalue::New {
             ctor: Some(ctor), ..
         } => out.push((*ctor, vec![])),
@@ -216,7 +216,12 @@ fn hir_expr_edges(e: &crate::hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(then_expr, out);
             hir_expr_edges(else_expr, out);
         }
-        K::JsCall { callee, target, method, args } => {
+        K::JsCall {
+            callee,
+            target,
+            method,
+            args,
+        } => {
             out.callees.push((callee.def, callee.instance.clone()));
             hir_expr_edges(target, out);
             if let Some(m) = method {
@@ -507,7 +512,12 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
             args.iter()
                 .for_each(|a| collect_global_reads_operand(a, out));
         }
-        Rvalue::JsCall { target, method, args, .. } => {
+        Rvalue::JsCall {
+            target,
+            method,
+            args,
+            ..
+        } => {
             collect_global_reads_operand(target, out);
             if let Some(m) = method {
                 collect_global_reads_operand(m, out);

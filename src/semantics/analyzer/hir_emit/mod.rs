@@ -9,6 +9,7 @@
 //! no backend output). The HIR is the only input the backend consumes.
 
 use super::Analyzer;
+use crate::diagnostics::DiagnosticBag;
 use crate::hir::{
     BinOp, Binding, Callee, GlobalId, HArm, HExpr, HExprKind, HFunction, HGlobal, HImport, HLocal,
     HParam, HPattern, HPlace, HStmt, LocalId, UnOp,
@@ -16,6 +17,7 @@ use crate::hir::{
 use crate::syntax::nodes::{FunctionNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::text::text_span::TextSpan;
 use crate::types::{DefId, DefKind, PrimTy, TyKind, TypeId};
 use indexmap::IndexMap;
 
@@ -50,6 +52,10 @@ pub(super) struct HirEmit {
     blocks: Vec<Vec<HStmt>>,
     def: Option<DefId>,
     name: String,
+    /// Source span of the current candidate function's name. Anchors the diagnostic emitted when a
+    /// candidate function is dropped from HIR without any accompanying error (see
+    /// [`Analyzer::hir_finish_function`]), so the drop is never silent.
+    name_span: Option<TextSpan>,
     /// The monomorphization type-args of the function currently being emitted (empty for a plain,
     /// non-generic function). Together with `def` this determines the emitted symbol, so a generic
     /// instance body and its call sites agree.
@@ -102,7 +108,10 @@ impl<'a> Analyzer<'a> {
     /// Starts HIR collection for `function`, returning whether it is a candidate. Slice 1 emits only
     /// plain non-generic, non-static free functions (no `this` receiver) that are registered as a
     /// `DefId`; everything else is skipped (collection stays off).
-    pub(in crate::semantics::analyzer) fn hir_begin_function(&mut self, function: &FunctionNode<'a>) {
+    pub(in crate::semantics::analyzer) fn hir_begin_function(
+        &mut self,
+        function: &FunctionNode<'a>,
+    ) {
         // `extern` functions are declarations with no body: host-interop imports are emitted as
         // `(import ...)` (see `hir_build_imports`) and `@intrinsic` ones lower straight to their
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for
@@ -124,13 +133,12 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|p| p.type_.get_type())
             .collect();
-        let lookup_name = self
-            .function_table
-            .resolve_emitted_name(&function.name.text, &param_types, &mut self.type_ctx);
-        let def = self
-            .type_ctx
-            .defs
-            .lookup(DefKind::Function, &lookup_name);
+        let lookup_name = self.function_table.resolve_emitted_name(
+            &function.name.text,
+            &param_types,
+            &mut self.type_ctx,
+        );
+        let def = self.type_ctx.defs.lookup(DefKind::Function, &lookup_name);
 
         // A generic template is emitted once per monomorphization: the initial (unbound) pass is
         // skipped, and each concrete instantiation is analyzed again under `current_generic_bindings`
@@ -146,8 +154,7 @@ impl<'a> Analyzer<'a> {
         // specialization is already baked into its mangled `{Type_args}_{method}` def name, so it
         // takes an empty instance (its call sites resolve to that same mangled name with no suffix).
         let instance: Vec<TypeId> = if is_generic && under_mono {
-            let concrete: Vec<Type> =
-                self.current_generic_bindings.values().cloned().collect();
+            let concrete: Vec<Type> = self.current_generic_bindings.values().cloned().collect();
             concrete.iter().map(|c| self.type_ctx.lower(c)).collect()
         } else {
             Vec::new()
@@ -165,6 +172,7 @@ impl<'a> Analyzer<'a> {
         self.hir.def = def;
         self.hir.instance = instance;
         self.hir.name = lookup_name;
+        self.hir.name_span = Some(function.name.position);
         self.hir.is_async = function.is_async;
         self.hir.ret = Some(
             function
@@ -178,9 +186,7 @@ impl<'a> Analyzer<'a> {
             let ty = self.type_ctx.lower(&param.type_);
             let local = LocalId(self.hir.next_local);
             self.hir.next_local += 1;
-            self.hir
-                .locals
-                .insert(param.name.text.clone(), (local, ty));
+            self.hir.locals.insert(param.name.text.clone(), (local, ty));
             self.hir.params.push(HParam {
                 local,
                 name: param.name.text.clone(),
@@ -191,10 +197,21 @@ impl<'a> Analyzer<'a> {
 
     /// Finishes the current function: if it was a fully-supported candidate, builds and records its
     /// [`HFunction`]. Always turns collection back off.
-    pub(in crate::semantics::analyzer) fn hir_finish_function(&mut self) {
+    ///
+    /// `errors_before` is the number of error diagnostics that existed *before* this function was
+    /// analyzed. If the function was a candidate for emission but is dropped (an unrepresentable
+    /// construct flipped `ok` to false, or the block stack is unbalanced) and no error was reported
+    /// during its analysis, the drop would otherwise be silent — the function would produce no WASM
+    /// with no diagnostic. In that case we report an explicit error so the failure is visible.
+    pub(in crate::semantics::analyzer) fn hir_finish_function(
+        &mut self,
+        diagnostics: &mut DiagnosticBag,
+        errors_before: usize,
+    ) {
         // A well-formed function leaves exactly the body frame on the stack; a mismatch means an
         // unbalanced push/pop, so refuse to emit rather than emit a truncated body.
-        if self.hir.collecting && self.hir.ok && self.hir.blocks.len() == 1 {
+        let emittable = self.hir.collecting && self.hir.ok && self.hir.blocks.len() == 1;
+        if emittable {
             if let (Some(def), Some(ret)) = (self.hir.def, self.hir.ret) {
                 let body = self.hir.blocks.pop().unwrap_or_default();
                 self.hir.functions.push(HFunction {
@@ -208,9 +225,24 @@ impl<'a> Analyzer<'a> {
                     is_async: self.hir.is_async,
                 });
             }
+        } else if self.hir.collecting {
+            // This function was selected as an emission candidate but did not produce HIR. Surface a
+            // diagnostic unless its analysis already reported one (in which case a more specific
+            // message exists and the build already fails).
+            let reported_during_fn = diagnostics.errors().count() > errors_before;
+            if !reported_during_fn {
+                diagnostics.report_error(
+                    format!(
+                        "function '{}' uses a construct that is not yet supported by the compiler backend (v1); no code was generated for it",
+                        self.hir.name
+                    ),
+                    self.hir.name_span,
+                );
+            }
         }
         self.hir.blocks.clear();
         self.hir.collecting = false;
+        self.hir.name_span = None;
     }
 
     /// Takes the HIR recorded for the most-recently-analyzed expression.
@@ -284,7 +316,11 @@ impl<'a> Analyzer<'a> {
 
     /// Allocates a fresh local slot without emitting a `let` (for loop-bound variables like a
     /// `foreach` element). Returns the slot, or `None` if collection is inactive.
-    pub(in crate::semantics::analyzer) fn hir_alloc_local(&mut self, name: &str, ty: &Type) -> Option<LocalId> {
+    pub(in crate::semantics::analyzer) fn hir_alloc_local(
+        &mut self,
+        name: &str,
+        ty: &Type,
+    ) -> Option<LocalId> {
         self.alloc_local(name, ty)
     }
 
@@ -346,6 +382,9 @@ fn unescape_lit_body(body: &str) -> String {
 /// quotes (it is the source slice), so strip them and expand escapes. Idempotent on already-unquoted
 /// input.
 fn string_lit_value(text: &str) -> String {
-    let body = text.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(text);
+    let body = text
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .unwrap_or(text);
     unescape_lit_body(body)
 }

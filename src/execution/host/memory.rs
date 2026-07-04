@@ -45,83 +45,81 @@ pub fn read_string_from_memory(memory: &Memory, store: impl AsContext, ptr: i32)
     String::from_utf8_lossy(&data[start..end]).into_owned()
 }
 
-/// Reads the caller's exported `memory` and returns the length-prefixed string at `ptr`.
-pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> String {
-    let memory = caller
+/// Resolves the caller module's exported linear `memory`, or a wasm trap (`Err`) if it is absent —
+/// so a malformed/foreign module traps the calling task instead of aborting the whole host process.
+fn required_memory(caller: &mut Caller<'_, ()>) -> Result<Memory> {
+    caller
         .get_export(abi::EXPORT_MEMORY)
         .and_then(Extern::into_memory)
-        .expect("module must export `memory`");
-    read_string_from_memory(&memory, &*caller, ptr)
+        .ok_or_else(|| Error::msg("module must export `memory`"))
+}
+
+/// Resolves the caller module's exported `malloc` with the expected `(size, tag) -> ptr` signature,
+/// or a wasm trap (`Err`) if it is missing or mistyped.
+fn required_malloc(caller: &mut Caller<'_, ()>) -> Result<TypedFunc<(i32, i32), i32>> {
+    caller
+        .get_export(abi::EXPORT_MALLOC)
+        .and_then(Extern::into_func)
+        .ok_or_else(|| Error::msg("module must export `malloc`"))?
+        .typed::<(i32, i32), i32>(&*caller)
+        .map_err(|_| Error::msg("unexpected `malloc` signature"))
+}
+
+/// Reads the caller's exported `memory` and returns the length-prefixed string at `ptr`. Traps
+/// (`Err`) only if the module does not export `memory`.
+pub(crate) fn read_arg_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<String> {
+    let memory = required_memory(caller)?;
+    Ok(read_string_from_memory(&memory, &*caller, ptr))
 }
 
 /// Allocates `s` as a Dream `string` inside the module's linear memory by calling its exported
 /// `malloc`, storing the length prefix, and copying the UTF-8 bytes at `ptr+4`. Returns the data
 /// pointer (mirrors `DreamInstance.writeString` in `runtime/dream.js`). Used by host functions that
 /// return strings. Layout: `[len: i32][utf8...]` (no NUL terminator).
-pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> i32 {
-    let malloc = caller
-        .get_export(abi::EXPORT_MALLOC)
-        .and_then(Extern::into_func)
-        .expect("module must export `malloc`")
-        .typed::<(i32, i32), i32>(&*caller)
-        .expect("unexpected `malloc` signature");
+pub fn write_string_to_memory(caller: &mut Caller<'_, ()>, s: &str) -> Result<i32> {
+    let malloc = required_malloc(caller)?;
     let bytes = s.as_bytes();
-    let ptr = malloc
-        .call(&mut *caller, (LEN_PREFIX as i32 + bytes.len() as i32, TAG_STRING))
-        .expect("malloc call failed");
-    let memory = caller
-        .get_export(abi::EXPORT_MEMORY)
-        .and_then(Extern::into_memory)
-        .expect("module must export `memory`");
+    let ptr = malloc.call(
+        &mut *caller,
+        (LEN_PREFIX as i32 + bytes.len() as i32, TAG_STRING),
+    )?;
+    let memory = required_memory(caller)?;
     let start = ptr as usize;
     let data = memory.data_mut(&mut *caller);
     data[start..start + LEN_PREFIX].copy_from_slice(&(bytes.len() as i32).to_le_bytes());
     data[start + LEN_PREFIX..start + LEN_PREFIX + bytes.len()].copy_from_slice(bytes);
-    ptr
+    Ok(ptr)
 }
 
 /// Reads a Dream `char[]` (byte array) at data pointer `ptr` into a `Vec<u8>` with a single bulk
 /// copy. Layout: `[count: i32][bytes...]` (char elements are 1 byte). No string round-trip, so
 /// this is binary-safe.
-pub(crate) fn read_arg_bytes(caller: &mut Caller<'_, ()>, ptr: i32) -> Vec<u8> {
-    let memory = caller
-        .get_export(abi::EXPORT_MEMORY)
-        .and_then(Extern::into_memory)
-        .expect("module must export `memory`");
+pub(crate) fn read_arg_bytes(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<Vec<u8>> {
+    let memory = required_memory(caller)?;
     let data = memory.data(&*caller);
     if ptr < 0 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let base = ptr as usize;
     let Some(count) = read_len_prefix(data, base) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     let start = base + LEN_PREFIX;
     let end = start.saturating_add(count).min(data.len());
-    data[start..end].to_vec()
+    Ok(data[start..end].to_vec())
 }
 
 /// Allocates a Dream `char[]` (byte array) holding `bytes` via the module's exported `malloc`,
 /// with a single bulk copy. Returns the array data pointer. Mirrors `DreamInstance.writeArray`
 /// in `runtime/dream.js`.
-pub fn write_bytes_to_memory(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> i32 {
-    let malloc = caller
-        .get_export(abi::EXPORT_MALLOC)
-        .and_then(Extern::into_func)
-        .expect("module must export `malloc`")
-        .typed::<(i32, i32), i32>(&*caller)
-        .expect("unexpected `malloc` signature");
+pub fn write_bytes_to_memory(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Result<i32> {
+    let malloc = required_malloc(caller)?;
     let count = bytes.len() as i32;
-    let ptr = malloc
-        .call(&mut *caller, (LEN_PREFIX as i32 + count, TAG_ARRAY))
-        .expect("malloc call failed");
-    let memory = caller
-        .get_export(abi::EXPORT_MEMORY)
-        .and_then(Extern::into_memory)
-        .expect("module must export `memory`");
+    let ptr = malloc.call(&mut *caller, (LEN_PREFIX as i32 + count, TAG_ARRAY))?;
+    let memory = required_memory(caller)?;
     let base = ptr as usize;
     let data = memory.data_mut(&mut *caller);
     data[base..base + LEN_PREFIX].copy_from_slice(&count.to_le_bytes());
     data[base + LEN_PREFIX..base + LEN_PREFIX + bytes.len()].copy_from_slice(bytes);
-    ptr
+    Ok(ptr)
 }

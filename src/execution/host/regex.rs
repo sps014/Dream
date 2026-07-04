@@ -25,11 +25,15 @@ pub fn link_regex_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "regexTest",
-        |mut caller: Caller<'_, ()>, pattern_ptr: i32, flags_ptr: i32, input_ptr: i32| -> i32 {
-            let pattern = read_arg_string(&mut caller, pattern_ptr);
-            let flags = read_arg_string(&mut caller, flags_ptr);
-            let input = read_arg_string(&mut caller, input_ptr);
-            build_regex(&pattern, &flags).map_or(0, |re| re.is_match(&input) as i32)
+        |mut caller: Caller<'_, ()>,
+         pattern_ptr: i32,
+         flags_ptr: i32,
+         input_ptr: i32|
+         -> Result<i32> {
+            let pattern = read_arg_string(&mut caller, pattern_ptr)?;
+            let flags = read_arg_string(&mut caller, flags_ptr)?;
+            let input = read_arg_string(&mut caller, input_ptr)?;
+            Ok(build_regex(&pattern, &flags).map_or(0, |re| re.is_match(&input) as i32))
         },
     )?;
 
@@ -41,11 +45,11 @@ pub fn link_regex_functions(linker: &mut Linker<()>) -> Result<()> {
          flags_ptr: i32,
          input_ptr: i32,
          replacement_ptr: i32|
-         -> i32 {
-            let pattern = read_arg_string(&mut caller, pattern_ptr);
-            let flags = read_arg_string(&mut caller, flags_ptr);
-            let input = read_arg_string(&mut caller, input_ptr);
-            let replacement = read_arg_string(&mut caller, replacement_ptr);
+         -> Result<i32> {
+            let pattern = read_arg_string(&mut caller, pattern_ptr)?;
+            let flags = read_arg_string(&mut caller, flags_ptr)?;
+            let input = read_arg_string(&mut caller, input_ptr)?;
+            let replacement = read_arg_string(&mut caller, replacement_ptr)?;
             let out = match build_regex(&pattern, &flags) {
                 Some(re) => {
                     if flags.contains('g') {
@@ -68,11 +72,11 @@ pub fn link_regex_functions(linker: &mut Linker<()>) -> Result<()> {
          flags_ptr: i32,
          input_ptr: i32,
          sep_ptr: i32|
-         -> i32 {
-            let pattern = read_arg_string(&mut caller, pattern_ptr);
-            let flags = read_arg_string(&mut caller, flags_ptr);
-            let input = read_arg_string(&mut caller, input_ptr);
-            let sep = read_arg_string(&mut caller, sep_ptr);
+         -> Result<i32> {
+            let pattern = read_arg_string(&mut caller, pattern_ptr)?;
+            let flags = read_arg_string(&mut caller, flags_ptr)?;
+            let input = read_arg_string(&mut caller, input_ptr)?;
+            let sep = read_arg_string(&mut caller, sep_ptr)?;
             let joined = match build_regex(&pattern, &flags) {
                 Some(re) => {
                     if flags.contains('g') {

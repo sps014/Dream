@@ -304,8 +304,9 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             self.match_token(TokenKind::OpenParenthesisToken);
-            let params =
-                self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_expression(0))?;
+            let params = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
+                p.parse_expression(0)
+            })?;
             Ok(ExpressionNode::MethodCall(
                 self.arena.alloc(base),
                 member,
@@ -444,7 +445,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut subs = Vec::new();
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             self.match_token(TokenKind::OpenParenthesisToken);
-            subs = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_pattern())?;
+            subs =
+                self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_pattern())?;
         }
         Ok(subs)
     }

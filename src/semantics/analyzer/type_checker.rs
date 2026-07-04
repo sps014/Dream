@@ -16,6 +16,7 @@ impl<'a> Analyzer<'a> {
         let param_table = Rc::new(RefCell::new(
             self.add_function_param_table(function, diagnostics)?,
         ));
+        let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
         self.with_async_flag(function.is_async, |s| {
             s.analyze_body(
@@ -30,7 +31,7 @@ impl<'a> Analyzer<'a> {
             s.check_await_positions(function, diagnostics);
             Ok(())
         })?;
-        self.hir_finish_function();
+        self.hir_finish_function(diagnostics, errors_before);
         // check return
         let mut graph = FunctionControlGraph::new(function);
         if let Err(e) = graph.build() {

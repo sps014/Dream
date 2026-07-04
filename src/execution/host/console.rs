@@ -4,7 +4,7 @@
 use std::io::{self, BufRead, Read, Write};
 use wasmtime::*;
 
-use crossterm::event::{Event, KeyCode, KeyEventKind, read};
+use crossterm::event::{read, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use super::memory::write_string_to_memory;
@@ -25,7 +25,7 @@ pub fn link_console_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "consoleReadLine",
-        |mut caller: Caller<'_, ()>| -> i32 {
+        |mut caller: Caller<'_, ()>| -> Result<i32> {
             let mut line = String::new();
             let stdin = io::stdin();
             let _ = stdin.lock().read_line(&mut line);

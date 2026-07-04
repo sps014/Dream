@@ -1,0 +1,37 @@
+// Generic interface default methods: a default body is inherited by implementers of a *generic*
+// interface, with the interface's type parameter substituted from the `implements` clause. `Box<T>`
+// keeps it generic (T is the class's own parameter, monomorphized per instantiation); `IntBox` binds
+// it to `int`. `firstOr`'s signature uses the type parameter (`fallback: T`), so it exercises the
+// signature substitution; `count` does not.
+
+interface Container<T> {
+    fun get(): T;
+    public fun firstOr(fallback: T): T {
+        return this.get();
+    }
+    public fun count(): int {
+        return 1;
+    }
+}
+
+class Box<T> : Container<T> {
+    public value: T;
+    constructor(value: T) { this.value = value; }
+    public fun get(): T { return this.value; }
+}
+
+class IntBox : Container<int> {
+    public value: int;
+    constructor(value: int) { this.value = value; }
+    public fun get(): int { return this.value; }
+}
+
+fun main(): void {
+    let b = Box<int>(7);
+    System.println(b.firstOr(9));
+    System.println(b.count());
+
+    let a = IntBox(42);
+    System.println(a.firstOr(9));
+    System.println(a.count());
+}

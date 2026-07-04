@@ -83,7 +83,10 @@ mod tests {
         let b = defs.intern(DefKind::Struct, "Point", vec![]);
         assert_eq!(a, b);
         let f = defs.intern(DefKind::Function, "Point", vec![]);
-        assert_ne!(a, f, "different DefKinds with the same name are distinct defs");
+        assert_ne!(
+            a, f,
+            "different DefKinds with the same name are distinct defs"
+        );
     }
 
     #[test]

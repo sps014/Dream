@@ -6,11 +6,11 @@ use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::types::{is_numeric_primitive, mangle_generic, strip_nullable};
-use crate::types::method_fn;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
-use crate::text::text_span::TextSpan;
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::text::text_span::TextSpan;
+use crate::types::method_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -28,21 +28,33 @@ impl<'a> Analyzer<'a> {
                 Ok(number.clone())
             }
             ExpressionNode::ArrayLiteral(elements) => {
+                // The element type expected for this literal, taken from the surrounding array-typed
+                // context (`let xs: int[] = ...`, `return ...`, an argument slot, a field, etc.). It
+                // is threaded down into each element so nested empty literals (`int[][] = [[]]`) and
+                // empty elements infer their element type instead of falling through as untyped.
+                let expected_elem = match &self.current_expected_type {
+                    Some(Type::Array(elem)) => Some((**elem).clone()),
+                    _ => None,
+                };
+
                 if elements.is_empty() {
-                    // The element type comes from the surrounding annotation (`let xs: int[] = [];`),
-                    // published as the expected type. Without one, the literal is untyped: reject it.
-                    if let Some(Type::Array(elem)) = self.current_expected_type.clone() {
+                    // With an array-typed context the empty literal takes that element type; without
+                    // one it is genuinely ambiguous (nothing to infer from), so reject it clearly.
+                    if let Some(elem) = expected_elem {
                         self.hir_set_empty_array(&elem);
-                        return Ok(Type::Array(elem));
+                        return Ok(Type::Array(Box::new(elem)));
                     }
                     self.hir_none();
+                    self.hir_fail();
                     diagnostics.report_error(
-                        "Empty array literals are not supported yet".to_string(),
-                        None,
+                        "cannot infer the element type of an empty array literal; add an array type annotation, e.g. `let xs: int[] = [];`".to_string(),
+                        expression.position(),
                     );
                     return Ok(Type::Array(Box::new(Type::Void)));
                 }
 
+                let saved_expected = self.current_expected_type.take();
+                self.current_expected_type = expected_elem;
                 let first_type = self.analyze_expression(
                     &elements[0],
                     parent_function,
@@ -57,6 +69,7 @@ impl<'a> Analyzer<'a> {
                     elem_hirs.push(self.hir_take());
                     self.compare_data_type(&first_type, &element_type, &empty_span(), diagnostics)?;
                 }
+                self.current_expected_type = saved_expected;
 
                 let array_type = Type::Array(Box::new(first_type));
                 self.hir_set_array_lit(elem_hirs, &array_type);
@@ -82,7 +95,12 @@ impl<'a> Analyzer<'a> {
                     )?;
                     let key_hir = self.hir_take();
                     let _ = key_type;
-                    self.desugar_js_index_get(array_hir, key_hir, index_expr.position(), diagnostics);
+                    self.desugar_js_index_get(
+                        array_hir,
+                        key_hir,
+                        index_expr.position(),
+                        diagnostics,
+                    );
                     return Ok(Self::js_type());
                 }
 
@@ -216,8 +234,9 @@ impl<'a> Analyzer<'a> {
             ExpressionNode::IsExpression(left, right_type, _binding) => {
                 // `is` always evaluates to a bool. A concrete static operand folds to a compile-time
                 // result; an `object` or interface-typed operand emits a runtime `$object_tag`
-                // comparison. (The optional `_binding` is only meaningful inside an `if` condition,
-                // where `statements.rs` flow-types it into the then-branch; a bare `is` ignores it.)
+                // comparison. (The optional `_binding` is handled by the statement layer — `if`/
+                // `while` conditions and top-level `&&` chains, see `statements.rs` — which flow-types
+                // it into the guarded branch/body; the expression itself ignores the binding here.)
                 let left_type =
                     self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
                 let left_hir = self.hir_take();
@@ -288,8 +307,13 @@ impl<'a> Analyzer<'a> {
             }
             ExpressionNode::Cast(target_type, expr) => {
                 // `analyze_cast` records the cast's HIR itself.
-                let t = self
-                    .analyze_cast(target_type, expr, parent_function, symbol_table, diagnostics)?;
+                let t = self.analyze_cast(
+                    target_type,
+                    expr,
+                    parent_function,
+                    symbol_table,
+                    diagnostics,
+                )?;
                 Ok(t)
             }
             ExpressionNode::MethodCall(obj, method, generic_args, params) => {
@@ -351,51 +375,40 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        match self.resolve_hook_method(obj_type, "get", 1, diagnostics) {
-            super::calls::HookResolution::Eligible(info) => {
-                if matches!(info.return_type, None | Some(Type::Void)) {
-                    self.hir_fail();
-                    self.hir_none();
-                    diagnostics.report_error(
-                        format!(
-                            "type '{}' has no indexer: its 'get' must return a value",
-                            obj_type.get_type()
-                        ),
-                        array_expr.position(),
-                    );
-                    return Ok(Type::Unknown);
-                }
-                let get_tok = synthetic_token(TokenKind::IdentifierToken, "get");
-                let call = ExpressionNode::MethodCall(
-                    array_expr,
-                    get_tok,
-                    None,
-                    vec![(*index_expr).clone()],
-                );
-                self.analyze_expression(&call, parent_function, symbol_table, diagnostics)
-            }
-            super::calls::HookResolution::Ineligible(reason) => {
-                self.hir_fail();
-                self.hir_none();
-                diagnostics.report_error(
-                    format!("type '{}' cannot be indexed: {}", obj_type.get_type(), reason),
-                    array_expr.position(),
-                );
-                Ok(Type::Unknown)
-            }
-            super::calls::HookResolution::Absent => {
-                self.hir_fail();
-                self.hir_none();
-                diagnostics.report_error(
-                    format!(
-                        "type '{}' has no indexer (define 'public fun get(index): T' to allow obj[index])",
-                        obj_type.get_type()
-                    ),
-                    array_expr.position(),
-                );
-                Ok(Type::Unknown)
-            }
+        let info = match self.resolve_hook_or_diagnose(
+            obj_type,
+            "get",
+            1,
+            array_expr.position(),
+            true,
+            diagnostics,
+            |reason| format!("type '{}' cannot be indexed: {}", obj_type.get_type(), reason),
+            || {
+                format!(
+                    "type '{}' has no indexer (define 'public fun get(index): T' to allow obj[index])",
+                    obj_type.get_type()
+                )
+            },
+        ) {
+            Some(info) => info,
+            None => return Ok(Type::Unknown),
+        };
+        if matches!(info.return_type, None | Some(Type::Void)) {
+            self.hir_fail();
+            self.hir_none();
+            diagnostics.report_error(
+                format!(
+                    "type '{}' has no indexer: its 'get' must return a value",
+                    obj_type.get_type()
+                ),
+                array_expr.position(),
+            );
+            return Ok(Type::Unknown);
         }
+        let get_tok = synthetic_token(TokenKind::IdentifierToken, "get");
+        let call =
+            ExpressionNode::MethodCall(array_expr, get_tok, None, vec![(*index_expr).clone()]);
+        self.analyze_expression(&call, parent_function, symbol_table, diagnostics)
     }
 
     /// Types a member access `obj.member`: discriminated-union unit-variant construction
@@ -476,8 +489,7 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let obj_type =
-            self.analyze_expression(obj, parent_function, symbol_table, diagnostics)?;
+        let obj_type = self.analyze_expression(obj, parent_function, symbol_table, diagnostics)?;
         let obj_hir = self.hir_take();
 
         // The receiver was already poisoned by an earlier error: stay quiet and stay poison.
@@ -507,12 +519,7 @@ impl<'a> Analyzer<'a> {
             }
         };
 
-        self.ensure_struct_instantiated(
-            &base_name,
-            &generic_args,
-            &member.position,
-            diagnostics,
-        );
+        self.ensure_struct_instantiated(&base_name, &generic_args, &member.position, diagnostics);
         let struct_name = mangle_generic(&base_name, &generic_args);
 
         let field = match self.struct_table.get_struct(&struct_name) {
@@ -537,8 +544,10 @@ impl<'a> Analyzer<'a> {
                 // the (internally named) getter method. The call carries its own privacy/type check.
                 let getter = method_fn(&struct_name, &getter_member_name(&member.text));
                 if self.function_table.get_function(&getter).is_ok() {
-                    let get_tok =
-                        synthetic_token(TokenKind::IdentifierToken, &getter_member_name(&member.text));
+                    let get_tok = synthetic_token(
+                        TokenKind::IdentifierToken,
+                        &getter_member_name(&member.text),
+                    );
                     let call = ExpressionNode::MethodCall(obj, get_tok, None, vec![]);
                     return self.analyze_expression(
                         &call,
@@ -600,12 +609,7 @@ impl<'a> Analyzer<'a> {
             core_target = inner;
         }
         if let Some((base_name, generic_args)) = Self::resolve_struct_parts(core_target) {
-            self.ensure_struct_instantiated(
-                &base_name,
-                &generic_args,
-                &empty_span(),
-                diagnostics,
-            );
+            self.ensure_struct_instantiated(&base_name, &generic_args, &empty_span(), diagnostics);
         }
 
         // The cast yields `target_type` regardless of whether the conversion is allowed (a
@@ -730,7 +734,10 @@ impl<'a> Analyzer<'a> {
         // that implements `Equatable<Self>`, dispatch to its `equals` method (a static call),
         // negating the result for `!=`. Primitives, strings, and null comparisons keep the built-in
         // behavior handled above/below.
-        if matches!(opr.kind, TokenKind::EqualEqualToken | TokenKind::NotEqualToken) {
+        if matches!(
+            opr.kind,
+            TokenKind::EqualEqualToken | TokenKind::NotEqualToken
+        ) {
             if let Some(equals_fn) = self.equatable_equals_fn(&left_value) {
                 let bool_ty = Type::Boolean(opr.clone());
                 self.hir_set_method_call(left_hir, &equals_fn, vec![right_hir], &bool_ty);
@@ -863,8 +870,7 @@ impl<'a> Analyzer<'a> {
                 // A generic function used as a value (`let cmp: fun(T, T): int = natural_order;`):
                 // infer its type arguments from the expected function type and instantiate it.
                 if self.generic_functions.contains_key(&id.text) {
-                    if let Some(func_ty) =
-                        self.instantiate_generic_function_value(id, diagnostics)
+                    if let Some(func_ty) = self.instantiate_generic_function_value(id, diagnostics)
                     {
                         return Ok(func_ty);
                     }

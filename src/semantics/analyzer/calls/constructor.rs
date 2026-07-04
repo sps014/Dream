@@ -6,10 +6,10 @@ use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::types::mangle_generic;
-use crate::types::constructor_fn;
 use crate::syntax::nodes::{FunctionNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::types::constructor_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -108,6 +108,4 @@ impl<'a> Analyzer<'a> {
             None,
         ))
     }
-
-
 }

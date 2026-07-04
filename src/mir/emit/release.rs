@@ -133,8 +133,11 @@ pub(super) fn emit_release_funcs(
         // Only the active variant's payload is valid, so switch on the discriminant (offset 0).
         out.push_str("    (local.get $ptr) (i32.load) (local.set $d)\n");
         for v in &layout.variants {
-            let ref_fields: Vec<&crate::hir::FieldLayout> =
-                v.fields.iter().filter(|f| interner.is_reference(f.ty)).collect();
+            let ref_fields: Vec<&crate::hir::FieldLayout> = v
+                .fields
+                .iter()
+                .filter(|f| interner.is_reference(f.ty))
+                .collect();
             if ref_fields.is_empty() {
                 continue;
             }
@@ -193,7 +196,9 @@ pub(super) fn emit_release_funcs(
             continue;
         }
         let _ = writeln!(out, "(func $release_array_t{} (param $ptr i32)", elem.0);
-        out.push_str("  (local $rc i32) (local $nc i32) (local $len i32) (local $i i32) (local $elem i32)\n");
+        out.push_str(
+            "  (local $rc i32) (local $nc i32) (local $len i32) (local $i i32) (local $elem i32)\n",
+        );
         emit_release_prologue(out);
         if is_ref {
             out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
@@ -206,10 +211,14 @@ pub(super) fn emit_release_funcs(
                 "      (local.get $elem) (if (then (local.get $elem) (call {})))",
                 release_call(interner, &mir.layouts, elem)
             );
-            out.push_str("      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n");
+            out.push_str(
+                "      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n",
+            );
         } else if value_glue.contains(&interner.strip_nullable(elem)) {
             // Drop each inline element (stride = its inline size) via `$__vs_drop_<T>` at its address.
-            let name = mir.layouts.structs[&interner.strip_nullable(elem)].name.clone();
+            let name = mir.layouts.structs[&interner.strip_nullable(elem)]
+                .name
+                .clone();
             let (stride, _) = crate::hir::scalar_size(interner, elem);
             out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
             out.push_str("    (i32.const 0) (local.set $i)\n");
@@ -221,7 +230,9 @@ pub(super) fn emit_release_funcs(
                 stride,
                 vs_drop_sym(&name)
             );
-            out.push_str("      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n");
+            out.push_str(
+                "      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n",
+            );
         }
         out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
     }

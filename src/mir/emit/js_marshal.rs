@@ -112,7 +112,12 @@ fn addr_at(base: &str, off: u32) -> String {
 
 /// WAT that consumes nothing and pushes a `js` handle for the value of type `ty` living at `addr`
 /// (a WAT snippet pushing the value's *address*). `None` when `ty` is not marshalable.
-fn value_to_js(interner: &TypeInterner, mir: &crate::mir::Mir, addr: &str, ty: TypeId) -> Option<String> {
+fn value_to_js(
+    interner: &TypeInterner,
+    mir: &crate::mir::Mir,
+    addr: &str,
+    ty: TypeId,
+) -> Option<String> {
     let s = interner.strip_nullable(ty);
     let load = load_instr_for(interner, ty);
     match interner.kind(s) {
@@ -120,14 +125,20 @@ fn value_to_js(interner: &TypeInterner, mir: &crate::mir::Mir, addr: &str, ty: T
             let (pre, boxm) = box_prim(*p);
             Some(format!("{addr} ({load}) {pre} (call {})", bridge_sym(boxm)))
         }
-        TyKind::Enum(_) => Some(format!("{addr} ({load}) (call {})", bridge_sym("__box_int"))),
+        TyKind::Enum(_) => Some(format!(
+            "{addr} ({load}) (call {})",
+            bridge_sym("__box_int")
+        )),
         TyKind::Js => Some(format!("{addr} ({load})")),
         TyKind::Array(elem) if is_marshalable(interner, *elem) => {
             Some(format!("{addr} ({load}) (call {})", array_to_js_sym(*elem)))
         }
         TyKind::Struct(..) if interner.is_reference(s) => {
             let name = struct_name(mir, s)?;
-            Some(format!("{addr} ({load}) (call {})", struct_to_js_sym(&name)))
+            Some(format!(
+                "{addr} ({load}) (call {})",
+                struct_to_js_sym(&name)
+            ))
         }
         // A nested *value* struct is stored inline: pass its address (no load) to the marshaler.
         TyKind::Struct(..) => {
@@ -140,7 +151,12 @@ fn value_to_js(interner: &TypeInterner, mir: &crate::mir::Mir, addr: &str, ty: T
 
 /// WAT that consumes nothing and pushes the Dream value of type `ty` decoded from the `js` handle
 /// produced by `jsval` (a WAT snippet pushing that handle). `None` when `ty` is not marshalable.
-fn value_from_js(interner: &TypeInterner, mir: &crate::mir::Mir, jsval: &str, ty: TypeId) -> Option<String> {
+fn value_from_js(
+    interner: &TypeInterner,
+    mir: &crate::mir::Mir,
+    jsval: &str,
+    ty: TypeId,
+) -> Option<String> {
     let s = interner.strip_nullable(ty);
     match interner.kind(s) {
         TyKind::Prim(p) => {
@@ -168,7 +184,11 @@ fn emit_struct_to_js(
     mir: &crate::mir::Mir,
     strings: &IndexMap<String, u32>,
 ) {
-    let _ = writeln!(out, "(func {} (param $this i32) (result i32)", struct_to_js_sym(&layout.name));
+    let _ = writeln!(
+        out,
+        "(func {} (param $this i32) (result i32)",
+        struct_to_js_sym(&layout.name)
+    );
     out.push_str("  (local $o i32)\n");
     let _ = writeln!(out, "  (call {}) (local.set $o)", bridge_sym("object"));
     for f in &layout.fields {
@@ -198,7 +218,11 @@ fn emit_js_to_struct(
     tags: &HashMap<TypeId, i32>,
 ) {
     let tag = tags.get(&ty).copied().unwrap_or(0);
-    let _ = writeln!(out, "(func {} (param $j i32) (result i32)", js_to_struct_sym(&layout.name));
+    let _ = writeln!(
+        out,
+        "(func {} (param $j i32) (result i32)",
+        js_to_struct_sym(&layout.name)
+    );
     out.push_str("  (local $o i32)\n");
     let _ = writeln!(
         out,
@@ -207,28 +231,43 @@ fn emit_js_to_struct(
     );
     for f in &layout.fields {
         let dst = addr_at("(local.get $o)", f.offset);
-        let jsval =
-            format!("(local.get $j) (i32.const {}) (call {})", strings[&f.name], bridge_sym("__get"));
+        let jsval = format!(
+            "(local.get $j) (i32.const {}) (call {})",
+            strings[&f.name],
+            bridge_sym("__get")
+        );
         if let Some(val) = value_from_js(interner, mir, &jsval, f.ty) {
             let store = store_instr_for(interner, f.ty);
             let _ = writeln!(out, "  {dst} {val} ({store})");
         } else {
             // Skipped field: zero its whole footprint (memory.fill: dst, value, len).
             let (size, _) = scalar_size(interner, f.ty);
-            let _ = writeln!(out, "  {dst} (i32.const 0) (i32.const {size}) (memory.fill)");
+            let _ = writeln!(
+                out,
+                "  {dst} (i32.const 0) (i32.const {size}) (memory.fill)"
+            );
         }
     }
     out.push_str("  (local.get $o)\n)\n");
 }
 
 /// `$array_to_js_t<id>`: a Dream `elem[]` -> a JS array, deep-copying each element.
-fn emit_array_to_js(out: &mut String, elem: TypeId, interner: &TypeInterner, mir: &crate::mir::Mir) {
+fn emit_array_to_js(
+    out: &mut String,
+    elem: TypeId,
+    interner: &TypeInterner,
+    mir: &crate::mir::Mir,
+) {
     let (esize, _) = scalar_size(interner, elem);
     let addr = format!(
         "(local.get $arr) (i32.const 4) (i32.add) (local.get $i) (i32.const {esize}) (i32.mul) (i32.add)"
     );
     let val = value_to_js(interner, mir, &addr, elem).expect("array element is marshalable");
-    let _ = writeln!(out, "(func {} (param $arr i32) (result i32)", array_to_js_sym(elem));
+    let _ = writeln!(
+        out,
+        "(func {} (param $arr i32) (result i32)",
+        array_to_js_sym(elem)
+    );
     out.push_str("  (local $o i32) (local $i i32) (local $n i32)\n");
     let _ = writeln!(out, "  (call {}) (local.set $o)", bridge_sym("array"));
     out.push_str("  (local.get $arr) (i32.load) (local.set $n)\n");
@@ -261,7 +300,11 @@ fn emit_js_to_array(
         bridge_sym("__index_get")
     );
     let val = value_from_js(interner, mir, &jsval, elem).expect("array element is marshalable");
-    let _ = writeln!(out, "(func {} (param $j i32) (result i32)", js_to_array_sym(elem));
+    let _ = writeln!(
+        out,
+        "(func {} (param $j i32) (result i32)",
+        js_to_array_sym(elem)
+    );
     out.push_str("  (local $o i32) (local $i i32) (local $n i32)\n");
     let _ = writeln!(
         out,

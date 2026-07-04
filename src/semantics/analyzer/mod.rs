@@ -8,11 +8,11 @@ use crate::syntax::nodes::types::{mangle_with_suffixes, primitive_type, FUTURE_T
 use crate::syntax::nodes::{EnumDeclarationNode, ExtendNode};
 use crate::syntax::nodes::{FunctionNode, ProgramNode, Type};
 use crate::syntax::syntax_tree::SyntaxTree;
-use crate::types::{DefKind, TypeCtx};
-use crate::text::line_text::LineText;
-use crate::text::text_span::TextSpan;
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::text::line_text::LineText;
+use crate::text::text_span::TextSpan;
+use crate::types::{DefKind, TypeCtx};
 use bumpalo::Bump;
 use indexmap::IndexMap;
 use std::cell::RefCell;
@@ -26,7 +26,10 @@ mod expressions;
 mod generics;
 mod hir_emit;
 mod js_interop;
+mod register_interfaces;
+mod register_methods;
 mod statements;
+mod switch_exhaustiveness;
 mod switch_unions;
 mod type_checker;
 
@@ -40,7 +43,11 @@ fn file_path_string(file_path: &Option<Rc<str>>) -> Option<String> {
 /// failing analysis site can `return Err(report(diagnostics, msg, span))` in a single step. The
 /// pushed diagnostic is what the user sees; the returned error drives `?`-based short-circuiting of
 /// the rest of the offending expression.
-fn report(diagnostics: &mut DiagnosticBag, message: String, span: Option<TextSpan>) -> SemanticError {
+fn report(
+    diagnostics: &mut DiagnosticBag,
+    message: String,
+    span: Option<TextSpan>,
+) -> SemanticError {
     diagnostics.report_error(message.clone(), span);
     SemanticError::reported(message, span)
 }
@@ -61,7 +68,7 @@ fn synthetic_token(kind: TokenKind, text: &str) -> SyntaxToken {
 /// zipping declared generic parameters with the supplied concrete arguments. Extra
 /// parameters or arguments beyond the common length are ignored (arity is validated
 /// separately so a clear diagnostic is produced).
-fn generic_bindings(params: &[SyntaxToken], args: &[Type]) -> GenericBindings {
+pub(crate) fn generic_bindings(params: &[SyntaxToken], args: &[Type]) -> GenericBindings {
     params
         .iter()
         .zip(args.iter())
@@ -103,7 +110,7 @@ fn substitute_generic_token(token: &SyntaxToken, bindings: &GenericBindings) -> 
 /// its bound concrete type. Unlike `substitute_generic_token` (which only understands `T`, `T[]`,
 /// `T?` on a flat token), this recurses through arrays, nullables, generic arguments, and function
 /// types, so a field like `List<T>` becomes `List<JsonValue>` rather than being flattened.
-fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> Type {
+pub(crate) fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> Type {
     match ty {
         Type::Array(inner) => Type::Array(Box::new(substitute_generic_type(inner, bindings))),
         Type::Nullable(inner) => Type::Nullable(Box::new(substitute_generic_type(inner, bindings))),
@@ -457,5 +464,5 @@ impl<'a> Analyzer<'a> {
 }
 
 #[cfg(test)]
-#[path = "../tests/analyzer_tests.rs"]
+#[path = "../tests/mod.rs"]
 mod tests;

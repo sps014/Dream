@@ -264,7 +264,10 @@ impl TypeInterner {
     /// Iterates every interned type as `(id, kind)` in interning order (deterministic). Used by the
     /// backend to enumerate, e.g., all function types that need a `call_indirect` signature.
     pub fn iter_kinds(&self) -> impl Iterator<Item = (TypeId, &TyKind)> {
-        self.kinds.iter().enumerate().map(|(i, k)| (TypeId(i as u32), k))
+        self.kinds
+            .iter()
+            .enumerate()
+            .map(|(i, k)| (TypeId(i as u32), k))
     }
 
     pub fn len(&self) -> usize {

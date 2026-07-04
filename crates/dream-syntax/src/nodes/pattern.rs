@@ -1,6 +1,6 @@
 use super::types::Type;
-use dream_text::text_span::TextSpan;
 use crate::token::syntax_token::SyntaxToken;
+use dream_text::text_span::TextSpan;
 
 /// A pattern matched by a `match` arm. Patterns may nest (a variant's sub-patterns are themselves
 /// patterns), enabling forms like `Pair(Some(x), None)`.

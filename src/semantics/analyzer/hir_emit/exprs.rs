@@ -84,7 +84,12 @@ impl<'a> Analyzer<'a> {
 
     /// Records the HIR for a unary expression. Unary `+` is the identity (passes the operand
     /// through); `-` and `!` map to [`UnOp::Neg`]/[`UnOp::Not`].
-    pub(in crate::semantics::analyzer) fn hir_set_unary(&mut self, opr: &SyntaxToken, operand: Option<HExpr>, result_ty: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_unary(
+        &mut self,
+        opr: &SyntaxToken,
+        operand: Option<HExpr>,
+        result_ty: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -194,7 +199,11 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records the HIR for a cast `expr as T`; `target_ty` is the cast's result type.
-    pub(in crate::semantics::analyzer) fn hir_set_cast(&mut self, inner: Option<HExpr>, target_ty: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_cast(
+        &mut self,
+        inner: Option<HExpr>,
+        target_ty: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -207,7 +216,11 @@ impl<'a> Analyzer<'a> {
 
     /// Records the HIR for a non-empty array literal. `result_ty` is the array type (`T[]`); the
     /// element type is taken from it. Fails if any element was not representable.
-    pub(in crate::semantics::analyzer) fn hir_set_array_lit(&mut self, elems: Vec<Option<HExpr>>, result_ty: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_array_lit(
+        &mut self,
+        elems: Vec<Option<HExpr>>,
+        result_ty: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -243,7 +256,12 @@ impl<'a> Analyzer<'a> {
     /// `DefId`; if it is not a registered (non-generic, non-overloaded) function or any argument is
     /// not representable, the call is dropped from coverage (the function falls back to the legacy
     /// path).
-    pub(in crate::semantics::analyzer) fn hir_set_call(&mut self, name: &str, args: Vec<Option<HExpr>>, ret: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_call(
+        &mut self,
+        name: &str,
+        args: Vec<Option<HExpr>>,
+        ret: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -281,7 +299,12 @@ impl<'a> Analyzer<'a> {
     /// or passing `foo` to a `fun(...)` parameter) becomes a `Binding::Func` carrying the resolved def
     /// and signature, typed as the function type so the backend can materialize its table index. Drops
     /// coverage if the name is not a registered function def.
-    pub(in crate::semantics::analyzer) fn hir_set_func_value(&mut self, name: &str, func_ty: &Type, ret: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_func_value(
+        &mut self,
+        name: &str,
+        func_ty: &Type,
+        ret: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -294,7 +317,11 @@ impl<'a> Analyzer<'a> {
         let ret_ty = self.type_ctx.lower(ret);
         self.hir.last = Some(HExpr::new(
             tid,
-            HExprKind::Var(Binding::Func(Callee { def, instance: vec![], ret: ret_ty })),
+            HExprKind::Var(Binding::Func(Callee {
+                def,
+                instance: vec![],
+                ret: ret_ty,
+            })),
         ));
     }
 
@@ -321,14 +348,23 @@ impl<'a> Analyzer<'a> {
         let ret_ty = self.type_ctx.lower(ret);
         self.hir.last = Some(HExpr::new(
             tid,
-            HExprKind::Var(Binding::Func(Callee { def, instance, ret: ret_ty })),
+            HExprKind::Var(Binding::Func(Callee {
+                def,
+                instance,
+                ret: ret_ty,
+            })),
         ));
     }
 
     /// Records an indirect call `f(args)` where `f` is a function-typed local: the target reads the
     /// local (whose value is a function-table index) and the call dispatches through it. Drops coverage
     /// if the name is not a known local or any argument is not representable.
-    pub(in crate::semantics::analyzer) fn hir_set_indirect_call(&mut self, name: &str, args: Vec<Option<HExpr>>, ret: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_indirect_call(
+        &mut self,
+        name: &str,
+        args: Vec<Option<HExpr>>,
+        ret: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -351,7 +387,10 @@ impl<'a> Analyzer<'a> {
         let target = HExpr::new(ty, HExprKind::Var(Binding::Local(local)));
         self.hir.last = Some(HExpr::new(
             ret_ty,
-            HExprKind::IndirectCall { target: Box::new(target), args: collected },
+            HExprKind::IndirectCall {
+                target: Box::new(target),
+                args: collected,
+            },
         ));
     }
 
@@ -401,7 +440,11 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records the HIR for an enum-member reference (`Enum.Member`) resolved to its integer value.
-    pub(in crate::semantics::analyzer) fn hir_set_enum_value(&mut self, value: i64, enum_ty: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_enum_value(
+        &mut self,
+        value: i64,
+        enum_ty: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -412,7 +455,12 @@ impl<'a> Analyzer<'a> {
 
     /// Records the HIR for a struct field read `obj.field`; `field` is the resolved field index
     /// (offset order). Fails over to the legacy path if the receiver was not representable.
-    pub(in crate::semantics::analyzer) fn hir_set_field(&mut self, obj: Option<HExpr>, field: usize, field_ty: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_field(
+        &mut self,
+        obj: Option<HExpr>,
+        field: usize,
+        field_ty: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -617,7 +665,11 @@ impl<'a> Analyzer<'a> {
     /// numerics and `bool` route through the in-wasm `*_to_string` runtime before `$print_string`.
     /// Non-scalar (object/struct/array) arguments still need the object-protocol `to_string` and so
     /// drop the enclosing function out of HIR coverage until that runtime lands.
-    pub(in crate::semantics::analyzer) fn hir_set_print(&mut self, arg: Option<HExpr>, newline: bool) {
+    pub(in crate::semantics::analyzer) fn hir_set_print(
+        &mut self,
+        arg: Option<HExpr>,
+        newline: bool,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -632,7 +684,13 @@ impl<'a> Analyzer<'a> {
         // union, array, `object`) renders through the backend's tag-dispatching `$print_object`.
         let printable = matches!(
             self.type_ctx.interner.kind(base),
-            TyKind::Prim(_) | TyKind::Enum(_) | TyKind::Struct(..) | TyKind::Union(..) | TyKind::Array(_) | TyKind::Object | TyKind::Interface(..)
+            TyKind::Prim(_)
+                | TyKind::Enum(_)
+                | TyKind::Struct(..)
+                | TyKind::Union(..)
+                | TyKind::Array(_)
+                | TyKind::Object
+                | TyKind::Interface(..)
         );
         if !printable {
             self.hir.ok = false;
@@ -642,7 +700,10 @@ impl<'a> Analyzer<'a> {
         let void = self.type_ctx.interner.void();
         self.hir.last = Some(HExpr::new(
             void,
-            HExprKind::Print { arg: Box::new(arg), newline },
+            HExprKind::Print {
+                arg: Box::new(arg),
+                newline,
+            },
         ));
     }
 
@@ -658,7 +719,9 @@ impl<'a> Analyzer<'a> {
             Some(e) => {
                 let int = self.type_ctx.interner.int();
                 let is_string = matches!(
-                    self.type_ctx.interner.kind(self.type_ctx.interner.strip_nullable(e.ty)),
+                    self.type_ctx
+                        .interner
+                        .kind(self.type_ctx.interner.strip_nullable(e.ty)),
                     TyKind::Prim(PrimTy::String)
                 );
                 let kind = if is_string {
@@ -684,7 +747,11 @@ impl<'a> Analyzer<'a> {
 
     /// Records a runtime type test `value is target` (typed `bool`) for an `object`-typed operand:
     /// the backend compares the value's runtime tag against `target`'s. Fails if `value` was dropped.
-    pub(in crate::semantics::analyzer) fn hir_set_is_type(&mut self, value: Option<HExpr>, target: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_is_type(
+        &mut self,
+        value: Option<HExpr>,
+        target: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -694,7 +761,10 @@ impl<'a> Analyzer<'a> {
         self.hir.last = value.map(|v| {
             HExpr::new(
                 bool_ty,
-                HExprKind::IsType { value: Box::new(v), target: target_ty },
+                HExprKind::IsType {
+                    value: Box::new(v),
+                    target: target_ty,
+                },
             )
         });
     }
@@ -759,7 +829,11 @@ impl<'a> Analyzer<'a> {
     /// Records a C-style enum's `to_string()` (typed `string`): the backend maps the receiver's
     /// discriminant to its interned variant-name string via `arms` (`(discriminant, name)` for
     /// every member).
-    pub(in crate::semantics::analyzer) fn hir_set_enum_name(&mut self, recv: Option<HExpr>, arms: Vec<(i64, String)>) {
+    pub(in crate::semantics::analyzer) fn hir_set_enum_name(
+        &mut self,
+        recv: Option<HExpr>,
+        arms: Vec<(i64, String)>,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -825,7 +899,11 @@ impl<'a> Analyzer<'a> {
         self.hir_set_array_new(elem_ty, Some(zero));
     }
 
-    pub(in crate::semantics::analyzer) fn hir_set_array_new(&mut self, elem_ty: &Type, len: Option<HExpr>) {
+    pub(in crate::semantics::analyzer) fn hir_set_array_new(
+        &mut self,
+        elem_ty: &Type,
+        len: Option<HExpr>,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -848,7 +926,11 @@ impl<'a> Analyzer<'a> {
 
     /// Records `recv.char_at(idx)` (typed `char`): a runtime `$char_at` read. Drops out of coverage
     /// if either the receiver or the index is not representable.
-    pub(in crate::semantics::analyzer) fn hir_set_char_at(&mut self, recv: Option<HExpr>, idx: Option<HExpr>) {
+    pub(in crate::semantics::analyzer) fn hir_set_char_at(
+        &mut self,
+        recv: Option<HExpr>,
+        idx: Option<HExpr>,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -866,7 +948,11 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records `await e` used as a value (carrying the awaited future's inner type).
-    pub(in crate::semantics::analyzer) fn hir_set_await(&mut self, inner: Option<HExpr>, inner_ty: &Type) {
+    pub(in crate::semantics::analyzer) fn hir_set_await(
+        &mut self,
+        inner: Option<HExpr>,
+        inner_ty: &Type,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
@@ -881,7 +967,11 @@ impl<'a> Analyzer<'a> {
     }
     /// Sets `last` to a read of an already-allocated local (used by the match-expression desugar to
     /// yield the result temporary as the match's value).
-    pub(in crate::semantics::analyzer) fn hir_set_local_read(&mut self, local: LocalId, ty: TypeId) {
+    pub(in crate::semantics::analyzer) fn hir_set_local_read(
+        &mut self,
+        local: LocalId,
+        ty: TypeId,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;

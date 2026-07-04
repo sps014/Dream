@@ -9,16 +9,18 @@ use crate::mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
 
 use super::memory::{read_arg_bytes, read_arg_string, write_bytes_to_memory};
 
-/// Calls an exported function on the caller's module by name with the given typed signature.
-fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) {
+/// Calls an exported function on the caller's module by name with the given typed signature. A
+/// missing export, signature mismatch, or failed call becomes a wasm trap (propagated `Err`) rather
+/// than aborting the host process.
+fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) -> Result<()> {
     let func = caller
         .get_export(name)
         .and_then(Extern::into_func)
-        .unwrap_or_else(|| panic!("module must export `{}`", name))
+        .ok_or_else(|| Error::msg(format!("module must export `{}`", name)))?
         .typed::<(i32, i32), ()>(&*caller)
-        .unwrap_or_else(|_| panic!("unexpected `{}` signature", name));
-    func.call(&mut *caller, (a, b))
-        .unwrap_or_else(|_| panic!("`{}` call failed", name));
+        .map_err(|_| Error::msg(format!("unexpected `{}` signature", name)))?;
+    func.call(&mut *caller, (a, b))?;
+    Ok(())
 }
 
 /// Bridges a synchronous (blocking) host result into Dream's async runtime, mirroring
@@ -26,19 +28,17 @@ fn call_export_2(caller: &mut Caller<'_, ()>, name: &str, a: i32, b: i32) {
 /// `__dream_new_future`, write `bytes` as a `char[]`, resolve the future via `__dream_resolve`, and
 /// return the future pointer. The future is already settled when the awaiting task inspects it, so
 /// the scheduler simply re-polls the waiter.
-fn resolve_host_future_bytes(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> i32 {
+fn resolve_host_future_bytes(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Result<i32> {
     let new_future = caller
         .get_export(abi::EXPORT_NEW_FUTURE)
         .and_then(Extern::into_func)
-        .expect("module must export `__dream_new_future`")
+        .ok_or_else(|| Error::msg("module must export `__dream_new_future`"))?
         .typed::<(i32, i32, i32), i32>(&*caller)
-        .expect("unexpected `__dream_new_future` signature");
-    let future = new_future
-        .call(&mut *caller, (F_SLOTS, HOST_POLL_INDEX, KIND_HOST))
-        .expect("`__dream_new_future` call failed");
-    let data_ptr = write_bytes_to_memory(caller, bytes);
-    call_export_2(caller, abi::EXPORT_RESOLVE, future, data_ptr);
-    future
+        .map_err(|_| Error::msg("unexpected `__dream_new_future` signature"))?;
+    let future = new_future.call(&mut *caller, (F_SLOTS, HOST_POLL_INDEX, KIND_HOST))?;
+    let data_ptr = write_bytes_to_memory(caller, bytes)?;
+    call_export_2(caller, abi::EXPORT_RESOLVE, future, data_ptr)?;
+    Ok(future)
 }
 
 /// Performs one blocking HTTP request and serializes the whole response into the wire format shared
@@ -107,11 +107,11 @@ pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
          method_ptr: i32,
          headers_ptr: i32,
          body_ptr: i32|
-         -> i32 {
-            let url = read_arg_string(&mut caller, url_ptr);
-            let method = read_arg_string(&mut caller, method_ptr);
-            let headers = read_arg_string(&mut caller, headers_ptr);
-            let body = read_arg_string(&mut caller, body_ptr).into_bytes();
+         -> Result<i32> {
+            let url = read_arg_string(&mut caller, url_ptr)?;
+            let method = read_arg_string(&mut caller, method_ptr)?;
+            let headers = read_arg_string(&mut caller, headers_ptr)?;
+            let body = read_arg_string(&mut caller, body_ptr)?.into_bytes();
             let response = perform_http(&method, &url, &headers, body);
             resolve_host_future_bytes(&mut caller, &response)
         },
@@ -125,11 +125,11 @@ pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
          method_ptr: i32,
          headers_ptr: i32,
          body_ptr: i32|
-         -> i32 {
-            let url = read_arg_string(&mut caller, url_ptr);
-            let method = read_arg_string(&mut caller, method_ptr);
-            let headers = read_arg_string(&mut caller, headers_ptr);
-            let body = read_arg_bytes(&mut caller, body_ptr);
+         -> Result<i32> {
+            let url = read_arg_string(&mut caller, url_ptr)?;
+            let method = read_arg_string(&mut caller, method_ptr)?;
+            let headers = read_arg_string(&mut caller, headers_ptr)?;
+            let body = read_arg_bytes(&mut caller, body_ptr)?;
             let response = perform_http(&method, &url, &headers, body);
             resolve_host_future_bytes(&mut caller, &response)
         },

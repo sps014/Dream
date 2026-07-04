@@ -3,9 +3,7 @@
 //! pass manager (one removal can expose another).
 
 use super::MirPass;
-use crate::mir::{
-    BlockId, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
-};
+use crate::mir::{BlockId, Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use crate::types::TypeInterner;
 use std::collections::HashSet;
 
@@ -160,7 +158,9 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         Rvalue::EnumName { value, .. } => read_operand(value, read),
         Rvalue::ArrayNew { len, .. } => read_operand(len, read),
         Rvalue::Unary(_, a) => read_operand(a, read),
-        Rvalue::Call { args, .. } | Rvalue::New { args, .. } | Rvalue::UnionNew { args, .. }
+        Rvalue::Call { args, .. }
+        | Rvalue::New { args, .. }
+        | Rvalue::UnionNew { args, .. }
         | Rvalue::ArrayLit { elems: args, .. } => args.iter().for_each(|a| read_operand(a, read)),
         Rvalue::IndirectCall { target, args } => {
             read_operand(target, read);
@@ -170,7 +170,12 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
             read_operand(receiver, read);
             args.iter().for_each(|a| read_operand(a, read));
         }
-        Rvalue::JsCall { target, method, args, .. } => {
+        Rvalue::JsCall {
+            target,
+            method,
+            args,
+            ..
+        } => {
             read_operand(target, read);
             if let Some(m) = method {
                 read_operand(m, read);
@@ -220,10 +225,16 @@ mod tests {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("f", i.int());
         let dead = b.new_temp(i.int());
-        b.assign(Place::Local(dead), Rvalue::Use(Operand::Const(Const::Int(99))));
+        b.assign(
+            Place::Local(dead),
+            Rvalue::Use(Operand::Const(Const::Int(99))),
+        );
         b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
         let mut func = b.finish();
         assert!(Dce.run(&mut func, &i));
-        assert!(func.blocks[0].stmts.is_empty(), "dead assignment should be removed");
+        assert!(
+            func.blocks[0].stmts.is_empty(),
+            "dead assignment should be removed"
+        );
     }
 }

@@ -33,7 +33,12 @@ impl TypeCtx {
         }
     }
 
-    pub fn register(&mut self, kind: DefKind, name: &str, generic_params: Vec<String>) -> super::DefId {
+    pub fn register(
+        &mut self,
+        kind: DefKind,
+        name: &str,
+        generic_params: Vec<String>,
+    ) -> super::DefId {
         self.nominal.insert(name.to_string(), kind);
         self.defs.intern(kind, name, generic_params)
     }
@@ -112,7 +117,10 @@ impl TypeCtx {
                 self.interner.nullable(i)
             }
             Type::Function(params, ret) => {
-                let ps = params.iter().map(|p| self.lower_with(p, bindings)).collect();
+                let ps = params
+                    .iter()
+                    .map(|p| self.lower_with(p, bindings))
+                    .collect();
                 let r = self.lower_with(ret, bindings);
                 self.interner.func(ps, r)
             }

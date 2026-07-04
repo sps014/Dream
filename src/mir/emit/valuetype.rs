@@ -237,7 +237,11 @@ pub(super) fn emit_value_glue(
             continue;
         }
         // `$__vs_retain_<T>(ptr)`: retain each reference field; recurse into value fields.
-        let _ = writeln!(out, "(func {} (param $ptr i32)", vs_retain_sym(&layout.name));
+        let _ = writeln!(
+            out,
+            "(func {} (param $ptr i32)",
+            vs_retain_sym(&layout.name)
+        );
         for f in &layout.fields {
             emit_field_glue(out, mir, interner, glue, f, GlueOp::Retain);
         }

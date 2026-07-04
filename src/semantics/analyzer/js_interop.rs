@@ -47,7 +47,11 @@ impl<'a> Analyzer<'a> {
         Some(HExpr::new(
             ret,
             HExprKind::Call {
-                callee: Callee { def, instance: vec![], ret },
+                callee: Callee {
+                    def,
+                    instance: vec![],
+                    ret,
+                },
                 args,
             },
         ))
@@ -96,10 +100,8 @@ impl<'a> Analyzer<'a> {
                     0 => self.js_bridge_call("func0", vec![e], js),
                     1 => self.js_bridge_call("func", vec![e], js),
                     n => {
-                        let arity = HExpr::new(
-                            self.type_ctx.interner.int(),
-                            HExprKind::IntLit(n as i64),
-                        );
+                        let arity =
+                            HExpr::new(self.type_ctx.interner.int(), HExprKind::IntLit(n as i64));
                         self.js_bridge_call("__funcN", vec![e, arity], js)
                     }
                 }
@@ -118,8 +120,10 @@ impl<'a> Analyzer<'a> {
         let target_stripped = self.type_ctx.interner.strip_nullable(target);
         // A reference struct/class target reconstructs from the JS object's properties via the
         // generated `$js_to_<Type>` marshaler that the `Cast` dispatches to.
-        if matches!(self.type_ctx.interner.kind(target_stripped), TyKind::Struct(..))
-            && self.type_ctx.interner.is_reference(target_stripped)
+        if matches!(
+            self.type_ctx.interner.kind(target_stripped),
+            TyKind::Struct(..)
+        ) && self.type_ctx.interner.is_reference(target_stripped)
         {
             return HExpr::new(target_stripped, HExprKind::Cast(Box::new(e)));
         }
@@ -174,7 +178,11 @@ impl<'a> Analyzer<'a> {
             // parameters. Any arity is marshalable through the slot buffer.
             TyKind::Func(..) => Some(e),
             TyKind::Array(elem) => {
-                let ek = self.type_ctx.interner.kind(self.type_ctx.interner.strip_nullable(elem)).clone();
+                let ek = self
+                    .type_ctx
+                    .interner
+                    .kind(self.type_ctx.interner.strip_nullable(elem))
+                    .clone();
                 match ek {
                     TyKind::Prim(_) | TyKind::Js | TyKind::Enum(_) => Some(e),
                     _ => None,
@@ -235,7 +243,11 @@ impl<'a> Analyzer<'a> {
         Some(HExpr::new(
             js,
             HExprKind::JsCall {
-                callee: Callee { def, instance: vec![], ret: js },
+                callee: Callee {
+                    def,
+                    instance: vec![],
+                    ret: js,
+                },
                 target: Box::new(target),
                 method: method.map(Box::new),
                 args,
@@ -259,7 +271,8 @@ impl<'a> Analyzer<'a> {
 
         let mut arg_hirs = Vec::with_capacity(params.len());
         for param in params.iter() {
-            let _ = self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
+            let _ =
+                self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
             arg_hirs.push(self.hir_take());
         }
 
@@ -270,7 +283,13 @@ impl<'a> Analyzer<'a> {
             return Ok(ret);
         }
 
-        self.desugar_js_call(recv, &method.text, arg_hirs, Some(method.position), diagnostics);
+        self.desugar_js_call(
+            recv,
+            &method.text,
+            arg_hirs,
+            Some(method.position),
+            diagnostics,
+        );
         Ok(Self::js_type())
     }
 
@@ -397,7 +416,9 @@ impl<'a> Analyzer<'a> {
     /// expression was not representable.
     pub(super) fn desugar_js_await(&mut self, inner: Option<HExpr>) -> Option<HExpr> {
         let recv = inner?;
-        let fut = self.type_ctx.lower(&Self::future_type(Self::option_js_type()));
+        let fut = self
+            .type_ctx
+            .lower(&Self::future_type(Self::option_js_type()));
         self.js_bridge_call("__await", vec![recv], fut)
     }
 
@@ -445,7 +466,10 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let (Some(key), Some(value)) = (self.box_to_js(key), self.box_to_js(value)) else {
-            diagnostics.report_error("cannot use this value as a js index key/value".to_string(), pos);
+            diagnostics.report_error(
+                "cannot use this value as a js index key/value".to_string(),
+                pos,
+            );
             self.hir_fail();
             return;
         };

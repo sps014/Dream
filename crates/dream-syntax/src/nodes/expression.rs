@@ -1,8 +1,8 @@
 use super::pattern::PatternNode;
 use super::statement::StatementNode;
 use super::types::Type;
-use dream_text::text_span::TextSpan;
 use crate::token::syntax_token::SyntaxToken;
+use dream_text::text_span::TextSpan;
 
 /// Represents an expression node in the AST
 #[derive(Debug, Clone)]

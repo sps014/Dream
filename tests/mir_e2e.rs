@@ -181,9 +181,7 @@ fn mir_backend_e2e_coverage() {
     eprintln!("passing: {passed:?}");
 
     if !unexpected_pass.is_empty() {
-        eprintln!(
-            "\nThese XFAIL cases now PASS — remove them from XFAIL:\n  {unexpected_pass:?}"
-        );
+        eprintln!("\nThese XFAIL cases now PASS — remove them from XFAIL:\n  {unexpected_pass:?}");
     }
     if !failed.is_empty() {
         let detail: String = failed

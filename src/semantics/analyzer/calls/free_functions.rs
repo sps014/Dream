@@ -8,9 +8,9 @@ use crate::semantics::errors::SemanticError;
 use crate::semantics::function_table::FunctionTableInfo;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::types::mangle_generic;
-use crate::types::constructor_fn;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
+use crate::types::constructor_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -33,19 +33,23 @@ impl<'a> Analyzer<'a> {
         // When the callee is an unambiguous (non-overloaded) free function, publish each parameter's
         // declared type as the expected type while analyzing the matching argument, so untyped
         // literals such as an empty array `[]` infer their element type from the signature.
-        let expected_params: Option<Vec<Type>> = if self.function_table.is_overloaded(&function_name)
-        {
-            None
-        } else {
-            self.function_table
-                .get_function(&function_name)
-                .ok()
-                .map(|info| info.parameters.iter().map(|p| Self::type_from_name(p)).collect())
-        };
+        let expected_params: Option<Vec<Type>> =
+            if self.function_table.is_overloaded(&function_name) {
+                None
+            } else {
+                self.function_table
+                    .get_function(&function_name)
+                    .ok()
+                    .map(|info| {
+                        info.parameters
+                            .iter()
+                            .map(|p| Self::type_from_name(p))
+                            .collect()
+                    })
+            };
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();
-            self.current_expected_type =
-                expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
+            self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
             self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
@@ -148,10 +152,10 @@ impl<'a> Analyzer<'a> {
             };
             if let Some(concrete_name) = concrete_name {
                 if self.struct_table.get_struct(&concrete_name).is_some() {
-                    let ctor = self
-                        .type_ctx
-                        .defs
-                        .lookup(crate::types::DefKind::Function, &constructor_fn(&concrete_name));
+                    let ctor = self.type_ctx.defs.lookup(
+                        crate::types::DefKind::Function,
+                        &constructor_fn(&concrete_name),
+                    );
                     self.hir_set_new(&name.text, ctor, arg_hirs, &t);
                 }
             }
@@ -195,10 +199,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
             let mangled_name = self.register_generic_function_instance(template, &bindings);
-            generic_instance = Some((
-                function_name.clone(),
-                bindings.values().cloned().collect(),
-            ));
+            generic_instance = Some((function_name.clone(), bindings.values().cloned().collect()));
             function_name = mangled_name;
         }
 
@@ -287,7 +288,6 @@ impl<'a> Analyzer<'a> {
         Ok(ret_type)
     }
 
-
     /// Types the async intrinsics: `sleep(ms: int): Future<void>`, `all(xs: Future<T>[]):
     /// Future<T[]>`, `any`/`race(xs: Future<T>[]): Future<T>`.
     pub(crate) fn analyze_async_intrinsic(
@@ -370,7 +370,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-
     /// Registers one monomorphized instance of a generic free function under its mangled name
     /// (`swap_int_string`, `natural_order_int`, ...), idempotently: a clone with its signature made
     /// concrete is stashed in `instantiated_generics` so its body is analyzed under `bindings`, and
@@ -400,7 +399,11 @@ impl<'a> Analyzer<'a> {
                     .iter()
                     .map(|p| Self::monomorphize_type(&p.type_, bindings).get_type())
                     .collect(),
-                defaults: template.parameters.iter().map(|p| p.default.clone()).collect(),
+                defaults: template
+                    .parameters
+                    .iter()
+                    .map(|p| p.default.clone())
+                    .collect(),
                 return_type: template
                     .return_type
                     .as_ref()
@@ -415,7 +418,6 @@ impl<'a> Analyzer<'a> {
         }
         mangled_name
     }
-
 
     /// Instantiates a generic free function used as a first-class *value* (`let cmp: fun(T, T): int =
     /// natural_order;`). The concrete type arguments are inferred by unifying the template's declared
@@ -461,16 +463,13 @@ impl<'a> Analyzer<'a> {
         self.register_generic_function_instance(template, &bindings);
         // The func value must reference the base template's `DefId` + concrete instance args (in
         // binding order) so it maps to the monomorphized instance's function-table slot.
-        let instance: Vec<crate::types::TypeId> = bindings
-            .values()
-            .map(|t| self.type_ctx.lower(t))
-            .collect();
+        let instance: Vec<crate::types::TypeId> =
+            bindings.values().map(|t| self.type_ctx.lower(t)).collect();
         let ret = (*exp_ret).clone();
         let func_ty = Type::Function(exp_params, exp_ret);
         self.hir_set_generic_func_value(&template.name.text, instance, &func_ty, &ret);
         Some(func_ty)
     }
-
 
     /// Appends the default values of any omitted trailing parameters to a call's argument lists.
     /// `defaults` is the callee's per-parameter default slice (parallel to its parameters); for each
@@ -490,13 +489,12 @@ impl<'a> Analyzer<'a> {
         for i in params_types.len()..defaults.len() {
             if let Some(default) = defaults.get(i).and_then(|d| d.clone()) {
                 let lit = ExpressionNode::Literal(default);
-                let t = self.analyze_expression(&lit, parent_function, symbol_table, diagnostics)?;
+                let t =
+                    self.analyze_expression(&lit, parent_function, symbol_table, diagnostics)?;
                 arg_hirs.push(self.hir_take());
                 params_types.push(t.get_type());
             }
         }
         Ok(())
     }
-
-
 }

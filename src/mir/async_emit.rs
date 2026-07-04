@@ -30,7 +30,9 @@ const SLOT_SIZE: i32 = 8;
 
 const RUNTIME_ASYNC: &str = include_str!("runtime/async.wat");
 
-pub fn poll_indices(functions: &[MirFunction]) -> HashMap<(crate::types::DefId, Vec<TypeId>), usize> {
+pub fn poll_indices(
+    functions: &[MirFunction],
+) -> HashMap<(crate::types::DefId, Vec<TypeId>), usize> {
     let base = functions.len();
     functions
         .iter()
@@ -147,7 +149,10 @@ pub fn emit_async_function(
     poll_idx: usize,
     debug: bool,
 ) -> String {
-    let hir = func.hir_fn.as_ref().expect("async function missing hir_fn snapshot");
+    let hir = func
+        .hir_fn
+        .as_ref()
+        .expect("async function missing hir_fn snapshot");
     // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
     let body = lower_async_poll_body(hir, interner);
     let slots = async_slots(&body, interner);
@@ -194,7 +199,11 @@ pub fn emit_async_function(
             let _ = writeln!(out, " local.get ${idx}");
             out.push_str(" call $retain\n");
         }
-        let _ = writeln!(out, " local.get $self\n local.get ${idx}\n {} offset={off}", slot_store(wt));
+        let _ = writeln!(
+            out,
+            " local.get $self\n local.get ${idx}\n {} offset={off}",
+            slot_store(wt)
+        );
     }
     out.push_str(" local.get $self\n call $dream_enqueue\n local.get $self\n)\n\n");
 
@@ -225,7 +234,10 @@ pub fn emit_async_main_wrapper(entry_sym: &str, has_args_param: bool) -> String 
         out.push_str(&format!("\n i32.const {}", super::abi::TAG_ARRAY));
         out.push_str("\n call $malloc\n local.set $args\n local.get $args\n i32.const 0\n i32.store\n local.get $args");
     }
-    let _ = writeln!(out, "\n call ${entry_sym}\n drop\n call $dream_run_loop\n)\n");
+    let _ = writeln!(
+        out,
+        "\n call ${entry_sym}\n drop\n call $dream_run_loop\n)\n"
+    );
     out
 }
 

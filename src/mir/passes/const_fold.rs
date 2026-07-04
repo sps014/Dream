@@ -148,7 +148,11 @@ mod tests {
         let t = b.new_temp(i.int());
         b.assign(
             Place::Local(t),
-            Rvalue::Binary(BinOp::Add, Operand::Const(Const::Int(2)), Operand::Const(Const::Int(3))),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Const(Const::Int(2)),
+                Operand::Const(Const::Int(3)),
+            ),
         );
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
         let mut func = b.finish();

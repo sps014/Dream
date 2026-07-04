@@ -33,7 +33,8 @@ pub enum Shape {
 pub fn reloop(func: &MirFunction) -> Option<Shape> {
     let r = Relooper { func };
     let all: BTreeSet<BlockId> = (0..func.blocks.len() as u32).map(BlockId).collect();
-    r.make(singleton(func.entry), all, &BTreeSet::new()).map(|b| *b)
+    r.make(singleton(func.entry), all, &BTreeSet::new())
+        .map(|b| *b)
 }
 
 struct Relooper<'a> {
@@ -96,8 +97,10 @@ impl Relooper<'_> {
         remaining: BTreeSet<BlockId>,
         headers: &BTreeSet<BlockId>,
     ) -> Option<Box<Shape>> {
-        let entries: BTreeSet<BlockId> =
-            entries.into_iter().filter(|e| remaining.contains(e)).collect();
+        let entries: BTreeSet<BlockId> = entries
+            .into_iter()
+            .filter(|e| remaining.contains(e))
+            .collect();
         if entries.is_empty() {
             return None;
         }
@@ -110,7 +113,9 @@ impl Relooper<'_> {
             return Some(self.make_loop(entries, remaining, headers));
         }
 
-        let is_loop = entries.iter().any(|&e| self.has_back_edge(e, &remaining, headers));
+        let is_loop = entries
+            .iter()
+            .any(|&e| self.has_back_edge(e, &remaining, headers));
         if is_loop {
             Some(self.make_loop(entries, remaining, headers))
         } else {
@@ -178,7 +183,8 @@ impl Relooper<'_> {
         remaining: BTreeSet<BlockId>,
         headers: &BTreeSet<BlockId>,
     ) -> Box<Shape> {
-        let mut count: std::collections::BTreeMap<BlockId, usize> = std::collections::BTreeMap::new();
+        let mut count: std::collections::BTreeMap<BlockId, usize> =
+            std::collections::BTreeMap::new();
         let mut per_entry: Vec<(BlockId, BTreeSet<BlockId>)> = Vec::new();
         for &e in &entries {
             let r = self.reach(&singleton(e), &remaining, headers);
@@ -258,7 +264,9 @@ mod tests {
         match shape {
             Shape::Simple { block, next } => {
                 assert_eq!(block, BlockId(0));
-                assert!(matches!(next.as_deref(), Some(Shape::Simple { block, next: None }) if *block == b1));
+                assert!(
+                    matches!(next.as_deref(), Some(Shape::Simple { block, next: None }) if *block == b1)
+                );
             }
             other => panic!("expected nested simple, got {:?}", other),
         }
@@ -292,7 +300,9 @@ mod tests {
                 match next.as_deref() {
                     Some(Shape::Multiple { handled, next }) => {
                         assert_eq!(handled.len(), 2);
-                        assert!(matches!(next.as_deref(), Some(Shape::Simple { block, .. }) if *block == join));
+                        assert!(
+                            matches!(next.as_deref(), Some(Shape::Simple { block, .. }) if *block == join)
+                        );
                     }
                     other => panic!("expected multiple, got {:?}", other),
                 }
@@ -328,7 +338,9 @@ mod tests {
                 assert_eq!(block, BlockId(0));
                 match next.as_deref() {
                     Some(Shape::Loop { next, .. }) => {
-                        assert!(matches!(next.as_deref(), Some(Shape::Simple { block, .. }) if *block == after));
+                        assert!(
+                            matches!(next.as_deref(), Some(Shape::Simple { block, .. }) if *block == after)
+                        );
                     }
                     other => panic!("expected loop, got {:?}", other),
                 }

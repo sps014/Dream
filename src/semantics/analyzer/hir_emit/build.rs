@@ -26,7 +26,12 @@ impl<'a> Analyzer<'a> {
     /// *later* global's initializer can resolve an *earlier* global to a [`Binding::Global`]. The
     /// slot `id` must equal the variable's index in [`Analyzer::globals`]. The initializer captured
     /// by [`Self::hir_global_init_finish`] (if representable) is attached to the surfaced [`HGlobal`].
-    pub(in crate::semantics::analyzer) fn hir_register_global(&mut self, name: &str, type_str: &str, is_const: bool) {
+    pub(in crate::semantics::analyzer) fn hir_register_global(
+        &mut self,
+        name: &str,
+        type_str: &str,
+        is_const: bool,
+    ) {
         let ty = self.type_ctx.lower_str(type_str);
         let id = GlobalId(self.hir.globals.len() as u32);
         self.hir.globals.insert(name.to_string(), (id, ty));
@@ -57,8 +62,11 @@ impl<'a> Analyzer<'a> {
             .iter()
             .filter(|(name, _)| !self.union_table.contains_key(name.as_str()))
             .map(|(name, info)| {
-                let fields =
-                    info.fields.iter().map(|(fname, f)| (fname.clone(), f.type_.clone())).collect();
+                let fields = info
+                    .fields
+                    .iter()
+                    .map(|(fname, f)| (fname.clone(), f.type_.clone()))
+                    .collect();
                 (name.clone(), fields)
             })
             .collect();
@@ -92,8 +100,10 @@ impl<'a> Analyzer<'a> {
             Vec::with_capacity(struct_snapshot.len());
         for (name, fields) in struct_snapshot {
             let ty = self.type_ctx.lower_str(&name);
-            let defs: Vec<(String, TypeId)> =
-                fields.iter().map(|(fname, t)| (fname.clone(), self.type_ctx.lower(t))).collect();
+            let defs: Vec<(String, TypeId)> = fields
+                .iter()
+                .map(|(fname, t)| (fname.clone(), self.type_ctx.lower(t)))
+                .collect();
             lowered.push((ty, name, defs));
         }
         // Value (`struct`) types are stored inline, so their footprint must be known before any layout
@@ -117,12 +127,16 @@ impl<'a> Analyzer<'a> {
             let vs = variants
                 .iter()
                 .map(|(_vname, _disc, fields)| {
-                    fields.iter().map(|(_fn, _off, t)| self.type_ctx.lower(t)).collect()
+                    fields
+                        .iter()
+                        .map(|(_fn, _off, t)| self.type_ctx.lower(t))
+                        .collect()
                 })
                 .collect();
             union_field_map.insert(ty, vs);
         }
-        let mut memo: std::collections::HashMap<TypeId, (u32, u32)> = std::collections::HashMap::new();
+        let mut memo: std::collections::HashMap<TypeId, (u32, u32)> =
+            std::collections::HashMap::new();
         for &(ty, ..) in &lowered {
             if self.type_ctx.interner.is_value_type(ty) {
                 let mut in_progress = std::collections::HashSet::new();
@@ -154,7 +168,10 @@ impl<'a> Analyzer<'a> {
             self.type_ctx.interner.set_value_layout(*ty, sz.0, sz.1);
         }
         for (ty, name, defs) in lowered {
-            layouts.insert(ty, TypeLayout::from_fields(&self.type_ctx.interner, name, defs));
+            layouts.insert(
+                ty,
+                TypeLayout::from_fields(&self.type_ctx.interner, name, defs),
+            );
         }
         for (name, _size, variants) in union_snapshot {
             let ty = self.type_ctx.lower_str(&name);
@@ -174,15 +191,30 @@ impl<'a> Analyzer<'a> {
                     if rem != 0 {
                         offset += falign - rem;
                     }
-                    flds.push(FieldLayout { offset, ty: fty, name: fname });
+                    flds.push(FieldLayout {
+                        offset,
+                        ty: fty,
+                        name: fname,
+                    });
                     offset += fsize;
                 }
                 block_end = block_end.max(offset);
-                vs.push(UnionVariant { name: vname, discriminant, fields: flds });
+                vs.push(UnionVariant {
+                    name: vname,
+                    discriminant,
+                    fields: flds,
+                });
             }
             // Keep the block 8-byte aligned so a `double` payload stays naturally aligned.
             let size = block_end.div_ceil(8) * 8;
-            layouts.insert_union(ty, UnionLayout { name, variants: vs, size });
+            layouts.insert_union(
+                ty,
+                UnionLayout {
+                    name,
+                    variants: vs,
+                    size,
+                },
+            );
         }
         layouts
     }
@@ -201,14 +233,16 @@ impl<'a> Analyzer<'a> {
         // name the call site resolves to). Using the bare method name for a class extern would fail
         // the def lookup and silently drop the import (its call site then falls back to `$def{N}`).
         let top = node.functions.iter().map(|f| (f, f.name.text.clone()));
-        let class_methods = node
-            .structs
-            .iter()
-            .flat_map(|s| s.methods.iter().map(move |m| (m, method_fn(&s.name.text, &m.name.text))));
-        let extend_methods = node
-            .extends
-            .iter()
-            .flat_map(|e| e.methods.iter().map(move |m| (m, method_fn(&e.target.text, &m.name.text))));
+        let class_methods = node.structs.iter().flat_map(|s| {
+            s.methods
+                .iter()
+                .map(move |m| (m, method_fn(&s.name.text, &m.name.text)))
+        });
+        let extend_methods = node.extends.iter().flat_map(|e| {
+            e.methods
+                .iter()
+                .map(move |m| (m, method_fn(&e.target.text, &m.name.text)))
+        });
         for (func, sym_name) in top.chain(class_methods).chain(extend_methods) {
             if !func.is_extern || crate::intrinsics::has_intrinsic_attr(&func.attributes) {
                 continue;
@@ -231,7 +265,14 @@ impl<'a> Analyzer<'a> {
                 Some(t) if *t != Type::Void => Some(self.type_ctx.lower(t)),
                 _ => None,
             };
-            imports.push(HImport { def, name: sym_name, module, field, params, ret });
+            imports.push(HImport {
+                def,
+                name: sym_name,
+                module,
+                field,
+                params,
+                ret,
+            });
         }
         imports
     }
@@ -249,7 +290,11 @@ impl<'a> Analyzer<'a> {
         let mut out: Vec<(crate::types::DefId, String)> = Vec::new();
         for func in node.functions.iter() {
             if let Some(key) = crate::intrinsics::intrinsic_key(&func.attributes) {
-                if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &func.name.text) {
+                if let Some(def) = self
+                    .type_ctx
+                    .defs
+                    .lookup(DefKind::Function, &func.name.text)
+                {
                     out.push((def, key));
                 }
             }
@@ -368,7 +413,14 @@ fn value_field_size(
     use crate::types::{PrimTy, TyKind};
     let stripped = interner.strip_nullable(fty);
     if interner.is_value_type(stripped) {
-        return compute_inline_layout(stripped, field_map, union_field_map, memo, in_progress, interner);
+        return compute_inline_layout(
+            stripped,
+            field_map,
+            union_field_map,
+            memo,
+            in_progress,
+            interner,
+        );
     }
     match interner.kind(stripped) {
         TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => (1, 1),

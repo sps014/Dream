@@ -3,8 +3,8 @@ use crate::diagnostics::DiagnosticBag;
 use crate::syntax::nodes::function::ParameterNode;
 use crate::syntax::nodes::types::mangle_generic;
 use crate::syntax::nodes::{FunctionNode, Type};
-use crate::text::text_span::TextSpan;
 use crate::syntax::token::token_kind::TokenKind;
+use crate::text::text_span::TextSpan;
 
 impl<'a> Analyzer<'a> {
     /// Substitutes every generic parameter appearing in a method's parameter or return types

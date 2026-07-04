@@ -20,7 +20,9 @@ pub(super) fn runtime_prelude(debug: bool) -> String {
     out.push('\n');
     // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`; keep
     // `abi.rs` authoritative rather than baking the literal into the `.wat`.
-    out.push_str(&RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()));
+    out.push_str(
+        &RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()),
+    );
     out
 }
 

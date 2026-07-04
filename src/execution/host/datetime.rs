@@ -27,20 +27,14 @@ pub fn link_datetime_functions(linker: &mut Linker<()>) -> Result<()> {
     // Minutes *east* of UTC for the local system timezone at the given UTC epoch millisecond
     // instant (e.g. IST is +330, PST is -480), accounting for DST. `runtime/dream.js` mirrors this
     // with the opposite-signed `Date.getTimezoneOffset()`, negated to match this convention.
-    linker.func_wrap(
-        "Dream",
-        "dateLocalOffsetMinutes",
-        |millis: i64| -> i32 {
-            use chrono::{Local, TimeZone};
-            match Local.timestamp_millis_opt(millis) {
-                chrono::LocalResult::Single(dt) => (dt.offset().local_minus_utc() / 60) as i32,
-                chrono::LocalResult::Ambiguous(dt, _) => {
-                    (dt.offset().local_minus_utc() / 60) as i32
-                }
-                chrono::LocalResult::None => 0,
-            }
-        },
-    )?;
+    linker.func_wrap("Dream", "dateLocalOffsetMinutes", |millis: i64| -> i32 {
+        use chrono::{Local, TimeZone};
+        match Local.timestamp_millis_opt(millis) {
+            chrono::LocalResult::Single(dt) => (dt.offset().local_minus_utc() / 60) as i32,
+            chrono::LocalResult::Ambiguous(dt, _) => (dt.offset().local_minus_utc() / 60) as i32,
+            chrono::LocalResult::None => 0,
+        }
+    })?;
 
     Ok(())
 }

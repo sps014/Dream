@@ -1,15 +1,25 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::wasm_runner::execute_wasm;
 use std::path::Path;
+use std::process::ExitCode;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-fn main() {
+/// Returns a non-zero [`ExitCode`] on any failure (bad arguments, invalid path, compile error, or
+/// run error) so CI pipelines and shell scripts can detect and react to failures. `--help`/`-h`
+/// prints usage and exits successfully.
+fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    let program = args
+        .first()
+        .map(String::as_str)
+        .unwrap_or("dream")
+        .to_string();
 
     let mut verbose = false;
     let mut run_after_compile = false;
     let mut debug = false;
+    let mut show_help = false;
     let mut file_name = None;
 
     for arg in args.iter().skip(1) {
@@ -20,9 +30,11 @@ fn main() {
             // `Debug.total_allocations()` probes report real values. Off by default so normal
             // builds carry zero per-allocation overhead.
             debug = true;
+        } else if arg == "-h" || arg == "--help" {
+            show_help = true;
         } else if arg == "run" {
             run_after_compile = true;
-        } else if !arg.starts_with("-") {
+        } else if !arg.starts_with('-') {
             file_name = Some(arg);
         }
     }
@@ -34,17 +46,19 @@ fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    if file_name.is_none() {
-        error!("Expected a source file (*.dream) as argument");
-        error!(
-            "Usage: {} [-v|--verbose] [-d|--debug] [run] <file>",
-            args[0]
-        );
-        error!(r"Example: {} run src/sample/test_arrays.dream", args[0]);
-        return;
+    if show_help {
+        print_usage(&program);
+        return ExitCode::SUCCESS;
     }
 
-    let file_name = file_name.unwrap();
+    let file_name = match file_name {
+        Some(name) => name,
+        None => {
+            error!("Expected a source file (*.dream) as argument");
+            print_usage(&program);
+            return ExitCode::FAILURE;
+        }
+    };
 
     info!("Dream Compiler Tools");
     info!("========================");
@@ -55,7 +69,7 @@ fn main() {
         Some(path) => path,
         None => {
             error!("Invalid source file path: {}", file_name);
-            return;
+            return ExitCode::FAILURE;
         }
     };
 
@@ -67,13 +81,29 @@ fn main() {
                 info!("Executing via Wasmtime...");
                 if let Err(e) = execute_wasm(&out_path) {
                     error!("Execution failed: {}", e);
+                    return ExitCode::FAILURE;
                 }
             }
+            ExitCode::SUCCESS
         }
         Err(e) => {
             error!("Compilation failed: {}", e.to_string());
+            ExitCode::FAILURE
         }
     }
+}
+
+/// Prints CLI usage to stderr via the tracing subscriber's error channel.
+fn print_usage(program: &str) {
+    error!(
+        "Usage: {} [-v|--verbose] [-d|--debug] [run] <file>",
+        program
+    );
+    error!("  -v, --verbose   Print progress information");
+    error!("  -d, --debug     Enable allocator instrumentation for Debug probes");
+    error!("  -h, --help      Show this help message");
+    error!("  run             Execute the compiled module after a successful build");
+    error!(r"Example: {} run src/sample/test_arrays.dream", program);
 }
 
 /// Derives the output `.wat` path that sits next to the given source file.

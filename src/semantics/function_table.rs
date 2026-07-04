@@ -23,7 +23,11 @@ pub enum OverloadResolution {
 /// parameter type, joined with `.` — a valid WAT identifier character, distinct from the `_`
 /// used by generic monomorphization so the two schemes never collide. E.g. base `add` with
 /// `[int, int]` becomes `add.int.int`; a zero-parameter overload becomes `add.`.
-pub fn overload_key(base: &str, parameters: &[String], type_ctx: &mut crate::types::TypeCtx) -> String {
+pub fn overload_key(
+    base: &str,
+    parameters: &[String],
+    type_ctx: &mut crate::types::TypeCtx,
+) -> String {
     let mut key = String::from(base);
     key.push('.');
     let mut parts = Vec::new();
@@ -134,7 +138,12 @@ impl FunctionTable {
 
     /// The emitted name of the declaration of `base` whose parameter list is `parameters`: the
     /// bare base when `base` is not overloaded, otherwise the signature-mangled key.
-    pub fn resolve_emitted_name(&self, base: &str, parameters: &[String], type_ctx: &mut crate::types::TypeCtx) -> String {
+    pub fn resolve_emitted_name(
+        &self,
+        base: &str,
+        parameters: &[String],
+        type_ctx: &mut crate::types::TypeCtx,
+    ) -> String {
         if self.is_overloaded(base) {
             overload_key(base, parameters, type_ctx)
         } else {

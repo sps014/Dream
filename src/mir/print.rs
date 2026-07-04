@@ -1,9 +1,7 @@
 //! A compact textual dump of MIR, for tests and `--emit=mir`-style debugging. Renders blocks in
 //! order with their statements and terminator.
 
-use super::{
-    BasicBlock, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
-};
+use super::{BasicBlock, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use std::fmt::Write;
 
 pub fn print_function(func: &MirFunction) -> String {
@@ -33,7 +31,13 @@ fn stmt(s: &Statement) -> String {
         Statement::Call { callee, args } => {
             format!("call def{}({})", callee.def.0, ops(args))
         }
-        Statement::InterfaceCall { receiver, iface_id, method_slot, args, .. } => {
+        Statement::InterfaceCall {
+            receiver,
+            iface_id,
+            method_slot,
+            args,
+            ..
+        } => {
             format!(
                 "iface_call I{}#{} {}({})",
                 iface_id,
@@ -53,15 +57,33 @@ fn stmt(s: &Statement) -> String {
 fn terminator(t: &Terminator) -> String {
     match t {
         Terminator::Goto(b) => format!("goto bb{}", b.0),
-        Terminator::If { cond, then_blk, else_blk } => {
-            format!("if {} -> bb{} else bb{}", operand(cond), then_blk.0, else_blk.0)
+        Terminator::If {
+            cond,
+            then_blk,
+            else_blk,
+        } => {
+            format!(
+                "if {} -> bb{} else bb{}",
+                operand(cond),
+                then_blk.0,
+                else_blk.0
+            )
         }
-        Terminator::Switch { value, targets, default } => {
+        Terminator::Switch {
+            value,
+            targets,
+            default,
+        } => {
             let arms: Vec<String> = targets
                 .iter()
                 .map(|(v, b)| format!("{} -> bb{}", v, b.0))
                 .collect();
-            format!("switch {} [{}] else bb{}", operand(value), arms.join(", "), default.0)
+            format!(
+                "switch {} [{}] else bb{}",
+                operand(value),
+                arms.join(", "),
+                default.0
+            )
         }
         Terminator::Return(Some(o)) => format!("return {}", operand(o)),
         Terminator::Return(None) => "return".to_string(),
@@ -69,7 +91,11 @@ fn terminator(t: &Terminator) -> String {
             "async_complete{}",
             v.as_ref().map(operand).unwrap_or_default()
         ),
-        Terminator::Await { future, dest, resume } => format!(
+        Terminator::Await {
+            future,
+            dest,
+            resume,
+        } => format!(
             "await {}{} -> bb{}",
             operand(future),
             dest.map(|d| format!(" into _{}", d.0)).unwrap_or_default(),
@@ -88,7 +114,13 @@ fn rvalue(r: &Rvalue) -> String {
         Rvalue::IndirectCall { target, args } => {
             format!("call_indirect {}({})", operand(target), ops(args))
         }
-        Rvalue::InterfaceCall { receiver, iface_id, method_slot, args, .. } => {
+        Rvalue::InterfaceCall {
+            receiver,
+            iface_id,
+            method_slot,
+            args,
+            ..
+        } => {
             format!(
                 "iface_call I{}#{} {}({})",
                 iface_id,
@@ -98,7 +130,9 @@ fn rvalue(r: &Rvalue) -> String {
             )
         }
         Rvalue::New { def, args, .. } => format!("new def{}({})", def.0, ops(args)),
-        Rvalue::UnionNew { def, variant, args, .. } => {
+        Rvalue::UnionNew {
+            def, variant, args, ..
+        } => {
             format!("union def{}#{}({})", def.0, variant, ops(args))
         }
         Rvalue::ArrayLit { elems, .. } => format!("[{}]", ops(elems)),
@@ -115,14 +149,37 @@ fn rvalue(r: &Rvalue) -> String {
         Rvalue::Cast(o, from, ty) => format!("{} as ty{} (from ty{})", operand(o), ty.0, from.0),
         Rvalue::Discriminant(o) => format!("discriminant({})", operand(o)),
         Rvalue::IsType(o, ty) => format!("{} is ty{}", operand(o), ty.0),
-        Rvalue::UnionField { base, variant, field, .. } => {
+        Rvalue::UnionField {
+            base,
+            variant,
+            field,
+            ..
+        } => {
             format!("{}#{}.{}", operand(base), variant, field)
         }
         Rvalue::FuncRef(callee) => format!("funcref def{}", callee.def.0),
-        Rvalue::JsCall { callee, target, method, args } => {
-            let m = method.as_ref().map(|m| operand(m)).unwrap_or_else(|| "*".to_string());
-            let a = args.iter().map(|(o, _)| operand(o)).collect::<Vec<_>>().join(", ");
-            format!("js_call def{} {}[{}]({})", callee.def.0, operand(target), m, a)
+        Rvalue::JsCall {
+            callee,
+            target,
+            method,
+            args,
+        } => {
+            let m = method
+                .as_ref()
+                .map(|m| operand(m))
+                .unwrap_or_else(|| "*".to_string());
+            let a = args
+                .iter()
+                .map(|(o, _)| operand(o))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "js_call def{} {}[{}]({})",
+                callee.def.0,
+                operand(target),
+                m,
+                a
+            )
         }
     }
 }

@@ -169,7 +169,9 @@ fn func_name(item: &str) -> Option<String> {
     let b = item.as_bytes();
     let n = b.len();
     let mut i = skip_trivia(b, 0);
-    if i >= n || b[i] != b'(' { return None; }
+    if i >= n || b[i] != b'(' {
+        return None;
+    }
     i += 1;
     i = skip_trivia(b, i);
     let start = i;
@@ -178,16 +180,22 @@ fn func_name(item: &str) -> Option<String> {
 
     if keyword == b"import" {
         i = skip_trivia(b, i);
-        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        if i < n && b[i] == b'"' {
+            i = skip_string(b, i);
+        }
         i = skip_trivia(b, i);
-        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        if i < n && b[i] == b'"' {
+            i = skip_string(b, i);
+        }
         i = skip_trivia(b, i);
         if i < n && b[i] == b'(' {
             i += 1;
             i = skip_trivia(b, i);
             let start = i;
             i = skip_atom(b, i);
-            if &b[start..i] != b"func" { return None; }
+            if &b[start..i] != b"func" {
+                return None;
+            }
         } else {
             return None;
         }
@@ -210,7 +218,9 @@ fn is_func_item(text: &str) -> bool {
     let b = text.as_bytes();
     let n = b.len();
     let mut i = skip_trivia(b, 0);
-    if i >= n || b[i] != b'(' { return false; }
+    if i >= n || b[i] != b'(' {
+        return false;
+    }
     i += 1;
     i = skip_trivia(b, i);
     let start = i;
@@ -222,9 +232,13 @@ fn is_func_item(text: &str) -> bool {
     }
     if keyword == b"import" {
         i = skip_trivia(b, i);
-        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        if i < n && b[i] == b'"' {
+            i = skip_string(b, i);
+        }
         i = skip_trivia(b, i);
-        if i < n && b[i] == b'"' { i = skip_string(b, i); }
+        if i < n && b[i] == b'"' {
+            i = skip_string(b, i);
+        }
         i = skip_trivia(b, i);
         if i < n && b[i] == b'(' {
             i += 1;
@@ -378,7 +392,11 @@ mod tests {
                  )\n";
         let out = strip_dead_functions(m);
         assert!(out.contains("$used"), "used func kept:\n{}", out);
-        assert!(out.contains("export \"main\""), "exported shim kept:\n{}", out);
+        assert!(
+            out.contains("export \"main\""),
+            "exported shim kept:\n{}",
+            out
+        );
         assert!(!out.contains("$dead"), "dead func removed:\n{}", out);
     }
 
@@ -391,7 +409,11 @@ mod tests {
                  (export \"a\" (func $a))\n\
                  )\n";
         let out = strip_dead_functions(m);
-        assert!(out.contains("$a") && out.contains("$b"), "closure kept:\n{}", out);
+        assert!(
+            out.contains("$a") && out.contains("$b"),
+            "closure kept:\n{}",
+            out
+        );
         assert!(!out.contains("$c"), "dead func removed:\n{}", out);
     }
 

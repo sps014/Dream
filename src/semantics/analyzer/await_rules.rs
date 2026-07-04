@@ -140,7 +140,9 @@ impl<'a> Analyzer<'a> {
             ExpressionNode::Unary(_, e)
             | ExpressionNode::Parenthesized(e)
             | ExpressionNode::Cast(_, e)
-            | ExpressionNode::IsExpression(e, _, _) => self.scan_expr_await(e, message, diagnostics),
+            | ExpressionNode::IsExpression(e, _, _) => {
+                self.scan_expr_await(e, message, diagnostics)
+            }
             ExpressionNode::FunctionCall(_, _, args) => {
                 for a in args {
                     self.scan_expr_await(a, message, diagnostics);

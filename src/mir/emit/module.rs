@@ -12,7 +12,16 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
     let mut out = String::new();
     for f in &mir.functions {
         out.push_str(&emit_function_with(
-            f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue, false,
+            f,
+            interner,
+            &symbols,
+            &sigs,
+            &mir.layouts,
+            &strings,
+            &tags,
+            &ftable,
+            &value_glue,
+            false,
         ));
         out.push('\n');
     }
@@ -46,10 +55,18 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
 
     // Linear memory + allocator runtime state. The heap bump pointer starts above the itable region.
     let _ = writeln!(out, "(memory {})", MEMORY_PAGES);
-    let _ = writeln!(out, "(global $heap_ptr (mut i32) (i32.const {}))", iface.heap_start);
+    let _ = writeln!(
+        out,
+        "(global $heap_ptr (mut i32) (i32.const {}))",
+        iface.heap_start
+    );
     out.push_str("(global $free_list_head (mut i32) (i32.const 0))\n");
     // Shadow-stack pointer for inline value (`struct`) locals; grows down from the top of memory.
-    let _ = writeln!(out, "(global $__sp (mut i32) (i32.const {}))", SHADOW_STACK_TOP);
+    let _ = writeln!(
+        out,
+        "(global $__sp (mut i32) (i32.const {}))",
+        SHADOW_STACK_TOP
+    );
     out.push_str("(global $live_objects (mut i32) (i32.const 0))\n");
     out.push_str("(global $total_allocations (mut i32) (i32.const 0))\n");
 
@@ -57,7 +74,13 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
     // (emitted as a normal function below and wired to `(start ...)`).
     for g in &mir.globals {
         let zero = zero_literal(wasm_ty_of(interner, g.ty));
-        let _ = writeln!(out, "(global $g{} (mut {}) {})", g.id.0, wasm_ty_of(interner, g.ty), zero);
+        let _ = writeln!(
+            out,
+            "(global $g{} (mut {}) {})",
+            g.id.0,
+            wasm_ty_of(interner, g.ty),
+            zero
+        );
     }
 
     out.push_str(&runtime_prelude(debug));
@@ -97,13 +120,28 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
     for f in &mir.functions {
         if f.is_async {
             out.push_str(&crate::mir::async_emit::emit_async_function(
-                f, interner, &symbols, &mir.layouts, &strings, &tags, &ftable,
+                f,
+                interner,
+                &symbols,
+                &mir.layouts,
+                &strings,
+                &tags,
+                &ftable,
                 *polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
                 debug,
             ));
         } else {
             out.push_str(&emit_function_with(
-                f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue, debug,
+                f,
+                interner,
+                &symbols,
+                &sigs,
+                &mir.layouts,
+                &strings,
+                &tags,
+                &ftable,
+                &value_glue,
+                debug,
             ));
         }
         if f.name == crate::mir::lower::INIT_FN_NAME {
@@ -113,7 +151,10 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
                 &func_symbol(f),
                 !f.params.is_empty(),
             ));
-        } else if f.instance.is_empty() && f.name == crate::mir::abi::ENTRY_FN && !f.params.is_empty() {
+        } else if f.instance.is_empty()
+            && f.name == crate::mir::abi::ENTRY_FN
+            && !f.params.is_empty()
+        {
             // `main(args: string[])`: the exported entry takes no args, so wrap the real `main` with a
             // `()` shim that passes an empty `string[]` (a zero-length, TAG_ARRAY block).
             let _ = writeln!(
@@ -139,9 +180,21 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
     let _ = writeln!(out, "(export \"{}\" (func $malloc))", abi::EXPORT_MALLOC);
     let _ = writeln!(out, "(export \"{}\" (func $free))", abi::EXPORT_FREE);
     if crate::mir::async_emit::module_has_async(&mir.functions) {
-        let _ = writeln!(out, "(export \"{}\" (func $dream_run_loop))", abi::EXPORT_RUN_LOOP);
-        let _ = writeln!(out, "(export \"{}\" (func $dream_resolve))", abi::EXPORT_RESOLVE);
-        let _ = writeln!(out, "(export \"{}\" (func $dream_new_future))", abi::EXPORT_NEW_FUTURE);
+        let _ = writeln!(
+            out,
+            "(export \"{}\" (func $dream_run_loop))",
+            abi::EXPORT_RUN_LOOP
+        );
+        let _ = writeln!(
+            out,
+            "(export \"{}\" (func $dream_resolve))",
+            abi::EXPORT_RESOLVE
+        );
+        let _ = writeln!(
+            out,
+            "(export \"{}\" (func $dream_new_future))",
+            abi::EXPORT_NEW_FUTURE
+        );
     }
     out.push_str(")\n");
     // Whole-module dead-function elimination: drop embedded runtime helpers (and any other funcs)

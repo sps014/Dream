@@ -204,7 +204,11 @@ fn test_parse_generic_constraints() {
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
-    assert_eq!(diagnostics.has_errors(), false, "constraint syntax should parse cleanly");
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "constraint syntax should parse cleanly"
+    );
 
     let s = &program.structs[0];
     let params = s.generic_parameters.as_ref().expect("generic params");
@@ -212,9 +216,17 @@ fn test_parse_generic_constraints() {
     assert_eq!(params[0].text, "T");
     assert_eq!(s.generic_constraints.len(), 1);
     assert_eq!(s.generic_constraints[0].param.text, "T");
-    assert_eq!(s.generic_constraints[0].bounds.len(), 2, "T has two interface bounds");
+    assert_eq!(
+        s.generic_constraints[0].bounds.len(),
+        2,
+        "T has two interface bounds"
+    );
 
-    let f = program.functions.iter().find(|f| f.name.text == "max_of").expect("max_of");
+    let f = program
+        .functions
+        .iter()
+        .find(|f| f.name.text == "max_of")
+        .expect("max_of");
     assert_eq!(f.generic_constraints.len(), 1);
     assert_eq!(f.generic_constraints[0].param.text, "U");
     assert_eq!(f.generic_constraints[0].bounds.len(), 1);
@@ -228,7 +240,11 @@ fn test_parse_extend_implements() {
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
-    assert_eq!(diagnostics.has_errors(), false, "extend implements should parse cleanly");
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "extend implements should parse cleanly"
+    );
     assert_eq!(program.extends.len(), 1);
     let ext = &program.extends[0];
     assert_eq!(ext.target.text, "int");
@@ -275,7 +291,8 @@ fn test_parse_switch_arm_guard() {
 fn test_parse_switch_statement_pattern_arms() {
     // A pattern-arm `switch` used as a statement parses to an `ExpressionStatement` wrapping an
     // `ExpressionNode::Switch` (distinct from the C-style `case`/`default` form).
-    let code = "fun f(o: Option): void { switch (o) { Some(n) => { System.println(n); } None => {} } }";
+    let code =
+        "fun f(o: Option): void { switch (o) { Some(n) => { System.println(n); } None => {} } }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 

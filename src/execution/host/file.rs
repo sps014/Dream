@@ -16,8 +16,8 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "fileRead",
-        |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
-            let path = read_arg_string(&mut caller, path_ptr);
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
             // The bridge ABI returns a bare string pointer with no error channel (the Dream `File.read`
             // wrapper guards with `exists()` and reports `Err` itself), so a genuine read failure here
             // can only surface as empty content. Log it rather than swallowing it silently, and read
@@ -36,31 +36,31 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "fileWrite",
-        |mut caller: Caller<'_, ()>, path_ptr: i32, content_ptr: i32| -> i64 {
-            let path = read_arg_string(&mut caller, path_ptr);
-            let content = read_arg_string(&mut caller, content_ptr);
-            match fs::write(&path, content.as_bytes()) {
+        |mut caller: Caller<'_, ()>, path_ptr: i32, content_ptr: i32| -> Result<i64> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            let content = read_arg_string(&mut caller, content_ptr)?;
+            Ok(match fs::write(&path, content.as_bytes()) {
                 Ok(()) => content.len() as i64,
                 Err(_) => -1,
-            }
+            })
         },
     )?;
 
     linker.func_wrap(
         "Dream",
         "fileAppend",
-        |mut caller: Caller<'_, ()>, path_ptr: i32, content_ptr: i32| -> i64 {
-            let path = read_arg_string(&mut caller, path_ptr);
-            let content = read_arg_string(&mut caller, content_ptr);
+        |mut caller: Caller<'_, ()>, path_ptr: i32, content_ptr: i32| -> Result<i64> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            let content = read_arg_string(&mut caller, content_ptr)?;
             let result = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&path)
                 .and_then(|mut f| f.write_all(content.as_bytes()));
-            match result {
+            Ok(match result {
                 Ok(()) => content.len() as i64,
                 Err(_) => -1,
-            }
+            })
         },
     )?;
 
@@ -68,8 +68,8 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "fileReadBytes",
-        |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
-            let path = read_arg_string(&mut caller, path_ptr);
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
             // As with `fileRead`, the ABI has no error channel; log failures instead of masking them.
             let bytes = fs::read(&path).unwrap_or_else(|e| {
                 tracing::warn!(path = %path, error = %e, "fileReadBytes failed; returning empty array");
@@ -82,57 +82,57 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
         "fileWriteBytes",
-        |mut caller: Caller<'_, ()>, path_ptr: i32, data_ptr: i32| -> i64 {
-            let path = read_arg_string(&mut caller, path_ptr);
-            let bytes = read_arg_bytes(&mut caller, data_ptr);
-            match fs::write(&path, &bytes) {
+        |mut caller: Caller<'_, ()>, path_ptr: i32, data_ptr: i32| -> Result<i64> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            let bytes = read_arg_bytes(&mut caller, data_ptr)?;
+            Ok(match fs::write(&path, &bytes) {
                 Ok(()) => bytes.len() as i64,
                 Err(_) => -1,
-            }
+            })
         },
     )?;
 
     linker.func_wrap(
         "Dream",
         "fileExists",
-        |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
-            let path = read_arg_string(&mut caller, path_ptr);
-            Path::new(&path).exists() as i32
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            Ok(Path::new(&path).exists() as i32)
         },
     )?;
 
     linker.func_wrap(
         "Dream",
         "fileDelete",
-        |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
-            let path = read_arg_string(&mut caller, path_ptr);
-            fs::remove_file(&path).is_ok() as i32
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            Ok(fs::remove_file(&path).is_ok() as i32)
         },
     )?;
 
     linker.func_wrap(
         "Dream",
         "fileSize",
-        |mut caller: Caller<'_, ()>, path_ptr: i32| -> i64 {
-            let path = read_arg_string(&mut caller, path_ptr);
-            fs::metadata(&path).map(|m| m.len() as i64).unwrap_or(-1)
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i64> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            Ok(fs::metadata(&path).map(|m| m.len() as i64).unwrap_or(-1))
         },
     )?;
 
     linker.func_wrap(
         "Dream",
         "fileIsDir",
-        |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
-            let path = read_arg_string(&mut caller, path_ptr);
-            Path::new(&path).is_dir() as i32
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            Ok(Path::new(&path).is_dir() as i32)
         },
     )?;
 
     linker.func_wrap(
         "Dream",
         "dirList",
-        |mut caller: Caller<'_, ()>, path_ptr: i32| -> i32 {
-            let path = read_arg_string(&mut caller, path_ptr);
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
             let joined = match fs::read_dir(&path) {
                 Ok(entries) => {
                     let mut names: Vec<String> = entries

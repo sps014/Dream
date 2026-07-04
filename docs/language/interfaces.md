@@ -164,8 +164,10 @@ The bound name exists **only** inside the taken branch — it is not visible in 
 after the `if`.
 
 !!! note
-    `is`-with-binding is supported in `if (...)` conditions. Binding inside `&&` chains or `while`
-    conditions is not yet supported.
+    `is`-with-binding is supported in `if (...)` and `while (...)` conditions, and through a
+    top-level `&&` chain (`if (x is T t && cond)` makes `t` available in the branch body). The bound
+    name is not yet visible inside *later conjuncts of the same condition* (e.g. `if (x is T t &&
+    t.ok())`) — reference it in the branch body instead.
 
 ## Generic interfaces
 

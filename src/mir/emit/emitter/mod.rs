@@ -3,125 +3,128 @@ use crate::mir::async_emit::{slot_load, slot_store, AsyncSlots, F_AWAITING, F_RE
 use crate::mir::emit::valuetype::{ValueFrame, ValueLocalKind};
 use std::collections::HashSet;
 
+mod async_ops;
+mod rvalue;
+
 /// Emits one function as WAT (calls fall back to `$def{N}`, and field/index access has no layout, so
 /// this is for layout-free unit tests; the pipeline uses [`emit_program`]/[`emit_module`]).
-    pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
-        emit_function_with(
-            func,
-            interner,
-            &HashMap::new(),
-            &HashMap::new(),
-            &LayoutTable::default(),
-            &IndexMap::new(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &HashSet::new(),
-            false,
-        )
-    }
+pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
+    emit_function_with(
+        func,
+        interner,
+        &HashMap::new(),
+        &HashMap::new(),
+        &LayoutTable::default(),
+        &IndexMap::new(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &HashSet::new(),
+        false,
+    )
+}
 
 #[allow(clippy::too_many_arguments)]
-    pub(super) fn emit_function_with(
-        func: &MirFunction,
-        interner: &TypeInterner,
-        symbols: &HashMap<(DefId, Vec<TypeId>), String>,
-        sigs: &HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
-        layouts: &LayoutTable,
-        strings: &IndexMap<String, u32>,
-        tags: &HashMap<TypeId, i32>,
-        func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
-        value_glue: &HashSet<TypeId>,
-        debug: bool,
-    ) -> String {
-        let frame = ValueFrame::compute(func, interner);
-        let mut e = Emitter {
-            func,
-            interner,
-            symbols,
-            sigs,
-            layouts,
-            strings,
-            tags,
-            func_table,
-            value_glue,
-            frame,
-            out: String::new(),
-            async_parent: None,
-            async_user_locals: 0,
-            debug,
-        };
-        e.emit();
-        e.out
-    }
+pub(super) fn emit_function_with(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    symbols: &HashMap<(DefId, Vec<TypeId>), String>,
+    sigs: &HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+    layouts: &LayoutTable,
+    strings: &IndexMap<String, u32>,
+    tags: &HashMap<TypeId, i32>,
+    func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
+    value_glue: &HashSet<TypeId>,
+    debug: bool,
+) -> String {
+    let frame = ValueFrame::compute(func, interner);
+    let mut e = Emitter {
+        func,
+        interner,
+        symbols,
+        sigs,
+        layouts,
+        strings,
+        tags,
+        func_table,
+        value_glue,
+        frame,
+        out: String::new(),
+        async_parent: None,
+        async_user_locals: 0,
+        debug,
+    };
+    e.emit();
+    e.out
+}
 
 /// Emits the poll function of an async coroutine: a single state-machine dispatch over the full
 /// lowered body (`func`), whose `Await` terminators suspend/resume. `slots` maps every frame-resident
 /// local to its offset in the `Future` frame. See [`Emitter::emit_async_state_machine`].
 #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_async_poll(
-        func: &MirFunction,
-        interner: &TypeInterner,
-        symbols: &HashMap<(DefId, Vec<TypeId>), String>,
-        layouts: &LayoutTable,
-        strings: &IndexMap<String, u32>,
-        tags: &HashMap<TypeId, i32>,
-        ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
-        slots: &AsyncSlots,
-        poll_sym: &str,
-        user_local_count: usize,
-        debug: bool,
-    ) -> String {
-        // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
-        // elsewhere); empty maps disable those paths without extra plumbing through the transform.
-        let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
-        let value_glue: HashSet<TypeId> = HashSet::new();
-        let frame = ValueFrame::compute(func, interner);
-        let mut e = Emitter {
-            func,
-            interner,
-            symbols,
-            sigs: &sigs,
-            layouts,
-            strings,
-            tags,
-            func_table: ftable,
-            value_glue: &value_glue,
-            frame,
-            out: String::new(),
-            // The poll body *is* the coroutine; completions release its own reference locals.
-            async_parent: Some(func),
-            async_user_locals: user_local_count,
-            debug,
-        };
-        e.emit_async_state_machine(slots, poll_sym);
-        e.out
-    }
+pub(crate) fn emit_async_poll(
+    func: &MirFunction,
+    interner: &TypeInterner,
+    symbols: &HashMap<(DefId, Vec<TypeId>), String>,
+    layouts: &LayoutTable,
+    strings: &IndexMap<String, u32>,
+    tags: &HashMap<TypeId, i32>,
+    ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
+    slots: &AsyncSlots,
+    poll_sym: &str,
+    user_local_count: usize,
+    debug: bool,
+) -> String {
+    // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
+    // elsewhere); empty maps disable those paths without extra plumbing through the transform.
+    let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
+    let value_glue: HashSet<TypeId> = HashSet::new();
+    let frame = ValueFrame::compute(func, interner);
+    let mut e = Emitter {
+        func,
+        interner,
+        symbols,
+        sigs: &sigs,
+        layouts,
+        strings,
+        tags,
+        func_table: ftable,
+        value_glue: &value_glue,
+        frame,
+        out: String::new(),
+        // The poll body *is* the coroutine; completions release its own reference locals.
+        async_parent: Some(func),
+        async_user_locals: user_local_count,
+        debug,
+    };
+    e.emit_async_state_machine(slots, poll_sym);
+    e.out
+}
 
-    struct Emitter<'a> {
-        func: &'a MirFunction,
-        interner: &'a TypeInterner,
-        symbols: &'a HashMap<(DefId, Vec<TypeId>), String>,
-        /// Callee `(def, instance)` → parameter types, for implicit widening of call arguments.
-        sigs: &'a HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
-        layouts: &'a LayoutTable,
-        strings: &'a IndexMap<String, u32>,
-        tags: &'a HashMap<TypeId, i32>,
-        func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
-        /// Value-struct types that require retain/drop glue (see [`valuetype`]).
-        value_glue: &'a HashSet<TypeId>,
-        /// Shadow-frame layout + ownership classification of this function's value-struct locals.
-        frame: ValueFrame,
-        out: String,
-        /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
-        async_parent: Option<&'a MirFunction>,
-        /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
-        /// front of `func.locals`; only these are released on completion. Synthetic lowering temporaries
-        /// (await results, array/reassignment scratch) that follow are transient and not deep-released
-        /// here (mirroring the pre-CFG async behavior), so no helper is needed for their element types.
-        async_user_locals: usize,
-        /// Generate `@name` annotations
-        debug: bool,
-    }
+struct Emitter<'a> {
+    func: &'a MirFunction,
+    interner: &'a TypeInterner,
+    symbols: &'a HashMap<(DefId, Vec<TypeId>), String>,
+    /// Callee `(def, instance)` → parameter types, for implicit widening of call arguments.
+    sigs: &'a HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+    layouts: &'a LayoutTable,
+    strings: &'a IndexMap<String, u32>,
+    tags: &'a HashMap<TypeId, i32>,
+    func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
+    /// Value-struct types that require retain/drop glue (see [`valuetype`]).
+    value_glue: &'a HashSet<TypeId>,
+    /// Shadow-frame layout + ownership classification of this function's value-struct locals.
+    frame: ValueFrame,
+    out: String,
+    /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
+    async_parent: Option<&'a MirFunction>,
+    /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
+    /// front of `func.locals`; only these are released on completion. Synthetic lowering temporaries
+    /// (await results, array/reassignment scratch) that follow are transient and not deep-released
+    /// here (mirroring the pre-CFG async behavior), so no helper is needed for their element types.
+    async_user_locals: usize,
+    /// Generate `@name` annotations
+    debug: bool,
+}
 
 impl Emitter<'_> {
     fn line(&mut self, s: &str) {
@@ -146,7 +149,12 @@ impl Emitter<'_> {
                 let p_ty = self.wasm_ty(self.func.local_ty(*p));
                 let name = &self.func.locals[p.0 as usize].name;
                 if self.debug && name.is_some() {
-                    format!(" (param ${} (@name \"{}\") {})", p.0, name.as_ref().unwrap(), p_ty)
+                    format!(
+                        " (param ${} (@name \"{}\") {})",
+                        p.0,
+                        name.as_ref().unwrap(),
+                        p_ty
+                    )
                 } else {
                     format!(" (param ${} {})", p.0, p_ty)
                 }
@@ -166,7 +174,10 @@ impl Emitter<'_> {
         };
         let sym = func_symbol(self.func);
         if self.debug {
-            self.line(&format!("(func ${} (@name \"{}\"){}{}", sym, self.func.name, params, result));
+            self.line(&format!(
+                "(func ${} (@name \"{}\"){}{}",
+                sym, self.func.name, params, result
+            ));
         } else {
             self.line(&format!("(func ${}{}{}", sym, params, result));
         }
@@ -178,7 +189,12 @@ impl Emitter<'_> {
                 continue;
             }
             if self.debug && decl.name.is_some() {
-                self.line(&format!("  (local ${} (@name \"{}\") {})", i, decl.name.as_ref().unwrap(), self.wasm_ty(decl.ty)));
+                self.line(&format!(
+                    "  (local ${} (@name \"{}\") {})",
+                    i,
+                    decl.name.as_ref().unwrap(),
+                    self.wasm_ty(decl.ty)
+                ));
             } else {
                 self.line(&format!("  (local ${} {})", i, self.wasm_ty(decl.ty)));
             }
@@ -281,10 +297,10 @@ impl Emitter<'_> {
 
         self.line("   )"); // loop
         self.line("  )"); // exit block
-        // Every block ends in a `return`/`goto`, so control never falls out of the dispatch loop.
-        // A value-returning function still needs its implicit `end` to be well-typed; mark the
-        // unreachable tail so the validator does not demand a phantom result value on the stack. A
-        // value-`struct` (sret) return produces no WASM result, so it needs no phantom either.
+                          // Every block ends in a `return`/`goto`, so control never falls out of the dispatch loop.
+                          // A value-returning function still needs its implicit `end` to be well-typed; mark the
+                          // unreachable tail so the validator does not demand a phantom result value on the stack. A
+                          // value-`struct` (sret) return produces no WASM result, so it needs no phantom either.
         if self.wasm_returns_value() {
             self.line("  (unreachable)");
         }
@@ -325,7 +341,13 @@ impl Emitter<'_> {
                     self.line("     (drop)");
                 }
             }
-            Statement::InterfaceCall { receiver, iface_id, method_slot, sig, args } => {
+            Statement::InterfaceCall {
+                receiver,
+                iface_id,
+                method_slot,
+                sig,
+                args,
+            } => {
                 self.emit_interface_call(receiver, *iface_id, *method_slot, *sig, args);
                 let ret = match self.interner.kind(*sig) {
                     TyKind::Func(_, r) => Some(*r),
@@ -479,10 +501,9 @@ impl Emitter<'_> {
     /// harvested into the interner beforehand (see `strings_in_*`), so a miss is a harvesting bug,
     /// not a user error — fail loudly instead of emitting a null (address 0) string.
     fn string_addr(&self, s: &str) -> u32 {
-        self.strings
-            .get(s)
-            .copied()
-            .unwrap_or_else(|| unreachable!("string literal {:?} was not interned before codegen", s))
+        self.strings.get(s).copied().unwrap_or_else(|| {
+            unreachable!("string literal {:?} was not interned before codegen", s)
+        })
     }
 
     fn field_addr(&mut self, base: crate::mir::Local, offset: u32) {
@@ -530,8 +551,7 @@ impl Emitter<'_> {
     /// element, or union payload), so the container owns its own reference count. A no-op for
     /// non-reference values and for non-place operands (constants/null; `$retain` also null-guards).
     fn retain_container_value(&mut self, value_ty: TypeId, value: &Operand) {
-        let borrowed =
-            matches!(value, Operand::Copy(_) | Operand::Const(Const::Str(_)));
+        let borrowed = matches!(value, Operand::Copy(_) | Operand::Const(Const::Str(_)));
         if self.interner.is_reference(value_ty) && borrowed {
             self.emit_operand(value);
             self.line("     (call $retain)");
@@ -616,7 +636,10 @@ impl Emitter<'_> {
 
     /// The element type of an array-typed local, or `None` if `base` is not an array.
     fn array_elem_ty(&self, base: crate::mir::Local) -> Option<TypeId> {
-        match self.interner.kind(self.interner.strip_nullable(self.func.local_ty(base))) {
+        match self
+            .interner
+            .kind(self.interner.strip_nullable(self.func.local_ty(base)))
+        {
             TyKind::Array(e) => Some(*e),
             _ => None,
         }
@@ -705,12 +728,7 @@ impl Emitter<'_> {
 
     /// Byte-wise copies value struct `ty` from the `src` address to the `dst` address, then retains
     /// the destination's (now duplicated) reference fields so the copy owns its own references.
-    fn emit_value_copy(
-        &mut self,
-        dst: impl Fn(&mut Self),
-        src: impl Fn(&mut Self),
-        ty: TypeId,
-    ) {
+    fn emit_value_copy(&mut self, dst: impl Fn(&mut Self), src: impl Fn(&mut Self), ty: TypeId) {
         let size = self.value_size(ty);
         dst(self);
         src(self);
@@ -805,7 +823,9 @@ impl Emitter<'_> {
             })
             .unwrap_or_default();
         for (i, arg) in args.iter().enumerate() {
-            let Some(&(off, fty)) = fields.get(i) else { continue };
+            let Some(&(off, fty)) = fields.get(i) else {
+                continue;
+            };
             let field_addr = |s: &mut Self| {
                 dst(s);
                 if off > 0 {
@@ -830,12 +850,18 @@ impl Emitter<'_> {
     fn emit_value_store(&mut self, dst: impl Fn(&mut Self), ty: TypeId, rvalue: &Rvalue) {
         self.emit_value_drop(&dst, ty);
         match rvalue {
-            Rvalue::New { ctor, args, ty: nty, .. } => {
-                self.construct_value_new(&dst, *ctor, args, *nty)
-            }
-            Rvalue::UnionNew { ty: uty, variant, args, .. } => {
-                self.construct_value_union(&dst, *uty, *variant, args)
-            }
+            Rvalue::New {
+                ctor,
+                args,
+                ty: nty,
+                ..
+            } => self.construct_value_new(&dst, *ctor, args, *nty),
+            Rvalue::UnionNew {
+                ty: uty,
+                variant,
+                args,
+                ..
+            } => self.construct_value_union(&dst, *uty, *variant, args),
             Rvalue::Call { callee, args } => self.emit_value_sret_call(&dst, callee, args),
             Rvalue::Use(Operand::Copy(src)) => {
                 let src = src.clone();
@@ -890,7 +916,10 @@ impl Emitter<'_> {
             let base = (i as u32) * js_abi::SLOT_SIZE;
             let (tag, aux, store) = js_abi::slot_desc(self.interner, *ty);
             self.emit_slot_word(base, &format!("(i32.const {})", tag));
-            self.emit_slot_word(base + js_abi::SLOT_AUX_OFFSET, &format!("(i32.const {})", aux));
+            self.emit_slot_word(
+                base + js_abi::SLOT_AUX_OFFSET,
+                &format!("(i32.const {})", aux),
+            );
             // Payload: the argument value, stored at its natural width.
             self.line(&format!(
                 "     (global.get $__sp) (i32.const {}) (i32.add)",
@@ -916,526 +945,21 @@ impl Emitter<'_> {
     /// buffer at byte offset `off` from `$__sp` — used by [`emit_js_call`](Self::emit_js_call) for a
     /// slot's `tag`/`aux` header words.
     fn emit_slot_word(&mut self, off: u32, value: &str) {
-        self.line(&format!("     (global.get $__sp) (i32.const {}) (i32.add)", off));
-        self.line(&format!("     {} (i32.store)", value));
-    }
-
-    fn emit_rvalue(&mut self, rvalue: &Rvalue) {
-        match rvalue {
-            Rvalue::Use(o) => self.emit_operand(o),
-            Rvalue::Binary(op, a, b) => {
-                let ty = self.operand_ty(a);
-                // String equality compares contents, not pointers, via the runtime `$string_eq`.
-                let str_eq = matches!(op, BinOp::Eq | BinOp::Ne)
-                    && matches!(
-                        self.interner.kind(self.interner.strip_nullable(ty)),
-                        TyKind::Prim(PrimTy::String)
-                    );
-                self.emit_operand(a);
-                self.emit_operand(b);
-                if str_eq {
-                    self.line("     (call $string_eq)");
-                    if matches!(op, BinOp::Ne) {
-                        self.line("     (i32.eqz)");
-                    }
-                } else {
-                    self.line(&format!("     ({})", self.binop_instr(*op, ty)));
-                }
-            }
-            Rvalue::Unary(op, a) => {
-                let ty = self.operand_ty(a);
-                match op {
-                    UnOp::Neg => {
-                        // No `neg` for integers in WASM: 0 - x.
-                        if matches!(self.interner.kind(ty), TyKind::Prim(PrimTy::Float | PrimTy::Double)) {
-                            self.emit_operand(a);
-                            self.line(&format!("     ({}.neg)", self.wasm_ty(ty)));
-                        } else {
-                            self.line(&format!("     ({}.const 0)", self.wasm_ty(ty)));
-                            self.emit_operand(a);
-                            self.line(&format!("     ({}.sub)", self.wasm_ty(ty)));
-                        }
-                    }
-                    UnOp::Not => {
-                        self.emit_operand(a);
-                        self.line("     (i32.eqz)");
-                    }
-                }
-            }
-            Rvalue::Call { callee, args } => {
-                let sym = self.callee_symbol(callee);
-                if let Some(kind) = async_intrinsic_kind(&sym) {
-                    self.emit_async_intrinsic(kind, args);
-                } else {
-                    self.emit_call_args(callee, args);
-                    self.line(&format!("     (call ${sym})"));
-                }
-            }
-            Rvalue::IndirectCall { target, args } => {
-                for a in args {
-                    self.emit_operand(a);
-                }
-                self.emit_operand(target);
-                // The table index (target) is on top of the stack; dispatch through `$__ft` with the
-                // signature derived from the target's function type.
-                let sig = func_sig(self.interner, self.operand_ty(target))
-                    .map(|(name, _, _)| name)
-                    .unwrap_or_else(|| "$sig___v".to_string());
-                self.line(&format!("     (call_indirect $__ft (type {}))", sig));
-            }
-            Rvalue::InterfaceCall { receiver, iface_id, method_slot, sig, args, .. } => {
-                self.emit_interface_call(receiver, *iface_id, *method_slot, *sig, args);
-            }
-            Rvalue::JsCall { callee, target, method, args } => {
-                self.emit_js_call(callee, target, method.as_ref(), args);
-            }
-            Rvalue::FuncRef(callee) => {
-                // A function value is its slot index in the module function table. The table is
-                // built from every referenced function, so a miss means it diverged from MIR
-                // (compiler bug); trap loudly rather than silently referencing slot 0.
-                let idx = self
-                    .func_table
-                    .get(&(callee.def, callee.args.clone()))
-                    .copied()
-                    .unwrap_or_else(|| {
-                        unreachable!("funcref to def{} missing from the function table", callee.def.0)
-                    });
-                self.line(&format!("     (i32.const {}) ;; funcref def{}", idx, callee.def.0));
-            }
-            Rvalue::New { def, ty, ctor, args } => {
-                // `$malloc(data_size, tag)` returns a data pointer with refcount 1.
-                let info = self
-                    .layouts
-                    .get(*ty)
-                    .map(|l| (l.size, l.fields.iter().map(|f| (f.offset, f.ty)).collect::<Vec<_>>()));
-                if let Some((size, fields)) = info {
-                    self.line(&format!("     (i32.const {})", size));
-                    self.line(&format!("     (i32.const {}) ;; tag", self.type_tag(*ty, *def)));
-                    self.line("     (call $malloc)");
-                    self.line("     (local.set $__obj)");
-                    if let Some(ctor) = ctor {
-                        // A user `constructor(this, args...)` sets the fields itself. Reused heap
-                        // blocks are not zeroed, so zero every field first (a constructor that leaves a
-                        // field unset must observe 0/null), then call it; the object is the result.
-                        for &(off, fty) in &fields {
-                            self.zero_at_obj(off, fty);
-                        }
-                        self.line("     (local.get $__obj)");
-                        for arg in args {
-                            self.emit_operand(arg);
-                        }
-                        let sym = self.callee_symbol(&crate::mir::Callee {
-                            def: *ctor,
-                            args: vec![],
-                            ret: self.interner.void(),
-                        });
-                        self.line(&format!("     (call ${})", sym));
-                        self.line("     (local.get $__obj)");
-                    } else {
-                        // Implicit zero-arg default constructor: leave every field at its zero
-                        // value. Reused heap blocks are not zeroed, so zero each field explicitly.
-                        let _ = args;
-                        for &(off, fty) in &fields {
-                            self.zero_at_obj(off, fty);
-                        }
-                        self.line("     (local.get $__obj)");
-                    }
-                } else {
-                    unreachable!("Missing layout for struct allocation");
-                }
-            }
-            Rvalue::UnionNew { def, ty, variant, args } => {
-                // A union value is one heap block `[discriminant: i32][payload...]`, sized to the
-                // largest variant so any variant fits. `variant` is the discriminant; allocate,
-                // write it at offset 0, then store the payload at the variant's field offsets.
-                let layout = self.layouts.union(*ty).and_then(|u| {
-                    let size = u.size;
-                    u.variants
-                        .iter()
-                        .find(|v| v.discriminant as usize == *variant)
-                        .map(|v| (size, v.fields.iter().map(|f| (f.offset, f.ty)).collect::<Vec<_>>()))
-                });
-                if let Some((size, fields)) = layout {
-                    // The analyzer already checked the variant's arity, so the argument list and the
-                    // variant's field slots must line up; a mismatch would silently drop or
-                    // misplace payload words.
-                    debug_assert_eq!(
-                        args.len(),
-                        fields.len(),
-                        "union def{} variant {} arity ({} args) disagrees with its layout ({} fields)",
-                        def.0, variant, args.len(), fields.len()
-                    );
-                    self.line(&format!("     (i32.const {})", size));
-                    self.line(&format!("     (i32.const {}) ;; tag", self.type_tag(*ty, *def)));
-                    self.line("     (call $malloc)");
-                    self.line("     (local.set $__obj)");
-                    self.line("     (local.get $__obj)");
-                    self.line(&format!("     (i32.const {}) ;; discriminant", variant));
-                    self.line("     (i32.store)");
-                    for (i, arg) in args.iter().enumerate() {
-                        let &(off, fty) = fields.get(i).unwrap_or_else(|| {
-                            unreachable!(
-                                "union def{} variant {} has no field slot for argument {}",
-                                def.0, variant, i
-                            )
-                        });
-                        self.store_at_obj(off, fty, arg);
-                    }
-                    self.line("     (local.get $__obj)");
-                } else {
-                    // A union that survived analysis always has a registered layout; a miss is a
-                    // compiler bug, so trap loudly rather than emitting a null pointer.
-                    unreachable!(
-                        "Missing layout for union def{} variant {}",
-                        def.0, variant
-                    );
-                }
-            }
-            Rvalue::ArrayLit { elem_ty, elems } => {
-                // Array block: `[len: i32][elem0][elem1]...`; the length is the first word (matching
-                // `ArrayLen`), elements follow at stride `elem_size`.
-                let (esize, _) = scalar_size(self.interner, *elem_ty);
-                // `[len:i32] + count * esize`. A literal big enough to overflow u32 is not
-                // representable in source, but guard the arithmetic so a bug can never emit a
-                // silently-truncated (undersized) allocation.
-                let size = (elems.len() as u32)
-                    .checked_mul(esize)
-                    .and_then(|payload| payload.checked_add(4))
-                    .unwrap_or_else(|| {
-                        unreachable!(
-                            "array literal size overflows u32 ({} elems x {} bytes)",
-                            elems.len(),
-                            esize
-                        )
-                    });
-                self.line(&format!("     (i32.const {})", size));
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
-                self.line("     (local.set $__obj)");
-                self.line("     (local.get $__obj)");
-                self.line(&format!("     (i32.const {})", elems.len()));
-                self.line("     (i32.store) ;; length");
-                for (i, e) in elems.iter().enumerate() {
-                    self.store_at_obj(4 + esize * (i as u32), *elem_ty, e);
-                }
-                self.line("     (local.get $__obj)");
-            }
-            Rvalue::ArrayNew { elem_ty, len } => {
-                // Block: `[len: i32][elem0..]`, zero-initialized (recycled freelist blocks are not
-                // zeroed, and reference-typed releases rely on null slots).
-                let (esize, _) = scalar_size(self.interner, *elem_ty);
-                self.emit_operand(len);
-                self.line("     (local.set $__len)");
-                // size = 4 + len * esize
-                self.line("     (i32.const 4)");
-                self.line("     (local.get $__len)");
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (i32.add)");
-                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
-                self.line("     (call $malloc)");
-                self.line("     (local.set $__obj)");
-                self.line("     (local.get $__obj)");
-                self.line("     (local.get $__len)");
-                self.line("     (i32.store) ;; length");
-                // memory.fill(dst = obj+4, 0, len*esize)
-                self.line("     (local.get $__obj)");
-                self.line("     (i32.const 4)");
-                self.line("     (i32.add)");
-                self.line("     (i32.const 0)");
-                self.line("     (local.get $__len)");
-                self.line(&format!("     (i32.const {})", esize));
-                self.line("     (i32.mul)");
-                self.line("     (memory.fill)");
-                self.line("     (local.get $__obj)");
-            }
-            Rvalue::ArrayLen(o) => {
-                self.emit_operand(o);
-                self.line("     (i32.load) ;; array length is the first word");
-            }
-            Rvalue::CharAt(s, i) => {
-                self.emit_operand(s);
-                self.emit_operand(i);
-                self.line("     (call $char_at)");
-            }
-            Rvalue::Concat(a, b) => {
-                self.emit_operand(a);
-                self.emit_operand(b);
-                self.line("     (call $concat_strings)");
-            }
-            Rvalue::ToString(o) => {
-                self.emit_operand(o);
-                let oty = self.operand_ty(o);
-                // A value struct/union is addressed inline (no heap tag header), so its `to_string`
-                // is dispatched statically to the concrete `$<Type>_to_string` rather than routed
-                // through the tag-dispatching `$object_to_string`.
-                if self.interner.is_value_type(oty) {
-                    if let Some(name) = self.value_name(oty) {
-                        self.line(&format!("     (call ${}_to_string)", name));
-                        return;
-                    }
-                }
-                // A `string` is already its own `to_string`; every other type has a formatter.
-                if let Some(call) = value_to_string_call(self.interner, oty) {
-                    self.line(&format!("     (call {})", call));
-                }
-            }
-            Rvalue::EnumName { value, arms } => {
-                let empty = self.string_addr("");
-                self.emit_operand(value);
-                self.line("     (local.set $__len)");
-                // Nested `value == disc ? strptr : (...)`, terminating in the empty string.
-                for (disc, name) in arms {
-                    let ptr = self.string_addr(name);
-                    self.line("     (local.get $__len)");
-                    self.line(&format!("     (i32.const {})", disc));
-                    self.line("     (i32.eq)");
-                    self.line("     (if (result i32)");
-                    self.line(&format!("      (then (i32.const {}))", ptr));
-                    self.line("      (else");
-                }
-                self.line(&format!("     (i32.const {})", empty));
-                for _ in arms {
-                    self.line("     ))");
-                }
-            }
-            Rvalue::HashCode(o) => {
-                self.emit_operand(o);
-                let oty = self.operand_ty(o);
-                if self.interner.is_value_type(oty) {
-                    if let Some(name) = self.value_name(oty) {
-                        self.line(&format!("     (call ${}_hash_code)", name));
-                        return;
-                    }
-                }
-                match self.interner.kind(self.interner.strip_nullable(oty)) {
-                    // Integer-family values (and enums) are their own hash.
-                    TyKind::Prim(
-                        PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte,
-                    )
-                    | TyKind::Enum(_) => {}
-                    TyKind::Prim(PrimTy::Long | PrimTy::ULong) => self.line("     (call $hash_long)"),
-                    TyKind::Prim(PrimTy::Float) => self.line("     (i32.reinterpret_f32)"),
-                    TyKind::Prim(PrimTy::Double) => self.line("     (call $hash_double)"),
-                    TyKind::Prim(PrimTy::String) => self.line("     (call $hash_string)"),
-                    _ => self.line("     (call $object_hash_code)"),
-                }
-            }
-            Rvalue::StrLen(o) => {
-                self.emit_operand(o);
-                self.line("     (call $strlen) ;; O(1): length is stored at the string's data pointer");
-            }
-            Rvalue::Cast(o, from, to) => self.emit_cast(o, *from, *to),
-            Rvalue::IsType(o, target) => {
-                self.emit_operand(o);
-                self.line("     (call $object_tag)");
-                // The analyzer only admits `is` against a type with a concrete runtime tag; a
-                // `None` here means an unsupported target slipped through (compiler bug). Comparing
-                // against 0 would silently answer the wrong question, so fail loudly instead.
-                let tag = runtime_tag_for(self.interner, self.tags, *target).unwrap_or_else(|| {
-                    unreachable!("`is` target type {:?} has no runtime tag", target)
-                });
-                self.line(&format!("     (i32.const {})", tag));
-                self.line("     (i32.eq)");
-            }
-            Rvalue::Discriminant(o) => {
-                // The discriminant is the `i32` at offset 0 of the union block.
-                self.emit_operand(o);
-                self.line("     (i32.load) ;; union discriminant");
-            }
-            Rvalue::UnionField { base, ty, variant, field } => {
-                let slot = self.layouts.union(*ty).and_then(|u| {
-                    u.variants
-                        .iter()
-                        .find(|v| v.discriminant as usize == *variant)
-                        .and_then(|v| v.fields.get(*field))
-                        .map(|f| (f.offset, f.ty))
-                });
-                if let Some((off, fty)) = slot {
-                    self.emit_operand(base);
-                    if off > 0 {
-                        self.line(&format!("     (i32.const {})", off));
-                        self.line("     (i32.add)");
-                    }
-                    // A value-struct payload is addressed inline (its bytes live in the union block),
-                    // so reading it yields the payload address rather than a load.
-                    if !self.interner.is_value_type(fty) {
-                        self.line(&format!("     ({})", self.load_instr(fty)));
-                    }
-                } else {
-                    unreachable!("Missing layout for union payload");
-                }
-            }
-        }
-    }
-
-    /// Boxes a value struct `ty` (whose operand pushes its inline address) into a fresh tagged heap
-    /// object: `$malloc(size, tag)`, `memory.copy` the inline bytes in, then retain the copy's
-    /// embedded references. Leaves the heap data pointer on the stack (refcount 1, owned).
-    fn emit_box_value_struct(&mut self, o: &Operand, ty: TypeId) {
-        let size = self.value_size(ty);
-        let tag = self.type_tag(ty, crate::types::DefId(0));
-        self.line(&format!("     (i32.const {})", size));
-        self.line(&format!("     (i32.const {}) ;; tag", tag));
-        self.line("     (call $malloc)");
-        self.line("     (local.set $__obj)");
-        // memory.copy(dst = $__obj, src = inline address of the value, size)
-        self.line("     (local.get $__obj)");
-        self.emit_operand(o);
-        self.line(&format!("     (i32.const {})", size));
-        self.line("     (memory.copy)");
-        if self.value_has_glue(ty) {
-            if let Some(name) = self.value_name(ty) {
-                self.line(&format!("     (local.get $__obj) (call {})", vs_retain_sym(&name)));
-            }
-        }
-        self.line("     (local.get $__obj)");
-    }
-
-    fn emit_cast(&mut self, o: &Operand, from: TypeId, to: TypeId) {
-        // A struct/class <-> `js` cast routes through the generated deep-copy marshalers (see
-        // `js_marshal`); everything else falls through to the primitive box/unbox path below.
-        if let Some(sym) = js_marshal::cast_sym(self.interner, self.layouts, from, to) {
-            self.emit_operand(o);
-            self.line(&format!("     (call {})", sym));
-            return;
-        }
-        // Boxing a value struct into a reference target (`object`, an interface, or a nullable value
-        // struct `T?`): allocate a tagged heap block, byte-copy the inline value in, and retain the
-        // copy's embedded references. The result is a refcounted heap object indistinguishable from
-        // a class instance for dynamic dispatch, the object protocol, and deep release.
-        let to_ref = self.interner.strip_nullable(to);
-        let from_bare = self.interner.strip_nullable(from);
-        let to_is_ref_box = matches!(
-            self.interner.kind(to_ref),
-            TyKind::Object | TyKind::Interface(..)
-        ) || self.interner.is_nullable_boxed_value(to);
-        if to_is_ref_box
-            && self.interner.is_value_type(from_bare)
-            && !self.interner.is_nullable_boxed_value(from)
-        {
-            self.emit_box_value_struct(o, from_bare);
-            return;
-        }
-        let from_prim = prim_of(self.interner, from);
-        let to_prim = prim_of(self.interner, to);
-        let to_is_object = matches!(
-            self.interner.kind(self.interner.strip_nullable(to)),
-            TyKind::Object
-        );
-        let from_is_object = matches!(
-            self.interner.kind(self.interner.strip_nullable(from)),
-            TyKind::Object
-        );
-        // Boxing a primitive into `object` (reference types are already pointers → identity).
-        if to_is_object {
-            self.emit_operand(o);
-            if let Some(boxfn) = from_prim.and_then(box_fn_for) {
-                self.line(&format!("     (call {})", boxfn));
-            }
-            return;
-        }
-        // Unboxing `object` to a primitive (or leaving a reference pointer as-is).
-        if from_is_object {
-            self.emit_operand(o);
-            if let Some(unboxfn) = to_prim.and_then(unbox_fn_for) {
-                self.line(&format!("     (call {})", unboxfn));
-            }
-            return;
-        }
-        self.emit_operand(o);
-        self.emit_numeric_conv(from, to);
-        // Narrowing to `byte` (which shares the `i32` WASM type with `int`/`uint`, so `numeric_conv`
-        // is a no-op) must wrap into the [0, 255] range explicitly (C-style truncation).
-        if matches!(to_prim, Some(PrimTy::Byte)) {
-            self.line("     (i32.const 255)");
-            self.line("     (i32.and)");
-        }
-    }
-
-    /// Emits a call's arguments, applying implicit numeric widening to each so a narrower argument
-    /// (e.g. an `int`/`float` passed to a `double` parameter) matches the callee's WASM signature.
-    /// Falls back to a plain push when the callee's parameter types are unknown (imports/intrinsics).
-    fn emit_call_args(&mut self, callee: &crate::mir::Callee, args: &[Operand]) {
-        let params = self.sigs.get(&(callee.def, callee.args.clone())).cloned();
-        for (i, a) in args.iter().enumerate() {
-            self.emit_operand(a);
-            if let Some(pty) = params.as_ref().and_then(|p| p.get(i)) {
-                self.emit_numeric_conv(self.operand_ty(a), *pty);
-            }
-        }
-    }
-
-    /// Emits a dynamic interface method call. The receiver is pushed as argument 0, then the real
-    /// arguments (widened to the interface method's declared parameter types), then control transfers
-    /// to the per-`(interface, method)` dispatch trampoline which looks the concrete implementation up
-    /// in the tag-indexed itable and forwards through `$__ft`. The trampoline leaves the result (if
-    /// any) on the stack.
-    fn emit_interface_call(
-        &mut self,
-        receiver: &Operand,
-        iface_id: usize,
-        method_slot: usize,
-        sig: TypeId,
-        args: &[Operand],
-    ) {
-        let param_tys: Vec<TypeId> = match self.interner.kind(sig) {
-            TyKind::Func(params, _) => params.clone(),
-            _ => Vec::new(),
-        };
-        self.emit_operand(receiver);
-        for (i, a) in args.iter().enumerate() {
-            self.emit_operand(a);
-            // param_tys[0] is the receiver (`this`); real args start at index 1.
-            if let Some(pty) = param_tys.get(i + 1) {
-                self.emit_numeric_conv(self.operand_ty(a), *pty);
-            }
-        }
         self.line(&format!(
-            "     (call ${})",
-            iface_dispatch_symbol(iface_id, method_slot)
+            "     (global.get $__sp) (i32.const {}) (i32.add)",
+            off
         ));
-    }
-
-    /// Emits the WASM numeric conversion instruction to turn a value of type `from` (already on the
-    /// stack) into type `to`, if their WASM value types differ (a no-op otherwise). Shared by explicit
-    /// `Cast` and the implicit widening applied to call arguments.
-    fn emit_numeric_conv(&mut self, from: TypeId, to: TypeId) {
-        let (fw, tw) = (self.wasm_ty(from), self.wasm_ty(to));
-        if fw != tw {
-            // Numeric conversions between the four WASM value types. Integer/float conversions carry
-            // the signedness of the *integer* side (the target for float→int, the source otherwise);
-            // saturating float→int truncation matches C-style cast semantics (no trap on overflow/NaN).
-            let (fw, tw) = (fw.as_str(), tw.as_str());
-            let int_signed = |ty: TypeId| {
-                !matches!(
-                    self.interner.kind(self.interner.strip_nullable(ty)),
-                    TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
-                )
-            };
-            let instr = match (fw, tw) {
-                ("i32", "i64") => if int_signed(from) { "i64.extend_i32_s" } else { "i64.extend_i32_u" },
-                ("i64", "i32") => "i32.wrap_i64",
-                ("i32", "f32") => if int_signed(from) { "f32.convert_i32_s" } else { "f32.convert_i32_u" },
-                ("i32", "f64") => if int_signed(from) { "f64.convert_i32_s" } else { "f64.convert_i32_u" },
-                ("i64", "f32") => if int_signed(from) { "f32.convert_i64_s" } else { "f32.convert_i64_u" },
-                ("i64", "f64") => if int_signed(from) { "f64.convert_i64_s" } else { "f64.convert_i64_u" },
-                ("f32", "f64") => "f64.promote_f32",
-                ("f64", "f32") => "f32.demote_f64",
-                ("f32", "i32") => if int_signed(to) { "i32.trunc_sat_f32_s" } else { "i32.trunc_sat_f32_u" },
-                ("f64", "i32") => if int_signed(to) { "i32.trunc_sat_f64_s" } else { "i32.trunc_sat_f64_u" },
-                ("f32", "i64") => if int_signed(to) { "i64.trunc_sat_f32_s" } else { "i64.trunc_sat_f32_u" },
-                ("f64", "i64") => if int_signed(to) { "i64.trunc_sat_f64_s" } else { "i64.trunc_sat_f64_u" },
-                _ => "nop",
-            };
-            self.line(&format!("     ({})", instr));
-        }
+        self.line(&format!("     {} (i32.store)", value));
     }
 
     fn emit_terminator(&mut self, t: &Terminator) {
         match t {
             Terminator::Goto(b) => self.goto(*b),
-            Terminator::If { cond, then_blk, else_blk } => {
+            Terminator::If {
+                cond,
+                then_blk,
+                else_blk,
+            } => {
                 self.emit_operand(cond);
                 self.line("     (if (then");
                 self.goto(*then_blk);
@@ -1443,7 +967,11 @@ impl Emitter<'_> {
                 self.goto(*else_blk);
                 self.line("     ))");
             }
-            Terminator::Switch { value, targets, default } => {
+            Terminator::Switch {
+                value,
+                targets,
+                default,
+            } => {
                 // Lower to a chain of compares; a real br_table needs contiguous keys.
                 for (k, b) in targets {
                     self.emit_operand(value);
@@ -1481,190 +1009,6 @@ impl Emitter<'_> {
             Terminator::Unreachable => self.line("     (unreachable)"),
             Terminator::AsyncComplete(_) => self.line("     (unreachable) ;; async in sync fn"),
             Terminator::Await { .. } => self.line("     (unreachable) ;; await in sync fn"),
-        }
-    }
-
-    /// Completes the current coroutine: releases the persistent user reference locals, then
-    /// `$dream_complete($self, value)` and returns `0` (the poll result).
-    fn emit_poll_complete(&mut self, value: Option<&Operand>) {
-        if let Some(parent) = self.async_parent {
-            // Only the persistent user locals (params + declared `let`s) are released; the trailing
-            // synthetic temps are transient and have no guaranteed release helper for their types.
-            for (i, decl) in parent.locals.iter().enumerate().take(self.async_user_locals) {
-                if self.interner.is_reference(decl.ty) {
-                    let call = release_call(self.interner, self.layouts, decl.ty);
-                    self.line(&format!("     (local.get ${i})"));
-                    self.line(&format!("     (call {call})"));
-                }
-            }
-        }
-        self.line("     (local.get $self)");
-        match value {
-            Some(v) => self.emit_operand(v),
-            None => self.line("     (i32.const 0)"),
-        }
-        self.line("     (call $dream_complete)");
-        self.line("     (i32.const 0)");
-        self.line("     (return)");
-    }
-
-    /// Emits the coroutine poll function: a state-machine dispatch over the whole lowered async body.
-    /// On entry the frame-resident locals are restored, then a `$__pc`/`br_table` loop (seeded from
-    /// the saved `Future.state`) runs blocks; CFG edges re-dispatch, an [`Terminator::Await`] parks
-    /// the task and returns (recording its `resume` block as the next state), and completions run
-    /// `$dream_complete`. A block that is some await's `resume` target first binds the settled result.
-    fn emit_async_state_machine(&mut self, slots: &AsyncSlots, poll_sym: &str) {
-        if self.debug {
-            self.line(&format!("(func ${} (@name \"{}\") (param $self i32) (result i32)", poll_sym, format!("{}__poll", self.func.name)));
-        } else {
-            self.line(&format!("(func ${} (param $self i32) (result i32)", poll_sym));
-        }
-        for (i, decl) in self.func.locals.iter().enumerate() {
-            if self.debug && decl.name.is_some() {
-                self.line(&format!(" (local ${} (@name \"{}\") {})", i, decl.name.as_ref().unwrap(), self.wasm_ty(decl.ty)));
-            } else {
-                self.line(&format!(" (local ${} {})", i, self.wasm_ty(decl.ty)));
-            }
-        }
-        // Scratch locals shared with the normal emitter (`$__obj`/`$__len`/`$__rel` back array &
-        // reassignment scratch, `$__jsp` a saved `$__sp` across a dynamic `js` call); `$__pc` drives
-        // the block dispatch, `$__scratch` holds the awaited future at a suspend.
-        self.line(" (local $__obj i32)");
-        self.line(" (local $__scratch i32)");
-        self.line(" (local $__len i32)");
-        self.line(" (local $__rel i32)");
-        self.line(" (local $__pc i32)");
-        self.line(" (local $__jsp i32)");
-
-        // Restore every frame-resident local; reference slots are zeroed after the move so ownership
-        // lives in the WASM local (and is not double-freed from the frame) until the next suspend.
-        for (idx, _, wt) in &slots.entries {
-            let off = slots.offsets[idx];
-            self.line(" local.get $self");
-            self.line(&format!(" {} offset={}", slot_load(wt), off));
-            self.line(&format!(" local.set ${}", idx));
-            if slots.ref_locals.contains(idx) {
-                self.line(" local.get $self");
-                self.line(" i32.const 0");
-                self.line(&format!(" i32.store offset={}", off));
-            }
-        }
-
-        // Blocks that are an await's `resume` target, mapped to the local its result binds to (if any).
-        let mut resume_binds: HashMap<u32, Option<crate::mir::Local>> = HashMap::new();
-        for block in &self.func.blocks {
-            if let Terminator::Await { dest, resume, .. } = &block.terminator {
-                resume_binds.insert(resume.0, *dest);
-            }
-        }
-
-        let n = self.func.blocks.len();
-        self.line(" local.get $self");
-        self.line(&format!(" i32.load offset={}", F_STATE));
-        self.line(" local.set $__pc");
-        self.line(" (block $__exit");
-        self.line("  (loop $__loop");
-        for i in (0..n).rev() {
-            self.line(&format!("   (block $bb{}", i));
-        }
-        let labels: String = (0..n).map(|i| format!("$bb{} ", i)).collect();
-        let default = format!("$bb{}", n.saturating_sub(1));
-        self.line(&format!("    (br_table {}{} (local.get $__pc))", labels, default));
-        for i in 0..n {
-            self.line(&format!("   ) ;; bb{} body", i));
-            if let Some(dest) = resume_binds.get(&(i as u32)) {
-                // Resume point: bind the settled result (`awaiting.result`) before continuing.
-                self.line("     (local.get $self)");
-                self.line(&format!("     (i32.load offset={})", F_AWAITING));
-                self.line(&format!("     (i32.load offset={})", F_RESULT));
-                match dest {
-                    Some(d) => self.line(&format!("     (local.set ${})", d.0)),
-                    None => self.line("     (drop)"),
-                }
-            }
-            let block = self.func.block(crate::mir::BlockId(i as u32));
-            for stmt in &block.stmts {
-                self.emit_stmt(stmt);
-            }
-            self.emit_async_cfg_terminator(&block.terminator, slots);
-        }
-        self.line("  )"); // loop
-        self.line(" )"); // $__exit
-        // Every reachable path suspends (returns) or completes (returns); the tail is unreachable but
-        // keeps the `(result i32)` signature well-typed.
-        self.line(" (unreachable)");
-        self.line(")");
-    }
-
-    /// Terminator emission inside the coroutine poll dispatch: CFG edges re-dispatch through `$__pc`,
-    /// an `Await` parks the task and returns, and completions/returns finish the task.
-    fn emit_async_cfg_terminator(&mut self, t: &Terminator, slots: &AsyncSlots) {
-        match t {
-            Terminator::Goto(_) | Terminator::If { .. } | Terminator::Switch { .. } => {
-                self.emit_terminator(t)
-            }
-            Terminator::Await { future, resume, .. } => {
-                // Evaluate the awaited future, park the task on it, save live locals, and return so the
-                // scheduler can drive it; the poll re-enters at `resume` when the future settles.
-                self.emit_operand(future);
-                self.line("     (local.set $__scratch)");
-                self.line("     (local.get $self)");
-                self.line("     (local.get $__scratch)");
-                self.line(&format!("     (i32.store offset={})", F_AWAITING));
-                self.line("     (local.get $self)");
-                self.line(&format!("     (i32.const {})", resume.0));
-                self.line(&format!("     (i32.store offset={})", F_STATE));
-                for (idx, _, wt) in &slots.entries {
-                    let off = slots.offsets[idx];
-                    self.line("     (local.get $self)");
-                    self.line(&format!("     (local.get ${})", idx));
-                    self.line(&format!("     ({} offset={})", slot_store(wt), off));
-                }
-                self.line("     (local.get $self)");
-                self.line("     (local.get $__scratch)");
-                self.line("     (call $dream_await)");
-                self.line("     (i32.const 0)");
-                self.line("     (return)");
-            }
-            Terminator::AsyncComplete(v) => {
-                let v = v.clone();
-                self.emit_poll_complete(v.as_ref());
-            }
-            // A value `return x;` in an async body lowers to `AsyncComplete`; handle the plain form too.
-            Terminator::Return(v) => {
-                let v = v.clone();
-                self.emit_poll_complete(v.as_ref());
-            }
-            Terminator::Unreachable => self.line("     (unreachable)"),
-        }
-    }
-
-    /// Emits `sleep` / `Promise.all|any|race`, leaving a `Future` pointer on the stack.
-    fn emit_async_intrinsic(&mut self, kind: &str, args: &[Operand]) {
-        use crate::intrinsics;
-        match kind {
-            intrinsics::SLEEP => {
-                use crate::mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
-                self.emit_operand(&args[0]);
-                self.line("     (local.set $__scratch)");
-                self.line(&format!("     (i32.const {F_SLOTS}) ;; F_SLOTS"));
-                self.line(&format!("     (i32.const {HOST_POLL_INDEX})"));
-                self.line(&format!("     (i32.const {KIND_HOST}) ;; KIND_HOST"));
-                self.line("     (call $dream_new_future)");
-                self.line("     (local.tee $__obj)");
-                self.line("     (local.get $__scratch)");
-                self.line("     (call $dream_set_timer)");
-                self.line("     (local.get $__obj)");
-            }
-            intrinsics::PROMISE_ALL => {
-                self.emit_operand(&args[0]);
-                self.line("     (call $dream_all)");
-            }
-            intrinsics::PROMISE_ANY | intrinsics::PROMISE_RACE => {
-                self.emit_operand(&args[0]);
-                self.line("     (call $dream_any)");
-            }
-            _ => {}
         }
     }
 
@@ -1728,9 +1072,9 @@ impl Emitter<'_> {
                 .field_layout(*base, *field)
                 .map(|(_, t)| t)
                 .unwrap_or_else(|| self.func.local_ty(*base)),
-            Operand::Copy(Place::Index { base, .. }) => {
-                self.array_elem_ty(*base).unwrap_or_else(|| self.func.local_ty(*base))
-            }
+            Operand::Copy(Place::Index { base, .. }) => self
+                .array_elem_ty(*base)
+                .unwrap_or_else(|| self.func.local_ty(*base)),
             Operand::Copy(Place::Global(_)) => self.interner.int(),
             Operand::Const(Const::Long(_)) => self.interner.long(),
             Operand::Const(Const::Float(_)) => self.interner.double(),

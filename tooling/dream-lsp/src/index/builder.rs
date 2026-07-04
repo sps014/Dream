@@ -678,7 +678,9 @@ impl Builder {
         let comments: Vec<_> = token
             .leading_trivia
             .iter()
-            .filter(|t| t.kind == TokenKind::LineCommentToken || t.kind == TokenKind::BlockCommentToken)
+            .filter(|t| {
+                t.kind == TokenKind::LineCommentToken || t.kind == TokenKind::BlockCommentToken
+            })
             .collect();
         if comments.is_empty() {
             return None;

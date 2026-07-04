@@ -42,9 +42,8 @@ impl MirPass for RcInsertion {
             .map(|d| interner.is_reference(d.ty))
             .collect();
         let params: HashSet<u32> = func.params.iter().map(|p| p.0).collect();
-        let is_owned_ref = |l: u32| {
-            local_is_ref.get(l as usize).copied().unwrap_or(false) && !params.contains(&l)
-        };
+        let is_owned_ref =
+            |l: u32| local_is_ref.get(l as usize).copied().unwrap_or(false) && !params.contains(&l);
         let mut changed = false;
 
         // Rule 1: local-assignment RC (release previous occupant, retain borrowed copies). When the
@@ -60,16 +59,26 @@ impl MirPass for RcInsertion {
             for stmt in block.stmts.drain(..) {
                 let ref_dest = match &stmt {
                     Statement::Assign(Place::Local(dest), rvalue) if is_owned_ref(dest.0) => {
-                        Some((*dest, is_borrowed_copy(rvalue, interner), rvalue_reads_local(rvalue, dest.0)))
+                        Some((
+                            *dest,
+                            is_borrowed_copy(rvalue, interner),
+                            rvalue_reads_local(rvalue, dest.0),
+                        ))
                     }
                     _ => None,
                 };
                 match ref_dest {
                     Some((dest, retain, true)) => {
-                        assert!(is_owned_ref(dest.0), "RC insertion on non-owned reference local");
+                        assert!(
+                            is_owned_ref(dest.0),
+                            "RC insertion on non-owned reference local"
+                        );
                         // Old value is read by the rvalue: save it, evaluate, then release it.
                         let tmp = Local(temp_base + extra_locals.len() as u32);
-                        extra_locals.push(LocalDecl { ty: local_types[dest.0 as usize], name: None });
+                        extra_locals.push(LocalDecl {
+                            ty: local_types[dest.0 as usize],
+                            name: None,
+                        });
                         out.push(Statement::Assign(
                             Place::Local(tmp),
                             Rvalue::Use(Operand::Copy(Place::Local(dest))),
@@ -100,12 +109,16 @@ impl MirPass for RcInsertion {
         func.locals.extend(extra_locals);
 
         // Rule 3: scope-exit release at every `Return`.
-        let owned_locals: Vec<u32> = (0..func.locals.len() as u32).filter(|i| is_owned_ref(*i)).collect();
+        let owned_locals: Vec<u32> = (0..func.locals.len() as u32)
+            .filter(|i| is_owned_ref(*i))
+            .collect();
         let ret_is_ref = interner.is_reference(func.ret);
         let mut spills: Vec<LocalDecl> = Vec::new();
         let next_local = func.locals.len() as u32;
         for block in &mut func.blocks {
-            let Terminator::Return(ret) = &block.terminator else { continue };
+            let Terminator::Return(ret) = &block.terminator else {
+                continue;
+            };
             // Decide whether the return value transfers (owned local) or must be spilled + retained.
             let (skip, spill_from): (Option<u32>, Option<Operand>) = match ret {
                 Some(Operand::Copy(Place::Local(l))) if is_owned_ref(l.0) => (Some(l.0), None),
@@ -114,9 +127,16 @@ impl MirPass for RcInsertion {
             };
             let skip = if let Some(op) = spill_from {
                 let temp = Local(next_local + spills.len() as u32);
-                spills.push(LocalDecl { ty: func.ret, name: None });
-                block.stmts.push(Statement::Assign(Place::Local(temp), Rvalue::Use(op)));
-                block.stmts.push(Statement::Retain(Operand::Copy(Place::Local(temp))));
+                spills.push(LocalDecl {
+                    ty: func.ret,
+                    name: None,
+                });
+                block
+                    .stmts
+                    .push(Statement::Assign(Place::Local(temp), Rvalue::Use(op)));
+                block
+                    .stmts
+                    .push(Statement::Retain(Operand::Copy(Place::Local(temp))));
                 block.terminator = Terminator::Return(Some(Operand::Copy(Place::Local(temp))));
                 changed = true;
                 Some(temp.0)
@@ -127,7 +147,9 @@ impl MirPass for RcInsertion {
                 if Some(i) == skip {
                     continue;
                 }
-                block.stmts.push(Statement::Release(Operand::Copy(Place::Local(Local(i)))));
+                block
+                    .stmts
+                    .push(Statement::Release(Operand::Copy(Place::Local(Local(i)))));
                 changed = true;
             }
         }
@@ -195,7 +217,12 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
             check(receiver);
             args.iter().for_each(&mut check);
         }
-        Rvalue::JsCall { target, method, args, .. } => {
+        Rvalue::JsCall {
+            target,
+            method,
+            args,
+            ..
+        } => {
             check(target);
             if let Some(m) = method {
                 check(m);
@@ -304,7 +331,10 @@ mod tests {
                 _ => "other",
             })
             .collect();
-        assert_eq!(kinds, vec!["release", "assign", "retain", "release", "release"]);
+        assert_eq!(
+            kinds,
+            vec!["release", "assign", "retain", "release", "release"]
+        );
     }
 
     #[test]
@@ -314,7 +344,10 @@ mod tests {
         let i = TypeInterner::new();
         let mut b = FunctionBuilder::new("f", i.string());
         let s = b.new_local(i.string(), Some("s".into()));
-        b.assign(Place::Local(s), Rvalue::Use(Operand::Const(crate::mir::Const::Str("x".into()))));
+        b.assign(
+            Place::Local(s),
+            Rvalue::Use(Operand::Const(crate::mir::Const::Str("x".into()))),
+        );
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
         let mut func = b.finish();
         RcInsertion.run(&mut func, &i);

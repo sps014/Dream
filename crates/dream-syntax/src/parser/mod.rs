@@ -1,12 +1,12 @@
-use dream_diagnostics::DiagnosticBag;
 use crate::lexer::Lexer;
 use crate::nodes::{ProgramNode, Type};
 use crate::syntax_tree::SyntaxTree;
-use dream_text::line_text::LineText;
-use dream_text::text_span::TextSpan;
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use bumpalo::Bump;
+use dream_diagnostics::DiagnosticBag;
+use dream_text::line_text::LineText;
+use dream_text::text_span::TextSpan;
 use std::collections::HashMap;
 use std::io::Error;
 
@@ -276,7 +276,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// two shapes the declaration nodes store.
     fn take_generic_params(
         &mut self,
-    ) -> (Option<Vec<SyntaxToken>>, Vec<crate::nodes::GenericConstraint>) {
+    ) -> (
+        Option<Vec<SyntaxToken>>,
+        Vec<crate::nodes::GenericConstraint>,
+    ) {
         match self.parse_identifier_generic_params() {
             Some((params, constraints)) => (Some(params), constraints),
             None => (None, Vec::new()),

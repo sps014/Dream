@@ -176,7 +176,10 @@ pub enum HStmt {
         value: HExpr,
     },
     /// Assignment to a place (local/global/field/index).
-    Assign { place: HPlace, value: HExpr },
+    Assign {
+        place: HPlace,
+        value: HExpr,
+    },
     /// An expression evaluated for its effect.
     Expr(HExpr),
     Return(Option<HExpr>),
@@ -409,10 +412,16 @@ pub enum HExprKind {
     },
     /// A runtime type test `value is target` on an `object`-typed value (typed `bool`): a runtime tag
     /// comparison. Concrete-typed operands are folded to a `BoolLit` in the analyzer instead.
-    IsType { value: Box<HExpr>, target: TypeId },
+    IsType {
+        value: Box<HExpr>,
+        target: TypeId,
+    },
     /// The `print`/`println` builtins (`System.print`/`System.println`), lowered to the host
     /// `print_*` imports. Void-typed; only valid in statement position. `newline` appends a `\n`.
-    Print { arg: Box<HExpr>, newline: bool },
+    Print {
+        arg: Box<HExpr>,
+        newline: bool,
+    },
     /// A dynamic `js` call whose variadic arguments are marshaled through the shadow stack in a
     /// single host crossing (no per-argument boxing, no heap array). `callee` is the bridge import
     /// (`js.__call` for a method call, `js.__invoke` for calling the value); `target` is the JS
@@ -459,8 +468,16 @@ mod tests {
             name: "add".to_string(),
             instance: vec![],
             params: vec![
-                HParam { local: LocalId(0), name: "a".into(), ty: int },
-                HParam { local: LocalId(1), name: "b".into(), ty: int },
+                HParam {
+                    local: LocalId(0),
+                    name: "a".into(),
+                    ty: int,
+                },
+                HParam {
+                    local: LocalId(1),
+                    name: "b".into(),
+                    ty: int,
+                },
             ],
             ret: int,
             locals: vec![],

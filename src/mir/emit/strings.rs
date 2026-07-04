@@ -4,14 +4,23 @@ use super::*;
 /// each struct's default `to_string` pieces (`"Point { "`, `"x: "`, `", y: "`, `" }"`). Interned
 /// alongside the program's own literals so `$<Type>_to_string` can reference their data pointers.
 pub(super) fn protocol_strings(mir: &crate::mir::Mir) -> Vec<String> {
-    let mut v =
-        vec!["null".to_string(), "<object>".to_string(), "[".to_string(), "]".to_string(), ", ".to_string()];
+    let mut v = vec![
+        "null".to_string(),
+        "<object>".to_string(),
+        "[".to_string(),
+        "]".to_string(),
+        ", ".to_string(),
+    ];
     // `length` is the JS array-length key read by the generated `$js_to_array_t*` marshalers.
     v.push("length".to_string());
     for layout in mir.layouts.structs.values() {
         v.push(format!("{} {{ ", layout.name));
         for (i, f) in layout.fields.iter().enumerate() {
-            v.push(if i == 0 { format!("{}: ", f.name) } else { format!(", {}: ", f.name) });
+            v.push(if i == 0 {
+                format!("{}: ", f.name)
+            } else {
+                format!(", {}: ", f.name)
+            });
             // The bare field name is the JS property key used by the struct<->js marshalers.
             v.push(f.name.clone());
         }
@@ -39,7 +48,13 @@ pub(super) fn union_variant_pieces(v: &crate::hir::UnionVariant) -> (String, Vec
         .fields
         .iter()
         .enumerate()
-        .map(|(i, f)| if i == 0 { format!("{}: ", f.name) } else { format!(", {}: ", f.name) })
+        .map(|(i, f)| {
+            if i == 0 {
+                format!("{}: ", f.name)
+            } else {
+                format!(", {}: ", f.name)
+            }
+        })
         .collect();
     (prefix, labels, ")".to_string())
 }
@@ -133,7 +148,12 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
             strings_in_operand(receiver, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
         }
-        Rvalue::JsCall { target, method, args, .. } => {
+        Rvalue::JsCall {
+            target,
+            method,
+            args,
+            ..
+        } => {
             strings_in_operand(target, out);
             if let Some(m) = method {
                 strings_in_operand(m, out);

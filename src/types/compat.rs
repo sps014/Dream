@@ -61,7 +61,8 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
     // generates the `$<Type>_to_js` / `$js_to_<Type>` marshalers); reconstruction targets a reference
     // class only.
     if matches!(tk, TyKind::Js) {
-        return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..)) || is_null_literal(interner, value);
+        return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..))
+            || is_null_literal(interner, value);
     }
     if matches!(vk, TyKind::Js) {
         if matches!(tk, TyKind::Prim(_)) {

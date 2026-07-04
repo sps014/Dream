@@ -15,7 +15,8 @@ pub(super) fn emit_object_protocol(
     // default for those so the symbols do not collide.
     let user_syms: std::collections::HashSet<String> =
         mir.functions.iter().map(func_symbol).collect();
-    let has_override = |name: &str, method: &str| user_syms.contains(&format!("{}_{}", name, method));
+    let has_override =
+        |name: &str, method: &str| user_syms.contains(&format!("{}_{}", name, method));
     for layout in mir.layouts.structs.values() {
         if !has_override(&layout.name, "to_string") {
             emit_struct_to_string(out, layout, interner, strings);
@@ -71,8 +72,16 @@ pub(super) fn fold_hash_field(out: &mut String, indent: &str, load: &str, hash: 
 }
 
 /// Emits one struct's default `$<Type>_hash_code`: `h = 17`, folding each field in offset order.
-pub(super) fn emit_struct_hash_code(out: &mut String, layout: &crate::hir::TypeLayout, interner: &TypeInterner) {
-    let _ = writeln!(out, "(func ${}_hash_code (param $this i32) (result i32)", layout.name);
+pub(super) fn emit_struct_hash_code(
+    out: &mut String,
+    layout: &crate::hir::TypeLayout,
+    interner: &TypeInterner,
+) {
+    let _ = writeln!(
+        out,
+        "(func ${}_hash_code (param $this i32) (result i32)",
+        layout.name
+    );
     out.push_str("  (local $h i32)\n  (i32.const 17) (local.set $h)\n");
     for f in &layout.fields {
         let load = field_load_expr(interner, f.offset, f.ty);
@@ -84,12 +93,22 @@ pub(super) fn emit_struct_hash_code(out: &mut String, layout: &crate::hir::TypeL
 /// Emits one union's default `$<Union>_hash_code`: seeds the accumulator from the discriminant word
 /// (offset 0) and folds the matching variant's fields, so equal values hash equally and different
 /// variants/payloads (including field order) diverge.
-pub(super) fn emit_union_hash_code(out: &mut String, layout: &crate::hir::UnionLayout, interner: &TypeInterner) {
-    let _ = writeln!(out, "(func ${}_hash_code (param $this i32) (result i32)", layout.name);
+pub(super) fn emit_union_hash_code(
+    out: &mut String,
+    layout: &crate::hir::UnionLayout,
+    interner: &TypeInterner,
+) {
+    let _ = writeln!(
+        out,
+        "(func ${}_hash_code (param $this i32) (result i32)",
+        layout.name
+    );
     out.push_str("  (local $h i32)\n  (local $d i32)\n");
     out.push_str("  (local.get $this) (i32.load) (local.set $d)\n");
     // h = 17 * 31 + discriminant
-    out.push_str("  (i32.const 17) (i32.const 31) (i32.mul) (local.get $d) (i32.add) (local.set $h)\n");
+    out.push_str(
+        "  (i32.const 17) (i32.const 31) (i32.mul) (local.get $d) (i32.add) (local.set $h)\n",
+    );
     for variant in &layout.variants {
         let _ = writeln!(
             out,
@@ -112,13 +131,21 @@ pub(super) fn field_load_expr(interner: &TypeInterner, offset: u32, ty: TypeId) 
     } else {
         String::new()
     };
-    format!("(local.get $this){} ({})", add, load_instr_for(interner, ty))
+    format!(
+        "(local.get $this){} ({})",
+        add,
+        load_instr_for(interner, ty)
+    )
 }
 
 /// Emits the tag-dispatching `$object_hash_code`: unbox+hash for boxed primitives, `$hash_string`
 /// for strings, and each struct/union's `$<Type>_hash_code` by type tag. Mirrors
 /// [`emit_object_to_string`]. A null pointer hashes to 0.
-pub(super) fn emit_object_hash_code(out: &mut String, mir: &crate::mir::Mir, tags: &HashMap<TypeId, i32>) {
+pub(super) fn emit_object_hash_code(
+    out: &mut String,
+    mir: &crate::mir::Mir,
+    tags: &HashMap<TypeId, i32>,
+) {
     use crate::mir::abi as t;
     out.push_str("(func $object_hash_code (param $ptr i32) (result i32)\n  (local $tag i32)\n");
     out.push_str("  (local.get $ptr) (i32.eqz) (if (then (i32.const 0) (return)))\n");
@@ -135,17 +162,29 @@ pub(super) fn emit_object_hash_code(out: &mut String, mir: &crate::mir::Mir, tag
         (t::TAG_BYTE, "$unbox_byte", ""),
     ];
     for (tag, unbox, hash) in prim_arms {
-        write_tag_arm(out, tag, &format!("(local.get $ptr) (call {}) {}", unbox, hash));
+        write_tag_arm(
+            out,
+            tag,
+            &format!("(local.get $ptr) (call {}) {}", unbox, hash),
+        );
     }
     write_tag_arm(out, t::TAG_STRING, "(local.get $ptr) (call $hash_string)");
     for (ty, layout) in &mir.layouts.structs {
         if let Some(&tag) = tags.get(ty) {
-            write_tag_arm(out, tag, &format!("(local.get $ptr) (call ${}_hash_code)", layout.name));
+            write_tag_arm(
+                out,
+                tag,
+                &format!("(local.get $ptr) (call ${}_hash_code)", layout.name),
+            );
         }
     }
     for (ty, layout) in &mir.layouts.unions {
         if let Some(&tag) = tags.get(ty) {
-            write_tag_arm(out, tag, &format!("(local.get $ptr) (call ${}_hash_code)", layout.name));
+            write_tag_arm(
+                out,
+                tag,
+                &format!("(local.get $ptr) (call ${}_hash_code)", layout.name),
+            );
         }
     }
     // Unknown/opaque reference: hash by identity (the pointer itself).
@@ -161,11 +200,19 @@ pub(super) fn emit_struct_to_string(
     strings: &IndexMap<String, u32>,
 ) {
     let prefix = format!("{} {{ ", layout.name);
-    let _ = writeln!(out, "(func ${}_to_string (param $this i32) (result i32)", layout.name);
+    let _ = writeln!(
+        out,
+        "(func ${}_to_string (param $this i32) (result i32)",
+        layout.name
+    );
     out.push_str("  (local $res i32)\n");
     let _ = writeln!(out, "  (i32.const {}) (local.set $res)", strings[&prefix]);
     for (i, f) in layout.fields.iter().enumerate() {
-        let label = if i == 0 { format!("{}: ", f.name) } else { format!(", {}: ", f.name) };
+        let label = if i == 0 {
+            format!("{}: ", f.name)
+        } else {
+            format!(", {}: ", f.name)
+        };
         let _ = writeln!(
             out,
             "  (local.get $res) (i32.const {}) (call $concat_strings) (local.set $res)",
@@ -181,7 +228,11 @@ pub(super) fn emit_struct_to_string(
         }
         out.push_str("  (call $concat_strings) (local.set $res)\n");
     }
-    let _ = writeln!(out, "  (local.get $res) (i32.const {}) (call $concat_strings)", strings[" }"]);
+    let _ = writeln!(
+        out,
+        "  (local.get $res) (i32.const {}) (call $concat_strings)",
+        strings[" }"]
+    );
     out.push_str(")\n");
 }
 
@@ -194,9 +245,17 @@ pub(super) fn emit_union_to_string(
     interner: &TypeInterner,
     strings: &IndexMap<String, u32>,
 ) {
-    let _ = writeln!(out, "(func ${}_to_string (param $this i32) (result i32)", layout.name);
+    let _ = writeln!(
+        out,
+        "(func ${}_to_string (param $this i32) (result i32)",
+        layout.name
+    );
     out.push_str("  (local $res i32)\n  (local $d i32)\n");
-    let _ = writeln!(out, "  (i32.const {}) (local.set $res)", strings["<object>"]);
+    let _ = writeln!(
+        out,
+        "  (i32.const {}) (local.set $res)",
+        strings["<object>"]
+    );
     out.push_str("  (local.get $this) (i32.load) (local.set $d)\n");
     for variant in &layout.variants {
         let (prefix, labels, suffix) = union_variant_pieces(variant);
@@ -298,7 +357,11 @@ pub(super) fn emit_array_to_string(
     strings: &IndexMap<String, u32>,
 ) {
     let (esize, _) = scalar_size(interner, elem);
-    let _ = writeln!(out, "(func {} (param $ptr i32) (result i32)", array_to_string_sym(elem));
+    let _ = writeln!(
+        out,
+        "(func {} (param $ptr i32) (result i32)",
+        array_to_string_sym(elem)
+    );
     out.push_str("  (local $res i32)\n  (local $len i32)\n  (local $i i32)\n");
     let _ = writeln!(out, "  (i32.const {}) (local.set $res)", strings["["]);
     out.push_str("  (local.get $ptr) (i32.load) (local.set $len)\n");
@@ -314,7 +377,11 @@ pub(super) fn emit_array_to_string(
     if esize == 1 {
         out.push_str("    (local.get $i) (i32.add)\n");
     } else {
-        let _ = writeln!(out, "    (local.get $i) (i32.const {}) (i32.mul) (i32.add)", esize);
+        let _ = writeln!(
+            out,
+            "    (local.get $i) (i32.const {}) (i32.mul) (i32.add)",
+            esize
+        );
     }
     let _ = writeln!(out, "    ({})", load_instr_for(interner, elem));
     if let Some(call) = value_to_string_call(interner, elem) {
@@ -323,7 +390,11 @@ pub(super) fn emit_array_to_string(
     out.push_str("    (call $concat_strings) (local.set $res)\n");
     out.push_str("    (local.get $i) (i32.const 1) (i32.add) (local.set $i)\n");
     out.push_str("    (br $scan)))\n");
-    let _ = writeln!(out, "  (local.get $res) (i32.const {}) (call $concat_strings)", strings["]"]);
+    let _ = writeln!(
+        out,
+        "  (local.get $res) (i32.const {}) (call $concat_strings)",
+        strings["]"]
+    );
     out.push_str(")\n");
 }
 
@@ -355,18 +426,30 @@ pub(super) fn emit_object_to_string(
         (t::TAG_BYTE, "$unbox_byte", "$byte_to_string"),
     ];
     for (tag, unbox, to_str) in prim_arms {
-        write_tag_arm(out, tag, &format!("(local.get $ptr) (call {}) (call {})", unbox, to_str));
+        write_tag_arm(
+            out,
+            tag,
+            &format!("(local.get $ptr) (call {}) (call {})", unbox, to_str),
+        );
     }
     // Strings are already their own pointer.
     write_tag_arm(out, t::TAG_STRING, "(local.get $ptr)");
     for (ty, layout) in &mir.layouts.structs {
         if let Some(&tag) = tags.get(ty) {
-            write_tag_arm(out, tag, &format!("(local.get $ptr) (call ${}_to_string)", layout.name));
+            write_tag_arm(
+                out,
+                tag,
+                &format!("(local.get $ptr) (call ${}_to_string)", layout.name),
+            );
         }
     }
     for (ty, layout) in &mir.layouts.unions {
         if let Some(&tag) = tags.get(ty) {
-            write_tag_arm(out, tag, &format!("(local.get $ptr) (call ${}_to_string)", layout.name));
+            write_tag_arm(
+                out,
+                tag,
+                &format!("(local.get $ptr) (call ${}_to_string)", layout.name),
+            );
         }
     }
     let _ = writeln!(out, "  (i32.const {})\n)", strings["<object>"]);

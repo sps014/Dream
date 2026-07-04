@@ -9,9 +9,7 @@
 
 use super::build::FunctionBuilder;
 use super::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use crate::hir::{
-    Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir,
-};
+use crate::hir::{Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir};
 use crate::types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 use std::collections::HashMap;
 
@@ -52,7 +50,10 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
     let globals = hir
         .globals
         .iter()
-        .map(|g| super::MirGlobal { id: super::Global(g.id.0), ty: g.ty })
+        .map(|g| super::MirGlobal {
+            id: super::Global(g.id.0),
+            ty: g.ty,
+        })
         .collect();
     Mir {
         functions,
@@ -207,7 +208,11 @@ impl Lowerer<'_> {
             HStmt::Await(e) if self.async_coroutine => {
                 let fut = self.lower_operand(e);
                 let resume = self.b.new_block();
-                self.b.terminate(Terminator::Await { future: fut, dest: None, resume });
+                self.b.terminate(Terminator::Await {
+                    future: fut,
+                    dest: None,
+                    resume,
+                });
                 self.b.switch_to(resume);
             }
             HStmt::Expr(e) | HStmt::Await(e) => match &e.kind {
@@ -217,15 +222,18 @@ impl Lowerer<'_> {
                 // *reference*, however, must be materialized into a temp so RC insertion releases it at
                 // scope exit — otherwise the returned object (and anything it owns) leaks.
                 HExprKind::Call { callee, args } if !self.interner.is_reference(e.ty) => {
-                    let lowered: Vec<Operand> = args.iter().map(|a| self.lower_operand(a)).collect();
+                    let lowered: Vec<Operand> =
+                        args.iter().map(|a| self.lower_operand(a)).collect();
                     self.b.push(Statement::Call {
                         callee: self.lower_callee(callee),
                         args: lowered,
                     });
                 }
-                HExprKind::MethodCall { receiver, callee, args }
-                    if !self.interner.is_reference(e.ty) =>
-                {
+                HExprKind::MethodCall {
+                    receiver,
+                    callee,
+                    args,
+                } if !self.interner.is_reference(e.ty) => {
                     let mut lowered = vec![self.lower_operand(receiver)];
                     lowered.extend(args.iter().map(|a| self.lower_operand(a)));
                     self.b.push(Statement::Call {
@@ -233,9 +241,13 @@ impl Lowerer<'_> {
                         args: lowered,
                     });
                 }
-                HExprKind::InterfaceCall { receiver, iface_id, method_slot, sig, args }
-                    if !self.interner.is_reference(e.ty) =>
-                {
+                HExprKind::InterfaceCall {
+                    receiver,
+                    iface_id,
+                    method_slot,
+                    sig,
+                    args,
+                } if !self.interner.is_reference(e.ty) => {
                     let recv = self.lower_operand(receiver);
                     let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
                     self.b.push(Statement::InterfaceCall {
@@ -250,7 +262,11 @@ impl Lowerer<'_> {
                 HExprKind::Print { arg, newline } => {
                     let ty = arg.ty;
                     let o = self.lower_operand(arg);
-                    self.b.push(Statement::Print { arg: o, ty, newline: *newline });
+                    self.b.push(Statement::Print {
+                        arg: o,
+                        ty,
+                        newline: *newline,
+                    });
                 }
                 // Any other expression is evaluated for effect and its value discarded.
                 _ => {
@@ -271,7 +287,9 @@ impl Lowerer<'_> {
                 else_branch,
             } => self.lower_if(cond, then_branch, else_branch),
             HStmt::While { cond, body, label } => self.lower_while(cond, body, label.as_deref()),
-            HStmt::DoWhile { cond, body, label } => self.lower_do_while(cond, body, label.as_deref()),
+            HStmt::DoWhile { cond, body, label } => {
+                self.lower_do_while(cond, body, label.as_deref())
+            }
             HStmt::For {
                 init,
                 cond,
@@ -436,8 +454,10 @@ impl Lowerer<'_> {
         self.b.assign(Place::Local(arr_local), Rvalue::Use(arr));
 
         let idx = self.b.new_temp(int);
-        self.b
-            .assign(Place::Local(idx), Rvalue::Use(Operand::Const(Const::Int(0))));
+        self.b.assign(
+            Place::Local(idx),
+            Rvalue::Use(Operand::Const(Const::Int(0))),
+        );
         let len = self.b.new_temp(int);
         self.b.assign(
             Place::Local(len),
@@ -510,7 +530,8 @@ impl Lowerer<'_> {
         {
             self.lower_variant_switch(scrutinee, arms, default);
         } else if matches!(
-            self.interner.kind(self.interner.strip_nullable(scrutinee.ty)),
+            self.interner
+                .kind(self.interner.strip_nullable(scrutinee.ty)),
             TyKind::Prim(PrimTy::String)
         ) {
             self.lower_string_switch(scrutinee, arms, default);
@@ -521,7 +542,12 @@ impl Lowerer<'_> {
 
     /// Lowers a `switch` on a string: a linear chain of `subject == label` content comparisons (the
     /// backend routes string `==` through `$string_eq`), each branching to its arm or the next check.
-    fn lower_string_switch(&mut self, scrutinee: &HExpr, arms: &[crate::hir::HArm], default: &[HStmt]) {
+    fn lower_string_switch(
+        &mut self,
+        scrutinee: &HExpr,
+        arms: &[crate::hir::HArm],
+        default: &[HStmt],
+    ) {
         let subject = self.lower_operand(scrutinee);
         let join = self.b.new_block();
         for arm in arms {
@@ -557,7 +583,12 @@ impl Lowerer<'_> {
     }
 
     /// Lowers a `switch`/`match` whose arms are const/enum-valued: a `br_table` over the scrutinee.
-    fn lower_const_switch(&mut self, scrutinee: &HExpr, arms: &[crate::hir::HArm], default: &[HStmt]) {
+    fn lower_const_switch(
+        &mut self,
+        scrutinee: &HExpr,
+        arms: &[crate::hir::HArm],
+        default: &[HStmt],
+    ) {
         let value = self.lower_operand(scrutinee);
         let default_blk = self.b.new_block();
         let join = self.b.new_block();
@@ -596,18 +627,27 @@ impl Lowerer<'_> {
 
     /// Lowers a `match` on a discriminated union: read the value's discriminant, `br_table` on it,
     /// and in each variant arm bind the payload fields to their pattern locals before the body runs.
-    fn lower_variant_switch(&mut self, scrutinee: &HExpr, arms: &[crate::hir::HArm], default: &[HStmt]) {
+    fn lower_variant_switch(
+        &mut self,
+        scrutinee: &HExpr,
+        arms: &[crate::hir::HArm],
+        default: &[HStmt],
+    ) {
         let union_ty = scrutinee.ty;
         let ptr = self.lower_operand(scrutinee);
         let disc = self.b.new_temp(self.interner.int());
-        self.b.assign(Place::Local(disc), Rvalue::Discriminant(ptr.clone()));
+        self.b
+            .assign(Place::Local(disc), Rvalue::Discriminant(ptr.clone()));
 
         let default_blk = self.b.new_block();
         let join = self.b.new_block();
         let mut targets: Vec<(i64, super::BlockId)> = Vec::new();
 
         for arm in arms {
-            let crate::hir::HPattern::Variant { variant, bindings, .. } = &arm.pattern else {
+            let crate::hir::HPattern::Variant {
+                variant, bindings, ..
+            } = &arm.pattern
+            else {
                 continue;
             };
             let blk = self.b.new_block();
@@ -620,7 +660,12 @@ impl Lowerer<'_> {
                 let local = self.mir_local(binding);
                 self.b.assign(
                     Place::Local(local),
-                    Rvalue::UnionField { base: ptr.clone(), ty: union_ty, variant: *variant, field: i },
+                    Rvalue::UnionField {
+                        base: ptr.clone(),
+                        ty: union_ty,
+                        variant: *variant,
+                        field: i,
+                    },
                 );
             }
             self.lower_block(&arm.body);
@@ -659,7 +704,11 @@ impl Lowerer<'_> {
 
     fn loop_target(&self, label: Option<&str>, is_break: bool) -> Option<super::BlockId> {
         let ctx = match label {
-            Some(l) => self.loops.iter().rev().find(|c| c.label.as_deref() == Some(l)),
+            Some(l) => self
+                .loops
+                .iter()
+                .rev()
+                .find(|c| c.label.as_deref() == Some(l)),
             None => self.loops.last(),
         }?;
         Some(if is_break {
@@ -754,9 +803,18 @@ impl Lowerer<'_> {
             HExprKind::IndirectCall { target, args } => {
                 let t = self.lower_operand(target);
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
-                Rvalue::IndirectCall { target: t, args: lowered }
+                Rvalue::IndirectCall {
+                    target: t,
+                    args: lowered,
+                }
             }
-            HExprKind::InterfaceCall { receiver, iface_id, method_slot, sig, args } => {
+            HExprKind::InterfaceCall {
+                receiver,
+                iface_id,
+                method_slot,
+                sig,
+                args,
+            } => {
                 let recv = self.lower_operand(receiver);
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
                 Rvalue::InterfaceCall {
@@ -770,9 +828,16 @@ impl Lowerer<'_> {
             }
             // A function name used as a value becomes its function-table index.
             HExprKind::Var(Binding::Func(callee)) => Rvalue::FuncRef(self.lower_callee(callee)),
-            HExprKind::New { def, ctor, args, .. } => {
+            HExprKind::New {
+                def, ctor, args, ..
+            } => {
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
-                Rvalue::New { def: *def, ty: e.ty, ctor: *ctor, args: lowered }
+                Rvalue::New {
+                    def: *def,
+                    ty: e.ty,
+                    ctor: *ctor,
+                    args: lowered,
+                }
             }
             HExprKind::UnionNew { def, variant, args } => {
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
@@ -785,18 +850,29 @@ impl Lowerer<'_> {
             }
             HExprKind::Field { obj, field } => {
                 let base = self.operand_into_local(obj);
-                Rvalue::Use(Operand::Copy(Place::Field { base, field: *field }))
+                Rvalue::Use(Operand::Copy(Place::Field {
+                    base,
+                    field: *field,
+                }))
             }
             HExprKind::Index { array, index } => {
                 let base = self.operand_into_local(array);
                 let idx = self.lower_operand(index);
-                Rvalue::Use(Operand::Copy(Place::Index { base, index: Box::new(idx) }))
+                Rvalue::Use(Operand::Copy(Place::Index {
+                    base,
+                    index: Box::new(idx),
+                }))
             }
             HExprKind::Discriminant(v) => Rvalue::Discriminant(self.lower_operand(v)),
             HExprKind::IsType { value, target } => {
                 Rvalue::IsType(self.lower_operand(value), *target)
             }
-            HExprKind::UnionField { base, union_ty, variant, field } => Rvalue::UnionField {
+            HExprKind::UnionField {
+                base,
+                union_ty,
+                variant,
+                field,
+            } => Rvalue::UnionField {
                 base: self.lower_operand(base),
                 ty: *union_ty,
                 variant: *variant,
@@ -804,18 +880,14 @@ impl Lowerer<'_> {
             },
             HExprKind::ArrayLen(a) => Rvalue::ArrayLen(self.lower_operand(a)),
             HExprKind::StrLen(a) => Rvalue::StrLen(self.lower_operand(a)),
-            HExprKind::CharAt(s, i) => {
-                Rvalue::CharAt(self.lower_operand(s), self.lower_operand(i))
-            }
+            HExprKind::CharAt(s, i) => Rvalue::CharAt(self.lower_operand(s), self.lower_operand(i)),
             HExprKind::ArrayNew { elem_ty, len } => Rvalue::ArrayNew {
                 elem_ty: *elem_ty,
                 len: self.lower_operand(len),
             },
             HExprKind::HashCode(e) => Rvalue::HashCode(self.lower_operand(e)),
             HExprKind::ToString(e) => Rvalue::ToString(self.lower_operand(e)),
-            HExprKind::Concat(a, b) => {
-                Rvalue::Concat(self.lower_operand(a), self.lower_operand(b))
-            }
+            HExprKind::Concat(a, b) => Rvalue::Concat(self.lower_operand(a), self.lower_operand(b)),
             HExprKind::EnumName { value, arms } => Rvalue::EnumName {
                 value: self.lower_operand(value),
                 arms: arms.clone(),
@@ -827,7 +899,12 @@ impl Lowerer<'_> {
                     elems: lowered,
                 }
             }
-            HExprKind::JsCall { callee, target, method, args } => {
+            HExprKind::JsCall {
+                callee,
+                target,
+                method,
+                args,
+            } => {
                 let target = self.lower_operand(target);
                 let method = method.as_ref().map(|m| self.lower_operand(m));
                 let args = args.iter().map(|a| (self.lower_operand(a), a.ty)).collect();
@@ -1014,12 +1091,18 @@ impl Lowerer<'_> {
             HPlace::Global(g) => Place::Global(super::Global(g.0)),
             HPlace::Field { obj, field } => {
                 let base = self.operand_into_local(obj);
-                Place::Field { base, field: *field }
+                Place::Field {
+                    base,
+                    field: *field,
+                }
             }
             HPlace::Index { array, index } => {
                 let base = self.operand_into_local(array);
                 let idx = self.lower_operand(index);
-                Place::Index { base, index: Box::new(idx) }
+                Place::Index {
+                    base,
+                    index: Box::new(idx),
+                }
             }
         }
     }
@@ -1057,7 +1140,11 @@ mod tests {
             def,
             name: "f".into(),
             instance: vec![],
-            params: vec![crate::hir::HParam { local: LocalId(0), name: "x".into(), ty: int }],
+            params: vec![crate::hir::HParam {
+                local: LocalId(0),
+                name: "x".into(),
+                ty: int,
+            }],
             ret: int,
             locals: vec![],
             is_async: false,
@@ -1073,7 +1160,10 @@ mod tests {
 
         let mir = lower_function(&func, &ctx.interner);
         // entry ends in a two-way branch.
-        assert!(matches!(mir.blocks[mir.entry.0 as usize].terminator, Terminator::If { .. }));
+        assert!(matches!(
+            mir.blocks[mir.entry.0 as usize].terminator,
+            Terminator::If { .. }
+        ));
         // at least one block returns.
         assert!(mir
             .blocks

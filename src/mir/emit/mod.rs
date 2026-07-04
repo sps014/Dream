@@ -8,9 +8,7 @@
 //! array elements) and allocation reuse the existing runtime/object/string layers when wired in;
 //! they are marked `;; TODO(layout)` here pending that integration.
 
-use super::{
-    BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp,
-};
+use super::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp};
 use crate::hir::{scalar_size, LayoutTable};
 use crate::types::{DefId, PrimTy, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
@@ -96,9 +94,9 @@ use valuetype::*;
 use wat_dce::*;
 
 // The external API of the backend, at the historical `crate::mir::emit::…` paths.
+pub(crate) use emitter::emit_async_poll;
 pub use emitter::emit_function;
 pub use module::{emit_module, emit_program};
-pub(crate) use emitter::emit_async_poll;
 pub(crate) use tables::{func_symbol, poll_symbol};
 pub(crate) use types::wasm_ty_of;
 

@@ -58,11 +58,13 @@ pub fn classify(text: &str) -> Vec<TokenOut> {
 /// `get name(...)` / `set name(...)`. The lexer skips whitespace/comments, so the two following
 /// tokens are the next significant ones.
 fn is_accessor_position(tokens: &[SyntaxToken], idx: usize) -> bool {
-    matches!(tokens.get(idx + 1).map(|t| t.kind), Some(TokenKind::IdentifierToken))
-        && matches!(
-            tokens.get(idx + 2).map(|t| t.kind),
-            Some(TokenKind::OpenParenthesisToken)
-        )
+    matches!(
+        tokens.get(idx + 1).map(|t| t.kind),
+        Some(TokenKind::IdentifierToken)
+    ) && matches!(
+        tokens.get(idx + 2).map(|t| t.kind),
+        Some(TokenKind::OpenParenthesisToken)
+    )
 }
 
 /// Maps a lexical token kind to a highlighting category, or `None` for tokens that carry no
