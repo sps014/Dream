@@ -47,7 +47,7 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     let dream_str = dream_file.to_str().unwrap().to_string();
     let wat_str = wat_path.to_str().unwrap().to_string();
 
-    let compiler = Compiler::new(Target::Wasm).with_debug_alloc(true);
+    let compiler = Compiler::new(Target::Wasm).with_debug(true);
     compiler
         .compile(&dream_str, &wat_str)
         .map_err(|e| format!("compile: {e:?}"))?;

@@ -22,7 +22,7 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
 /// Emits a whole MIR program as a single `(module ...)`, exporting every (non-instance) function
 /// under its source name. This is the self-contained unit the driver will hand to the WASM
 /// assembler once the runtime layers are wired in.
-pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: bool) -> String {
+pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) -> String {
     let symbols = symbol_table(mir);
     let sigs = signature_table(mir);
     let strings = string_table(mir);
@@ -60,7 +60,7 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
         let _ = writeln!(out, "(global $g{} (mut {}) {})", g.id.0, wasm_ty_of(interner, g.ty), zero);
     }
 
-    out.push_str(&runtime_prelude(debug_alloc));
+    out.push_str(&runtime_prelude(debug));
     out.push('\n');
     if crate::mir::async_emit::module_has_async(&mir.functions) {
         out.push_str(&crate::mir::async_emit::async_runtime_wat());
@@ -145,7 +145,11 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug_alloc: 
     out.push_str(")\n");
     // Whole-module dead-function elimination: drop embedded runtime helpers (and any other funcs)
     // not reachable from the module's exports / start / function table.
-    strip_dead_functions(&out)
+    if !debug {
+        strip_dead_functions(&out)
+    } else {
+        out
+    }
 }
 
 /// Emits the module's `(import ...)` declarations: the fixed host `print_*` builtins (which

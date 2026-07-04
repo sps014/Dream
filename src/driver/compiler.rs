@@ -23,21 +23,21 @@ pub struct Compiler {
     target: Target,
     /// When `true`, codegen emits allocator instrumentation so the `Debug.live_objects()` /
     /// `Debug.total_allocations()` probes report real values. Off by default (release builds pay
-    /// no per-allocation cost); enabled via the CLI `--debug` flag or [`Compiler::with_debug_alloc`].
-    debug_alloc: bool,
+    /// no per-allocation cost); enabled via the CLI `--debug` flag or [`Compiler::with_debug`].
+    debug: bool,
 }
 
 impl Compiler {
     pub fn new(target: Target) -> Self {
         Self {
             target,
-            debug_alloc: false,
+            debug: false,
         }
     }
 
     /// Builder: enable allocator instrumentation for this compilation.
-    pub fn with_debug_alloc(mut self, on: bool) -> Self {
-        self.debug_alloc = on;
+    pub fn with_debug(mut self, on: bool) -> Self {
+        self.debug = on;
         self
     }
 
@@ -141,7 +141,7 @@ impl Compiler {
                 pipeline.run(f, interner);
             }
             match self.target {
-                Target::Wasm => crate::mir::emit::emit_module(&mir, interner, self.debug_alloc),
+                Target::Wasm => crate::mir::emit::emit_module(&mir, interner, self.debug),
             }
         };
 

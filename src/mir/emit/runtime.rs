@@ -1,11 +1,11 @@
 use super::*;
 
-/// The allocator + string runtime. When `debug_alloc` is on, `$malloc` bumps
+/// The allocator + string runtime. When `debug` is on, `$malloc` bumps
 /// `$live_objects`/`$total_allocations` and `$free` decrements `$live_objects` (backing the
 /// `Debug.*` probes); otherwise the placeholders expand to nothing so the hot allocation path
 /// carries no extra instructions.
-pub(super) fn runtime_prelude(debug_alloc: bool) -> String {
-    let (malloc_count, free_count) = if debug_alloc {
+pub(super) fn runtime_prelude(debug: bool) -> String {
+    let (malloc_count, free_count) = if debug {
         (
             "global.get $live_objects\n    i32.const 1\n    i32.add\n    global.set $live_objects\n    \
              global.get $total_allocations\n    i32.const 1\n    i32.add\n    global.set $total_allocations",

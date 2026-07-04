@@ -101,9 +101,10 @@ function registerRunFileCommand(context: vscode.ExtensionContext): void {
     );
 }
 
-function registerShowWatCommand(context: vscode.ExtensionContext): void {
+function registerShowWatCommand(context: vscode.ExtensionContext, isRelease: boolean): void {
+    const commandName = isRelease ? 'dream.showWatRelease' : 'dream.showWat';
     context.subscriptions.push(
-        vscode.commands.registerCommand('dream.showWat', async () => {
+        vscode.commands.registerCommand(commandName, async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor || editor.document.languageId !== 'dream') {
                 vscode.window.showWarningMessage('Open a .dream file to view its generated WAT.');
@@ -120,7 +121,8 @@ function registerShowWatCommand(context: vscode.ExtensionContext): void {
             const watPath = watPathFor(filePath);
             const fileLabel = path.basename(filePath);
 
-            const command = `${dreamCmd} ${quotePath(filePath)}`;
+            const args = isRelease ? '' : '--debug';
+            const command = `${dreamCmd} ${args} ${quotePath(filePath)}`;
             exec(command, { cwd: path.dirname(filePath) }, (error, stdout, stderr) => {
                 if (error) {
                     const details = [stderr, stdout].filter(Boolean).join('\n');
@@ -204,7 +206,8 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(compilerOutputChannel);
 
     registerRunFileCommand(context);
-    registerShowWatCommand(context);
+    registerShowWatCommand(context, false);
+    registerShowWatCommand(context, true);
 
     const platform = process.platform;
     const arch = process.arch;

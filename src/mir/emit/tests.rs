@@ -258,7 +258,7 @@
     /// `--debug` must actually instrument the allocator under the MIR backend: with it on, `$malloc`
     /// bumps the live/total counters; with it off the hot path stays clean.
     #[test]
-    fn debug_alloc_toggles_allocator_instrumentation() {
+    fn debug_toggles_allocator_instrumentation() {
         assert!(runtime_prelude(true).contains("global.set $live_objects"));
         assert!(!runtime_prelude(false).contains("global.set $live_objects"));
     }

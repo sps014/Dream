@@ -46,7 +46,12 @@
       },
       {
         "command": "dream.showWat",
-        "title": "Dream: Show Generated WAT",
+        "title": "Dream: Show Generated WAT (Debug)",
+        "icon": "$(output)"
+      },
+      {
+        "command": "dream.showWatRelease",
+        "title": "Dream: Show Generated WAT (Release)",
         "icon": "$(output)"
       }
     ],
@@ -61,6 +66,11 @@
           "command": "dream.showWat",
           "when": "resourceLangId == dream",
           "group": "navigation@2"
+        },
+        {
+          "command": "dream.showWatRelease",
+          "when": "resourceLangId == dream",
+          "group": "navigation@3"
         }
       ]
     }
