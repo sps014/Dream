@@ -247,10 +247,7 @@ fn run_all_e2e_cases_release() {
         // bypass release for them and run them in debug with the full output assertion — they are
         // important and must stay fully checked, not relaxed to a smoke test.
         let debug = DEBUG_ONLY_CASES.contains(&stem);
-        println!(
-            "Running release E2E test: {:?} (debug={})",
-            path, debug
-        );
+        println!("Running release E2E test: {:?} (debug={})", path, debug);
         run_test_case(&path, debug);
     }
 }

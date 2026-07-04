@@ -61,9 +61,7 @@ fn empty_span() -> TextSpan {
 /// Best-effort 1-based source line of a statement, used to place debug-info line markers. Picks a
 /// representative token/expression for each statement kind; returns `None` for statements with no
 /// anchoring token (bare `break`/`continue`, `return;`), which simply carry no breakpoint line.
-pub(super) fn statement_line(
-    statement: &crate::syntax::nodes::StatementNode,
-) -> Option<usize> {
+pub(super) fn statement_line(statement: &crate::syntax::nodes::StatementNode) -> Option<usize> {
     use crate::syntax::nodes::StatementNode;
     let line = |span: Option<TextSpan>| span.map(|s| s.line_no);
     match statement {

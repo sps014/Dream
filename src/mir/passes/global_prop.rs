@@ -100,7 +100,9 @@ fn operand_eq(a: &Operand, b: &Operand) -> bool {
 }
 
 fn facts_eq(a: &Facts, b: &Facts) -> bool {
-    a.len() == b.len() && a.iter().all(|(k, v)| b.get(k).is_some_and(|w| operand_eq(v, w)))
+    a.len() == b.len()
+        && a.iter()
+            .all(|(k, v)| b.get(k).is_some_and(|w| operand_eq(v, w)))
 }
 
 #[cfg(test)]

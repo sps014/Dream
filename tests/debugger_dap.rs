@@ -84,9 +84,7 @@ impl DapClient {
     }
 
     fn wait_response(&self, command: &str) -> serde_json::Value {
-        self.wait_for(|m| {
-            m["type"] == "response" && m["command"] == command
-        })
+        self.wait_for(|m| m["type"] == "response" && m["command"] == command)
     }
 
     fn wait_event(&self, event: &str) -> serde_json::Value {

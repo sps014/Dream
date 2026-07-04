@@ -884,8 +884,11 @@ impl<'a> Analyzer<'a> {
         // from its declaring file. (Locals/params never appear in `self.globals`, so a shadowing
         // local of the same name is unaffected.)
         if let Some(global) = self.globals.iter().find(|g| g.name == id.text) {
-            if !self.visible_across_files(&global.file_path, global.is_public, self.current_file.as_ref())
-            {
+            if !self.visible_across_files(
+                &global.file_path,
+                global.is_public,
+                self.current_file.as_ref(),
+            ) {
                 let decl_file = global.file_path.clone();
                 self.report_not_public("Variable", &id.text, &decl_file, id.position, diagnostics);
             }

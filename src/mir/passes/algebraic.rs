@@ -134,10 +134,18 @@ fn simplify(rvalue: &Rvalue, unsigned: bool) -> Option<Rvalue> {
         BinOp::Eq if bool_val(a) == Some(true) => return Some(Rvalue::Use(b.clone())),
         BinOp::Ne if bool_val(b) == Some(false) => return Some(Rvalue::Use(a.clone())),
         BinOp::Ne if bool_val(a) == Some(false) => return Some(Rvalue::Use(b.clone())),
-        BinOp::Eq if bool_val(b) == Some(false) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, a.clone())),
-        BinOp::Eq if bool_val(a) == Some(false) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, b.clone())),
-        BinOp::Ne if bool_val(b) == Some(true) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, a.clone())),
-        BinOp::Ne if bool_val(a) == Some(true) => return Some(Rvalue::Unary(crate::mir::UnOp::Not, b.clone())),
+        BinOp::Eq if bool_val(b) == Some(false) => {
+            return Some(Rvalue::Unary(crate::mir::UnOp::Not, a.clone()))
+        }
+        BinOp::Eq if bool_val(a) == Some(false) => {
+            return Some(Rvalue::Unary(crate::mir::UnOp::Not, b.clone()))
+        }
+        BinOp::Ne if bool_val(b) == Some(true) => {
+            return Some(Rvalue::Unary(crate::mir::UnOp::Not, a.clone()))
+        }
+        BinOp::Ne if bool_val(a) == Some(true) => {
+            return Some(Rvalue::Unary(crate::mir::UnOp::Not, b.clone()))
+        }
         _ => {}
     }
     match op {

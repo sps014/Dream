@@ -98,8 +98,8 @@ use valuetype::*;
 use wat_dce::*;
 
 // The external API of the backend, at the historical `crate::mir::emit::…` paths.
-pub(crate) use emitter::emit_async_poll;
 pub use debug_map::DebugModule;
+pub(crate) use emitter::emit_async_poll;
 pub use emitter::emit_function;
 pub use module::{emit_module, emit_module_with_debug, emit_program};
 pub(crate) use tables::{func_symbol, poll_symbol};

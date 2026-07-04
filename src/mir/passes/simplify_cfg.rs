@@ -148,7 +148,10 @@ fn if_convert(func: &mut MirFunction, interner: &TypeInterner) -> bool {
 }
 
 /// Matches an arm block of the form `{ x = <const|local>; goto J }`, returning `(x, value, J)`.
-fn single_select_arm(func: &MirFunction, b: BlockId) -> Option<(crate::mir::Local, Operand, BlockId)> {
+fn single_select_arm(
+    func: &MirFunction,
+    b: BlockId,
+) -> Option<(crate::mir::Local, Operand, BlockId)> {
     let block = func.block(b);
     if block.stmts.len() != 1 {
         return None;

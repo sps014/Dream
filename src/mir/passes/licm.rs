@@ -417,10 +417,11 @@ mod tests {
             .any(|s| matches!(s, Statement::Assign(Place::Local(l), _) if *l == t));
         assert!(!body_has_assign, "assignment left in loop body");
         // A new preheader block holds it.
-        let hoisted_somewhere = func
-            .blocks
-            .iter()
-            .any(|bb| bb.stmts.iter().any(|s| matches!(s, Statement::Assign(Place::Local(l), _) if *l == t)));
+        let hoisted_somewhere = func.blocks.iter().any(|bb| {
+            bb.stmts
+                .iter()
+                .any(|s| matches!(s, Statement::Assign(Place::Local(l), _) if *l == t))
+        });
         assert!(hoisted_somewhere, "assignment vanished entirely");
     }
 
@@ -456,6 +457,9 @@ mod tests {
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
         let mut func = b.finish();
 
-        assert!(!Licm.run(&mut func, &i), "must not hoist a loop-carried value");
+        assert!(
+            !Licm.run(&mut func, &i),
+            "must not hoist a loop-carried value"
+        );
     }
 }

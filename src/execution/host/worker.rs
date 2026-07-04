@@ -127,7 +127,12 @@ fn store_write_string(
 /// the `fun(string): string` body (funcref `fn_idx`) once per inbound message. Exits (dropping
 /// `reply_tx`, which unblocks any pending owner `recv`) on `Terminate`, channel close, or any
 /// instantiation failure.
-fn worker_thread(bytes: Arc<Vec<u8>>, fn_idx: i32, job_rx: Receiver<Job>, reply_tx: Sender<String>) {
+fn worker_thread(
+    bytes: Arc<Vec<u8>>,
+    fn_idx: i32,
+    job_rx: Receiver<Job>,
+    reply_tx: Sender<String>,
+) {
     // Re-establish the module bytes on this thread so a worker can itself spawn sub-workers.
     WASM_BYTES.with(|c| *c.borrow_mut() = Some(bytes.clone()));
 

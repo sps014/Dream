@@ -87,10 +87,10 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
                 }
             }
             "threads" => {
-                writer.lock().unwrap().respond(
-                    &msg,
-                    json!({ "threads": [ { "id": 1, "name": "main" } ] }),
-                )?;
+                writer
+                    .lock()
+                    .unwrap()
+                    .respond(&msg, json!({ "threads": [ { "id": 1, "name": "main" } ] }))?;
             }
             "stackTrace" => {
                 let body = handle_stack_trace(&shared, &source_map);
@@ -101,7 +101,10 @@ pub fn run_debug_adapter(wat_path: &str) -> Result<(), Box<dyn std::error::Error
                     .pointer("/arguments/frameId")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(0);
-                writer.lock().unwrap().respond(&msg, scopes_body(frame_id))?;
+                writer
+                    .lock()
+                    .unwrap()
+                    .respond(&msg, scopes_body(frame_id))?;
             }
             "variables" => {
                 let reference = msg
@@ -347,7 +350,8 @@ fn run_program(
     linker.define_unknown_imports_as_traps(&module)?;
 
     let instance = linker.instantiate(&mut store, &module)?;
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN) {
+    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN)
+    {
         main_func.call(&mut store, ())?;
     }
     Ok(())
@@ -406,20 +410,28 @@ fn link_debug_hooks(
     writer: &Writer,
 ) -> Result<()> {
     let sh = shared.clone();
-    linker.func_wrap("dream_debug", "enter", move |_c: Caller<'_, ()>, id: i32| {
-        let mut inner = sh.inner.lock().unwrap();
-        inner.call_stack.push(FrameState {
-            func_id: id as u32,
-            file: 0,
-            line: 0,
-        });
-    })?;
+    linker.func_wrap(
+        "dream_debug",
+        "enter",
+        move |_c: Caller<'_, ()>, id: i32| {
+            let mut inner = sh.inner.lock().unwrap();
+            inner.call_stack.push(FrameState {
+                func_id: id as u32,
+                file: 0,
+                line: 0,
+            });
+        },
+    )?;
 
     let sh = shared.clone();
-    linker.func_wrap("dream_debug", "exit", move |_c: Caller<'_, ()>, _id: i32| {
-        let mut inner = sh.inner.lock().unwrap();
-        inner.call_stack.pop();
-    })?;
+    linker.func_wrap(
+        "dream_debug",
+        "exit",
+        move |_c: Caller<'_, ()>, _id: i32| {
+            let mut inner = sh.inner.lock().unwrap();
+            inner.call_stack.pop();
+        },
+    )?;
 
     let sh = shared.clone();
     let sm = source_map.clone();

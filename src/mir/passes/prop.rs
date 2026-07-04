@@ -85,7 +85,11 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
             cond,
             then_val,
             else_val,
-        } => subst_operand(cond, known) | subst_operand(then_val, known) | subst_operand(else_val, known),
+        } => {
+            subst_operand(cond, known)
+                | subst_operand(then_val, known)
+                | subst_operand(else_val, known)
+        }
         Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)

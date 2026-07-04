@@ -255,9 +255,11 @@ fn induction(
                 if body.contains(&bid) {
                     // In-loop def must be the `iv = iv + const` increment.
                     match rv {
-                        Rvalue::Binary(BinOp::Add, Operand::Copy(Place::Local(s)), Operand::Const(Const::Int(k)))
-                            if *s == iv =>
-                        {
+                        Rvalue::Binary(
+                            BinOp::Add,
+                            Operand::Copy(Place::Local(s)),
+                            Operand::Const(Const::Int(k)),
+                        ) if *s == iv => {
                             step = Some(*k);
                         }
                         _ => return None,
@@ -265,7 +267,9 @@ fn induction(
                 } else {
                     // Out-of-loop def must be a constant init dominating the header.
                     match rv {
-                        Rvalue::Use(Operand::Const(Const::Int(v))) if dom.dominates(bid, header) => {
+                        Rvalue::Use(Operand::Const(Const::Int(v)))
+                            if dom.dominates(bid, header) =>
+                        {
                             start = Some(*v);
                         }
                         _ => return None,
@@ -371,7 +375,11 @@ mod tests {
         b.switch_to(header);
         b.assign(
             Place::Local(cmp),
-            Rvalue::Binary(BinOp::Lt, Operand::Copy(Place::Local(iv)), Operand::Const(Const::Int(3))),
+            Rvalue::Binary(
+                BinOp::Lt,
+                Operand::Copy(Place::Local(iv)),
+                Operand::Const(Const::Int(3)),
+            ),
         );
         b.terminate(Terminator::If {
             cond: Operand::Copy(Place::Local(cmp)),
@@ -381,25 +389,35 @@ mod tests {
         b.switch_to(body);
         b.assign(
             Place::Local(acc),
-            Rvalue::Binary(BinOp::Add, Operand::Copy(Place::Local(acc)), Operand::Copy(Place::Local(iv))),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Copy(Place::Local(acc)),
+                Operand::Copy(Place::Local(iv)),
+            ),
         );
         b.terminate(Terminator::Goto(step));
         b.switch_to(step);
         b.assign(
             Place::Local(iv),
-            Rvalue::Binary(BinOp::Add, Operand::Copy(Place::Local(iv)), Operand::Const(Const::Int(1))),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Copy(Place::Local(iv)),
+                Operand::Const(Const::Int(1)),
+            ),
         );
         b.terminate(Terminator::Goto(header));
         b.switch_to(exit);
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(acc)))));
         let mut func = b.finish();
 
-        assert!(LoopUnroll.run(&mut func, &i), "canonical loop should unroll");
+        assert!(
+            LoopUnroll.run(&mut func, &i),
+            "canonical loop should unroll"
+        );
         // The unrolled block holds 3 copies of {acc+=iv ; iv+=1} = 6 statements, ending at exit.
-        let unrolled = func
-            .blocks
-            .iter()
-            .find(|bb| matches!(bb.terminator, Terminator::Goto(t) if t == exit) && bb.stmts.len() == 6);
+        let unrolled = func.blocks.iter().find(|bb| {
+            matches!(bb.terminator, Terminator::Goto(t) if t == exit) && bb.stmts.len() == 6
+        });
         assert!(unrolled.is_some(), "expected a 6-statement unrolled block");
     }
 
@@ -419,7 +437,11 @@ mod tests {
         b.switch_to(header);
         b.assign(
             Place::Local(cmp),
-            Rvalue::Binary(BinOp::Lt, Operand::Copy(Place::Local(iv)), Operand::Copy(Place::Local(n))),
+            Rvalue::Binary(
+                BinOp::Lt,
+                Operand::Copy(Place::Local(iv)),
+                Operand::Copy(Place::Local(n)),
+            ),
         );
         b.terminate(Terminator::If {
             cond: Operand::Copy(Place::Local(cmp)),
@@ -429,12 +451,19 @@ mod tests {
         b.switch_to(body);
         b.assign(
             Place::Local(iv),
-            Rvalue::Binary(BinOp::Add, Operand::Copy(Place::Local(iv)), Operand::Const(Const::Int(1))),
+            Rvalue::Binary(
+                BinOp::Add,
+                Operand::Copy(Place::Local(iv)),
+                Operand::Const(Const::Int(1)),
+            ),
         );
         b.terminate(Terminator::Goto(header));
         b.switch_to(exit);
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
-        assert!(!LoopUnroll.run(&mut func, &i), "non-constant bound must not unroll");
+        assert!(
+            !LoopUnroll.run(&mut func, &i),
+            "non-constant bound must not unroll"
+        );
     }
 }

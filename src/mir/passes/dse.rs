@@ -159,11 +159,17 @@ mod tests {
         let mut b = FunctionBuilder::new("f", i.int());
         let obj = b.new_temp(i.int());
         b.assign(
-            Place::Field { base: obj, field: 0 },
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
             Rvalue::Use(Operand::Const(Const::Int(1))),
         );
         b.assign(
-            Place::Field { base: obj, field: 0 },
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
             Rvalue::Use(Operand::Const(Const::Int(2))),
         );
         b.terminate(Terminator::Return(None));
@@ -184,20 +190,32 @@ mod tests {
         let obj = b.new_temp(i.int());
         let x = b.new_temp(i.int());
         b.assign(
-            Place::Field { base: obj, field: 0 },
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
             Rvalue::Use(Operand::Const(Const::Int(1))),
         );
         b.assign(
             Place::Local(x),
-            Rvalue::Use(Operand::Copy(Place::Field { base: obj, field: 0 })),
+            Rvalue::Use(Operand::Copy(Place::Field {
+                base: obj,
+                field: 0,
+            })),
         );
         b.assign(
-            Place::Field { base: obj, field: 0 },
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
             Rvalue::Use(Operand::Const(Const::Int(2))),
         );
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
-        assert!(!Dse.run(&mut func, &i), "store observed by a load must be kept");
+        assert!(
+            !Dse.run(&mut func, &i),
+            "store observed by a load must be kept"
+        );
     }
 
     #[test]
@@ -206,7 +224,10 @@ mod tests {
         let mut b = FunctionBuilder::new("f", i.int());
         let obj = b.new_temp(i.int());
         b.assign(
-            Place::Field { base: obj, field: 0 },
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
             Rvalue::Use(Operand::Const(Const::Int(1))),
         );
         b.push(Statement::Print {
@@ -215,11 +236,17 @@ mod tests {
             newline: false,
         });
         b.assign(
-            Place::Field { base: obj, field: 0 },
+            Place::Field {
+                base: obj,
+                field: 0,
+            },
             Rvalue::Use(Operand::Const(Const::Int(2))),
         );
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
-        assert!(!Dse.run(&mut func, &i), "a print between stores is a barrier");
+        assert!(
+            !Dse.run(&mut func, &i),
+            "a print between stores is a barrier"
+        );
     }
 }

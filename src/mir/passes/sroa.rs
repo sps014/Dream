@@ -62,10 +62,7 @@ fn find_default_news(func: &MirFunction, interner: &TypeInterner) -> Vec<Local> 
         for stmt in &block.stmts {
             if let Statement::Assign(Place::Local(d), rv) = stmt {
                 *def_counts.entry(*d).or_default() += 1;
-                if let Rvalue::New {
-                    ctor: None, ty, ..
-                } = rv
-                {
+                if let Rvalue::New { ctor: None, ty, .. } = rv {
                     if !interner.is_value_type(*ty) {
                         news.push(*d);
                     }
@@ -100,9 +97,10 @@ fn classify(
                     fields.entry(*field).or_insert(ty);
                 }
                 // Field load `x = o.f`.
-                Statement::Assign(Place::Local(x), Rvalue::Use(Operand::Copy(Place::Field { base, field })))
-                    if *base == o =>
-                {
+                Statement::Assign(
+                    Place::Local(x),
+                    Rvalue::Use(Operand::Copy(Place::Field { base, field })),
+                ) if *base == o => {
                     // The destination's declared type is the field's type (authoritative).
                     fields.insert(*field, func.local_ty(*x));
                 }
@@ -145,8 +143,10 @@ fn transform(
                 Statement::Assign(Place::Local(d), Rvalue::New { .. }) if d == o => {
                     for (&field, &l) in &promo {
                         let zero = zero_for(interner, fields[&field]);
-                        new_stmts
-                            .push(Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(zero))));
+                        new_stmts.push(Statement::Assign(
+                            Place::Local(l),
+                            Rvalue::Use(Operand::Const(zero)),
+                        ));
                     }
                 }
                 Statement::Assign(Place::Field { base, field }, rv) if base == o => {
@@ -274,7 +274,10 @@ mod tests {
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(x)))));
         let mut func = b.finish();
 
-        assert!(Sroa.run(&mut func, &i), "non-escaping struct should be promoted");
+        assert!(
+            Sroa.run(&mut func, &i),
+            "non-escaping struct should be promoted"
+        );
         let has_new = func
             .blocks
             .iter()
@@ -312,6 +315,9 @@ mod tests {
         );
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(o)))));
         let mut func = b.finish();
-        assert!(!Sroa.run(&mut func, &i), "escaping struct must not be promoted");
+        assert!(
+            !Sroa.run(&mut func, &i),
+            "escaping struct must not be promoted"
+        );
     }
 }

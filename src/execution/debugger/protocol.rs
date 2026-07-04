@@ -26,10 +26,7 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> std::io::Result<Option<Value>
         if trimmed.is_empty() {
             break; // end of headers
         }
-        if let Some(rest) = trimmed
-            .to_ascii_lowercase()
-            .strip_prefix("content-length:")
-        {
+        if let Some(rest) = trimmed.to_ascii_lowercase().strip_prefix("content-length:") {
             content_length = rest.trim().parse::<usize>().ok();
         }
     }
@@ -40,7 +37,10 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> std::io::Result<Option<Value>
     let mut buf = vec![0u8; len];
     reader.read_exact(&mut buf)?;
     let value = serde_json::from_slice(&buf).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad DAP JSON: {}", e))
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("bad DAP JSON: {}", e),
+        )
     })?;
     Ok(Some(value))
 }
@@ -90,7 +90,12 @@ impl<W: Write> DapWriter<W> {
     }
 }
 
-fn response_envelope(request: &Value, success: bool, message: Option<String>, body: Value) -> Value {
+fn response_envelope(
+    request: &Value,
+    success: bool,
+    message: Option<String>,
+    body: Value,
+) -> Value {
     let request_seq = request.get("seq").and_then(|s| s.as_i64()).unwrap_or(0);
     let command = request
         .get("command")

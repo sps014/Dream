@@ -13,9 +13,7 @@
 use super::const_fold::fold as fold_rvalue;
 use super::prop::{subst_stmt_reads, subst_terminator_reads};
 use super::MirPass;
-use crate::mir::{
-    BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
-};
+use crate::mir::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use crate::types::TypeInterner;
 use std::collections::{BTreeMap, HashMap};
 
@@ -53,7 +51,8 @@ impl MirPass for Sccp {
         let mut changed = false;
         for (i, block) in func.blocks.iter_mut().enumerate() {
             if !reachable[i] {
-                if !(block.stmts.is_empty() && matches!(block.terminator, Terminator::Unreachable)) {
+                if !(block.stmts.is_empty() && matches!(block.terminator, Terminator::Unreachable))
+                {
                     block.stmts.clear();
                     block.terminator = Terminator::Unreachable;
                     changed = true;
@@ -254,7 +253,10 @@ mod tests {
         let c = b.new_temp(i.bool());
         let then_b = b.new_block();
         let else_b = b.new_block();
-        b.assign(Place::Local(c), Rvalue::Use(Operand::Const(Const::Bool(true))));
+        b.assign(
+            Place::Local(c),
+            Rvalue::Use(Operand::Const(Const::Bool(true))),
+        );
         b.terminate(Terminator::If {
             cond: Operand::Copy(Place::Local(c)),
             then_blk: then_b,

@@ -228,7 +228,10 @@ mod tests {
         let l = &loops[0];
         assert_eq!(l.header, BlockId(1), "header is the cond block");
         assert!(l.body.contains(&BlockId(1)) && l.body.contains(&BlockId(2)));
-        assert!(!l.body.contains(&BlockId(3)), "after-block is outside the loop");
+        assert!(
+            !l.body.contains(&BlockId(3)),
+            "after-block is outside the loop"
+        );
         assert_eq!(l.latches, vec![BlockId(2)]);
     }
 
@@ -237,7 +240,13 @@ mod tests {
         let func = loop_fn();
         let dom = DomTree::new(&func);
         assert!(dom.dominates(BlockId(0), BlockId(3)), "entry dominates all");
-        assert!(dom.dominates(BlockId(1), BlockId(2)), "header dominates body");
-        assert!(!dom.dominates(BlockId(2), BlockId(3)), "body does not dominate after");
+        assert!(
+            dom.dominates(BlockId(1), BlockId(2)),
+            "header dominates body"
+        );
+        assert!(
+            !dom.dominates(BlockId(2), BlockId(3)),
+            "body does not dominate after"
+        );
     }
 }

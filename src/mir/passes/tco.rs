@@ -38,7 +38,9 @@ impl MirPass for Tco {
                 (
                     Terminator::Return(Some(Operand::Copy(Place::Local(d)))),
                     Statement::Assign(Place::Local(d2), Rvalue::Call { args, .. }),
-                ) => d == d2 && !interner.is_value_type(ret) && args_all_scalar(func, interner, args),
+                ) => {
+                    d == d2 && !interner.is_value_type(ret) && args_all_scalar(func, interner, args)
+                }
                 // `f(args); return;`
                 (Terminator::Return(None), Statement::Call { callee, args }) => {
                     callee.ret == interner.void() && args_all_scalar(func, interner, args)
@@ -104,8 +106,14 @@ mod tests {
         b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(d)))));
         let mut func = b.finish();
         assert!(Tco.run(&mut func, &i));
-        assert!(matches!(func.blocks[0].terminator, Terminator::TailCall { .. }));
-        assert!(func.blocks[0].stmts.is_empty(), "call statement folded away");
+        assert!(matches!(
+            func.blocks[0].terminator,
+            Terminator::TailCall { .. }
+        ));
+        assert!(
+            func.blocks[0].stmts.is_empty(),
+            "call statement folded away"
+        );
     }
 
     #[test]
