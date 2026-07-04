@@ -108,7 +108,13 @@ pub(crate) fn signature(func: &FunctionNode) -> String {
     let params = func
         .parameters
         .iter()
-        .map(|p| format!("{}: {}", p.name.text, p.type_.display_name()))
+        .map(|p| {
+            if let Some(def) = &p.default {
+                format!("{}: {} = {}", p.name.text, p.type_.display_name(), def.display_name())
+            } else {
+                format!("{}: {}", p.name.text, p.type_.display_name())
+            }
+        })
         .collect::<Vec<_>>()
         .join(", ");
     let ret = func

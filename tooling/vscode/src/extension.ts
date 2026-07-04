@@ -101,6 +101,32 @@ function registerRunFileCommand(context: vscode.ExtensionContext): void {
     );
 }
 
+function registerDebugFileCommand(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('dream.debugFile', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || editor.document.languageId !== 'dream') {
+                vscode.window.showWarningMessage('Open a .dream file to debug it.');
+                return;
+            }
+
+            await saveActiveDreamFile(editor);
+
+            const dreamCmd = resolveDreamCliCommand(context);
+            if (!dreamCmd) {
+                return;
+            }
+            const filePath = editor.document.uri.fsPath;
+
+            if (!runTerminal || runTerminal.exitStatus !== undefined) {
+                runTerminal = vscode.window.createTerminal('Dream');
+            }
+            runTerminal.show();
+            runTerminal.sendText(`${dreamCmd} --debug run ${quotePath(filePath)}`);
+        })
+    );
+}
+
 function registerShowWatCommand(context: vscode.ExtensionContext, isRelease: boolean): void {
     const commandName = isRelease ? 'dream.showWatRelease' : 'dream.showWat';
     context.subscriptions.push(
@@ -206,6 +232,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(compilerOutputChannel);
 
     registerRunFileCommand(context);
+    registerDebugFileCommand(context);
     registerShowWatCommand(context, false);
     registerShowWatCommand(context, true);
 

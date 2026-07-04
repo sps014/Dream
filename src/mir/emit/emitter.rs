@@ -5,116 +5,123 @@ use std::collections::HashSet;
 
 /// Emits one function as WAT (calls fall back to `$def{N}`, and field/index access has no layout, so
 /// this is for layout-free unit tests; the pipeline uses [`emit_program`]/[`emit_module`]).
-pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
-    emit_function_with(
-        func,
-        interner,
-        &HashMap::new(),
-        &HashMap::new(),
-        &LayoutTable::default(),
-        &IndexMap::new(),
-        &HashMap::new(),
-        &HashMap::new(),
-        &HashSet::new(),
-    )
-}
+    pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
+        emit_function_with(
+            func,
+            interner,
+            &HashMap::new(),
+            &HashMap::new(),
+            &LayoutTable::default(),
+            &IndexMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashSet::new(),
+            false,
+        )
+    }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn emit_function_with(
-    func: &MirFunction,
-    interner: &TypeInterner,
-    symbols: &HashMap<(DefId, Vec<TypeId>), String>,
-    sigs: &HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
-    layouts: &LayoutTable,
-    strings: &IndexMap<String, u32>,
-    tags: &HashMap<TypeId, i32>,
-    func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
-    value_glue: &HashSet<TypeId>,
-) -> String {
-    let frame = ValueFrame::compute(func, interner);
-    let mut e = Emitter {
-        func,
-        interner,
-        symbols,
-        sigs,
-        layouts,
-        strings,
-        tags,
-        func_table,
-        value_glue,
-        frame,
-        out: String::new(),
-        async_parent: None,
-        async_user_locals: 0,
-    };
-    e.emit();
-    e.out
-}
+    pub(super) fn emit_function_with(
+        func: &MirFunction,
+        interner: &TypeInterner,
+        symbols: &HashMap<(DefId, Vec<TypeId>), String>,
+        sigs: &HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+        layouts: &LayoutTable,
+        strings: &IndexMap<String, u32>,
+        tags: &HashMap<TypeId, i32>,
+        func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
+        value_glue: &HashSet<TypeId>,
+        debug: bool,
+    ) -> String {
+        let frame = ValueFrame::compute(func, interner);
+        let mut e = Emitter {
+            func,
+            interner,
+            symbols,
+            sigs,
+            layouts,
+            strings,
+            tags,
+            func_table,
+            value_glue,
+            frame,
+            out: String::new(),
+            async_parent: None,
+            async_user_locals: 0,
+            debug,
+        };
+        e.emit();
+        e.out
+    }
 
 /// Emits the poll function of an async coroutine: a single state-machine dispatch over the full
 /// lowered body (`func`), whose `Await` terminators suspend/resume. `slots` maps every frame-resident
 /// local to its offset in the `Future` frame. See [`Emitter::emit_async_state_machine`].
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_async_poll(
-    func: &MirFunction,
-    interner: &TypeInterner,
-    symbols: &HashMap<(DefId, Vec<TypeId>), String>,
-    layouts: &LayoutTable,
-    strings: &IndexMap<String, u32>,
-    tags: &HashMap<TypeId, i32>,
-    ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
-    slots: &AsyncSlots,
-    poll_sym: &str,
-    user_local_count: usize,
-) -> String {
-    // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
-    // elsewhere); empty maps disable those paths without extra plumbing through the transform.
-    let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
-    let value_glue: HashSet<TypeId> = HashSet::new();
-    let frame = ValueFrame::compute(func, interner);
-    let mut e = Emitter {
-        func,
-        interner,
-        symbols,
-        sigs: &sigs,
-        layouts,
-        strings,
-        tags,
-        func_table: ftable,
-        value_glue: &value_glue,
-        frame,
-        out: String::new(),
-        // The poll body *is* the coroutine; completions release its own reference locals.
-        async_parent: Some(func),
-        async_user_locals: user_local_count,
-    };
-    e.emit_async_state_machine(slots, poll_sym);
-    e.out
-}
+    pub(crate) fn emit_async_poll(
+        func: &MirFunction,
+        interner: &TypeInterner,
+        symbols: &HashMap<(DefId, Vec<TypeId>), String>,
+        layouts: &LayoutTable,
+        strings: &IndexMap<String, u32>,
+        tags: &HashMap<TypeId, i32>,
+        ftable: &HashMap<(DefId, Vec<TypeId>), usize>,
+        slots: &AsyncSlots,
+        poll_sym: &str,
+        user_local_count: usize,
+        debug: bool,
+    ) -> String {
+        // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
+        // elsewhere); empty maps disable those paths without extra plumbing through the transform.
+        let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
+        let value_glue: HashSet<TypeId> = HashSet::new();
+        let frame = ValueFrame::compute(func, interner);
+        let mut e = Emitter {
+            func,
+            interner,
+            symbols,
+            sigs: &sigs,
+            layouts,
+            strings,
+            tags,
+            func_table: ftable,
+            value_glue: &value_glue,
+            frame,
+            out: String::new(),
+            // The poll body *is* the coroutine; completions release its own reference locals.
+            async_parent: Some(func),
+            async_user_locals: user_local_count,
+            debug,
+        };
+        e.emit_async_state_machine(slots, poll_sym);
+        e.out
+    }
 
-struct Emitter<'a> {
-    func: &'a MirFunction,
-    interner: &'a TypeInterner,
-    symbols: &'a HashMap<(DefId, Vec<TypeId>), String>,
-    /// Callee `(def, instance)` → parameter types, for implicit widening of call arguments.
-    sigs: &'a HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
-    layouts: &'a LayoutTable,
-    strings: &'a IndexMap<String, u32>,
-    tags: &'a HashMap<TypeId, i32>,
-    func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
-    /// Value-struct types that require retain/drop glue (see [`valuetype`]).
-    value_glue: &'a HashSet<TypeId>,
-    /// Shadow-frame layout + ownership classification of this function's value-struct locals.
-    frame: ValueFrame,
-    out: String,
-    /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
-    async_parent: Option<&'a MirFunction>,
-    /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
-    /// front of `func.locals`; only these are released on completion. Synthetic lowering temporaries
-    /// (await results, array/reassignment scratch) that follow are transient and not deep-released
-    /// here (mirroring the pre-CFG async behavior), so no helper is needed for their element types.
-    async_user_locals: usize,
-}
+    struct Emitter<'a> {
+        func: &'a MirFunction,
+        interner: &'a TypeInterner,
+        symbols: &'a HashMap<(DefId, Vec<TypeId>), String>,
+        /// Callee `(def, instance)` → parameter types, for implicit widening of call arguments.
+        sigs: &'a HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+        layouts: &'a LayoutTable,
+        strings: &'a IndexMap<String, u32>,
+        tags: &'a HashMap<TypeId, i32>,
+        func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
+        /// Value-struct types that require retain/drop glue (see [`valuetype`]).
+        value_glue: &'a HashSet<TypeId>,
+        /// Shadow-frame layout + ownership classification of this function's value-struct locals.
+        frame: ValueFrame,
+        out: String,
+        /// When emitting inside an async poll segment, the enclosing task (for scope-exit release).
+        async_parent: Option<&'a MirFunction>,
+        /// In an async poll body, the count of persistent user locals (params + declared `let`s) at the
+        /// front of `func.locals`; only these are released on completion. Synthetic lowering temporaries
+        /// (await results, array/reassignment scratch) that follow are transient and not deep-released
+        /// here (mirroring the pre-CFG async behavior), so no helper is needed for their element types.
+        async_user_locals: usize,
+        /// Generate `@name` annotations
+        debug: bool,
+    }
 
 impl Emitter<'_> {
     fn line(&mut self, s: &str) {
@@ -135,7 +142,15 @@ impl Emitter<'_> {
             .func
             .params
             .iter()
-            .map(|p| format!(" (param ${} {})", p.0, self.wasm_ty(self.func.local_ty(*p))))
+            .map(|p| {
+                let p_ty = self.wasm_ty(self.func.local_ty(*p));
+                let name = &self.func.locals[p.0 as usize].name;
+                if self.debug && name.is_some() {
+                    format!(" (param ${} (@name \"{}\") {})", p.0, name.as_ref().unwrap(), p_ty)
+                } else {
+                    format!(" (param ${} {})", p.0, p_ty)
+                }
+            })
             .collect();
         // A value(`struct`)-returning function uses the sret ABI: a hidden leading `$__sret` pointer
         // names the caller-provided destination the result is copied into, and the function itself
@@ -149,7 +164,12 @@ impl Emitter<'_> {
                 _ => format!(" (result {})", self.wasm_ty(self.func.ret)),
             }
         };
-        self.line(&format!("(func ${}{}{}", func_symbol(self.func), params, result));
+        let sym = func_symbol(self.func);
+        if self.debug {
+            self.line(&format!("(func ${} (@name \"{}\"){}{}", sym, self.func.name, params, result));
+        } else {
+            self.line(&format!("(func ${}{}{}", sym, params, result));
+        }
 
         // Non-parameter locals plus the dispatch program-counter.
         let param_count = self.func.params.len();
@@ -157,7 +177,11 @@ impl Emitter<'_> {
             if i < param_count {
                 continue;
             }
-            self.line(&format!("  (local ${} {})", i, self.wasm_ty(decl.ty)));
+            if self.debug && decl.name.is_some() {
+                self.line(&format!("  (local ${} (@name \"{}\") {})", i, decl.name.as_ref().unwrap(), self.wasm_ty(decl.ty)));
+            } else {
+                self.line(&format!("  (local ${} {})", i, self.wasm_ty(decl.ty)));
+            }
         }
         self.line("  (local $__pc i32)");
         if self.frame.size > 0 {
@@ -1490,9 +1514,17 @@ impl Emitter<'_> {
     /// the task and returns (recording its `resume` block as the next state), and completions run
     /// `$dream_complete`. A block that is some await's `resume` target first binds the settled result.
     fn emit_async_state_machine(&mut self, slots: &AsyncSlots, poll_sym: &str) {
-        self.line(&format!("(func ${} (param $self i32) (result i32)", poll_sym));
+        if self.debug {
+            self.line(&format!("(func ${} (@name \"{}\") (param $self i32) (result i32)", poll_sym, format!("{}__poll", self.func.name)));
+        } else {
+            self.line(&format!("(func ${} (param $self i32) (result i32)", poll_sym));
+        }
         for (i, decl) in self.func.locals.iter().enumerate() {
-            self.line(&format!(" (local ${} {})", i, self.wasm_ty(decl.ty)));
+            if self.debug && decl.name.is_some() {
+                self.line(&format!(" (local ${} (@name \"{}\") {})", i, decl.name.as_ref().unwrap(), self.wasm_ty(decl.ty)));
+            } else {
+                self.line(&format!(" (local ${} {})", i, self.wasm_ty(decl.ty)));
+            }
         }
         // Scratch locals shared with the normal emitter (`$__obj`/`$__len`/`$__rel` back array &
         // reassignment scratch, `$__jsp` a saved `$__sp` across a dynamic `js` call); `$__pc` drives

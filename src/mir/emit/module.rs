@@ -12,7 +12,7 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
     let mut out = String::new();
     for f in &mir.functions {
         out.push_str(&emit_function_with(
-            f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue,
+            f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue, false,
         ));
         out.push('\n');
     }
@@ -99,10 +99,11 @@ pub fn emit_module(mir: &crate::mir::Mir, interner: &TypeInterner, debug: bool) 
             out.push_str(&crate::mir::async_emit::emit_async_function(
                 f, interner, &symbols, &mir.layouts, &strings, &tags, &ftable,
                 *polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
+                debug,
             ));
         } else {
             out.push_str(&emit_function_with(
-                f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue,
+                f, interner, &symbols, &sigs, &mir.layouts, &strings, &tags, &ftable, &value_glue, debug,
             ));
         }
         if f.name == crate::mir::lower::INIT_FN_NAME {

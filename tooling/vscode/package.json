@@ -45,6 +45,10 @@
         "icon": "$(play)"
       },
       {
+        "command": "dream.debugFile",
+        "title": "Dream: Debug File"
+      },
+      {
         "command": "dream.showWat",
         "title": "Dream: Show Generated WAT (Debug)",
         "icon": "$(output)"

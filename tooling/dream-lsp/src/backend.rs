@@ -194,6 +194,9 @@ impl LanguageServer for Backend {
                         },
                     ),
                 ),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 ..Default::default()
             },
             ..Default::default()
@@ -591,6 +594,54 @@ impl LanguageServer for Backend {
             result_id: None,
             data: tokens,
         })))
+    }
+
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+        let uri = params.text_document.uri.clone();
+        let key = uri.to_string();
+        let Some(text) = self.document_text(&key) else {
+            return Ok(None);
+        };
+        let line_index = LineIndex::new(&text);
+        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+            return Ok(None);
+        };
+
+        let mut lenses = Vec::new();
+        // Look for a top-level function named "main"
+        for decl in &idx.decls {
+            if decl.name == "main" && decl.kind == index::SymKind::Function {
+                // The range points to the start of the 'fun main' token
+                let range = Range {
+                    start: map_position(line_index.position(decl.start)),
+                    end: map_position(line_index.position(decl.end)),
+                };
+                
+                // Add Run CodeLens
+                lenses.push(CodeLens {
+                    range,
+                    command: Some(Command {
+                        title: "▶ Run".to_string(),
+                        command: "dream.runFile".to_string(),
+                        arguments: None,
+                    }),
+                    data: None,
+                });
+                
+                // Add Debug CodeLens
+                lenses.push(CodeLens {
+                    range,
+                    command: Some(Command {
+                        title: "▶ Debug".to_string(),
+                        command: "dream.debugFile".to_string(),
+                        arguments: None,
+                    }),
+                    data: None,
+                });
+            }
+        }
+        
+        Ok(Some(lenses))
     }
 }
 

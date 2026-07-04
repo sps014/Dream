@@ -145,6 +145,7 @@ pub fn emit_async_function(
     tags: &HashMap<TypeId, i32>,
     ftable: &HashMap<(crate::types::DefId, Vec<TypeId>), usize>,
     poll_idx: usize,
+    debug: bool,
 ) -> String {
     let hir = func.hir_fn.as_ref().expect("async function missing hir_fn snapshot");
     // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
@@ -156,14 +157,29 @@ pub fn emit_async_function(
 
     // Constructor: allocate the future frame, store (and retain) the params into their slots, enqueue
     // the first poll, and hand the frame back to the caller as the task handle.
-    let _ = writeln!(out, "(func ${sym}");
+    if debug {
+        let _ = writeln!(out, "(func ${sym} (@name \"{}\")", func.name);
+    } else {
+        let _ = writeln!(out, "(func ${sym}");
+    }
     for p in &body.params {
-        let _ = writeln!(
-            out,
-            " (param ${} {})",
-            p.0,
-            wasm_ty_of(interner, body.locals[p.0 as usize].ty)
-        );
+        let name = &body.locals[p.0 as usize].name;
+        if debug && name.is_some() {
+            let _ = writeln!(
+                out,
+                " (param ${} (@name \"{}\") {})",
+                p.0,
+                name.as_ref().unwrap(),
+                wasm_ty_of(interner, body.locals[p.0 as usize].ty)
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                " (param ${} {})",
+                p.0,
+                wasm_ty_of(interner, body.locals[p.0 as usize].ty)
+            );
+        }
     }
     out.push_str(" (result i32)\n (local $self i32)\n");
     let _ = writeln!(out, " i32.const {frame_size}");
@@ -196,6 +212,7 @@ pub fn emit_async_function(
         &slots,
         &poll_symbol(func),
         user_local_count,
+        debug,
     ));
     out
 }
