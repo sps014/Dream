@@ -318,7 +318,9 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         }
         Rvalue::EnumName { value, .. } => operand_reads(value, f),
         Rvalue::ArrayNew { len, .. } => operand_reads(len, f),
-        Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => operand_reads(o, f),
+        Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
+            operand_reads(o, f)
+        }
         Rvalue::Unary(_, a) => operand_reads(a, f),
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
