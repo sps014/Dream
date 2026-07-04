@@ -23,10 +23,19 @@ impl MirPass for Algebraic {
                 if let Statement::Assign(place, rvalue) = stmt {
                     // The destination's scalar type disambiguates signed vs. unsigned strength
                     // reduction (only unsigned `/`,`%` by a power of two are sound as shift/mask).
-                    let unsigned = match place {
-                        Place::Local(l) => is_unsigned(interner, local_tys[l.0 as usize]),
-                        _ => false,
+                    let dest_ty = match place {
+                        Place::Local(l) => Some(local_tys[l.0 as usize]),
+                        _ => None,
                     };
+                    // A floating-point operation can still carry an un-widened integer constant
+                    // operand (e.g. `someDouble * 4`, where the `4` is an `Int` const the backend
+                    // widens to `f64`). The integer identities/strength reduction here would then
+                    // wrongly fold it (`* 4` -> `<< 2`), producing a nonsensical float shift. Skip
+                    // them entirely for float/double results and let the backend do the widening.
+                    if dest_ty.map(|t| is_float(interner, t)).unwrap_or(false) {
+                        continue;
+                    }
+                    let unsigned = dest_ty.map(|t| is_unsigned(interner, t)).unwrap_or(false);
                     if let Some(simpler) = simplify(rvalue, unsigned) {
                         *rvalue = simpler;
                         changed = true;
@@ -43,6 +52,15 @@ fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
     matches!(
         interner.kind(interner.strip_nullable(ty)),
         TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
+    )
+}
+
+/// True for the floating-point primitives, whose arithmetic must never be strength-reduced to
+/// integer shifts/masks (see the guard in [`Algebraic::run`]).
+fn is_float(interner: &TypeInterner, ty: TypeId) -> bool {
+    matches!(
+        interner.kind(interner.strip_nullable(ty)),
+        TyKind::Prim(PrimTy::Float | PrimTy::Double)
     )
 }
 

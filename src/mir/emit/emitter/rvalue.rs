@@ -21,22 +21,32 @@ impl Emitter<'_> {
                 self.line("     (select)");
             }
             Rvalue::Binary(op, a, b) => {
-                let ty = self.operand_ty(a);
+                let ta = self.operand_ty(a);
+                let tb = self.operand_ty(b);
                 // String equality compares contents, not pointers, via the runtime `$string_eq`.
                 let str_eq = matches!(op, BinOp::Eq | BinOp::Ne)
                     && matches!(
-                        self.interner.kind(self.interner.strip_nullable(ty)),
+                        self.interner.kind(self.interner.strip_nullable(ta)),
                         TyKind::Prim(PrimTy::String)
                     );
-                self.emit_operand(a);
-                self.emit_operand(b);
                 if str_eq {
+                    self.emit_operand(a);
+                    self.emit_operand(b);
                     self.line("     (call $string_eq)");
                     if matches!(op, BinOp::Ne) {
                         self.line("     (i32.eqz)");
                     }
                 } else {
-                    self.line(&format!("     ({})", self.binop_instr(*op, ty)));
+                    // The operation runs at one WASM width, so widen the narrower operand to the
+                    // common numeric type (e.g. `someLong > 0` widens the `int` literal `0` to i64).
+                    // Without this a mixed-width pair emits e.g. `i64.gt_s` over an i32 operand,
+                    // which fails WASM validation.
+                    let common = self.wider_numeric(ta, tb);
+                    self.emit_operand(a);
+                    self.emit_numeric_conv(ta, common);
+                    self.emit_operand(b);
+                    self.emit_numeric_conv(tb, common);
+                    self.line(&format!("     ({})", self.binop_instr(*op, common)));
                 }
             }
             Rvalue::Unary(op, a) => {
@@ -584,6 +594,26 @@ impl Emitter<'_> {
             "     (call ${})",
             iface_dispatch_symbol(iface_id, method_slot)
         ));
+    }
+
+    /// The common numeric type of a binary operation's operands: the one with the wider WASM value
+    /// type, so the narrower side can be widened up to it. Ranking `i32 < i64 < f32 < f64` matches the
+    /// language's implicit numeric widening (e.g. `long` op `int` -> `long`; any op `double` ->
+    /// `double`). Non-numeric operands (equal-width pointers, `bool`, refs) fall through to `a`, which
+    /// leaves same-width pairs unchanged (`emit_numeric_conv` is then a no-op).
+    fn wider_numeric(&self, a: TypeId, b: TypeId) -> TypeId {
+        let rank = |w: &str| match w {
+            "i32" => 0,
+            "i64" => 1,
+            "f32" => 2,
+            "f64" => 3,
+            _ => -1,
+        };
+        if rank(self.wasm_ty(b).as_str()) > rank(self.wasm_ty(a).as_str()) {
+            b
+        } else {
+            a
+        }
     }
 
     /// Emits the WASM numeric conversion instruction to turn a value of type `from` (already on the

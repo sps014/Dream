@@ -1,0 +1,70 @@
+// Benchmark: parallel WebWorkers vs. sequential (single-threaded) calls.
+//
+//   dream run sample/webworker_bench.dream
+//
+// We do the same CPU-bound work N times. First sequentially on the main thread (the "native"
+// single-threaded baseline), then across N workers running on N threads/cores at once. With more
+// than one core the parallel run should finish several times faster.
+
+// A deliberately CPU-bound body: a long arithmetic loop. Returns the accumulator so the loop can't
+// be optimized away. `input` seeds the work so each call is real.
+fun heavy(input: string): string {
+    let seed = input.size();
+    let acc = 0;
+    let i = 0;
+    while (i < 60000000) {
+        acc = acc + ((i + seed) % 9);
+        i = i + 1;
+    }
+    return acc.to_string();
+}
+
+fun ms_between(start: long, end: long): long {
+    return (end - start) / 1000000;
+}
+
+async fun main(): void {
+    let tasks = 8;
+
+    // --- Sequential baseline: call heavy() directly, one after another, on this thread. ---
+    let seq_start = Time.nano_time();
+    let i = 0;
+    while (i < tasks) {
+        let r = heavy("seq");
+        i = i + 1;
+    }
+    let seq_end = Time.nano_time();
+    let seq_ms = ms_between(seq_start, seq_end);
+
+    // --- Parallel: N workers, each runs heavy() once, all at the same time. ---
+    let par_start = Time.nano_time();
+    let workers = Buffer.alloc<WebWorker>(tasks);
+    let s = 0;
+    while (s < tasks) {
+        workers[s] = WebWorker(heavy);
+        workers[s].post("par");   // fire off the work; does not block
+        s = s + 1;
+    }
+    // Now collect every reply (the workers have been computing in parallel this whole time).
+    let c = 0;
+    while (c < tasks) {
+        let r = await workers[c].receive();
+        c = c + 1;
+    }
+    let par_end = Time.nano_time();
+    let par_ms = ms_between(par_start, par_end);
+
+    // Clean up.
+    let t = 0;
+    while (t < tasks) {
+        workers[t].terminate();
+        t = t + 1;
+    }
+
+    System.println("tasks:       " + tasks.to_string());
+    System.println("sequential:  " + seq_ms.to_string() + " ms");
+    System.println("parallel:    " + par_ms.to_string() + " ms");
+    if (par_ms > 0) {
+        System.println("speedup:     " + (seq_ms / par_ms).to_string() + "x");
+    }
+}
