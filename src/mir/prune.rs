@@ -196,6 +196,8 @@ fn hir_expr_edges(e: &crate::hir::HExpr, out: &mut HirEdges) {
         | K::ToString(x)
         | K::EnumName { value: x, .. }
         | K::ArrayNew { len: x, .. }
+        | K::ToBytes(x)
+        | K::FromBytes(x)
         | K::Cast(x)
         | K::Await(x)
         | K::Discriminant(x)
@@ -508,6 +510,8 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::ToString(o)
         | Rvalue::EnumName { value: o, .. }
         | Rvalue::ArrayNew { len: o, .. }
+        | Rvalue::ToBytes { value: o, .. }
+        | Rvalue::FromBytes { bytes: o, .. }
         | Rvalue::UnionField { base: o, .. } => collect_global_reads_operand(o, out),
         Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::Concat(a, b) => {
             collect_global_reads_operand(a, out);

@@ -307,6 +307,45 @@ impl Emitter<'_> {
                 self.emit_operand(o);
                 self.line("     (i32.load) ;; array length is the first word");
             }
+            Rvalue::ToBytes { value, ty } => {
+                // Allocate a `byte[]` of `[len: i32][size bytes]` and raw-copy the value's inline
+                // bytes into the payload. `byte` elements are one byte, so the length word is the
+                // byte count.
+                let size = self.value_size(*ty);
+                self.line(&format!("     (i32.const {}) ;; 4 + byte size", 4 + size));
+                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
+                self.line("     (call $malloc)");
+                self.line("     (local.set $__obj)");
+                self.line("     (local.get $__obj)");
+                self.line(&format!("     (i32.const {})", size));
+                self.line("     (i32.store) ;; byte length");
+                // memory.copy(dst = obj+4, src = value address, size)
+                self.line("     (local.get $__obj)");
+                self.line("     (i32.const 4)");
+                self.line("     (i32.add)");
+                self.emit_operand(value);
+                self.line(&format!("     (i32.const {})", size));
+                self.line("     (memory.copy)");
+                self.line("     (local.get $__obj)");
+            }
+            Rvalue::FromBytes { bytes, ty } => {
+                // Allocate a fresh `T`-sized block (tagged as `T`) and raw-copy the buffer's payload
+                // (which starts after the 4-byte length prefix) into it.
+                let size = self.value_size(*ty);
+                let tag = self.type_tag(*ty, crate::types::DefId(0));
+                self.line(&format!("     (i32.const {})", size));
+                self.line(&format!("     (i32.const {}) ;; tag", tag));
+                self.line("     (call $malloc)");
+                self.line("     (local.set $__obj)");
+                // memory.copy(dst = obj, src = bytes+4, size)
+                self.line("     (local.get $__obj)");
+                self.emit_operand(bytes);
+                self.line("     (i32.const 4)");
+                self.line("     (i32.add)");
+                self.line(&format!("     (i32.const {})", size));
+                self.line("     (memory.copy)");
+                self.line("     (local.get $__obj)");
+            }
             Rvalue::CharAt(s, i) => {
                 self.emit_operand(s);
                 self.emit_operand(i);
@@ -594,6 +633,28 @@ impl Emitter<'_> {
             "     (call ${})",
             iface_dispatch_symbol(iface_id, method_slot)
         ));
+    }
+
+    /// Emits an indirect (funcref) call to a value-struct-returning target using the sret ABI: the
+    /// destination address (`dst`) is passed as the hidden leading argument, then the real
+    /// arguments, then the table index dispatched through `$__ft` with the target's sret signature.
+    /// Mirrors [`emit_value_sret_call`](Self::emit_value_sret_call) for first-class function values
+    /// (e.g. a worker body funcref of type `fun(TIn): TOut` where `TOut` is a struct).
+    pub(super) fn emit_indirect_sret_call(
+        &mut self,
+        dst: impl Fn(&mut Self),
+        target: &Operand,
+        args: &[Operand],
+    ) {
+        dst(self);
+        for a in args {
+            self.emit_operand(a);
+        }
+        self.emit_operand(target);
+        let sig = func_sig(self.interner, self.operand_ty(target))
+            .map(|(name, _, _)| name)
+            .unwrap_or_else(|| "$sig___v".to_string());
+        self.line(&format!("     (call_indirect $__ft (type {}))", sig));
     }
 
     /// The common numeric type of a binary operation's operands: the one with the wider WASM value

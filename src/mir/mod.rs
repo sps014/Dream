@@ -347,6 +347,18 @@ pub enum Rvalue {
     },
     /// The stored length of an array.
     ArrayLen(Operand),
+    /// `Bytes.of<T>(v)` — allocate a `byte[]` of `T`'s inline byte size and raw-copy the value's
+    /// bytes into its payload. `value` pushes the value's (inline) address; `ty` is `T`.
+    ToBytes {
+        value: Operand,
+        ty: TypeId,
+    },
+    /// `Bytes.to<T>(bytes)` — allocate a fresh block of `T`'s inline byte size (tagged as `T`) and
+    /// raw-copy the `byte[]` buffer's payload into it. `bytes` pushes the buffer; `ty` is `T`.
+    FromBytes {
+        bytes: Operand,
+        ty: TypeId,
+    },
     /// A numeric/object coercion. Carries `(value, from_ty, to_ty)`; the source type is captured at
     /// lowering time so later constant propagation (which can replace the value with a bare `Const`
     /// that no longer distinguishes `int`/`uint`/`byte`) cannot lose the signedness needed to pick the

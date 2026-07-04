@@ -108,6 +108,11 @@ pub const ATTR_DEBUG_LIVE_OBJECTS: &str = "debug_get_live_objects";
 pub const ATTR_DEBUG_TOTAL_ALLOCATIONS: &str = "debug_get_total_allocations";
 /// `Debug.ref_count(o)` — live reference count of a heap value.
 pub const ATTR_DEBUG_REF_COUNT: &str = "debug_get_ref_count";
+/// `Bytes.of<T>(v)` — raw-copy a blittable value's bytes into a fresh `byte[]` buffer.
+pub const ATTR_TO_BYTES: &str = "to_bytes";
+/// `Bytes.to<T>(bytes)` — reconstruct a blittable value from a `byte[]` buffer (a raw copy
+/// of the buffer's payload into a fresh block of `T`'s size).
+pub const ATTR_FROM_BYTES: &str = "from_bytes";
 
 /// The operation a `@intrinsic("…")`-tagged static method lowers to. Derived once from the
 /// attribute key via [`IntrinsicOp::from_key`], so every layer dispatches off the same enum
@@ -146,6 +151,10 @@ pub enum IntrinsicOp {
     DebugTotalAllocations,
     /// `Debug.ref_count(o)` — live reference count of a heap value.
     DebugRefCount,
+    /// `Bytes.of<T>(v)` — raw-copy a blittable value's bytes into a fresh `byte[]`.
+    ToBytes,
+    /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of `T` from a `byte[]` buffer.
+    FromBytes,
 }
 
 impl IntrinsicOp {
@@ -168,6 +177,8 @@ impl IntrinsicOp {
             ATTR_DEBUG_LIVE_OBJECTS => IntrinsicOp::DebugLiveObjects,
             ATTR_DEBUG_TOTAL_ALLOCATIONS => IntrinsicOp::DebugTotalAllocations,
             ATTR_DEBUG_REF_COUNT => IntrinsicOp::DebugRefCount,
+            ATTR_TO_BYTES => IntrinsicOp::ToBytes,
+            ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
             _ => return None,
         })
     }

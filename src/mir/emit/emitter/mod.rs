@@ -932,6 +932,9 @@ impl Emitter<'_> {
                 ..
             } => self.construct_value_union(&dst, *uty, *variant, args),
             Rvalue::Call { callee, args } => self.emit_value_sret_call(&dst, callee, args),
+            Rvalue::IndirectCall { target, args } => {
+                self.emit_indirect_sret_call(&dst, target, args)
+            }
             Rvalue::InterfaceCall {
                 receiver,
                 iface_id,

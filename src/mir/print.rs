@@ -156,6 +156,8 @@ fn rvalue(r: &Rvalue) -> String {
         Rvalue::ArrayNew { elem_ty, len } => {
             format!("array_new::<ty{}>({})", elem_ty.0, operand(len))
         }
+        Rvalue::ToBytes { value, ty } => format!("to_bytes::<ty{}>({})", ty.0, operand(value)),
+        Rvalue::FromBytes { bytes, ty } => format!("from_bytes::<ty{}>({})", ty.0, operand(bytes)),
         Rvalue::HashCode(o) => format!("hash_code({})", operand(o)),
         Rvalue::ToString(o) => format!("to_string({})", operand(o)),
         Rvalue::Concat(a, b) => format!("concat({}, {})", operand(a), operand(b)),

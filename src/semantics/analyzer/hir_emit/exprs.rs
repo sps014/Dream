@@ -924,6 +924,43 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Records `Bytes.of<T>(v)` — a raw byte-copy of blittable value `v` into a fresh `byte[]`.
+    /// Drops out of coverage if the value is not representable.
+    pub(in crate::semantics::analyzer) fn hir_set_to_bytes(&mut self, value: Option<HExpr>) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match value {
+            Some(value) => {
+                let byte_ty = self.type_ctx.interner.byte();
+                let arr = self.type_ctx.interner.array(byte_ty);
+                self.hir.last = Some(HExpr::new(arr, HExprKind::ToBytes(Box::new(value))));
+            }
+            None => self.hir.last = None,
+        }
+    }
+
+    /// Records `Bytes.to<T>(bytes)` — reconstructs a blittable value of `target` from a `byte[]`
+    /// buffer. Drops out of coverage if the buffer operand is not representable.
+    pub(in crate::semantics::analyzer) fn hir_set_from_bytes(
+        &mut self,
+        target: &Type,
+        bytes: Option<HExpr>,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match bytes {
+            Some(bytes) => {
+                let ty = self.type_ctx.lower(target);
+                self.hir.last = Some(HExpr::new(ty, HExprKind::FromBytes(Box::new(bytes))));
+            }
+            None => self.hir.last = None,
+        }
+    }
+
     /// Records `recv.char_at(idx)` (typed `char`): a runtime `$char_at` read. Drops out of coverage
     /// if either the receiver or the index is not representable.
     pub(in crate::semantics::analyzer) fn hir_set_char_at(

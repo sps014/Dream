@@ -890,6 +890,14 @@ impl Lowerer<'_> {
                 elem_ty: *elem_ty,
                 len: self.lower_operand(len),
             },
+            HExprKind::ToBytes(v) => Rvalue::ToBytes {
+                value: self.lower_operand(v),
+                ty: v.ty,
+            },
+            HExprKind::FromBytes(bytes) => Rvalue::FromBytes {
+                bytes: self.lower_operand(bytes),
+                ty: e.ty,
+            },
             HExprKind::HashCode(e) => Rvalue::HashCode(self.lower_operand(e)),
             HExprKind::ToString(e) => Rvalue::ToString(self.lower_operand(e)),
             HExprKind::Concat(a, b) => Rvalue::Concat(self.lower_operand(a), self.lower_operand(b)),

@@ -265,6 +265,44 @@ impl<'a> Analyzer<'a> {
                 return Ok(Some(Type::Array(Box::new(element))));
             }
 
+            // `Bytes.of<T>(v)` / `Bytes.to<T>(bytes)`: raw byte-copy conversions between a blittable
+            // value and a `byte[]` buffer (used by the worker-boundary adapter). `of` copies the
+            // value's bytes out to a fresh buffer; `to` reconstructs a `T` from a buffer.
+            let byte_op = intrinsics::IntrinsicOp::from_attributes(&template.attributes);
+            if byte_op == Some(intrinsics::IntrinsicOp::ToBytes) {
+                let named = |name: &str| -> Type {
+                    let mut t = method.clone();
+                    t.text = name.to_string();
+                    Type::from_token(t).unwrap_or(Type::Unknown)
+                };
+                if params_types.len() != 1 {
+                    diagnostics.report_error(
+                        format!(
+                            "'Bytes.of' expects exactly 1 argument (the value), got {}",
+                            params_types.len()
+                        ),
+                        Some(method.position),
+                    );
+                }
+                self.hir_set_to_bytes(arg_hirs.into_iter().next().flatten());
+                return Ok(Some(Type::Array(Box::new(named("byte")))));
+            }
+            if byte_op == Some(intrinsics::IntrinsicOp::FromBytes) {
+                let target = match generic_args.as_ref().and_then(|g| g.first()) {
+                    Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
+                    None => {
+                        diagnostics.report_error(
+                            "'Bytes.to' requires a type argument, e.g. Bytes.to<Point>(bytes)"
+                                .to_string(),
+                            Some(method.position),
+                        );
+                        Type::Void
+                    }
+                };
+                self.hir_set_from_bytes(&target, arg_hirs.into_iter().next().flatten());
+                return Ok(Some(target));
+            }
+
             let bindings = self.infer_generic_bindings(
                 template,
                 generic_args,

@@ -214,6 +214,7 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         }
         Rvalue::EnumName { value, .. } => check(value),
         Rvalue::ArrayNew { len, .. } => check(len),
+        Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => check(o),
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }

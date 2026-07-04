@@ -167,6 +167,9 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         }
         Rvalue::EnumName { value, .. } => read_operand(value, read),
         Rvalue::ArrayNew { len, .. } => read_operand(len, read),
+        Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
+            read_operand(o, read)
+        }
         Rvalue::Unary(_, a) => read_operand(a, read),
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }

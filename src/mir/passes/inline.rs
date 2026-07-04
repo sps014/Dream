@@ -534,6 +534,9 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         }
         Rvalue::EnumName { value, .. } => remap_operand(value, base),
         Rvalue::ArrayNew { len, .. } => remap_operand(len, base),
+        Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
+            remap_operand(o, base)
+        }
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }

@@ -137,6 +137,9 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
             strings_in_operand(b, out);
         }
         Rvalue::ArrayNew { len, .. } => strings_in_operand(len, out),
+        Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
+            strings_in_operand(o, out)
+        }
         Rvalue::HashCode(o) | Rvalue::ToString(o) => strings_in_operand(o, out),
         Rvalue::EnumName { value, arms } => {
             strings_in_operand(value, out);

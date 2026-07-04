@@ -104,6 +104,9 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         }
         Rvalue::EnumName { value, .. } => subst_operand(value, known),
         Rvalue::ArrayNew { len, .. } => subst_operand(len, known),
+        Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
+            subst_operand(o, known)
+        }
         Rvalue::Unary(_, a) => subst_operand(a, known),
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }

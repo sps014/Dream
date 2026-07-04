@@ -123,6 +123,9 @@ impl TypeInterner {
     pub fn char(&self) -> TypeId {
         self.find(&TyKind::Prim(PrimTy::Char))
     }
+    pub fn byte(&self) -> TypeId {
+        self.find(&TyKind::Prim(PrimTy::Byte))
+    }
     pub fn long(&self) -> TypeId {
         self.find(&TyKind::Prim(PrimTy::Long))
     }

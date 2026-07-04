@@ -9,6 +9,7 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
     // `Buffer` (the raw `array_new` intrinsic) is merged first; `Array<T>` wraps it, so it must be
     // defined before the collection classes that construct backing storage.
     ("<std>/core/buffer.dream", include_str!("core/buffer.dream")),
+    ("<std>/core/bytes.dream", include_str!("core/bytes.dream")),
     // Comparison interfaces (`Equatable`/`Comparable`) come before types that implement them.
     (
         "<std>/core/compare.dream",

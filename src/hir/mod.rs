@@ -389,6 +389,12 @@ pub enum HExprKind {
         elem_ty: TypeId,
         elems: Vec<HExpr>,
     },
+    /// `Bytes.of<T>(v)` — raw-copy the blittable value `.0`'s bytes into a fresh `byte[]`. The
+    /// operand's static type gives the byte count at codegen. Node type is `byte[]`.
+    ToBytes(Box<HExpr>),
+    /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of the node's type from the `byte[]`
+    /// buffer `.0`, copying its payload into a fresh block of `T`'s size.
+    FromBytes(Box<HExpr>),
     /// An explicit or implicit numeric/object coercion to `ty`.
     Cast(Box<HExpr>),
     /// `cond ? then : else_`.
