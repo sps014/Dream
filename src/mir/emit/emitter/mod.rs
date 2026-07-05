@@ -535,7 +535,11 @@ impl Emitter<'_> {
                     self.retain_stored_rvalue(fty, rvalue);
                     self.release_stash(fty, stash);
                 } else {
-                    unreachable!("Missing field layout for store");
+                    crate::internal_error!(
+                        "missing field layout for store (base {:?}, field {})",
+                        base,
+                        field
+                    );
                 }
             }
             Place::Index { base, index } => {
@@ -553,7 +557,10 @@ impl Emitter<'_> {
                     self.retain_stored_rvalue(ety, rvalue);
                     self.release_stash(ety, stash);
                 } else {
-                    unreachable!("Missing array element type for store");
+                    crate::internal_error!(
+                        "missing array element type for store (base {:?})",
+                        base
+                    );
                 }
             }
         }
@@ -571,7 +578,7 @@ impl Emitter<'_> {
     /// not a user error — fail loudly instead of emitting a null (address 0) string.
     fn string_addr(&self, s: &str) -> u32 {
         self.strings.get(s).copied().unwrap_or_else(|| {
-            unreachable!("string literal {:?} was not interned before codegen", s)
+            crate::internal_error!("string literal {:?} was not interned before codegen", s)
         })
     }
 
@@ -1138,7 +1145,11 @@ impl Emitter<'_> {
                         self.line(&format!("     ({})", self.load_instr(fty)));
                     }
                 } else {
-                    unreachable!("Missing field layout for read");
+                    crate::internal_error!(
+                        "missing field layout for read (base {:?}, field {})",
+                        base,
+                        field
+                    );
                 }
             }
             Operand::Copy(Place::Index { base, index }) => {
@@ -1148,7 +1159,7 @@ impl Emitter<'_> {
                         self.line(&format!("     ({})", self.load_instr(ety)));
                     }
                 } else {
-                    unreachable!("Missing array element type for read");
+                    crate::internal_error!("missing array element type for read (base {:?})", base);
                 }
             }
         }
@@ -1165,7 +1176,7 @@ impl Emitter<'_> {
             Const::Null => self.line("     (i32.const 0)"),
             Const::Str(s) => match self.strings.get(s) {
                 Some(addr) => self.line(&format!("     (i32.const {})", addr)),
-                None => unreachable!("Missing interned string: {}", s),
+                None => crate::internal_error!("missing interned string: {}", s),
             },
         }
     }

@@ -23,6 +23,21 @@ use crate::types::{DefId, TypeId};
 pub use prune::prune_module;
 pub(crate) use prune::{hir_body_edges, HirEdges};
 
+/// Raises a codegen-time compiler-internal-error: the condition it guards can only be reached if an
+/// earlier pass (analysis/lowering) produced MIR that is inconsistent with itself (e.g. a type with
+/// no registered layout, a callee missing from the function table). These are compiler bugs, never
+/// malformed *user* programs, so there is no source position to attach - but they should still fail
+/// with a clear, greppable message rather than a bare `unreachable!`/`expect` panic. The top-level
+/// [`crate::driver::compiler::Compiler::compile`] catches the resulting panic and reports it as a
+/// [`crate::driver::error::CompileError::Internal`] instead of letting a raw Rust backtrace reach the
+/// user.
+#[macro_export]
+macro_rules! internal_error {
+    ($($arg:tt)*) => {
+        panic!("internal compiler error: {}\nthis is a compiler bug, not a problem with your program; please file an issue", format!($($arg)*))
+    };
+}
+
 /// A basic block within a function body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlockId(pub u32);

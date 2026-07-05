@@ -191,8 +191,7 @@ impl<'a> Analyzer<'a> {
         }
 
         // Support generic static method calls by monomorphizing them on the fly.
-        if self.generic_functions.contains_key(&base) {
-            let template = *self.generic_functions.get(&base).unwrap();
+        if let Some(&template) = self.generic_functions.get(&base) {
             let mut params_types = vec![];
             let mut arg_hirs = vec![];
             for param in params.iter() {

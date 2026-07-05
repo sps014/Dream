@@ -152,10 +152,12 @@ pub fn emit_async_function(
     debug: bool,
     debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
-    let hir = func
-        .hir_fn
-        .as_ref()
-        .expect("async function missing hir_fn snapshot");
+    let hir = func.hir_fn.as_ref().unwrap_or_else(|| {
+        crate::internal_error!(
+            "async function '{}' reached codegen without its HIR snapshot",
+            func.name
+        )
+    });
     // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
     let body = lower_async_poll_body(hir, interner);
     let slots = async_slots(&body, interner);

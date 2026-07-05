@@ -267,7 +267,9 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
         let mangled = method_fn(crate::mir::js_abi::JS_TYPE, &method.text);
-        let known = self.function_table.get_function(&mangled).is_ok();
+        // Cloned up front (rather than re-looked-up below) because the argument analysis loop needs
+        // `&mut self`, which would otherwise conflict with a borrow held from this lookup.
+        let known_sig = self.function_table.get_function(&mangled).ok();
 
         let mut arg_hirs = Vec::with_capacity(params.len());
         for param in params.iter() {
@@ -276,8 +278,7 @@ impl<'a> Analyzer<'a> {
             arg_hirs.push(self.hir_take());
         }
 
-        if known {
-            let sig = self.function_table.get_function(&mangled).unwrap().clone();
+        if let Some(sig) = known_sig {
             let ret = sig.return_type.clone().unwrap_or(Type::Void);
             self.hir_set_method_call(recv, &sig.name, arg_hirs, &ret);
             return Ok(ret);

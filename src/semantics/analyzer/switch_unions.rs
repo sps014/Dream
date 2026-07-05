@@ -78,8 +78,7 @@ impl<'a> Analyzer<'a> {
         );
 
         // The declared payload field types of the named variant (templated for generic unions).
-        let field_types: Vec<Type> = if is_generic {
-            let template = *self.generic_unions.get(enum_name).unwrap();
+        let field_types: Vec<Type> = if let Some(&template) = self.generic_unions.get(enum_name) {
             match template
                 .variants
                 .iter()
@@ -155,7 +154,12 @@ impl<'a> Analyzer<'a> {
 
         // Generic union: resolve the concrete type arguments, preferring an explicit expected type
         // (e.g. a `let`/`return` annotation) and otherwise inferring from the arguments.
-        let template = *self.generic_unions.get(enum_name).unwrap();
+        let template = *self.generic_unions.get(enum_name).unwrap_or_else(|| {
+            crate::internal_error!(
+                "generic union '{}' reached generic-instantiation analysis without a registered template",
+                enum_name
+            )
+        });
         let params: Vec<String> = template
             .generic_parameters
             .as_ref()

@@ -120,7 +120,7 @@ impl Emitter<'_> {
                     .get(&(callee.def, callee.args.clone()))
                     .copied()
                     .unwrap_or_else(|| {
-                        unreachable!(
+                        crate::internal_error!(
                             "funcref to def{} missing from the function table",
                             callee.def.0
                         )
@@ -182,7 +182,7 @@ impl Emitter<'_> {
                         self.line("     (local.get $__obj)");
                     }
                 } else {
-                    unreachable!("Missing layout for struct allocation");
+                    crate::internal_error!("missing layout for struct allocation (type {:?})", ty);
                 }
             }
             Rvalue::UnionNew {
@@ -231,9 +231,11 @@ impl Emitter<'_> {
                     self.line("     (i32.store)");
                     for (i, arg) in args.iter().enumerate() {
                         let &(off, fty) = fields.get(i).unwrap_or_else(|| {
-                            unreachable!(
+                            crate::internal_error!(
                                 "union def{} variant {} has no field slot for argument {}",
-                                def.0, variant, i
+                                def.0,
+                                variant,
+                                i
                             )
                         });
                         self.store_at_obj(off, fty, arg);
@@ -242,7 +244,11 @@ impl Emitter<'_> {
                 } else {
                     // A union that survived analysis always has a registered layout; a miss is a
                     // compiler bug, so trap loudly rather than emitting a null pointer.
-                    unreachable!("Missing layout for union def{} variant {}", def.0, variant);
+                    crate::internal_error!(
+                        "missing layout for union def{} variant {}",
+                        def.0,
+                        variant
+                    );
                 }
             }
             Rvalue::ArrayLit { elem_ty, elems } => {
@@ -256,7 +262,7 @@ impl Emitter<'_> {
                     .checked_mul(esize)
                     .and_then(|payload| payload.checked_add(4))
                     .unwrap_or_else(|| {
-                        unreachable!(
+                        crate::internal_error!(
                             "array literal size overflows u32 ({} elems x {} bytes)",
                             elems.len(),
                             esize
@@ -430,7 +436,7 @@ impl Emitter<'_> {
                 // `None` here means an unsupported target slipped through (compiler bug). Comparing
                 // against 0 would silently answer the wrong question, so fail loudly instead.
                 let tag = runtime_tag_for(self.interner, self.tags, *target).unwrap_or_else(|| {
-                    unreachable!("`is` target type {:?} has no runtime tag", target)
+                    crate::internal_error!("`is` target type {:?} has no runtime tag", target)
                 });
                 self.line(&format!("     (i32.const {})", tag));
                 self.line("     (i32.eq)");
@@ -465,7 +471,12 @@ impl Emitter<'_> {
                         self.line(&format!("     ({})", self.load_instr(fty)));
                     }
                 } else {
-                    unreachable!("Missing layout for union payload");
+                    crate::internal_error!(
+                        "missing layout for union payload (type {:?}, variant {}, field {})",
+                        ty,
+                        variant,
+                        field
+                    );
                 }
             }
         }

@@ -140,9 +140,25 @@ impl Compiler {
         // Destructuring moves the owned `hir` out and drops `symbol_info`'s borrowing references,
         // releasing the `&mut analyzer` borrow so the shared interner can be read (the HIR references
         // its `TypeId`s, so both must come from this same analyzer instance).
-        let (text, debug_map) = {
-            let crate::semantics::analyzer::SemanticInfo { hir, .. } = symbol_info;
-            let interner = analyzer.interner();
+        let crate::semantics::analyzer::SemanticInfo { hir, .. } = symbol_info;
+        let interner = analyzer.interner();
+        let target = &self.target;
+        let debug = self.debug;
+        let debug_info = self.debug_info;
+
+        // Codegen (MIR lowering/optimization/emission) treats certain lookups - a type's layout, an
+        // interned string, a function-table slot - as compiler invariants rather than user errors: a
+        // miss means the analyzer and codegen disagree about a well-typed program, i.e. a compiler
+        // bug (see `crate::internal_error!`). Catching the resulting panic here turns that into a
+        // clean, typed `CompileError::Internal` instead of an unwinding panic with a raw backtrace
+        // reaching the user.
+        // Suppress the default panic hook's raw "thread 'main' panicked at ..." dump for the
+        // duration of this call: the panic is already a well-formed internal-error message (see
+        // `render_internal_error` below), and we don't want a Rust backtrace header confusing users
+        // who never expect to see a stack trace from a compiler CLI.
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let codegen_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut mir = crate::mir::lower::lower_program(&hir, interner);
             // Whole-module optimization: tree-shaking + reference-counting insertion + function
             // inlining (see `mir::passes::optimize_module`). RC is inserted there, before inlining,
@@ -151,8 +167,8 @@ impl Compiler {
             // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
             // user variables and per-function call frames survive for the debugger; release builds
             // use the full optimizing pipeline.
-            crate::mir::passes::optimize_module_opts(&mut mir, interner, !self.debug_info);
-            let pipeline = if self.debug_info {
+            crate::mir::passes::optimize_module_opts(&mut mir, interner, !debug_info);
+            let pipeline = if debug_info {
                 crate::mir::passes::PassManager::debug_pipeline()
             } else {
                 crate::mir::passes::PassManager::default_pipeline()
@@ -160,15 +176,19 @@ impl Compiler {
             for f in &mut mir.functions {
                 pipeline.run(f, interner);
             }
-            match self.target {
-                Target::Wasm => crate::mir::emit::emit_module_with_debug(
-                    &mir,
-                    interner,
-                    self.debug,
-                    self.debug_info,
-                ),
+            match target {
+                Target::Wasm => {
+                    crate::mir::emit::emit_module_with_debug(&mir, interner, debug, debug_info)
+                }
             }
-        };
+        }));
+        std::panic::set_hook(previous_hook);
+
+        let (text, debug_map) = codegen_result.map_err(|panic_payload| {
+            let message = panic_message(&panic_payload);
+            render_internal_error(&message);
+            CompileError::Internal(message)
+        })?;
 
         info!("finished code generation");
         fs::write(out_path, &text)?;
@@ -188,6 +208,25 @@ impl Compiler {
 
         Ok(())
     }
+}
+
+/// Extracts a human-readable message from a caught panic payload (the `Any` that
+/// `std::panic::catch_unwind` hands back), covering the two shapes `panic!`/`internal_error!`
+/// actually produce (`&'static str` and `String`).
+fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "internal compiler error: codegen panicked with a non-string payload".to_string()
+    }
+}
+
+/// Prints a caught codegen panic the way [`render`] prints ordinary diagnostics, so an internal
+/// compiler error looks like the rest of the CLI's output rather than a raw Rust panic dump.
+fn render_internal_error(message: &str) {
+    eprintln!("error: {}", message);
 }
 
 /// Derives the `.dbg.json` debug-map path that sits next to the compiled `.wat` output.
