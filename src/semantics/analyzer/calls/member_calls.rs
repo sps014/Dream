@@ -286,7 +286,10 @@ impl<'a> Analyzer<'a> {
                 }
                 let payload = match generic_args.as_ref().and_then(|g| g.first()) {
                     Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
-                    None => params_types.first().map(|s| named(s)).unwrap_or(Type::Unknown),
+                    None => params_types
+                        .first()
+                        .map(|s| named(s))
+                        .unwrap_or(Type::Unknown),
                 };
                 self.require_unmanaged(&payload, "Bytes.of", &method.position, diagnostics);
                 self.hir_set_to_bytes(arg_hirs.into_iter().next().flatten());

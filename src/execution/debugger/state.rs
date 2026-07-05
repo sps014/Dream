@@ -10,7 +10,7 @@
 //! (servicing the client's per-thread `continue`/`next`/... requests) releases it.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 /// Reference-namespacing stride. A thread `tid` owns `variablesReference`/`frameId` values in
@@ -154,7 +154,9 @@ impl Default for BpFilter {
 impl BpFilter {
     fn bit_index(file: u32, line: u32) -> u64 {
         // Cheap mix of (file, line); collisions only cost an extra locked check.
-        let h = (file as u64).wrapping_mul(0x9E3779B1).wrapping_add(line as u64);
+        let h = (file as u64)
+            .wrapping_mul(0x9E3779B1)
+            .wrapping_add(line as u64);
         h % BP_FILTER_BITS
     }
 
@@ -220,7 +222,9 @@ impl ThreadHot {
     pub fn step_wants_stop(&self) -> bool {
         match self.step_mode.load(Ordering::Relaxed) {
             STEP_IN => true,
-            STEP_OVER => self.depth.load(Ordering::Relaxed) <= self.step_ref.load(Ordering::Relaxed),
+            STEP_OVER => {
+                self.depth.load(Ordering::Relaxed) <= self.step_ref.load(Ordering::Relaxed)
+            }
             STEP_OUT => self.depth.load(Ordering::Relaxed) < self.step_ref.load(Ordering::Relaxed),
             _ => false,
         }

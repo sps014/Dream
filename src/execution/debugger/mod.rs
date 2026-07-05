@@ -686,9 +686,10 @@ fn link_debug_hooks(
             // Hot path: record the current position lock-free, then bail unless something might want to
             // stop here (a breakpoint at this line, an active step, or a pending pause). This is what
             // keeps tight loops running at near-native speed under the debugger.
-            hot_line
-                .pos
-                .store(ThreadHot::pack_pos(file_id as u32, line as u32), Ordering::Relaxed);
+            hot_line.pos.store(
+                ThreadHot::pack_pos(file_id as u32, line as u32),
+                Ordering::Relaxed,
+            );
             let maybe_stop = hot_line.pause.load(Ordering::Relaxed)
                 || hot_line.step_wants_stop()
                 || sh.bp_filter.probe(file_id as u32, line as u32);
