@@ -26,13 +26,15 @@ pub struct AttributeNode {
     pub args: Vec<SyntaxToken>,
 }
 
-/// A *kind* bound on a generic parameter: `T : struct` requires a value type (a `struct` or a
-/// non-`string` primitive; the compiler further requires it to be blittable where that matters),
-/// and `T : class` requires a reference type. Orthogonal to the interface `bounds` and combinable
-/// with them via `+` (e.g. `T : struct + Comparable<T>`).
+/// A *kind* bound on a generic parameter (C#-aligned): `T : struct` requires a non-nullable value
+/// type (a `struct` or a non-`string` primitive) that *may* still contain reference-typed fields;
+/// `T : unmanaged` requires a *blittable* value type (recursively only value fields, no inner heap
+/// pointers - a strict subset of `struct`); `T : class` requires a reference type. Orthogonal to
+/// the interface `bounds` and combinable with them via `+` (e.g. `T : unmanaged + Comparable<T>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConstraintKind {
     Struct,
+    Unmanaged,
     Class,
 }
 

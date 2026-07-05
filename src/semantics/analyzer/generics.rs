@@ -158,9 +158,12 @@ impl<'a> Analyzer<'a> {
             for kind in &constraint.kinds {
                 if !self.type_satisfies_kind(concrete, *kind) {
                     let (want, why) = match kind {
-                        crate::syntax::nodes::ConstraintKind::Struct => (
-                            "struct",
-                            "it is not a value (struct) type with only blittable fields",
+                        crate::syntax::nodes::ConstraintKind::Struct => {
+                            ("struct", "it is not a (non-nullable) value type")
+                        }
+                        crate::syntax::nodes::ConstraintKind::Unmanaged => (
+                            "unmanaged",
+                            "it is not a blittable value type (it contains reference-typed fields, or is nullable/a reference type)",
                         ),
                         crate::syntax::nodes::ConstraintKind::Class => {
                             ("class", "it is not a reference type")
@@ -181,10 +184,11 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// True when `concrete` satisfies a `struct`/`class` kind constraint. `struct` requires a
-    /// *blittable value type* (a non-`string` scalar primitive, or a value `struct` all of whose
-    /// fields are themselves blittable and non-nullable, recursively - so it is a self-contained run
-    /// of bytes with no inner heap pointers); `class` requires a reference type.
+    /// True when `concrete` satisfies a `struct`/`unmanaged`/`class` kind constraint (C#-aligned):
+    /// `struct` requires a non-nullable *value type* (a non-`string` scalar primitive or a value
+    /// `struct`), which may still hold reference-typed fields; `unmanaged` additionally requires it
+    /// to be *blittable* (recursively only value fields, no inner heap pointers - a self-contained
+    /// run of bytes); `class` requires a reference type.
     pub(super) fn type_satisfies_kind(
         &self,
         concrete: &Type,
@@ -193,13 +197,54 @@ impl<'a> Analyzer<'a> {
         let name = concrete.get_type();
         let base = crate::syntax::nodes::types::strip_nullable(&name);
         match kind {
+            // A nullable value type is boxed to a heap pointer, so it is not a plain value type.
             crate::syntax::nodes::ConstraintKind::Struct => {
-                // A nullable value struct is boxed to a heap pointer, so it is not blittable.
+                !name.ends_with('?') && self.name_is_value_type(base)
+            }
+            crate::syntax::nodes::ConstraintKind::Unmanaged => {
                 !name.ends_with('?')
                     && self.name_is_blittable_value(base, &mut std::collections::HashSet::new())
             }
             crate::syntax::nodes::ConstraintKind::Class => self.name_is_reference_type(base),
         }
+    }
+
+    /// Reports an error unless `ty` satisfies the `unmanaged` (blittable) kind. Used by the raw
+    /// byte-blit intrinsics (`Bytes.of`/`Bytes.to`), whose generic bound is verified here rather
+    /// than through the normal call-site constraint path (which they bypass).
+    pub(super) fn require_unmanaged(
+        &self,
+        ty: &Type,
+        who: &str,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if !self.type_satisfies_kind(ty, crate::syntax::nodes::ConstraintKind::Unmanaged) {
+            diagnostics.report_error(
+                format!(
+                    "'{}' requires an unmanaged (blittable) type, but '{}' is not (it is a reference type, is nullable, or contains reference-typed fields)",
+                    who,
+                    ty.get_type()
+                ),
+                Some(*position),
+            );
+        }
+    }
+
+    /// True when `name` is a value type: a non-`string` scalar primitive or a declared value
+    /// `struct` (regardless of whether its fields are references). The complement of
+    /// [`Self::name_is_reference_type`] for known nominal types.
+    fn name_is_value_type(&self, name: &str) -> bool {
+        if name.ends_with("[]") || name == "string" {
+            return false; // arrays and strings are heap references
+        }
+        if crate::syntax::nodes::types::is_boxable_primitive(name) {
+            return true; // non-string scalar primitive
+        }
+        self.struct_table
+            .get_struct(name)
+            .map(|s| s.is_value)
+            .unwrap_or(false) // class / unknown / generic param
     }
 
     fn name_is_blittable_value(

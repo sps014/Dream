@@ -244,7 +244,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             let iter = self.current_token_index;
             let param = self.match_token(TokenKind::IdentifierToken);
             // Optional bounds: interface bounds (`T : Comparable<T>`), kind bounds
-            // (`T : struct` / `T : class`), or a `+`-combined mix (`T : struct + Comparable<T>`).
+            // (`T : struct` / `T : unmanaged` / `T : class`), or a `+`-combined mix
+            // (`T : unmanaged + Comparable<T>`).
             if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
                 let mut bounds = Vec::new();
@@ -258,6 +259,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                         TokenKind::ClassToken => {
                             self.match_token(TokenKind::ClassToken);
                             kinds.push(crate::nodes::ConstraintKind::Class);
+                        }
+                        TokenKind::UnmanagedToken => {
+                            self.match_token(TokenKind::UnmanagedToken);
+                            kinds.push(crate::nodes::ConstraintKind::Unmanaged);
                         }
                         _ => match self.parse_type() {
                             Ok(t) => bounds.push(t),

@@ -2,17 +2,17 @@
 // compiler intrinsics. These underpin the value-copy WebWorker boundary: a value is flattened to a
 // byte buffer on one side and rebuilt from an identical buffer on the other, with no marshalling.
 //
-// Only blittable values (`T : struct`, recursively free of reference fields) are safe to copy this
-// way - a raw byte copy of a heap reference would carry a pointer that is meaningless in another
-// memory space.
+// Only blittable values (`T : unmanaged`, recursively free of reference fields) are safe to copy
+// this way - a raw byte copy of a heap reference would carry a pointer that is meaningless in
+// another memory space.
 public class Bytes {
     // Copy the raw bytes of blittable `value` into a fresh `byte[]` (one element per byte).
     @intrinsic("to_bytes")
-    static extern fun of<T : struct>(value: T): byte[];
+    static extern fun of<T : unmanaged>(value: T): byte[];
 
     // Reconstruct a blittable `T` from a `byte[]` buffer produced by `Bytes.of<T>`.
     @intrinsic("from_bytes")
-    static extern fun to<T : struct>(bytes: byte[]): T;
+    static extern fun to<T : unmanaged>(bytes: byte[]): T;
 }
 
 // Worker-boundary adapter: decode `inBytes` to `TIn`, run `body`, and encode its `TOut` result
@@ -21,7 +21,7 @@ public class Bytes {
 // `body` in a closure. The adapter's own signature is uniformly `(funcref, byte[]) -> byte[]`
 // (all i32 on the wire), so bodies that return a struct (and thus use the sret ABI internally) do
 // not force a per-body host trampoline.
-public fun __worker_run<TIn : struct, TOut : struct>(body: fun(TIn): TOut, inBytes: byte[]): byte[] {
+public fun __worker_run<TIn : unmanaged, TOut : unmanaged>(body: fun(TIn): TOut, inBytes: byte[]): byte[] {
     let input = Bytes.to<TIn>(inBytes);
     let output = body(input);
     return Bytes.of<TOut>(output);
