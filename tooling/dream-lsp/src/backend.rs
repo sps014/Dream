@@ -276,7 +276,7 @@ impl LanguageServer for Backend {
         let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
-        if let Some(located) = idx.hover(offset, &text) {
+        if let Some(located) = idx.hover(offset) {
             return Ok(Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,

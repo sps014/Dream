@@ -85,7 +85,7 @@ pub fn exercise_all(src: &str) {
         while off > 0 && !src.is_char_boundary(off) {
             off -= 1;
         }
-        let _ = idx.hover(off, src);
+        let _ = idx.hover(off);
         let _ = idx.definition(off);
         let _ = idx.references(off, true);
         let _ = idx.completions(None, src, off);

@@ -82,32 +82,6 @@ impl Index {
             .find(|d| d.kind == SymKind::EnumMember && d.name == name)
     }
 
-    /// Extracts an immediately-preceding `receiver.` identifier (e.g. `Shape` in `Shape.Rect`),
-    /// scanning back over an optional dot and surrounding spaces. Returns `None` when the reference
-    /// is not a member access.
-    fn receiver_before(text: &str, ref_start: usize) -> Option<&str> {
-        let bytes = text.as_bytes();
-        let mut i = ref_start;
-        while i > 0 && is_ident_byte(bytes[i - 1]) {
-            i -= 1;
-        }
-        if i > 0 && bytes[i - 1] == b'.' {
-            let mut j = i - 1;
-            while j > 0 && bytes[j - 1] == b' ' {
-                j -= 1;
-            }
-            let recv_end = j;
-            let mut recv_start = recv_end;
-            while recv_start > 0 && is_ident_byte(bytes[recv_start - 1]) {
-                recv_start -= 1;
-            }
-            if recv_start < recv_end {
-                return Some(&text[recv_start..recv_end]);
-            }
-        }
-        None
-    }
-
     pub(crate) fn substitute_generic(detail: &str, receiver_ty: &str) -> String {
         // `receiver_ty` is the human-readable type (e.g. `List<int>`); pull the generic argument
         // out of the angle brackets. Types are never `_`-mangled at this layer, so there is no
@@ -133,13 +107,13 @@ impl Index {
             .replace(" T ", &format!(" {} ", generic_arg))
     }
 
-    pub fn hover(&self, offset: usize, text: &str) -> Option<Located> {
+    pub fn hover(&self, offset: usize) -> Option<Located> {
         let mut receiver_ty_opt = None;
         let (start, end, decl) = if let Some(decl) = self.decl_at(offset) {
             (decl.start, decl.end, decl)
         } else {
             let reference = self.ref_at(offset)?;
-            let receiver = Self::receiver_before(text, reference.start);
+            let receiver = reference.receiver.as_deref();
             let d = match reference.kind {
                 SymKind::EnumMember => self.resolve_enum_member(receiver, &reference.name),
                 SymKind::Field | SymKind::Method => {

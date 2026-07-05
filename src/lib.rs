@@ -1,3 +1,4 @@
+pub mod debug_schema;
 pub mod driver;
 #[cfg(feature = "native")]
 pub mod execution;

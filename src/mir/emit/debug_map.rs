@@ -9,6 +9,7 @@
 //! raw pointer) — and serializes it to a compact JSON sidecar (`<stem>.dbg.json`) shipped next to
 //! the `.wat`/`.wasm`.
 
+use crate::debug_schema::{FieldDesc, ScalarKind, TypeDesc, VariantDesc};
 use crate::hir::{scalar_size, LayoutTable};
 use crate::mir::{Mir, MirFunction, Statement};
 use crate::types::{PrimTy, TyKind, TypeId, TypeInterner};
@@ -39,84 +40,6 @@ pub fn spill_kind(interner: &TypeInterner, ty: TypeId) -> SpillKind {
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => SpillKind::I64,
         _ => SpillKind::I32,
     }
-}
-
-/// A scalar (non-aggregate, non-reference) value's runtime encoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScalarKind {
-    Int,
-    UInt,
-    Byte,
-    Bool,
-    Char,
-    Long,
-    ULong,
-    Float,
-    Double,
-}
-
-impl ScalarKind {
-    fn tag(self) -> &'static str {
-        match self {
-            ScalarKind::Int => "int",
-            ScalarKind::UInt => "uint",
-            ScalarKind::Byte => "byte",
-            ScalarKind::Bool => "bool",
-            ScalarKind::Char => "char",
-            ScalarKind::Long => "long",
-            ScalarKind::ULong => "ulong",
-            ScalarKind::Float => "float",
-            ScalarKind::Double => "double",
-        }
-    }
-}
-
-/// One field of a struct or a union variant.
-#[derive(Debug, Clone)]
-pub struct FieldDesc {
-    pub name: String,
-    pub offset: u32,
-    /// Index into [`DebugModule::types`].
-    pub type_id: u32,
-}
-
-/// One variant of a discriminated union.
-#[derive(Debug, Clone)]
-pub struct VariantDesc {
-    pub name: String,
-    pub discriminant: i32,
-    pub fields: Vec<FieldDesc>,
-}
-
-/// A structural description of a runtime type, sufficient for the debugger to walk memory and decode
-/// live values. Recursive: aggregates reference their component types by index into
-/// [`DebugModule::types`].
-#[derive(Debug, Clone)]
-pub enum TypeDesc {
-    Scalar(ScalarKind),
-    /// A `string`: pointer to `[len:i32][utf8...]`.
-    Str,
-    /// C-style enum (an `i32` discriminant).
-    Enum,
-    Struct {
-        name: String,
-        /// True for value (inline) structs; false for reference (heap) structs.
-        value: bool,
-        fields: Vec<FieldDesc>,
-    },
-    Union {
-        name: String,
-        value: bool,
-        variants: Vec<VariantDesc>,
-    },
-    Array {
-        elem: u32,
-        /// Byte stride between consecutive elements.
-        stride: u32,
-    },
-    /// An opaque reference (interface/object/function value, or a type with no known layout): shown
-    /// as an address.
-    Ref,
 }
 
 /// Builds and memoizes the module's [`TypeDesc`] registry, breaking recursive types with a

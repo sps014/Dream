@@ -17,9 +17,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index
-        .hover(harness.offset, src)
-        .expect("Expected hover info");
+    let hover = index.hover(harness.offset).expect("Expected hover info");
     assert!(hover.contents.contains("fun add"));
 }
 
@@ -181,9 +179,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index
-        .hover(harness.offset, src)
-        .expect("Expected hover info");
+    let hover = index.hover(harness.offset).expect("Expected hover info");
     assert!(
         hover.contents.contains("int"),
         "Hover should contain field type"
@@ -208,7 +204,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset, &harness.src)
+        .hover(harness.offset)
         .expect("Expected hover info on union variant");
     assert!(
         hover
@@ -244,7 +240,7 @@ fun area(s: Shape): int {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset, &harness.src)
+        .hover(harness.offset)
         .expect("Expected hover info on match-arm variant");
     assert!(
         hover
@@ -270,7 +266,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset, &harness.src)
+        .hover(harness.offset)
         .expect("Expected hover info on generic enum type");
     assert!(
         hover.contents.contains("enum Opt<T>"),
@@ -353,7 +349,7 @@ class User { age: int; }
 
     // Check hover for the reference
     let hover_ref = index
-        .hover(harness.offset - 1, src)
+        .hover(harness.offset - 1)
         .expect("Expected hover info on ref");
     assert!(
         hover_ref.contents.contains("User"),
@@ -377,7 +373,7 @@ class User { age: int; }
 
     // Check hover for the reference
     let hover_ref = index
-        .hover(harness.offset - 1, src)
+        .hover(harness.offset - 1)
         .expect("Expected hover info on ref");
     assert!(
         hover_ref.contents.contains("User"),
@@ -507,7 +503,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset, src)
+        .hover(harness.offset)
         .expect("Expected hover info on builtin method");
     println!("HOVER CONTENTS: {}", hover.contents);
     // With generic substitution, it should show 'push(value: int)' instead of 'push(value: T)'
@@ -525,7 +521,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
     let hover = index
-        .hover(harness.offset, src)
+        .hover(harness.offset)
         .expect("Expected hover info on Math.floor");
     println!("HOVER CONTENTS MATH.FLOOR: {}", hover.contents);
 }
@@ -777,7 +773,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let hover = harness
         .index()
-        .hover(harness.offset, &harness.src)
+        .hover(harness.offset)
         .expect("Expected hover info on `a`");
     assert!(
         hover.contents.contains("int"),
@@ -852,7 +848,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let hover = harness
         .index()
-        .hover(harness.offset, &harness.src)
+        .hover(harness.offset)
         .expect("Expected hover info on `a`");
     assert!(
         hover.contents.contains("fun(int): int"),
@@ -875,9 +871,7 @@ fun main(): void {
 ";
     let offset = src.find("print(1)").unwrap() + 1; // inside the `print` reference
     let index = dream_lsp::index::Index::build(None, src);
-    let hover = index
-        .hover(offset, src)
-        .expect("expected hover on System.print");
+    let hover = index.hover(offset).expect("expected hover on System.print");
     assert!(
         hover.contents.contains("Prints a value to standard output"),
         "doc comment above an attribute should still appear in hover; got {}",
@@ -903,7 +897,7 @@ fun main(): void {
 ";
     let offset = src.find("enum Foo").unwrap() + 5; // inside `Foo`
     let index = dream_lsp::index::Index::build(None, src);
-    let hover = index.hover(offset, src).expect("expected hover on Foo");
+    let hover = index.hover(offset).expect("expected hover on Foo");
     assert!(
         hover.contents.contains("The doc comment for Foo"),
         "hover should include the directly-attached doc comment; got {}",
@@ -927,7 +921,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
     let hover = index
-        .hover(harness.offset, &harness.src)
+        .hover(harness.offset)
         .expect("expected hover on a top-level global");
     assert!(
         hover.contents.contains("FACTOR") && hover.contents.contains("const"),

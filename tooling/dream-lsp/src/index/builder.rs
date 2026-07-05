@@ -393,7 +393,7 @@ impl Builder {
             }
             StatementNode::MemberAssignment(target, member, value) => {
                 self.walk_expr(target, scope);
-                self.add_ref(member, SymKind::Field, scope);
+                self.add_ref_with_receiver(member, SymKind::Field, scope, receiver_ident(target));
                 self.walk_expr(value, scope);
             }
             StatementNode::Return(Some(expr)) => self.walk_expr(expr, scope),
@@ -421,7 +421,7 @@ impl Builder {
                     ExpressionNode::Identifier(id) if self.is_enum(&id.text) => SymKind::EnumMember,
                     _ => SymKind::Method,
                 };
-                self.add_ref(method, kind, scope);
+                self.add_ref_with_receiver(method, kind, scope, receiver_ident(recv));
                 if let Some(params) = self.method_params.get(&method.text) {
                     self.push_param_hints(&params.clone(), args);
                 }
@@ -552,7 +552,7 @@ impl Builder {
                     ExpressionNode::Identifier(id) if self.is_enum(&id.text) => SymKind::EnumMember,
                     _ => SymKind::Field,
                 };
-                self.add_ref(member, kind, scope);
+                self.add_ref_with_receiver(member, kind, scope, receiver_ident(recv));
             }
             ExpressionNode::MethodCall(recv, method, _, args) => {
                 self.walk_expr(recv, scope);
@@ -561,7 +561,7 @@ impl Builder {
                     ExpressionNode::Identifier(id) if self.is_enum(&id.text) => SymKind::EnumMember,
                     _ => SymKind::Method,
                 };
-                self.add_ref(method, kind, scope);
+                self.add_ref_with_receiver(method, kind, scope, receiver_ident(recv));
                 if let Some(params) = self.method_params.get(&method.text) {
                     self.push_param_hints(&params.clone(), args);
                 }
@@ -721,6 +721,19 @@ impl Builder {
     }
 
     fn add_ref(&mut self, token: &SyntaxToken, kind: SymKind, scope: usize) {
+        self.add_ref_with_receiver(token, kind, scope, None);
+    }
+
+    /// Like [`Self::add_ref`], but records the receiver of a field/method/enum-member access
+    /// (`recv.token`) when the receiver is a plain identifier, so queries can resolve it directly
+    /// instead of re-parsing source text around the reference.
+    fn add_ref_with_receiver(
+        &mut self,
+        token: &SyntaxToken,
+        kind: SymKind,
+        scope: usize,
+        receiver: Option<String>,
+    ) {
         if token.text.is_empty() {
             return;
         }
@@ -731,6 +744,18 @@ impl Builder {
             end: token.position.end,
             scope,
             is_main: self.is_main,
+            receiver,
         });
+    }
+}
+
+/// The identifier text of `expr`, when it is a plain identifier (e.g. `obj` in `obj.field`, or an
+/// enum/struct name in `Color.Red`/`Point.origin`). `None` for any other receiver shape (a call, an
+/// index, another member access, etc.), matching what a single-identifier receiver scan could ever
+/// recover.
+fn receiver_ident(expr: &ExpressionNode) -> Option<String> {
+    match expr {
+        ExpressionNode::Identifier(token) => Some(token.text.clone()),
+        _ => None,
     }
 }

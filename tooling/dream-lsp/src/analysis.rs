@@ -3,7 +3,7 @@
 //! access is involved (the prelude is embedded with `include_str!`), so it runs in the browser.
 
 use bumpalo::Bump;
-use dream::diagnostics::{DiagnosticBag, Severity};
+use dream::diagnostics::{Diagnostic, DiagnosticBag, Severity};
 use dream::driver::source_loader::collect_declarations;
 use dream::semantics::analyzer::Analyzer;
 use dream::syntax::lexer::Lexer;
@@ -117,10 +117,13 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
             acc.all_globals,
         );
         let tree = SyntaxTree::new(combined);
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut analyzer = Analyzer::new(&tree, &arena);
             let _ = analyzer.analyze(&mut diagnostics);
         }));
+        if let Err(payload) = result {
+            report_analyzer_panic(&mut diagnostics, &payload);
+        }
     }
 
     diagnostics
@@ -148,6 +151,50 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
             })
         })
         .collect()
+}
+
+/// Extracts a human-readable message from a caught panic payload (`&str`/`String`, or a fallback
+/// for anything else, e.g. a custom panic payload type).
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "unknown panic payload".to_string()
+    }
+}
+
+/// Surfaces a caught analyzer panic instead of silently downgrading to "syntax diagnostics only":
+/// logs it (so it shows up in the language server's own logs) and reports it as a warning
+/// diagnostic anchored at the start of the document, so the editor visibly indicates that semantic
+/// diagnostics for this file may be incomplete. This is a safety net — the compiler's own internal
+/// errors (Phase 1 of the fragility cleanup) already turn known-fragile MIR/codegen panics into
+/// proper diagnostics before they would ever reach here; this only catches what that pass doesn't.
+fn report_analyzer_panic(diagnostics: &mut DiagnosticBag, payload: &(dyn std::any::Any + Send)) {
+    let message = panic_message(payload);
+    // No structured logger is wired up in this crate; stderr is the language server's own log
+    // (VS Code surfaces it in the "Dream Language Server" output channel), separate from the
+    // diagnostic pushed below (which is what the *user* sees in-editor).
+    eprintln!(
+        "[dream-lsp] semantic analyzer panicked (this is a compiler bug): {}",
+        message
+    );
+    diagnostics.diagnostics.push(Diagnostic::warning(
+        format!(
+            "internal error: semantic analysis crashed while analyzing this file ({}); some \
+             diagnostics may be missing. This is a compiler bug, not a problem with your program \
+             — please file an issue.",
+            message
+        ),
+        Some(dream::text::text_span::TextSpan {
+            start: 0,
+            end: 1,
+            line_no: 1,
+            col_no: 1,
+        }),
+        None,
+    ));
 }
 
 /// Parses each embedded prelude file and merges its declarations, tagging them with their

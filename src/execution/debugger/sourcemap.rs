@@ -3,103 +3,25 @@
 //! uses to map hook ids/file ids back to source paths, function names, variable tables, and the
 //! recursive **type table** that lets it decode live aggregate values from linear memory.
 
+pub use crate::debug_schema::{FieldDesc, ScalarKind, TypeDesc, VariantDesc};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// A scalar (non-aggregate, non-reference) value's runtime encoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScalarKind {
-    Int,
-    UInt,
-    Byte,
-    Bool,
-    Char,
-    Long,
-    ULong,
-    Float,
-    Double,
-}
-
-impl ScalarKind {
-    fn from_tag(tag: &str) -> ScalarKind {
-        match tag {
-            "uint" => ScalarKind::UInt,
-            "byte" => ScalarKind::Byte,
-            "bool" => ScalarKind::Bool,
-            "char" => ScalarKind::Char,
-            "long" => ScalarKind::Long,
-            "ulong" => ScalarKind::ULong,
-            "float" => ScalarKind::Float,
-            "double" => ScalarKind::Double,
-            _ => ScalarKind::Int,
-        }
+/// Parses a [`ScalarKind`] back out of its `tag()` JSON string, the inverse of
+/// [`ScalarKind::tag`]. Local to this reader since only JSON parsing needs it.
+fn scalar_from_tag(tag: &str) -> ScalarKind {
+    match tag {
+        "uint" => ScalarKind::UInt,
+        "byte" => ScalarKind::Byte,
+        "bool" => ScalarKind::Bool,
+        "char" => ScalarKind::Char,
+        "long" => ScalarKind::Long,
+        "ulong" => ScalarKind::ULong,
+        "float" => ScalarKind::Float,
+        "double" => ScalarKind::Double,
+        _ => ScalarKind::Int,
     }
-
-    /// Byte width of the scalar in linear memory.
-    pub fn width(self) -> u32 {
-        match self {
-            ScalarKind::Byte | ScalarKind::Bool => 1,
-            ScalarKind::Long | ScalarKind::ULong | ScalarKind::Double => 8,
-            _ => 4,
-        }
-    }
-
-    pub fn tag(self) -> &'static str {
-        match self {
-            ScalarKind::Int => "int",
-            ScalarKind::UInt => "uint",
-            ScalarKind::Byte => "byte",
-            ScalarKind::Bool => "bool",
-            ScalarKind::Char => "char",
-            ScalarKind::Long => "long",
-            ScalarKind::ULong => "ulong",
-            ScalarKind::Float => "float",
-            ScalarKind::Double => "double",
-        }
-    }
-}
-
-/// One field of a struct or a union variant payload.
-#[derive(Debug, Clone)]
-pub struct FieldDesc {
-    pub name: String,
-    pub offset: u32,
-    pub type_id: u32,
-}
-
-/// One variant of a discriminated union.
-#[derive(Debug, Clone)]
-pub struct VariantDesc {
-    pub name: String,
-    pub discriminant: i32,
-    pub fields: Vec<FieldDesc>,
-}
-
-/// A structural description of a runtime type: enough for the debugger to walk linear memory and
-/// decode a live value. Aggregates reference their component types by index into [`SourceMap::types`].
-#[derive(Debug, Clone)]
-pub enum TypeDesc {
-    Scalar(ScalarKind),
-    Str,
-    Enum,
-    Struct {
-        name: String,
-        /// True for value (inline) structs; false for reference (heap) structs.
-        value: bool,
-        fields: Vec<FieldDesc>,
-    },
-    Union {
-        name: String,
-        value: bool,
-        variants: Vec<VariantDesc>,
-    },
-    Array {
-        elem: u32,
-        stride: u32,
-    },
-    /// An opaque reference shown as an address.
-    Ref,
 }
 
 #[derive(Debug, Clone)]
@@ -263,7 +185,7 @@ fn parse_field(v: &Value) -> FieldDesc {
 
 fn parse_type(v: &Value) -> TypeDesc {
     match v.get("kind").and_then(|x| x.as_str()).unwrap_or("ref") {
-        "scalar" => TypeDesc::Scalar(ScalarKind::from_tag(
+        "scalar" => TypeDesc::Scalar(scalar_from_tag(
             v.get("scalar").and_then(|x| x.as_str()).unwrap_or("int"),
         )),
         "string" => TypeDesc::Str,

@@ -45,6 +45,11 @@ pub struct Ref {
     pub end: usize,
     pub scope: usize,
     pub is_main: bool,
+    /// For a field/method/enum-member reference (`recv.name`), the receiver's identifier text
+    /// (e.g. `obj` in `obj.field`, `Color` in `Color.Red`), when the receiver is a plain
+    /// identifier. Captured from the AST at index-build time so hover/go-to-definition never need
+    /// to re-derive the receiver by scanning source bytes backwards from the reference.
+    pub receiver: Option<String>,
 }
 
 /// Distinguishes an inferred-type hint (rendered after a `let` name, e.g. `: int`) from a
