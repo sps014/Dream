@@ -9,6 +9,7 @@ use tower_lsp::lsp_types::{SemanticToken, SemanticTokenType};
 
 use crate::index::{Index, SymKind};
 use crate::position::LineIndex;
+use crate::tokens::{lex_category, LexCategory};
 
 /// The ordered semantic-token legend advertised in the server capabilities. A token's
 /// `token_type` is an index into this slice.
@@ -72,68 +73,16 @@ pub fn compute(file_path: Option<&str>, text: &str) -> Vec<SemanticToken> {
                     }
                     Some(kind)
                 }
-                TokenKind::NumberToken => Some(12),
-                TokenKind::StringToken
-                | TokenKind::InterpolatedStringToken
-                | TokenKind::CharToken => Some(11),
-                TokenKind::BooleanToken | TokenKind::NullToken => Some(0),
-                TokenKind::IfToken
-                | TokenKind::ElseToken
-                | TokenKind::ForToken
-                | TokenKind::WhileToken
-                | TokenKind::DoToken
-                | TokenKind::ReturnToken
-                | TokenKind::BreakToken
-                | TokenKind::ContinueToken
-                | TokenKind::LetToken
-                | TokenKind::ConstToken
-                | TokenKind::FunToken
-                | TokenKind::StaticToken
-                | TokenKind::ImportToken
-                | TokenKind::PublicToken
-                | TokenKind::ExternToken
-                | TokenKind::ClassToken
-                | TokenKind::ExtendToken
-                | TokenKind::IsToken
-                | TokenKind::InToken
-                | TokenKind::EnumToken
-                | TokenKind::TypeToken
-                | TokenKind::SwitchToken
-                | TokenKind::CaseToken
-                | TokenKind::DefaultToken
-                | TokenKind::AsyncToken
-                | TokenKind::AwaitToken
-                | TokenKind::SealedToken => Some(0),
-                TokenKind::DataTypeToken => Some(9),
-                TokenKind::PlusToken
-                | TokenKind::MinusToken
-                | TokenKind::SlashToken
-                | TokenKind::StarToken
-                | TokenKind::BangToken
-                | TokenKind::ModulusToken
-                | TokenKind::PlusEqualToken
-                | TokenKind::MinusEqualToken
-                | TokenKind::StarEqualToken
-                | TokenKind::SlashEqualToken
-                | TokenKind::ModulusEqualToken
-                | TokenKind::PlusPlusToken
-                | TokenKind::MinusMinusToken
-                | TokenKind::EqualEqualToken
-                | TokenKind::NotEqualToken
-                | TokenKind::AmpersandAmpersandToken
-                | TokenKind::PipePipeToken
-                | TokenKind::BitWisePipeToken
-                | TokenKind::BitWiseAmpersandToken
-                | TokenKind::BitWiseXorToken
-                | TokenKind::ShiftLeftToken
-                | TokenKind::ShiftRightToken
-                | TokenKind::QuestionQuestionToken
-                | TokenKind::EqualToken
-                | TokenKind::GreaterThanEqualToken
-                | TokenKind::GreaterThanToken
-                | TokenKind::SmallerThanToken
-                | TokenKind::SmallerThanEqualToken => Some(10),
-                _ => None,
+                // Every other fixed-category token (keywords, types, literals, operators) shares
+                // its classification with `crate::tokens::classify` via `lex_category`; only the
+                // legend index mapping (this analyzer's `TOKEN_TYPES`) is local to this module.
+                other => lex_category(other).map(|c| match c {
+                    LexCategory::Keyword => 0,
+                    LexCategory::Type => 9,
+                    LexCategory::Operator => 10,
+                    LexCategory::String => 11,
+                    LexCategory::Number => 12,
+                }),
             };
 
             if let Some(type_idx) = token_type_index {

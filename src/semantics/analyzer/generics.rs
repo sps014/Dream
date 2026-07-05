@@ -6,6 +6,21 @@ use crate::syntax::nodes::{FunctionNode, Type};
 use crate::syntax::token::token_kind::TokenKind;
 use crate::text::text_span::TextSpan;
 
+/// The coarse shape of a type name, as classified by [`Analyzer::name_shape`].
+enum NameShape<'s> {
+    /// `T[]`: always a heap-allocated array reference.
+    Array,
+    /// `string`: a heap-allocated reference (spelled as a primitive name for historical reasons).
+    String,
+    /// A non-`string` scalar primitive (`int`, `bool`, `byte`, ...), stored inline.
+    Primitive,
+    /// A declared nominal `struct`/`class`; [`crate::semantics::struct_table::StructInfo::is_value`]
+    /// says which.
+    Nominal(&'s crate::semantics::struct_table::StructInfo),
+    /// Not a recognized name (an interface, `object`/`js`, or an unresolved/generic name).
+    Unknown,
+}
+
 impl<'a> Analyzer<'a> {
     /// Substitutes every generic parameter appearing in a method's parameter or return types
     /// with its concrete type, according to the monomorphization bindings.
@@ -231,20 +246,39 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// The coarse shape of a (nullable-stripped) type name, as needed to decide the `struct`/
+    /// `unmanaged`/`class` kind constraints. Single source of truth for "what counts as an array /
+    /// a string / a scalar primitive / a declared value struct", shared by
+    /// [`Self::name_is_value_type`], [`Self::name_is_blittable_value`], and
+    /// [`Self::name_is_reference_type`] below (previously each re-derived this classification from
+    /// the raw name independently).
+    fn name_shape<'s>(&'s self, name: &str) -> NameShape<'s> {
+        if name.ends_with("[]") {
+            return NameShape::Array;
+        }
+        if name == "string" {
+            return NameShape::String;
+        }
+        if crate::syntax::nodes::types::is_boxable_primitive(name) {
+            return NameShape::Primitive;
+        }
+        match self.struct_table.get_struct(name) {
+            Some(info) => NameShape::Nominal(info),
+            // An interface, `object`/`js`, or an unresolved/generic name: not a known value shape,
+            // so it falls back to a reference type below (the pre-existing default).
+            None => NameShape::Unknown,
+        }
+    }
+
     /// True when `name` is a value type: a non-`string` scalar primitive or a declared value
     /// `struct` (regardless of whether its fields are references). The complement of
     /// [`Self::name_is_reference_type`] for known nominal types.
     fn name_is_value_type(&self, name: &str) -> bool {
-        if name.ends_with("[]") || name == "string" {
-            return false; // arrays and strings are heap references
+        match self.name_shape(name) {
+            NameShape::Primitive => true,
+            NameShape::Nominal(info) => info.is_value,
+            NameShape::Array | NameShape::String | NameShape::Unknown => false,
         }
-        if crate::syntax::nodes::types::is_boxable_primitive(name) {
-            return true; // non-string scalar primitive
-        }
-        self.struct_table
-            .get_struct(name)
-            .map(|s| s.is_value)
-            .unwrap_or(false) // class / unknown / generic param
     }
 
     fn name_is_blittable_value(
@@ -252,50 +286,37 @@ impl<'a> Analyzer<'a> {
         name: &str,
         seen: &mut std::collections::HashSet<String>,
     ) -> bool {
-        if name.ends_with("[]") {
-            return false; // arrays are heap references
-        }
-        if crate::syntax::nodes::types::is_boxable_primitive(name) {
-            return true; // non-string scalar primitive
-        }
-        if name == "string" {
-            return false;
-        }
-        let Some(info) = self.struct_table.get_struct(name) else {
-            return false; // class / unknown / generic param
-        };
-        if !info.is_value {
-            return false;
-        }
-        if !seen.insert(name.to_string()) {
-            return true; // cycle guard (value structs cannot actually recurse by value)
-        }
-        for f in info.fields.values() {
-            let fname = f.type_.get_type();
-            if fname.ends_with('?') {
-                return false; // nullable field is a boxed/nullable pointer
-            }
-            let fbase = crate::syntax::nodes::types::strip_nullable(&fname);
-            if !self.name_is_blittable_value(fbase, seen) {
-                return false;
+        match self.name_shape(name) {
+            NameShape::Array | NameShape::String | NameShape::Unknown => false,
+            NameShape::Primitive => true,
+            NameShape::Nominal(info) => {
+                if !info.is_value {
+                    return false; // class / reference struct
+                }
+                if !seen.insert(name.to_string()) {
+                    return true; // cycle guard (value structs cannot actually recurse by value)
+                }
+                for f in info.fields.values() {
+                    let fname = f.type_.get_type();
+                    if fname.ends_with('?') {
+                        return false; // nullable field is a boxed/nullable pointer
+                    }
+                    let fbase = crate::syntax::nodes::types::strip_nullable(&fname);
+                    if !self.name_is_blittable_value(fbase, seen) {
+                        return false;
+                    }
+                }
+                true
             }
         }
-        true
     }
 
     fn name_is_reference_type(&self, name: &str) -> bool {
-        if name.ends_with("[]") || name == "string" {
-            return true;
+        match self.name_shape(name) {
+            NameShape::Array | NameShape::String | NameShape::Unknown => true,
+            NameShape::Primitive => false,
+            NameShape::Nominal(info) => !info.is_value,
         }
-        if crate::syntax::nodes::types::is_boxable_primitive(name) {
-            return false;
-        }
-        // A declared value `struct` is not a reference; a `class` is. Unions/object/js/interfaces
-        // and unknown names default to reference types.
-        self.struct_table
-            .get_struct(name)
-            .map(|s| !s.is_value)
-            .unwrap_or(true)
     }
 
     /// True when `concrete` implements the interface named by `bound` (after substituting the

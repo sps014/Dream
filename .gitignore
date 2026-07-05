@@ -22,3 +22,5 @@ node_modules/
 *.dbg.json
 tooling/vscode/out/
 tooling/vscode/bin/
+
+*.pyc

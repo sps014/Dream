@@ -10,7 +10,7 @@ public class Map<K, V> {
 
     // Allocates an empty map with an initial capacity (defaults to 8, rounded up to power of 2).
     constructor(capacity: int = 8) {
-        let c = 8;
+        let c = hash_min_capacity();
         while (c < capacity) {
             c = c * 2;
         }
@@ -46,10 +46,10 @@ public class Map<K, V> {
         let searching = true;
         while (searching == true) {
             let s = this.states[idx];
-            if (s == 0) {
+            if (s == hash_slot_empty()) {
                 searching = false;
             } else {
-                if (s == 1) {
+                if (s == hash_slot_occupied()) {
                     if (this.keys[idx] == key) {
                         result = idx;
                         searching = false;
@@ -73,8 +73,8 @@ public class Map<K, V> {
         let old_states = this.states;
         let old_cap = this.cap;
         let new_cap = old_cap * 2;
-        if (new_cap < 8) {
-            new_cap = 8;
+        if (new_cap < hash_min_capacity()) {
+            new_cap = hash_min_capacity();
         }
         this.keys = Buffer.alloc<K>(new_cap);
         this.values = Buffer.alloc<V>(new_cap);
@@ -84,7 +84,7 @@ public class Map<K, V> {
         this.used = 0;
         let i = 0;
         while (i < old_cap) {
-            if (old_states[i] == 1) {
+            if (old_states[i] == hash_slot_occupied()) {
                 this.put(old_keys[i], old_values[i]);
             }
             i = i + 1;
@@ -98,7 +98,7 @@ public class Map<K, V> {
 
     // Inserts or updates the value for a key.
     public fun put(key: K, value: V): void {
-        if ((this.used + 1) * 4 >= this.cap * 3) {
+        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
             this.rehash();
         }
         let idx = this.home(key);
@@ -106,21 +106,21 @@ public class Map<K, V> {
         let placed = false;
         while (placed == false) {
             let s = this.states[idx];
-            if (s == 0) {
+            if (s == hash_slot_empty()) {
                 let target = idx;
                 if (first_tomb >= 0) {
                     target = first_tomb;
                 }
                 this.keys[target] = key;
                 this.values[target] = value;
-                this.states[target] = 1;
+                this.states[target] = hash_slot_occupied();
                 this.count = this.count + 1;
                 if (first_tomb < 0) {
                     this.used = this.used + 1;
                 }
                 placed = true;
             } else {
-                if (s == 2) {
+                if (s == hash_slot_tombstone()) {
                     if (first_tomb < 0) {
                         first_tomb = idx;
                     }
@@ -167,7 +167,7 @@ public class Map<K, V> {
     public fun remove(key: K): bool {
         let i = this.find(key);
         if (i >= 0) {
-            this.states[i] = 2;
+            this.states[i] = hash_slot_tombstone();
             this.values[i] = this.defaults[0];
             this.count = this.count - 1;
             return true;
@@ -182,12 +182,12 @@ public class Map<K, V> {
 
     // Removes all entries.
     public fun clear(): void {
-        this.keys = Buffer.alloc<K>(8);
-        this.values = Buffer.alloc<V>(8);
-        this.states = Buffer.alloc<int>(8);
+        this.keys = Buffer.alloc<K>(hash_min_capacity());
+        this.values = Buffer.alloc<V>(hash_min_capacity());
+        this.states = Buffer.alloc<int>(hash_min_capacity());
         this.count = 0;
         this.used = 0;
-        this.cap = 8;
+        this.cap = hash_min_capacity();
     }
 
     // Gets all keys.
@@ -196,7 +196,7 @@ public class Map<K, V> {
         let i = 0;
         let j = 0;
         while (i < this.cap) {
-            if (this.states[i] == 1) {
+            if (this.states[i] == hash_slot_occupied()) {
                 result[j] = this.keys[i];
                 j = j + 1;
             }
@@ -211,7 +211,7 @@ public class Map<K, V> {
         let i = 0;
         let j = 0;
         while (i < this.cap) {
-            if (this.states[i] == 1) {
+            if (this.states[i] == hash_slot_occupied()) {
                 result[j] = this.values[i];
                 j = j + 1;
             }

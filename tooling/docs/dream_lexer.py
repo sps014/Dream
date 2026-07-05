@@ -27,16 +27,19 @@ class DreamLexer(RegexLexer):
     aliases = ["dream"]
     filenames = ["*.dream"]
 
-    # Keyword groups mirror tooling/vscode/syntaxes/dream.tmLanguage.json.
+    # Keyword groups mirror tooling/vscode/syntaxes/dream.tmLanguage.json, which in turn should
+    # match the canonical `KEYWORDS`/`CONTEXTUAL_KEYWORDS` lists in
+    # crates/dream-syntax/src/token/token_kind.rs - update all three together when the parser gains
+    # a new reserved word.
     _control = (
         "if", "else", "for", "while", "do", "return", "break", "continue",
         "switch", "case", "default", "is", "in", "async", "await",
     )
     _declaration = (
-        "let", "const", "class", "interface","enum", "type", "extend", "fun",
+        "let", "const", "class", "struct", "interface", "enum", "type", "extend", "fun",
         "constructor", "del",
     )
-    _modifiers = ("static", "public", "extern", "import", "override")
+    _modifiers = ("static", "public", "extern", "import", "override", "sealed", "unmanaged")
     _builtin_types = (
         "int", "float", "double", "string", "bool", "char", "void", "object",
     )

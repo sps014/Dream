@@ -1,0 +1,31 @@
+// Named tuning constants shared by the stdlib collections, so the near-identical growable-sequence
+// (`Array<T>`/`List<T>`) and open-addressing hash-table (`Set<T>`/`Map<K, V>`) implementations
+// cannot silently disagree on what a magic number means.
+//
+// These are plain zero-argument functions rather than top-level `const` globals because the
+// prelude merge (`crate::driver::prelude::merge_prelude`) intentionally discards globals declared
+// in prelude files (see its comment: "Preludes declare no globals"), while free functions merge
+// normally and are callable from every other prelude file exactly like `Buffer.alloc<T>` already
+// is. Each is a single `return <literal>;`, so the whole-module inlining pass folds every call
+// back down to the literal in optimized builds - this costs nothing at runtime while still giving
+// every call site a name instead of a bare magic number.
+
+// Smallest backing-buffer capacity `Array`/`List` will grow to (also their capacity floor when
+// constructed with a smaller explicit capacity).
+public fun sequence_min_capacity(): int { return 4; }
+
+// A hash-table probe slot has never been occupied. Also the sentinel value that ends a probe
+// sequence in `find`/`add`/`put` (searching stops at the first empty slot).
+public fun hash_slot_empty(): int { return 0; }
+// A hash-table probe slot currently holds a live key/value.
+public fun hash_slot_occupied(): int { return 1; }
+// A hash-table probe slot held a key/value that was since removed: probing must continue past it
+// (unlike an empty slot), but the slot is available for reuse by a future insert.
+public fun hash_slot_tombstone(): int { return 2; }
+// Smallest hash-table backing-array capacity (already a power of 2); also the capacity `clear()`
+// resets to.
+public fun hash_min_capacity(): int { return 8; }
+// `Set`/`Map` grow when `(used + 1) * hash_load_factor_denom() >= capacity * hash_load_factor_num()`,
+// i.e. before the table would exceed 3/4 full, keeping the average probe length short.
+public fun hash_load_factor_num(): int { return 3; }
+public fun hash_load_factor_denom(): int { return 4; }

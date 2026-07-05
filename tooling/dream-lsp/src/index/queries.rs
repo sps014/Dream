@@ -1,7 +1,8 @@
 //! Read-only queries over the built [`Index`]: hover, go-to-definition, signature help,
 //! completion, and the scope/name-resolution helpers they share.
 
-use super::{is_ident_byte, Decl, Index, Located, Ref, SymKind, GLOBAL, KEYWORDS};
+use super::{is_ident_byte, keywords, Decl, Index, Located, Ref, SymKind, GLOBAL};
+use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 
 impl Index {
     fn span_at(start: usize, end: usize, offset: usize) -> bool {
@@ -327,7 +328,7 @@ impl Index {
             if let Some(decl) = self.resolve(name, scope, recv_start) {
                 if decl.kind == SymKind::Struct {
                     if let Some(ctor_decl) = self.decls.iter().find(|d| {
-                        d.name == "constructor"
+                        d.name == CONSTRUCTOR_NAME
                             && d.kind == SymKind::Method
                             && d.detail.starts_with(&format!("{}.", name))
                     }) {
@@ -339,7 +340,7 @@ impl Index {
             }
             // For struct initializers where `resolve` failed entirely (e.g. static imports sometimes)
             if let Some(decl) = self.decls.iter().find(|d| {
-                d.name == "constructor"
+                d.name == CONSTRUCTOR_NAME
                     && d.kind == SymKind::Method
                     && d.detail.starts_with(&format!("{}.", name))
             }) {
@@ -439,7 +440,7 @@ impl Index {
         }
 
         let mut out = Vec::new();
-        for kw in KEYWORDS {
+        for kw in keywords() {
             out.push((
                 kw.to_string(),
                 SymKind::Keyword,
@@ -528,7 +529,7 @@ impl Index {
                 matches!(d.kind, SymKind::Field | SymKind::Method)
                     && d.scope == GLOBAL
                     && d.detail.starts_with(&prefix)
-                    && d.name != "constructor"
+                    && d.name != CONSTRUCTOR_NAME
             })
             .map(|d| {
                 let detail = Self::substitute_generic(&d.detail, ty);

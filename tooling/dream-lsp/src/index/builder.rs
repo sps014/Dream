@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use dream::syntax::nodes::struct_node::StructDeclarationNode;
+use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream::syntax::nodes::{
     ExpressionNode, FunctionNode, PatternNode, ProgramNode, StatementNode, SwitchArmBody, Type,
 };
@@ -192,7 +193,7 @@ impl Builder {
             for method in &st.methods {
                 let detail = format!("{}.{}", st.name.text, signature(method));
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
-                if method.name.text == "constructor" {
+                if method.name.text == CONSTRUCTOR_NAME {
                     self.ctor_params
                         .insert(st.name.text.clone(), param_names(method));
                 } else {

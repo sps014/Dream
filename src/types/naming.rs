@@ -5,6 +5,7 @@
 //! stored inline. They are backend concerns, kept out of the `dream-syntax` surface AST so the
 //! frontend carries no mangling/layout knowledge.
 
+use super::PrimTy;
 use crate::syntax::nodes::types::CONSTRUCTOR_NAME;
 
 /// The internal name under which a struct method is registered in the function table and emitted in
@@ -34,12 +35,12 @@ pub fn json_from_json_fn(struct_name: &str) -> String {
 }
 
 /// Byte size and alignment of a value of `type_name` when stored inline (array element or struct
-/// field). `bool`/`char`/`byte` occupy a single byte; `double`/`long`/`ulong` are 8 bytes;
-/// everything else - `int`, `uint`, `float`, and all heap references - is a 4-byte word/pointer.
+/// field). Delegates to [`PrimTy::size_align`] for recognized primitive names (see there for the
+/// exact rule); any other name (a `class`/`struct`/array/generic-param reference) is a 4-byte
+/// word/pointer, matching every reference type's runtime representation.
 pub fn value_size_align(type_name: &str) -> (usize, usize) {
-    match type_name {
-        "bool" | "char" | "byte" => (1, 1),
-        "double" | "long" | "ulong" => (8, 8),
-        _ => (4, 4),
-    }
+    let (size, align) = PrimTy::from_name(type_name)
+        .map(PrimTy::size_align)
+        .unwrap_or((4, 4));
+    (size as usize, align as usize)
 }

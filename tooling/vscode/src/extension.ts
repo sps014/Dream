@@ -14,32 +14,29 @@ let watPanel: vscode.WebviewPanel | undefined;
 let compilerOutputChannel: vscode.OutputChannel;
 
 /**
- * Resolves a shell command prefix for invoking the bundled `dream` compiler CLI binary.
- * Returns `null` (and shows an error message) if no bundled binary is found for this
- * platform/arch, rather than falling back to building it from source.
+ * Resolves the bundled platform-specific binary for `namePrefix` (e.g. `dream`, `dream-lsp`)
+ * inside `binDir`: prefers `<namePrefix>-<platform>-<arch>[.exe]`, falling back to the generic
+ * `<namePrefix>[.exe]`, and marks whichever is found executable (best-effort - a failure here
+ * surfaces as a real error on the subsequent invocation instead). Returns `null` if neither exists.
+ * Single source of truth for the platform/arch/extension-suffix packaging convention shared by
+ * every bundled binary this extension launches (the compiler CLI, for both the shell-quoted "run
+ * a command" use and the bare-path DAP use, and the language server), which previously
+ * hand-duplicated this exact resolution three times.
  */
-function resolveDreamCliCommand(context: vscode.ExtensionContext): string | null {
+function resolveBundledBinary(binDir: string, namePrefix: string): string | null {
     const platform = process.platform;
     const arch = process.arch;
     const ext = platform === 'win32' ? '.exe' : '';
 
-    const specificBinName = `dream-${platform}-${arch}${ext}`;
-    const genericBinName = `dream${ext}`;
+    const specificBinPath = path.join(binDir, `${namePrefix}-${platform}-${arch}${ext}`);
+    const genericBinPath = path.join(binDir, `${namePrefix}${ext}`);
 
-    const specificBinPath = path.join(context.extensionPath, 'bin', specificBinName);
-    const genericBinPath = path.join(context.extensionPath, 'bin', genericBinName);
-
-    let binPath = '';
-    if (fs.existsSync(specificBinPath)) {
-        binPath = specificBinPath;
-    } else if (fs.existsSync(genericBinPath)) {
-        binPath = genericBinPath;
-    }
-
-    if (binPath === '') {
-        vscode.window.showErrorMessage(
-            `Dream: no bundled compiler binary found for ${platform}-${arch} (expected "${specificBinName}" or "${genericBinName}" in the extension's bin/ folder).`
-        );
+    const binPath = fs.existsSync(specificBinPath)
+        ? specificBinPath
+        : fs.existsSync(genericBinPath)
+            ? genericBinPath
+            : null;
+    if (!binPath) {
         return null;
     }
 
@@ -48,7 +45,26 @@ function resolveDreamCliCommand(context: vscode.ExtensionContext): string | null
     } catch {
         // Best-effort; if this fails the subsequent invocation will surface the real error.
     }
-    return `"${binPath}"`;
+    return binPath;
+}
+
+/**
+ * Resolves a shell command prefix for invoking the bundled `dream` compiler CLI binary.
+ * Returns `null` (and shows an error message) if no bundled binary is found for this
+ * platform/arch, rather than falling back to building it from source.
+ */
+function resolveDreamCliCommand(context: vscode.ExtensionContext): string | null {
+    const binPath = resolveBundledBinary(path.join(context.extensionPath, 'bin'), 'dream');
+    if (!binPath) {
+        const platform = process.platform;
+        const arch = process.arch;
+        const ext = platform === 'win32' ? '.exe' : '';
+        vscode.window.showErrorMessage(
+            `Dream: no bundled compiler binary found for ${platform}-${arch} (expected "dream-${platform}-${arch}${ext}" or "dream${ext}" in the extension's bin/ folder).`
+        );
+        return null;
+    }
+    return quotePath(binPath);
 }
 
 /** Escapes a path for safe interpolation inside a double-quoted shell argument. */
@@ -135,28 +151,7 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
  * `DebugAdapterExecutable`, which invokes the program directly (no shell).
  */
 function resolveDreamBinaryPath(context: vscode.ExtensionContext): string | null {
-    const platform = process.platform;
-    const arch = process.arch;
-    const ext = platform === 'win32' ? '.exe' : '';
-
-    const specificBinPath = path.join(context.extensionPath, 'bin', `dream-${platform}-${arch}${ext}`);
-    const genericBinPath = path.join(context.extensionPath, 'bin', `dream${ext}`);
-
-    let binPath = '';
-    if (fs.existsSync(specificBinPath)) {
-        binPath = specificBinPath;
-    } else if (fs.existsSync(genericBinPath)) {
-        binPath = genericBinPath;
-    }
-    if (binPath === '') {
-        return null;
-    }
-    try {
-        fs.chmodSync(binPath, '755');
-    } catch {
-        // Best-effort.
-    }
-    return binPath;
+    return resolveBundledBinary(path.join(context.extensionPath, 'bin'), 'dream');
 }
 
 /**
@@ -313,33 +308,13 @@ export async function activate(context: vscode.ExtensionContext) {
     registerShowWatCommand(context, false);
     registerShowWatCommand(context, true);
 
-    const platform = process.platform;
-    const arch = process.arch;
-    const ext = platform === 'win32' ? '.exe' : '';
-    
-    // Check for platform-specific binary (e.g. dream-lsp-darwin-arm64)
-    const specificBinName = `dream-lsp-${platform}-${arch}${ext}`;
-    const genericBinName = `dream-lsp${ext}`;
-    
-    const specificBinPath = path.join(__dirname, '..', 'bin', specificBinName);
-    const genericBinPath = path.join(__dirname, '..', 'bin', genericBinName);
-    
-    let binPath = '';
-    if (fs.existsSync(specificBinPath)) {
-        binPath = specificBinPath;
-    } else if (fs.existsSync(genericBinPath)) {
-        binPath = genericBinPath;
-    }
+    // Check for a bundled platform-specific binary (e.g. dream-lsp-darwin-arm64).
+    const binPath = resolveBundledBinary(path.join(__dirname, '..', 'bin'), 'dream-lsp');
 
     let serverOptions: ServerOptions;
 
-    if (binPath !== '') {
+    if (binPath) {
         outputChannel.appendLine(`Found bundled binary at ${binPath}`);
-        try {
-            fs.chmodSync(binPath, '755');
-        } catch (e) {
-            outputChannel.appendLine(`Failed to make binary executable: ${e}`);
-        }
         serverOptions = {
             command: binPath,
             args: [],

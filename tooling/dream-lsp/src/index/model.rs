@@ -1,6 +1,7 @@
 //! Symbol-model data types shared across the index: declaration/reference records, inlay-hint
 //! payloads, and the small rendering helpers used when building and querying the model.
 
+use dream::syntax::nodes::types::{CONSTRUCTOR_NAME, DESTRUCTOR_NAME};
 use dream::syntax::nodes::{FunctionNode, Type};
 
 /// Sentinel scope id for declarations that live at file scope (functions, structs, enums).
@@ -130,7 +131,7 @@ pub(crate) fn signature(func: &FunctionNode) -> String {
 
     let prefix = if func.is_async { "async fun " } else { "fun " };
 
-    if func.name.text == "constructor" || func.name.text == "del" {
+    if func.name.text == CONSTRUCTOR_NAME || func.name.text == DESTRUCTOR_NAME {
         format!("{}({}): {}", func.name.text, params, ret)
     } else {
         format!("{}{}({}): {}", prefix, func.name.text, params, ret)
@@ -141,43 +142,14 @@ pub(crate) fn is_ident_byte(b: u8) -> bool {
     b == b'_' || b.is_ascii_alphanumeric()
 }
 
-/// Language keywords offered as completion proposals.
-pub const KEYWORDS: [&str; 37] = [
-    "if",
-    "else",
-    "for",
-    "while",
-    "do",
-    "return",
-    "break",
-    "continue",
-    "let",
-    "const",
-    "fun",
-    "static",
-    "import",
-    "public",
-    "extern",
-    "class",
-    "extend",
-    "enum",
-    "type",
-    "switch",
-    "case",
-    "default",
-    "is",
-    "in",
-    "true",
-    "false",
-    "null",
-    "constructor",
-    "del",
-    "int",
-    "float",
-    "double",
-    "string",
-    "bool",
-    "char",
-    "void",
-    "object",
-];
+/// Language keywords offered as completion proposals: every reserved word (`KEYWORDS`) plus the
+/// contextual keywords that are only reserved in specific positions (`CONTEXTUAL_KEYWORDS`, e.g.
+/// `this`/`get`/`set`/`constructor`/`del`). Re-exported from `dream-syntax` (the parser's own
+/// source of truth) rather than hand-duplicated here, which is what previously let this list drift
+/// out of sync with the parser (missing `interface`/`async`/`await`/`sealed`/`struct`/`unmanaged`).
+pub fn keywords() -> impl Iterator<Item = &'static str> {
+    dream::syntax::token::token_kind::KEYWORDS
+        .iter()
+        .chain(dream::syntax::token::token_kind::CONTEXTUAL_KEYWORDS)
+        .copied()
+}

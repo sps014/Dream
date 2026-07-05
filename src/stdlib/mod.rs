@@ -10,6 +10,12 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
     // defined before the collection classes that construct backing storage.
     ("<std>/core/buffer.dream", include_str!("core/buffer.dream")),
     ("<std>/core/bytes.dream", include_str!("core/bytes.dream")),
+    // Named tuning constants (hash-table slot states/load factor, sequence growth floor) shared by
+    // the collection classes below; no dependencies of its own, so it can merge anywhere before them.
+    (
+        "<std>/core/collection_tuning.dream",
+        include_str!("core/collection_tuning.dream"),
+    ),
     // Comparison interfaces (`Equatable`/`Comparable`) come before types that implement them.
     (
         "<std>/core/compare.dream",

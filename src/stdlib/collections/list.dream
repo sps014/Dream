@@ -20,8 +20,8 @@ public class List<T> : Collection<T> {
     // Allocates an empty list with an initial backing buffer capacity (defaults to 8).
     constructor(capacity: int = 8) {
         let c = capacity;
-        if (c < 4) {
-            c = 4;
+        if (c < sequence_min_capacity()) {
+            c = sequence_min_capacity();
         }
         this.items = Buffer.alloc<T>(c);
         this.count = 0;
@@ -41,8 +41,8 @@ public class List<T> : Collection<T> {
     fun grow(): void {
         let old_cap = this.items.size();
         let new_cap = old_cap * 2;
-        if (new_cap < 4) {
-            new_cap = 4;
+        if (new_cap < sequence_min_capacity()) {
+            new_cap = sequence_min_capacity();
         }
         let bigger = Buffer.alloc<T>(new_cap);
         let i = 0;

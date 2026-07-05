@@ -87,15 +87,19 @@
         },
         {
           "name": "storage.type.dream",
-          "match": "\\b(let|const|class|enum|type|extend|fun)\\b"
+          "match": "\\b(let|const|class|struct|interface|enum|type|extend|fun)\\b"
         },
         {
           "name": "storage.modifier.dream",
-          "match": "\\b(static|public|extern|import)\\b"
+          "match": "\\b(static|public|extern|import|sealed|unmanaged)\\b"
         },
         {
           "name": "variable.language.this.dream",
           "match": "\\bthis\\b"
+        },
+        {
+          "name": "entity.name.function.dream",
+          "match": "\\b(constructor|del|get|set)\\b(?=\\s*\\()"
         }
       ]
     },

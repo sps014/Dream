@@ -73,6 +73,21 @@ impl PrimTy {
     pub fn is_unsigned_integer(self) -> bool {
         matches!(self, PrimTy::Byte | PrimTy::UInt | PrimTy::ULong)
     }
+
+    /// Byte size and alignment of a scalar value of this primitive when stored inline (a struct
+    /// field, array element, or local): `bool`/`char`/`byte` occupy a single byte;
+    /// `double`/`long`/`ulong` are 8 bytes; everything else (`int`, `uint`, `float`, and `string`,
+    /// which is a 4-byte heap pointer) is a 4-byte word. Single source of truth for this rule,
+    /// shared by the string-keyed [`crate::types::naming::value_size_align`] (used by the
+    /// legacy/analyzer struct tables) and the `TypeId`-keyed [`crate::hir::scalar_size`] (used by
+    /// HIR/MIR layout) so the two representations can never disagree on a primitive's width.
+    pub fn size_align(self) -> (u32, u32) {
+        match self {
+            PrimTy::Bool | PrimTy::Char | PrimTy::Byte => (1, 1),
+            PrimTy::Double | PrimTy::Long | PrimTy::ULong => (8, 8),
+            PrimTy::Int | PrimTy::UInt | PrimTy::Float | PrimTy::String => (4, 4),
+        }
+    }
 }
 
 /// The shape of an interned type. Produced and deduplicated by
