@@ -82,6 +82,7 @@ mod strings;
 mod tables;
 mod types;
 mod valuetype;
+mod wasm_types;
 mod wat_dce;
 
 // Flat internal re-exports so each submodule can `use super::*` and call sibling helpers
@@ -95,6 +96,7 @@ use strings::*;
 use tables::*;
 use types::*;
 use valuetype::*;
+use wasm_types::*;
 use wat_dce::*;
 
 // The external API of the backend, at the historical `crate::mir::emit::…` paths.
@@ -103,7 +105,7 @@ pub(crate) use emitter::emit_async_poll;
 pub use emitter::emit_function;
 pub use module::{emit_module, emit_module_with_debug, emit_program};
 pub(crate) use tables::{func_symbol, poll_symbol};
-pub(crate) use types::wasm_ty_of;
+pub(crate) use wasm_types::wasm_ty_of;
 
 #[cfg(test)]
 mod tests;

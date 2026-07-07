@@ -8,12 +8,18 @@
 //! - [`functions`]: function-signature registration and the body-analysis / pending-instantiation
 //!   fixpoint passes.
 //!
-//! Interface registration lives in the sibling `register_interfaces` module and method/`extend`
-//! registration in `register_methods`; all are `impl Analyzer` blocks split to keep each focused.
+//! - [`register_interfaces`]: interface def/method-slot registration, generic-interface
+//!   monomorphization, the runtime interface table, and `validate_implements`.
+//! - [`register_methods`]: struct-method and `extend`-block method registration plus object-protocol
+//!   override validation.
+//!
+//! All are `impl Analyzer` blocks split to keep each focused.
 
 use super::*;
 
 mod enums;
 mod functions;
 mod globals;
+mod register_interfaces;
+mod register_methods;
 mod structs;

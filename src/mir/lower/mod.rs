@@ -84,37 +84,20 @@ pub fn lower_function(func: &HFunction, interner: &TypeInterner) -> MirFunction 
         // The pipeline representation of an async function is a stub carrying the HIR body; the poll
         // state machine is lowered from it at emit time (see [`lower_async_poll_body`]), where each
         // `await` becomes a CFG suspend point — so no statement-position normalization is needed.
-        return lower_async_stub(func, interner);
+        return lower_async_stub(func);
     }
     lower_sync_function(func, interner)
 }
 
-/// Preserves the HIR body for the async coroutine transform; the poll/constructor are emitted
-/// separately (see [`crate::mir::async_emit`]).
-fn lower_async_stub(func: &HFunction, interner: &TypeInterner) -> MirFunction {
-    let mut b = FunctionBuilder::new(func.name.clone(), interner.int());
-    b.set_async(true);
-    b.set_def(func.def, func.instance.clone());
-    b.set_file(func.file.clone());
-    for p in &func.params {
-        b.new_param(p.ty, Some(p.name.clone()));
-    }
-    for decl in &func.locals {
-        b.new_local(decl.ty, Some(decl.name.clone()));
-    }
-    b.terminate(Terminator::Return(None));
-    let mut f = b.finish();
-    f.ret = func.ret;
-    f.hir_fn = Some(func.clone());
-    f
-}
-
-fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction {
+/// Creates a [`FunctionBuilder`] for `func` (return type, def, source file, async flag) and registers
+/// its parameters and declared locals, returning the builder and the HIR-local-id -> MIR-[`Local`]
+/// map. Shared by the sync, async-stub, and async-poll lowering entry points, which then differ only
+/// in body lowering and terminal handling.
+fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u32, Local>) {
     let mut b = FunctionBuilder::new(func.name.clone(), func.ret);
-    b.set_async(func.is_async);
+    b.set_async(is_async);
     b.set_def(func.def, func.instance.clone());
     b.set_file(func.file.clone());
-
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
         let l = b.new_param(p.ty, Some(p.name.clone()));
@@ -124,6 +107,22 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
         let l = b.new_local(decl.ty, Some(decl.name.clone()));
         locals.insert(decl.id.0, l);
     }
+    (b, locals)
+}
+
+/// Preserves the HIR body for the async coroutine transform; the poll/constructor are emitted
+/// separately (see [`crate::mir::async_emit`]).
+fn lower_async_stub(func: &HFunction) -> MirFunction {
+    let (mut b, _locals) = init_builder(func, true);
+    b.terminate(Terminator::Return(None));
+    let mut f = b.finish();
+    f.ret = func.ret;
+    f.hir_fn = Some(func.clone());
+    f
+}
+
+fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction {
+    let (b, locals) = init_builder(func, func.is_async);
 
     let mut lo = Lowerer {
         b,
@@ -148,19 +147,7 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
 /// completes the task with no value. The async backend ([`crate::mir::async_emit`]) turns each
 /// `Await`'s `resume` block id into the saved poll state.
 pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFunction {
-    let mut b = FunctionBuilder::new(func.name.clone(), func.ret);
-    b.set_async(true);
-    b.set_def(func.def, func.instance.clone());
-    b.set_file(func.file.clone());
-    let mut locals: HashMap<u32, Local> = HashMap::new();
-    for p in &func.params {
-        let l = b.new_param(p.ty, Some(p.name.clone()));
-        locals.insert(p.local.0, l);
-    }
-    for decl in &func.locals {
-        let l = b.new_local(decl.ty, Some(decl.name.clone()));
-        locals.insert(decl.id.0, l);
-    }
+    let (b, locals) = init_builder(func, true);
     let mut lo = Lowerer {
         b,
         interner,

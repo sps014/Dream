@@ -53,24 +53,10 @@ pub(super) fn emit_function_with(
     debug: bool,
     debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
-    let frame = ValueFrame::compute(func, interner);
-    let mut e = Emitter {
-        func,
-        interner,
-        symbols,
-        sigs,
-        layouts,
-        strings,
-        tags,
-        func_table,
-        value_glue,
-        frame,
-        out: String::new(),
-        async_parent: None,
-        async_user_locals: 0,
-        debug,
-        debug_fn,
-    };
+    let mut e = Emitter::new(
+        func, interner, symbols, sigs, layouts, strings, tags, func_table, value_glue, None, 0,
+        debug, debug_fn,
+    );
     e.emit();
     e.out
 }
@@ -97,25 +83,22 @@ pub(crate) fn emit_async_poll(
     // elsewhere); empty maps disable those paths without extra plumbing through the transform.
     let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
     let value_glue: HashSet<TypeId> = HashSet::new();
-    let frame = ValueFrame::compute(func, interner);
-    let mut e = Emitter {
+    // The poll body *is* the coroutine; completions release its own reference locals.
+    let mut e = Emitter::new(
         func,
         interner,
         symbols,
-        sigs: &sigs,
+        &sigs,
         layouts,
         strings,
         tags,
-        func_table: ftable,
-        value_glue: &value_glue,
-        frame,
-        out: String::new(),
-        // The poll body *is* the coroutine; completions release its own reference locals.
-        async_parent: Some(func),
-        async_user_locals: user_local_count,
+        ftable,
+        &value_glue,
+        Some(func),
+        user_local_count,
         debug,
         debug_fn,
-    };
+    );
     e.emit_async_state_machine(slots, poll_sym);
     e.out
 }
@@ -147,6 +130,47 @@ struct Emitter<'a> {
     /// Debug-info metadata for this function when compiled with source-level debug-info (line hooks
     /// + local spilling). `None` disables all instrumentation (release builds, async bodies).
     debug_fn: Option<&'a crate::mir::emit::debug_map::DebugFunction>,
+}
+
+impl<'a> Emitter<'a> {
+    /// Builds an emitter for `func`, computing its value-struct shadow frame. `async_parent`/
+    /// `async_user_locals` are set only for async poll bodies (see [`emit_async_poll`]); the ordinary
+    /// function path passes `None`/`0`. Shared by [`emit_function_with`] and [`emit_async_poll`].
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        func: &'a MirFunction,
+        interner: &'a TypeInterner,
+        symbols: &'a HashMap<(DefId, Vec<TypeId>), String>,
+        sigs: &'a HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+        layouts: &'a LayoutTable,
+        strings: &'a IndexMap<String, u32>,
+        tags: &'a HashMap<TypeId, i32>,
+        func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
+        value_glue: &'a HashSet<TypeId>,
+        async_parent: Option<&'a MirFunction>,
+        async_user_locals: usize,
+        debug: bool,
+        debug_fn: Option<&'a crate::mir::emit::debug_map::DebugFunction>,
+    ) -> Self {
+        let frame = ValueFrame::compute(func, interner);
+        Emitter {
+            func,
+            interner,
+            symbols,
+            sigs,
+            layouts,
+            strings,
+            tags,
+            func_table,
+            value_glue,
+            frame,
+            out: String::new(),
+            async_parent,
+            async_user_locals,
+            debug,
+            debug_fn,
+        }
+    }
 }
 
 impl Emitter<'_> {
@@ -368,24 +392,12 @@ impl Emitter<'_> {
 
     /// The load instruction for a value of `ty` (width- and float-aware; sub-word loads are unsigned).
     fn load_instr(&self, ty: TypeId) -> &'static str {
-        match self.interner.kind(self.interner.strip_nullable(ty)) {
-            TyKind::Prim(PrimTy::Float) => "f32.load",
-            TyKind::Prim(PrimTy::Double) => "f64.load",
-            TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.load",
-            TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => "i32.load8_u",
-            _ => "i32.load",
-        }
+        load_instr_for(self.interner, ty)
     }
 
     /// The store instruction matching [`Self::load_instr`].
     fn store_instr(&self, ty: TypeId) -> &'static str {
-        match self.interner.kind(self.interner.strip_nullable(ty)) {
-            TyKind::Prim(PrimTy::Float) => "f32.store",
-            TyKind::Prim(PrimTy::Double) => "f64.store",
-            TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.store",
-            TyKind::Prim(PrimTy::Bool | PrimTy::Char | PrimTy::Byte) => "i32.store8",
-            _ => "i32.store",
-        }
+        store_instr_for(self.interner, ty)
     }
 
     fn emit_operand(&mut self, op: &Operand) {
@@ -463,17 +475,7 @@ impl Emitter<'_> {
     }
 
     fn wasm_ty(&self, ty: TypeId) -> String {
-        match self.interner.kind(self.interner.strip_nullable(ty)) {
-            TyKind::Prim(PrimTy::Double | PrimTy::Long | PrimTy::ULong) => {
-                match self.interner.kind(self.interner.strip_nullable(ty)) {
-                    TyKind::Prim(PrimTy::Double) => "f64".to_string(),
-                    _ => "i64".to_string(),
-                }
-            }
-            TyKind::Prim(PrimTy::Float) => "f32".to_string(),
-            TyKind::Void => "i32".to_string(),
-            _ => "i32".to_string(),
-        }
+        wasm_ty_of(self.interner, ty).to_string()
     }
 
     fn binop_instr(&self, op: BinOp, ty: TypeId) -> String {

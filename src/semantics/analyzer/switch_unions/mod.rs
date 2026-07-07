@@ -13,6 +13,7 @@
 
 use super::*;
 
+mod exhaustiveness;
 mod foreach;
 mod lowering;
 mod patterns;

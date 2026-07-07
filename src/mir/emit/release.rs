@@ -51,6 +51,26 @@ pub(super) fn emit_del_call(out: &mut String, del: Option<&str>) {
     }
 }
 
+/// Releases one reference field/variant-field: `release(this[+offset].load)` at `indent`. Shared by
+/// struct and union deep-release; the union calls it inside each variant's discriminant guard.
+fn emit_release_ref_field(
+    out: &mut String,
+    indent: &str,
+    f: &crate::hir::FieldLayout,
+    interner: &TypeInterner,
+    layouts: &LayoutTable,
+) {
+    let _ = writeln!(out, "{indent}(local.get $ptr)");
+    if f.offset > 0 {
+        let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", f.offset);
+    }
+    let _ = writeln!(
+        out,
+        "{indent}(i32.load) (call {})",
+        release_call(interner, layouts, f.ty)
+    );
+}
+
 /// Emits an in-place drop of an inline value(`struct`) field `f` (at `ptr + offset`) via its
 /// `$__vs_drop_<T>` glue, if the field is a value struct that requires glue. A no-op otherwise. The
 /// inline storage is not freed (it belongs to the enclosing object's block).
@@ -105,15 +125,7 @@ pub(super) fn emit_release_funcs(
         emit_release_prologue(out);
         emit_del_call(out, del.as_deref());
         for f in layout.fields.iter().filter(|f| interner.is_reference(f.ty)) {
-            out.push_str("    (local.get $ptr)\n");
-            if f.offset > 0 {
-                let _ = writeln!(out, "    (i32.const {}) (i32.add)", f.offset);
-            }
-            let _ = writeln!(
-                out,
-                "    (i32.load) (call {})",
-                release_call(interner, &mir.layouts, f.ty)
-            );
+            emit_release_ref_field(out, "    ", f, interner, &mir.layouts);
         }
         // Inline value(`struct`) fields are dropped in place (their reference fields released, `del`
         // run) via the field type's drop-glue at `ptr + offset` — never freed, since they share the
@@ -147,15 +159,7 @@ pub(super) fn emit_release_funcs(
                 v.discriminant
             );
             for f in ref_fields {
-                out.push_str("      (local.get $ptr)\n");
-                if f.offset > 0 {
-                    let _ = writeln!(out, "      (i32.const {}) (i32.add)", f.offset);
-                }
-                let _ = writeln!(
-                    out,
-                    "      (i32.load) (call {})",
-                    release_call(interner, &mir.layouts, f.ty)
-                );
+                emit_release_ref_field(out, "      ", f, interner, &mir.layouts);
             }
             out.push_str("    ))\n");
         }
@@ -243,23 +247,8 @@ pub(super) fn emit_release_funcs(
     out.push_str("(func $release_object (param $ptr i32)\n  (local $tag i32)\n");
     out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
     out.push_str("  (local.get $ptr) (call $object_tag) (local.set $tag)\n");
-    for (ty, layout) in &mir.layouts.structs {
-        if let Some(&tag) = tags.get(ty) {
-            let _ = writeln!(
-                out,
-                "  (local.get $tag) (i32.const {}) (i32.eq) (if (then (local.get $ptr) (call $release_{}) (return)))",
-                tag, layout.name
-            );
-        }
-    }
-    for (ty, layout) in &mir.layouts.unions {
-        if let Some(&tag) = tags.get(ty) {
-            let _ = writeln!(
-                out,
-                "  (local.get $tag) (i32.const {}) (i32.eq) (if (then (local.get $ptr) (call $release_{}) (return)))",
-                tag, layout.name
-            );
-        }
-    }
+    write_struct_union_tag_arms(out, mir, tags, |name| {
+        format!("(local.get $ptr) (call $release_{})", name)
+    });
     out.push_str("  (local.get $ptr) (call $release_generic)\n)\n");
 }

@@ -62,25 +62,15 @@ impl Emitter<'_> {
                     TyKind::Prim(PrimTy::Int) => self.line("     (call $print_int)"),
                     TyKind::Prim(PrimTy::Char) => self.line("     (call $print_char)"),
                     TyKind::Prim(PrimTy::String) => self.line("     (call $print_string)"),
-                    TyKind::Prim(prim) => {
-                        let to_string = match prim {
-                            PrimTy::Bool => "$bool_to_string",
-                            PrimTy::Float => "$float_to_string",
-                            PrimTy::Double => "$double_to_string",
-                            PrimTy::Long => "$long_to_string",
-                            PrimTy::UInt => "$uint_to_string",
-                            PrimTy::ULong => "$ulong_to_string",
-                            PrimTy::Byte => "$byte_to_string",
-                            // Int/Char/String handled above; any other primitive prints via $print_int.
-                            _ => "",
-                        };
-                        if to_string.is_empty() {
-                            self.line("     (call $print_int)");
-                        } else {
+                    // Int/Char/String are handled above; every other primitive renders through its
+                    // shared `$*_to_string` formatter and prints as a string.
+                    TyKind::Prim(prim) => match prim_info(*prim).to_string {
+                        Some(to_string) => {
                             self.line(&format!("     (call {})", to_string));
                             self.line("     (call $print_string)");
                         }
-                    }
+                        None => self.line("     (call $print_int)"),
+                    },
                     // Enums are `i32` values at runtime; print their numeric value.
                     TyKind::Enum(_) => self.line("     (call $print_int)"),
                     // Arrays aren't self-describing at runtime (the header only says `TAG_ARRAY`), so
@@ -195,17 +185,8 @@ impl Emitter<'_> {
             }
             Place::Field { base, field } => {
                 if let Some((off, fty)) = self.field_layout(*base, *field) {
-                    let (b, off, fty) = (*base, off, fty);
-                    if self.interner.is_value_type(fty) {
-                        self.emit_value_store(move |s| s.field_addr(b, off), fty, rvalue);
-                        return;
-                    }
-                    let stash = self.stash_old_ref(fty, |s| s.field_addr(b, off));
-                    self.field_addr(*base, off);
-                    self.emit_rvalue(rvalue);
-                    self.line(&format!("     ({})", self.store_instr(fty)));
-                    self.retain_stored_rvalue(fty, rvalue);
-                    self.release_stash(fty, stash);
+                    let b = *base;
+                    self.emit_place_store(fty, move |s| s.field_addr(b, off), rvalue);
                 } else {
                     crate::internal_error!(
                         "missing field layout for store (base {:?}, field {})",
@@ -216,18 +197,9 @@ impl Emitter<'_> {
             }
             Place::Index { base, index } => {
                 if let Some(ety) = self.array_elem_ty(*base) {
-                    let (b, idx) = (*base, index.clone());
-                    if self.interner.is_value_type(ety) {
-                        let idx2 = idx.clone();
-                        self.emit_value_store(move |s| s.elem_addr(b, ety, &idx2), ety, rvalue);
-                        return;
-                    }
-                    let stash = self.stash_old_ref(ety, |s| s.elem_addr(b, ety, &idx));
-                    self.elem_addr(*base, ety, index);
-                    self.emit_rvalue(rvalue);
-                    self.line(&format!("     ({})", self.store_instr(ety)));
-                    self.retain_stored_rvalue(ety, rvalue);
-                    self.release_stash(ety, stash);
+                    let b = *base;
+                    let idx = index.clone();
+                    self.emit_place_store(ety, move |s| s.elem_addr(b, ety, &idx), rvalue);
                 } else {
                     crate::internal_error!(
                         "missing array element type for store (base {:?})",
@@ -236,6 +208,25 @@ impl Emitter<'_> {
                 }
             }
         }
+    }
+
+    /// Stores `rvalue` into a memory place of type `ty` whose address is produced by `addr`. Shared by
+    /// field and array-element assignment, which differ only in how the slot address is computed. A
+    /// value(`struct`) slot is copied in place (`emit_value_store`); a reference/scalar slot stashes
+    /// the previous occupant, stores the new value with the slot's width, retains a stored borrowed
+    /// reference, then releases the stashed old reference (deferred so self-referential writes stay
+    /// sound).
+    fn emit_place_store(&mut self, ty: TypeId, addr: impl Fn(&mut Self), rvalue: &Rvalue) {
+        if self.interner.is_value_type(ty) {
+            self.emit_value_store(addr, ty, rvalue);
+            return;
+        }
+        let stash = self.stash_old_ref(ty, &addr);
+        addr(self);
+        self.emit_rvalue(rvalue);
+        self.line(&format!("     ({})", self.store_instr(ty)));
+        self.retain_stored_rvalue(ty, rvalue);
+        self.release_stash(ty, stash);
     }
 
     /// Stores `value` into the object under construction (`$__obj + offset`) with the field/element

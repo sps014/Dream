@@ -1,14 +1,42 @@
 use super::*;
 
+/// The emission-driving lookup tables derived once per module and shared by every per-function emit:
+/// resolved call symbols, callee signatures (for argument widening), the interned-string address map,
+/// struct/union type tags, the indirect-call function table, and the set of value structs needing
+/// retain/drop glue. Built by [`build_tables`] so [`emit_program`] and [`emit_module_with_debug`]
+/// derive them identically.
+struct ModuleTables {
+    symbols: HashMap<(DefId, Vec<TypeId>), String>,
+    sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+    strings: IndexMap<String, u32>,
+    tags: HashMap<TypeId, i32>,
+    ftable: HashMap<(DefId, Vec<TypeId>), usize>,
+    value_glue: std::collections::HashSet<TypeId>,
+}
+
+/// Derives the shared [`ModuleTables`] for `mir`.
+fn build_tables(mir: &crate::mir::Mir, interner: &TypeInterner) -> ModuleTables {
+    ModuleTables {
+        symbols: symbol_table(mir),
+        sigs: signature_table(mir),
+        strings: string_table(mir),
+        tags: struct_tags(mir),
+        ftable: func_table(mir),
+        value_glue: value_glue_types(mir, interner),
+    }
+}
+
 /// Emits a whole MIR program as a sequence of WAT function definitions (no module wrapper). Used by
 /// the pipeline tests; the driver target is [`emit_module`].
 pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
-    let symbols = symbol_table(mir);
-    let sigs = signature_table(mir);
-    let strings = string_table(mir);
-    let tags = struct_tags(mir);
-    let ftable = func_table(mir);
-    let value_glue = value_glue_types(mir, interner);
+    let ModuleTables {
+        symbols,
+        sigs,
+        strings,
+        tags,
+        ftable,
+        value_glue,
+    } = build_tables(mir, interner);
     let mut out = String::new();
     for f in &mir.functions {
         out.push_str(&emit_function_with(
@@ -45,12 +73,14 @@ pub fn emit_module_with_debug(
     debug: bool,
     debug_info: bool,
 ) -> (String, Option<crate::mir::emit::debug_map::DebugModule>) {
-    let symbols = symbol_table(mir);
-    let sigs = signature_table(mir);
-    let strings = string_table(mir);
-    let tags = struct_tags(mir);
-    let ftable = func_table(mir);
-    let value_glue = value_glue_types(mir, interner);
+    let ModuleTables {
+        symbols,
+        sigs,
+        strings,
+        tags,
+        ftable,
+        value_glue,
+    } = build_tables(mir, interner);
 
     // Debug-info metadata (file table + per-function variable tables + spill-pool width). Built up
     // front so both the instrumentation below and the returned source map agree on ids/slots.

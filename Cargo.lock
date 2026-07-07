@@ -510,6 +510,7 @@ dependencies = [
  "indexmap",
  "logos",
  "pretty_assertions",
+ "rayon",
  "regex",
  "reqwest",
  "serde_json",

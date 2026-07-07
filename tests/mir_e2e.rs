@@ -14,6 +14,7 @@ use dream::execution::host::{
     link_math_functions, link_regex_functions, link_worker_functions, read_string_from_memory,
     set_worker_module,
 };
+use rayon::prelude::*;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
@@ -132,10 +133,6 @@ fn mir_backend_e2e_coverage() {
     }
     let xfail: BTreeSet<&str> = XFAIL.iter().map(|(name, _)| *name).collect();
 
-    let mut passed: Vec<String> = Vec::new();
-    let mut failed: Vec<(String, String)> = Vec::new();
-    let mut unexpected_pass: Vec<String> = Vec::new();
-
     let mut entries: Vec<_> = fs::read_dir(cases_dir)
         .unwrap()
         .filter_map(|e| e.ok())
@@ -144,38 +141,53 @@ fn mir_backend_e2e_coverage() {
         .collect();
     entries.sort();
 
-    for path in entries {
-        let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
-        // Cases that are supposed to fail compilation are not backend-coverage cases.
-        if path.with_extension("expected_error").exists() {
-            continue;
-        }
-        let expected = match fs::read_to_string(path.with_extension("expected")) {
-            Ok(s) => s,
-            Err(_) => continue, // no golden output to compare against
-        };
+    // One classified outcome per case; `None` for cases that are not backend-coverage fixtures
+    // (compile-error cases or those lacking a golden `.expected`). Runs in parallel across cores.
+    enum Outcome {
+        Pass(String),
+        Fail(String, String),
+        UnexpectedPass(String),
+    }
 
-        let is_xfail = xfail.contains(stem.as_str());
-        match compile_and_run_mir(&path) {
-            Ok(actual) if actual.trim() == expected.trim() => {
-                if is_xfail {
-                    unexpected_pass.push(stem);
-                } else {
-                    passed.push(stem);
-                }
+    let outcomes: Vec<Outcome> = entries
+        .par_iter()
+        .filter_map(|path| {
+            let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
+            // Cases that are supposed to fail compilation are not backend-coverage cases.
+            if path.with_extension("expected_error").exists() {
+                return None;
             }
-            Ok(actual) => {
-                if !is_xfail {
-                    failed.push((stem, format!("output mismatch: got {:?}", actual.trim())));
+            let expected = fs::read_to_string(path.with_extension("expected")).ok()?;
+            let is_xfail = xfail.contains(stem.as_str());
+            Some(match compile_and_run_mir(path) {
+                Ok(actual) if actual.trim() == expected.trim() => {
+                    if is_xfail {
+                        Outcome::UnexpectedPass(stem)
+                    } else {
+                        Outcome::Pass(stem)
+                    }
                 }
-            }
-            Err(e) => {
-                if !is_xfail {
-                    failed.push((stem, e));
-                }
-            }
+                Ok(_) if is_xfail => return None,
+                Ok(actual) => Outcome::Fail(stem, format!("output mismatch: got {:?}", actual.trim())),
+                Err(_) if is_xfail => return None,
+                Err(e) => Outcome::Fail(stem, e),
+            })
+        })
+        .collect();
+
+    let mut passed: Vec<String> = Vec::new();
+    let mut failed: Vec<(String, String)> = Vec::new();
+    let mut unexpected_pass: Vec<String> = Vec::new();
+    for outcome in outcomes {
+        match outcome {
+            Outcome::Pass(stem) => passed.push(stem),
+            Outcome::Fail(stem, msg) => failed.push((stem, msg)),
+            Outcome::UnexpectedPass(stem) => unexpected_pass.push(stem),
         }
     }
+    passed.sort();
+    failed.sort();
+    unexpected_pass.sort();
 
     eprintln!(
         "\nMIR backend e2e coverage: {} passing, {} xfail, {} unexpectedly failing",

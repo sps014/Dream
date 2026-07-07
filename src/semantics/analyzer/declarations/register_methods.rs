@@ -1,7 +1,7 @@
-//! Method and extension registration. Split out of `declarations.rs`: registering a struct's own
-//! methods and `extend`-block methods (`register_methods_for`), the set of extendable targets,
-//! stashing generic extension templates, and validating object-protocol overrides and property
-//! accessors. Methods on `Analyzer`, in a sibling module sharing its `pub(super)` surface.
+//! Method and extension registration: registering a struct's own methods and `extend`-block methods
+//! (`register_methods_for`), the set of extendable targets, stashing generic extension templates,
+//! and validating object-protocol overrides and property accessors. These are `impl Analyzer`
+//! methods, kept in the `declarations` module alongside the other top-level registration passes.
 
 use super::*;
 use crate::diagnostics::DiagnosticBag;
@@ -12,7 +12,7 @@ use crate::syntax::nodes::{FunctionNode, ProgramNode, Type};
 use crate::types::method_fn;
 
 impl<'a> Analyzer<'a> {
-    pub(super) fn register_struct_methods(
+    pub(in crate::semantics::analyzer) fn register_struct_methods(
         &mut self,
         struct_decl: &'a StructDeclarationNode<'a>,
         struct_type_str: &str,
@@ -27,7 +27,7 @@ impl<'a> Analyzer<'a> {
     /// `{target}_{method}`, given an implicit `this` parameter of the target type, queued for
     /// codegen, and recorded in the function table. Shared by struct declarations and `extend`
     /// blocks so they lower identically.
-    pub(super) fn register_methods_for(
+    pub(in crate::semantics::analyzer) fn register_methods_for(
         &mut self,
         target_type_str: &str,
         methods: &'a [FunctionNode<'a>],
@@ -109,7 +109,7 @@ impl<'a> Analyzer<'a> {
     /// Returns true if `name` is a type that an `extend` block may attach methods to: a
     /// primitive (the shared [`PRIMITIVE_TYPE_NAMES`] list), the dynamic `object`/`js` reference
     /// types, a registered struct, a generic struct template, or an enum.
-    pub(super) fn is_extendable_target(&self, name: &str) -> bool {
+    pub(in crate::semantics::analyzer) fn is_extendable_target(&self, name: &str) -> bool {
         PRIMITIVE_TYPE_NAMES.contains(&name)
             || matches!(name, "object" | "js")
             || self.struct_table.get_struct(name).is_some()
@@ -121,7 +121,7 @@ impl<'a> Analyzer<'a> {
     /// exactly like struct methods (`{target}_{method}` + implicit `this`) but the target's
     /// runtime representation is untouched (it is NOT added to the struct table), so primitives
     /// keep their value/reference semantics.
-    pub(super) fn register_extensions(
+    pub(in crate::semantics::analyzer) fn register_extensions(
         &mut self,
         node: &'a ProgramNode<'a>,
         diagnostics: &mut DiagnosticBag,
@@ -185,7 +185,7 @@ impl<'a> Analyzer<'a> {
     /// name, so the methods are available to monomorphize at the first instantiation of that type
     /// (which can happen as early as `register_enums`). Validation of the target is deferred to
     /// `register_extensions`, once all type templates are registered.
-    pub(super) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
+    pub(in crate::semantics::analyzer) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
         for ext in node.extends.iter() {
             if ext.generic_parameters.is_some() {
                 // A generic type may have several `extend` blocks (e.g. a base `extend List<T>` plus a
@@ -202,7 +202,7 @@ impl<'a> Analyzer<'a> {
     /// Validates an `@override` object-protocol method: `@override` may only mark `to_string`
     /// / `hash_code`, those must be exported with the exact protocol signature, and a method
     /// that shadows a protocol name must carry `@override`.
-    pub(super) fn validate_protocol_override(
+    pub(in crate::semantics::analyzer) fn validate_protocol_override(
         &self,
         method: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
@@ -281,7 +281,7 @@ impl<'a> Analyzer<'a> {
     /// Validates a TypeScript-style property accessor (`get`/`set`): a getter takes no parameters
     /// and returns a non-`void` value; a setter takes exactly one parameter; neither may be `static`
     /// or `async`. Non-accessor methods are ignored.
-    pub(super) fn validate_accessor(
+    pub(in crate::semantics::analyzer) fn validate_accessor(
         &self,
         method: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,

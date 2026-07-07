@@ -26,10 +26,7 @@ mod expressions;
 mod generics;
 mod hir_emit;
 mod js_interop;
-mod register_interfaces;
-mod register_methods;
 mod statements;
-mod switch_exhaustiveness;
 mod switch_unions;
 mod type_checker;
 

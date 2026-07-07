@@ -5,8 +5,10 @@ use dream::execution::host::{
     set_worker_module,
 };
 use pretty_assertions::assert_eq;
+use rayon::prelude::*;
 use std::fs;
-use std::path::Path;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use wasmtime::*;
 
@@ -39,7 +41,7 @@ const DEBUG_ONLY_CASES: &[&str] = &[
     "gc_complete",
 ];
 
-fn run_test_case(dream_file: &Path, debug: bool) {
+fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
 
@@ -47,9 +49,9 @@ fn run_test_case(dream_file: &Path, debug: bool) {
     // runtime helper; release runs the same program through `strip_dead_functions` and the
     // uninstrumented hot path, so this second mode is what actually exercises structural WAT DCE.
     let compiler = Compiler::new(Target::Wasm).with_debug(debug);
-    // Mode-specific output path so the debug and release passes never race on the same file when
-    // cargo runs the two suite tests in parallel.
-    let wat_ext = if debug { "wat" } else { "release.wat" };
+    // Suite-scoped output path (passed in by the caller) so the debug and release suites never race
+    // on the same file — crucial because both suites compile `DEBUG_ONLY_CASES` in debug mode, and
+    // each suite additionally runs its corpus in parallel across cores.
     let wat_path = dream_file.with_extension(wat_ext);
 
     let dream_file_str = dream_file.to_str().unwrap().to_string();
@@ -199,28 +201,62 @@ fn run_test_case(dream_file: &Path, debug: bool) {
     let _ = fs::remove_file(wat_path);
 }
 
-#[test]
-fn run_all_e2e_cases() {
+/// Collect every `tests/cases/*.dream` fixture path.
+fn collect_case_paths() -> Vec<PathBuf> {
     let cases_dir = Path::new("tests/cases");
     if !cases_dir.exists() {
+        return Vec::new();
+    }
+    fs::read_dir(cases_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("dream"))
+        .collect()
+}
+
+/// Run the whole corpus in parallel across all CPU cores. `debug_for` decides, per fixture stem,
+/// whether the case runs through the debug or release backend. `wat_ext` scopes this suite's
+/// generated output files so concurrent suites never collide. Each fixture's failure is captured
+/// (rather than aborting the run at the first panic) so one invocation reports every broken case.
+fn run_corpus(wat_ext: &str, debug_for: impl Fn(&str) -> bool + Sync) {
+    let paths = collect_case_paths();
+    if paths.is_empty() {
+        println!("No .dream files found in tests/cases/");
         return;
     }
 
-    let mut ran_any = false;
-    for entry in fs::read_dir(cases_dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
+    let failures: Vec<String> = paths
+        .par_iter()
+        .filter_map(|path| {
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            let debug = debug_for(stem);
+            // `run_test_case` signals failure via panic/assert; catch it so rayon aggregates rather
+            // than tearing down the whole run on the first failure.
+            match catch_unwind(AssertUnwindSafe(|| run_test_case(path, debug, wat_ext))) {
+                Ok(()) => None,
+                Err(payload) => {
+                    let msg = payload
+                        .downcast_ref::<String>()
+                        .cloned()
+                        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+                        .unwrap_or_else(|| "unknown panic".to_string());
+                    Some(format!("{:?}: {}", path, msg))
+                }
+            }
+        })
+        .collect();
 
-        if path.extension().and_then(|s| s.to_str()) == Some("dream") {
-            println!("Running E2E test: {:?}", path);
-            run_test_case(&path, true);
-            ran_any = true;
-        }
-    }
+    assert!(
+        failures.is_empty(),
+        "{} e2e case(s) failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
 
-    if !ran_any {
-        println!("No .dream files found in tests/cases/");
-    }
+#[test]
+fn run_all_e2e_cases() {
+    run_corpus("wat", |_| true);
 }
 
 /// The whole suite run through the *release* backend (`with_debug(false)`), the only path that
@@ -230,26 +266,10 @@ fn run_all_e2e_cases() {
 /// cases (`DEBUG_ONLY_CASES`) run in debug (their counts are debug-specific), all others in release.
 #[test]
 fn run_all_e2e_cases_release() {
-    let cases_dir = Path::new("tests/cases");
-    if !cases_dir.exists() {
-        return;
-    }
-
-    for entry in fs::read_dir(cases_dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-
-        if path.extension().and_then(|s| s.to_str()) != Some("dream") {
-            continue;
-        }
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-        // The instrumentation-probe cases only produce correct output with the debug allocator, so
-        // bypass release for them and run them in debug with the full output assertion — they are
-        // important and must stay fully checked, not relaxed to a smoke test.
-        let debug = DEBUG_ONLY_CASES.contains(&stem);
-        println!("Running release E2E test: {:?} (debug={})", path, debug);
-        run_test_case(&path, debug);
-    }
+    // The instrumentation-probe cases only produce correct output with the debug allocator, so
+    // bypass release for them and run them in debug with the full output assertion — they are
+    // important and must stay fully checked, not relaxed to a smoke test.
+    run_corpus("release.wat", |stem| DEBUG_ONLY_CASES.contains(&stem));
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,

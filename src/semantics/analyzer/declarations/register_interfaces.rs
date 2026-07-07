@@ -1,8 +1,8 @@
-//! Interface declarations, monomorphization, and implementation validation. Split out of
-//! `declarations.rs`: registering interface defs + method slots, instantiating generic interface
-//! templates, building the runtime interface table, the interface-membership/assignability
-//! queries, and `validate_implements` (checking a class satisfies each interface it names). These
-//! are methods on `Analyzer`, defined in a sibling module so they share its `pub(super)` surface.
+//! Interface declarations, monomorphization, and implementation validation: registering interface
+//! defs + method slots, instantiating generic interface templates, building the runtime interface
+//! table, the interface-membership/assignability queries, and `validate_implements` (checking a
+//! class satisfies each interface it names). These are `impl Analyzer` methods, kept in the
+//! `declarations` module alongside the other top-level registration passes.
 
 use super::*;
 use crate::diagnostics::DiagnosticBag;
@@ -15,7 +15,7 @@ impl<'a> Analyzer<'a> {
     /// signatures (no fields in v1); a method may carry a default body that implementers inherit (see
     /// `driver::interface_defaults`). Generic interfaces are stashed as templates and monomorphized on
     /// demand. The declaration order of methods is their local index (used later for itable slots).
-    pub(super) fn register_interfaces(
+    pub(in crate::semantics::analyzer) fn register_interfaces(
         &mut self,
         node: &'a ProgramNode<'a>,
         diagnostics: &mut DiagnosticBag,
@@ -81,7 +81,7 @@ impl<'a> Analyzer<'a> {
     /// (e.g. `Container<int>` -> `Container_int`) by substituting the type parameters through every
     /// method signature. Mirrors [`ensure_struct_instantiated`]; idempotent. The concrete instance
     /// becomes an ordinary interface with its own itable slots at `hir_build_interfaces` time.
-    pub(super) fn ensure_interface_instantiated(
+    pub(in crate::semantics::analyzer) fn ensure_interface_instantiated(
         &mut self,
         base_name: &str,
         args: &[Type],
@@ -124,7 +124,7 @@ impl<'a> Analyzer<'a> {
     /// Builds the interface dispatch metadata carried into codegen: the ordered interfaces (index =
     /// `iface_id`) with each method slot's `call_indirect` signature, and, per implementing class,
     /// the concrete method symbol filling each `(interface, slot)`.
-    pub(super) fn hir_build_interfaces(&mut self) -> crate::hir::InterfaceTable {
+    pub(in crate::semantics::analyzer) fn hir_build_interfaces(&mut self) -> crate::hir::InterfaceTable {
         use crate::hir::{InterfaceImpl, InterfaceInfo, InterfaceTable};
 
         let iface_order: Vec<(String, Vec<&'a FunctionNode<'a>>)> = self
@@ -181,13 +181,13 @@ impl<'a> Analyzer<'a> {
     /// True when `name` (a bare type name, no nullable/array suffix) is a registered interface.
     /// Recognizes both plain interfaces (`Animal`) and mangled generic interface instances
     /// (`Container_int`), even before the latter has been instantiated.
-    pub(super) fn is_interface_name(&self, name: &str) -> bool {
+    pub(in crate::semantics::analyzer) fn is_interface_name(&self, name: &str) -> bool {
         self.type_ctx.nominal_kind(name) == Some(DefKind::Interface)
             || self.demangle_generic_interface(name).is_some()
     }
 
     /// True when `name` is the base name of a declared generic interface (`Container`).
-    pub(super) fn is_generic_interface(&self, name: &str) -> bool {
+    pub(in crate::semantics::analyzer) fn is_generic_interface(&self, name: &str) -> bool {
         self.generic_interfaces.contains_key(name)
     }
 
@@ -206,7 +206,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when class `class_name` was validated as implementing interface `iface_name`.
-    pub(super) fn class_implements(&self, class_name: &str, iface_name: &str) -> bool {
+    pub(in crate::semantics::analyzer) fn class_implements(&self, class_name: &str, iface_name: &str) -> bool {
         self.implements
             .get(class_name)
             .is_some_and(|ifaces| ifaces.iter().any(|i| i == iface_name))
@@ -215,7 +215,7 @@ impl<'a> Analyzer<'a> {
     /// True when a value of type `value` may be implicitly converted to interface-typed `target`
     /// (an upcast): `target` names an interface and `value`'s concrete class implements it.
     /// Nullable wrappers on either side are ignored.
-    pub(super) fn value_assignable_to_interface(&self, target: &Type, value: &Type) -> bool {
+    pub(in crate::semantics::analyzer) fn value_assignable_to_interface(&self, target: &Type, value: &Type) -> bool {
         let iface = strip_nullable(&target.get_type()).to_string();
         if !self.is_interface_name(&iface) {
             return false;
@@ -228,7 +228,7 @@ impl<'a> Analyzer<'a> {
     /// (`iface_name`). A reference class upcasts by identity (same tagged pointer); a value
     /// (`struct`) type is *boxed* into a fresh tagged heap object at the upcast site (see the value
     /// struct case in `emit_cast`), so it too may become an interface reference.
-    pub(super) fn implements_as_interface_ref(&self, class_name: &str, iface_name: &str) -> bool {
+    pub(in crate::semantics::analyzer) fn implements_as_interface_ref(&self, class_name: &str, iface_name: &str) -> bool {
         self.class_implements(class_name, iface_name)
     }
 
@@ -271,7 +271,7 @@ impl<'a> Analyzer<'a> {
     /// the `implements` entries are expected to already be substituted (e.g. `Container<int>`) while
     /// `methods` are the unsubstituted template methods, substituted here for signature comparison.
     /// Generic interfaces named in the clause are instantiated on demand.
-    pub(super) fn validate_implements(
+    pub(in crate::semantics::analyzer) fn validate_implements(
         &mut self,
         class_name: &str,
         implements: &[Type],

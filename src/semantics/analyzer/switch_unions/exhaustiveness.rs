@@ -1,8 +1,7 @@
-//! Pattern type-checking and exhaustiveness for `switch`. Split out of `switch_unions.rs` (which
-//! retains union construction, `switch`/`foreach` analysis, and HIR lowering): type-checks each
-//! pattern against the subject type and introduces bindings (`check_pattern`), validates variant
-//! payload arity/types, and checks exhaustiveness / redundant arms. Methods on `Analyzer`, in a
-//! sibling module sharing its `pub(super)` surface.
+//! Pattern type-checking and exhaustiveness for `switch`: type-checks each pattern against the
+//! subject type and introduces bindings (`check_pattern`), validates variant payload arity/types,
+//! and checks exhaustiveness / redundant arms. These are `impl Analyzer` methods, kept in the
+//! `switch_unions` module alongside union construction, `switch`/`foreach` analysis, and lowering.
 
 use super::*;
 use crate::diagnostics::DiagnosticBag;
@@ -14,11 +13,11 @@ use crate::syntax::nodes::{PatternNode, SwitchArm, Type};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::switch_unions::PatternInfo;
+use super::PatternInfo;
 
 impl<'a> Analyzer<'a> {
     /// Type-checks `pattern` against `expected`, introducing any bindings into `scope`.
-    pub(super) fn check_pattern(
+    pub(in crate::semantics::analyzer) fn check_pattern(
         &mut self,
         pattern: &PatternNode,
         expected: &Type,
@@ -138,7 +137,7 @@ impl<'a> Analyzer<'a> {
             }
         }
     }
-    pub(super) fn validate_variant_payload(
+    pub(in crate::semantics::analyzer) fn validate_variant_payload(
         &mut self,
         enum_name: &str,
         variant_name: &str,
@@ -172,7 +171,7 @@ impl<'a> Analyzer<'a> {
         );
     }
 
-    pub(super) fn check_exhaustiveness(
+    pub(in crate::semantics::analyzer) fn check_exhaustiveness(
         &self,
         subject_base: &str,
         subject_type: &Type,
