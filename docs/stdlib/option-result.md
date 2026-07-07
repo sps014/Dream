@@ -1,50 +1,45 @@
 # Option & Result
 
-Dream provides two essential built-in generic unions to handle absence and failure safely. Both are automatically imported into every program.
+Two built-in generic unions handle absence and failure safely, without null. Both are imported into every program automatically. They are ordinary [discriminated unions](../language/enums-unions.md), so you take them apart with a pattern-matching `switch`.
 
 ## `Option<T>`
 
-`Option<T>` represents a value that may be absent. It is defined as:
+`Option<T>` represents a value that may be absent:
 
 ```dream
 enum Option<T> { Some(value: T), None }
 ```
 
-Use `Option<T>` instead of nullable (`T?`) when the absence is a meaningful part of the data flow, such as a lookup that might find nothing. It forces the caller to explicitly handle both cases.
-
-### Using Option
+Prefer it over a nullable `T?` when absence is a meaningful part of the flow — a lookup that might find nothing — because it forces the caller to handle both cases.
 
 ```dream
 let some = Option.Some(42);
 let none: Option<int> = Option.None;
 
-// Handling via switch
 let val = switch (some) {
     Some(v) => v,
     None    => 0,
 };
 ```
 
-### Option Helpers
-*   **`.is_some()`**: Returns `true` if it's `Some`.
-*   **`.is_none()`**: Returns `true` if it's `None`.
-*   **`.unwrap_or(fallback: T)`**: Returns the contained value or `fallback`.
+Helpers:
+
+- `.is_some()` / `.is_none()` — which variant it is.
+- `.unwrap_or(fallback)` — the contained value, or `fallback`.
 
 ```dream
-println(some.unwrap_or(0)); // 42
+println(some.unwrap_or(0));   // 42
 ```
 
 ## `Result<T, E>`
 
-`Result<T, E>` represents the outcome of an operation that can fail. It provides either a success value (`Ok`) or an error (`Err`):
+`Result<T, E>` is the outcome of an operation that can fail — either a success (`Ok`) or an error (`Err`):
 
 ```dream
 enum Result<T, E> { Ok(value: T), Err(error: E) }
 ```
 
-Returning a `Result` makes failure an explicit part of a function's type signature.
-
-### Using Result
+Returning a `Result` makes failure an explicit part of the signature:
 
 ```dream
 fun safe_div(a: int, b: int): Result<int, string> {
@@ -58,9 +53,10 @@ switch (safe_div(10, 2)) {
 }
 ```
 
-### Result Helpers
-*   **`.is_ok()`**: Returns `true` if it's `Ok`.
-*   **`.is_err()`**: Returns `true` if it's `Err`.
-*   **`.unwrap_or(fallback: T)`**: Returns the success value or `fallback`.
+Helpers:
 
-There are no built-in panicking `unwrap()` methods on purpose — you must always provide a fallback or use `switch` to explicitly handle the empty/error cases.
+- `.is_ok()` / `.is_err()` — which variant it is.
+- `.unwrap_or(fallback)` — the success value, or `fallback`.
+
+!!! note
+    There are no panicking `unwrap()` methods, by design. Always supply a fallback or use `switch` to handle the empty/error case explicitly.

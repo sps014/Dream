@@ -2,7 +2,7 @@
 
 This document serves as the foundational instruction manual and architectural guide for any AI-assisted developments, refactorings, or explorations of the Dream language codebase.
 
-> **In-depth compiler architecture docs live in [`design/compiler/`](./design/compiler/README.md)** — the pipeline, type system, HIR, MIR, how to write optimization passes, the relooper/backend, how to add a language feature, testing/determinism, and the migration status. Start there for the middle/back end.
+> **In-depth compiler architecture docs live in [`docs/compiler/`](./docs/compiler/README.md)** — the pipeline, type system, HIR, MIR, how to write optimization passes, the relooper/backend, how to add a language feature, testing/determinism, and the migration status. Start there for the middle/back end.
 
 ---
 

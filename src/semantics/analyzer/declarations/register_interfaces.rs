@@ -124,7 +124,9 @@ impl<'a> Analyzer<'a> {
     /// Builds the interface dispatch metadata carried into codegen: the ordered interfaces (index =
     /// `iface_id`) with each method slot's `call_indirect` signature, and, per implementing class,
     /// the concrete method symbol filling each `(interface, slot)`.
-    pub(in crate::semantics::analyzer) fn hir_build_interfaces(&mut self) -> crate::hir::InterfaceTable {
+    pub(in crate::semantics::analyzer) fn hir_build_interfaces(
+        &mut self,
+    ) -> crate::hir::InterfaceTable {
         use crate::hir::{InterfaceImpl, InterfaceInfo, InterfaceTable};
 
         let iface_order: Vec<(String, Vec<&'a FunctionNode<'a>>)> = self
@@ -206,7 +208,11 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when class `class_name` was validated as implementing interface `iface_name`.
-    pub(in crate::semantics::analyzer) fn class_implements(&self, class_name: &str, iface_name: &str) -> bool {
+    pub(in crate::semantics::analyzer) fn class_implements(
+        &self,
+        class_name: &str,
+        iface_name: &str,
+    ) -> bool {
         self.implements
             .get(class_name)
             .is_some_and(|ifaces| ifaces.iter().any(|i| i == iface_name))
@@ -215,7 +221,11 @@ impl<'a> Analyzer<'a> {
     /// True when a value of type `value` may be implicitly converted to interface-typed `target`
     /// (an upcast): `target` names an interface and `value`'s concrete class implements it.
     /// Nullable wrappers on either side are ignored.
-    pub(in crate::semantics::analyzer) fn value_assignable_to_interface(&self, target: &Type, value: &Type) -> bool {
+    pub(in crate::semantics::analyzer) fn value_assignable_to_interface(
+        &self,
+        target: &Type,
+        value: &Type,
+    ) -> bool {
         let iface = strip_nullable(&target.get_type()).to_string();
         if !self.is_interface_name(&iface) {
             return false;
@@ -228,7 +238,11 @@ impl<'a> Analyzer<'a> {
     /// (`iface_name`). A reference class upcasts by identity (same tagged pointer); a value
     /// (`struct`) type is *boxed* into a fresh tagged heap object at the upcast site (see the value
     /// struct case in `emit_cast`), so it too may become an interface reference.
-    pub(in crate::semantics::analyzer) fn implements_as_interface_ref(&self, class_name: &str, iface_name: &str) -> bool {
+    pub(in crate::semantics::analyzer) fn implements_as_interface_ref(
+        &self,
+        class_name: &str,
+        iface_name: &str,
+    ) -> bool {
         self.class_implements(class_name, iface_name)
     }
 

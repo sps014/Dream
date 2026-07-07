@@ -1,38 +1,33 @@
 # Classes & Structs
 
-Dream provides two ways to group related data into object types: **Classes** and **Structs**. They share identical features (fields, constructors, methods, generics, properties, indexers, interfaces) but differ fundamentally in **how they are stored and copied**.
+Classes and structs both group related data with fields, constructors, and methods. They share every feature — the one difference is **how they are stored and copied**: a `class` is a reference type, a `struct` is a value type.
 
-## Classes (Reference Types)
+## Classes are reference types
 
-A `class` is a **reference type**. Instances live on the heap, and variables hold a *reference* to the instance. Assigning or passing a class shares the same object.
+A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object:
 
 ```dream
 class Point {
     x: int;
     y: int;
 
-    // Optional: a constructor to initialize fields
     constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
 }
-```
 
-### Creating and using classes
-
-```dream
 let p1 = Point(3, 4);
-let p2 = p1;    // Shares the same object!
+let p2 = p1;    // shares the same object
 p2.x = 10;
 println(p1.x);  // 10
 ```
 
-Classes are garbage-collected via automatic reference counting (ARC). You do not need to manually free them. If you define a `del()` destructor method, it will automatically run right before the object is destroyed.
+Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
 
-## Structs (Value Types)
+## Structs are value types
 
-A `struct` is a **value type**. Instances are stored *inline* (on the stack, inside arrays, or inside other objects), and every assignment or argument pass makes an independent **copy**.
+A `struct` is stored inline (on the stack, inside an array, or inside another object), and every assignment or argument pass makes an independent **copy**:
 
 ```dream
 struct Vec2 {
@@ -44,28 +39,31 @@ struct Vec2 {
         this.y = y;
     }
 }
-```
 
-### Copy semantics
-
-```dream
 let v1 = Vec2(3, 4);
-let v2 = v1;    // Makes a full copy!
+let v2 = v1;    // full copy
 v2.x = 10;
 println(v1.x);  // 3 (unaffected)
 ```
 
-Structs do not use heap allocation and have zero garbage collection overhead, so a struct held by value is never `null` and cannot recursively contain itself by value. When a struct is used where a reference is expected, it is **boxed** into a heap copy: a nullable struct (`Vec2?`) stores a nullable pointer to a boxed value (so `null` is representable, and `??` unboxes it back to an inline struct), and assigning a struct to a bare interface or `object` variable boxes it for dynamic dispatch.
+Structs need no heap allocation and have no GC overhead, so a struct held by value is never `null` and cannot recursively contain itself by value.
 
-## Common Features
+### When to use which
 
-Both classes and structs support the following features:
+- Use a **`struct`** for small, copyable bundles with value identity — points, vectors, colors, ranges.
+- Use a **`class`** when an instance has a lifetime and identity that should be *shared* rather than copied — graph nodes, file handles, services.
+
+## Shared features
+
+Both classes and structs support all of the following.
 
 ### Visibility
-Members are **class-private by default**: accessible only from the class's own methods, regardless of file. Mark a member `public` to allow access from outside the class. Separately, the class (or struct/enum/interface) itself is **file-private by default** and must be marked `public` to be usable from another file — see [Imports > Visibility](imports.md#visibility) for how the two axes compose.
+
+Members are **class-private by default** — reachable only from the type's own methods, regardless of file. Mark a member `public` to expose it. Separately, the type itself is **file-private by default** and needs `public` to be used from another file. See [Imports > Visibility](imports.md#visibility) for how the two axes combine.
 
 ### Methods
-Define methods using `fun`. They automatically receive a `this` parameter.
+
+Declare methods with `fun`; each receives an implicit `this`:
 
 ```dream
 class Counter {
@@ -74,8 +72,9 @@ class Counter {
 }
 ```
 
-### Properties (`get` / `set`)
-You can define computed properties using `get` and `set` accessors.
+### Properties
+
+Define computed properties with `get` / `set` accessors:
 
 ```dream
 class Config {
@@ -83,11 +82,13 @@ class Config {
 }
 ```
 
-### Indexers & Enumerators
-You can opt into `obj[i]` syntax by defining `get(index)` and `set(index, value)` methods. You can opt into `for (let x in obj)` loops by defining `iterator()` and `next()` methods.
+### Indexers and enumerators
 
-### Sealed types
-Prefix a `class`, `struct`, or `enum` with `sealed` to forbid `extend` blocks from adding methods to it. This locks the type's method surface to what it declares itself:
+Opt into `obj[i]` syntax by defining `get(index)` and `set(index, value)`. Opt into `for (let x in obj)` loops by defining `iterator()` (returning an object with `next(): Option<T>`).
+
+## Advanced: sealed types
+
+Prefix a `class`, `struct`, or `enum` with `sealed` to forbid `extend` blocks from adding methods, locking the method surface to what the type declares:
 
 ```dream
 sealed class Token { public kind: int; }
@@ -96,9 +97,8 @@ sealed class Token { public kind: int; }
 extend Token { public fun describe(): string { return "token"; } }
 ```
 
-`sealed` may be combined with `public` in either order (`public sealed class ...`). It only blocks user `extend` blocks — a sealed type may still implement interfaces (including their default methods) and derive `@json`.
+`sealed` combines with `public` in either order (`public sealed class ...`). It only blocks user `extend` blocks — a sealed type may still implement interfaces (including their defaults) and derive `@json`.
 
-## When to use which?
+## Advanced: boxing a struct
 
-*   Use a **`struct`** for small, copyable bundles of data with value identity (points, vectors, colors, ranges).
-*   Use a **`class`** when instances have a lifetime and identity that should be *shared* rather than copied (graph nodes, file handles, services).
+When a struct is used where a reference is expected, it is **boxed** into a heap copy. A nullable struct (`Vec2?`) stores a nullable pointer to a boxed value — so `null` is representable and `??` unboxes it back to an inline struct — and assigning a struct to a bare interface or `object` variable boxes it for dynamic dispatch.

@@ -95,3 +95,13 @@ nav:
       - HTTP: stdlib/http.md
       - Regex: stdlib/regex.md
       - DateTime: stdlib/datetime.md
+  - Compiler Internals:
+    - Overview: compiler/README.md
+    - Pipeline: compiler/01-pipeline-overview.md
+    - Type System: compiler/02-type-system.md
+    - HIR: compiler/03-hir.md
+    - MIR: compiler/04-mir.md
+    - Writing Passes: compiler/05-writing-passes.md
+    - Relooper & Backend: compiler/06-relooper-and-backend.md
+    - Adding a Feature: compiler/07-adding-a-language-feature.md
+    - Testing & Determinism: compiler/08-testing-and-determinism.md

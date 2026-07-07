@@ -1,27 +1,21 @@
 # The `object` Type
 
-`object` is a universal container — it can hold any value: an `int`, a `string`, a class, an array, anything.
+`object` is a universal container — it can hold any value: an `int`, a `string`, a class, an array, anything. Use it for heterogeneous data and runtime type dispatch.
 
-## Storing a value
+## Storing and reading a value
 
-Assigning to an `object` variable automatically boxes the value:
+Assigning to an `object` variable automatically **boxes** the value. To read it back, cast with the concrete type; a mismatch traps at runtime:
 
 ```dream
 let o: object = 42;       // boxing an int
 let s: object = "hello";  // boxing a string
-```
 
-## Reading it back
-
-To get the original value out, cast with the concrete type. If the stored type doesn't match, the program traps at runtime:
-
-```dream
 let n = (int)o;    // 42, if o holds an int
 ```
 
 ## The `is` operator
 
-Check the runtime type of an `object` before casting:
+Check the runtime type before casting:
 
 ```dream
 fun describe(o: object): void {
@@ -37,39 +31,36 @@ fun describe(o: object): void {
 }
 ```
 
-On a non-`object` variable, `is` is resolved at compile time. If the types match, the branch is always taken; if they don't, the branch is always skipped (dead code eliminated). `is` also works on [interface](interfaces.md)-typed values, checking the concrete class at runtime.
+On a non-`object` variable, `is` is resolved at compile time — a matching branch is always taken, a non-matching one is eliminated as dead code. `is` also works on [interface](interfaces.md)-typed values, checking the concrete class at runtime.
 
-## `is`-with-binding
+### `is` with binding
 
-`is` can declare a narrowed local at the same time — `expr is Type name` binds `name: Type` inside the branch, so no separate cast is needed:
+`is` can narrow *and* bind in one step — `expr is Type name` introduces `name: Type` inside the branch, so no separate cast is needed:
 
 ```dream
 fun describe(o: object): void {
     if (o is int n) {
-        println(n + 1);          // `n` is an int, unboxed from `o`
+        println(n + 1);   // `n` is an int, unboxed from `o`
     } else if (o is string s) {
-        println(s);              // `s` is a string
+        println(s);       // `s` is a string
     }
 }
 ```
 
-The bound name is visible only inside the taken branch. It works for any target type — primitives (unboxed) and reference/interface types (aliased). See [Interfaces](interfaces.md#is-with-binding) for more.
+The bound name is visible only inside the taken branch, and works for any target type — primitives are unboxed, reference/interface types are aliased. See [Interfaces](interfaces.md#is-with-binding).
 
 ## `to_string` and `hash_code`
 
-Every value responds to the instance methods `to_string()` (returns a `string`) and `hash_code()`
-(returns an `int`):
+Every value responds to `to_string()` (returns `string`) and `hash_code()` (returns `int`), including values stored in an `object`:
 
 ```dream
 let s = (42).to_string();       // "42"
 let h = "hello".hash_code();    // some stable integer
 ```
 
-These work on any type, including `object`.
+### Overriding them on a class
 
-## Overriding protocol methods on classes
-
-A class can customize `to_string` and `hash_code` by declaring them with `@override public`:
+A class customizes `to_string` and `hash_code` by declaring them `@override public`:
 
 ```dream
 class Color {
@@ -87,9 +78,4 @@ class Color {
 }
 ```
 
-Requirements:
-- Both `@override` and `public` must be present.
-- `to_string` must return `string` and take no parameters.
-- `hash_code` must return `int` and take no parameters.
-
-Once overridden, calling `print` or `to_string` on a `Color` (or a `Color` stored in an `object`) will use your implementation.
+Requirements: both `@override` and `public` are required; `to_string` returns `string` and `hash_code` returns `int`, and both take no parameters. Once overridden, `print`/`to_string` on a `Color` — even one stored in an `object` — uses your implementation.

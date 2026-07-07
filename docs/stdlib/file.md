@@ -1,22 +1,20 @@
 # File I/O
 
-`File` and `FileStream` are the filesystem API for reading and writing files. Operations are
-[`async`](../language/async.md) and return a `Future<T>` you `await`. The same `.dream` runs
-unchanged on every host.
+`File` and `FileStream` are the filesystem API. Operations are [`async`](../language/async.md) and return a `Future<T>` you `await`; the same `.dream` runs unchanged on every host.
 
 ## Runtime support
 
 | Runtime | Filesystem |
 | --- | --- |
-| Wasmtime (native CLI) | Real on-disk filesystem (`cargo run -- run file.dream`) |
+| Wasmtime (native CLI) | Real on-disk filesystem |
 | Node.js | Real on-disk filesystem via `node:fs` |
-| Browser | In-memory virtual filesystem, like a C/C++ → WASM build's Emscripten MEMFS; files persist for the page session only |
+| Browser | In-memory virtual filesystem; files persist for the page session only |
 
-The API is identical across all three; only the browser differs in that writes live in memory rather than on disk.
+The API is identical everywhere; only the browser differs in that writes live in memory.
 
 ## Reading and writing text
 
-`File.read` returns the whole file as a UTF-8 string; `File.write` replaces its contents and `File.append` adds to the end. Each resolves a `Future`, so `await` them inside an `async fun`. Fallible operations resolve with a `Result`, so a failure is explicit — read the value with `unwrap_or` (or `switch`):
+`File.read` returns the whole file as a UTF-8 string; `File.write` replaces its contents and `File.append` adds to the end. Each resolves a `Future`, so `await` them in an `async fun`. Fallible operations resolve with a `Result`, so failure is explicit — read the value with `unwrap_or` or `switch`:
 
 ```dream
 async fun main(): void {
@@ -28,27 +26,17 @@ async fun main(): void {
 }
 ```
 
-`read` and `read_bytes` resolve with `Err` when the file does not exist; `write`, `append`, and `write_bytes` resolve with `Ok(bytes_written)` or `Err` on failure.
+`read` and `read_bytes` resolve with `Err` when the file is missing; `write`, `append`, and `write_bytes` resolve with `Ok(bytes_written)` or `Err`.
 
-## Metadata
+## Metadata and directories
 
-`exists`, `size`, and `is_dir` are cheap and synchronous — no `await`. `size` is an `Option<long>` (`None` if the path is missing), so large files are represented exactly:
+`exists`, `size`, and `is_dir` are cheap and synchronous — no `await`. `size` is an `Option<long>` (`None` if missing). `File.list` resolves to a `string[]` of entry names:
 
 ```dream
 async fun main(): void {
     if (File.exists("notes.txt")) {
-        System.print("size = ");
         System.println(File.size("notes.txt").unwrap_or(0L - 1L));   // bytes; -1 if missing
     }
-}
-```
-
-## Listing a directory
-
-`File.list` resolves to a `string[]` of entry names (empty for an empty or non-directory path):
-
-```dream
-async fun main(): void {
     let entries = await File.list(".");
     System.println(entries.size());
 }
@@ -56,7 +44,7 @@ async fun main(): void {
 
 ## Binary I/O
 
-For non-text data, `read_bytes`/`write_bytes` move raw bytes directly between the file and a `byte[]` with a single bulk copy — no string round-trip, so they are binary-safe (bytes such as `0x00` are preserved). Byte counts and sizes are `long`:
+For non-text data, `read_bytes`/`write_bytes` move raw bytes between the file and a `byte[]` in a single bulk copy — binary-safe (bytes such as `0x00` are preserved). Byte counts and sizes are `long`:
 
 ```dream
 async fun main(): void {
@@ -67,7 +55,7 @@ async fun main(): void {
 
 ## Streaming with FileStream
 
-`File.open` reads a file's bytes once into a buffered, seekable cursor. Reads slice the buffer in place; text views are materialized only when you ask for them, and random access via `seek` is allocation-free:
+`File.open` reads a file's bytes once into a buffered, seekable cursor. Reads slice the buffer in place, text views are materialized only when asked for, and `seek` is allocation-free:
 
 ```dream
 async fun main(): void {
@@ -93,12 +81,12 @@ async fun main(): void {
 
 | Member | Description |
 | --- | --- |
-| `File.read(path): Future<Result<string, string>>` | read the whole file as UTF-8 text; `Err` if missing |
-| `File.write(path, content): Future<Result<long, string>>` | overwrite `path`; `Ok(bytes_written)` or `Err` |
-| `File.append(path, content): Future<Result<long, string>>` | append to `path`; `Ok(bytes_written)` or `Err` |
-| `File.read_bytes(path): Future<Result<byte[], string>>` | read the whole file as raw bytes (binary-safe); `Err` if missing |
+| `File.read(path): Future<Result<string, string>>` | whole file as UTF-8 text; `Err` if missing |
+| `File.write(path, content): Future<Result<long, string>>` | overwrite; `Ok(bytes_written)` or `Err` |
+| `File.append(path, content): Future<Result<long, string>>` | append; `Ok(bytes_written)` or `Err` |
+| `File.read_bytes(path): Future<Result<byte[], string>>` | whole file as raw bytes; `Err` if missing |
 | `File.write_bytes(path, data): Future<Result<long, string>>` | write raw bytes; `Ok(bytes_written)` or `Err` |
-| `File.delete(path): Future<bool>` | delete `path`; resolves `true` on success |
+| `File.delete(path): Future<bool>` | delete; resolves `true` on success |
 | `File.list(path): Future<string[]>` | directory entry names (empty if not a directory) |
 | `File.exists(path): bool` | true if `path` exists (synchronous) |
 | `File.size(path): Option<long>` | size in bytes, or `None` if missing (synchronous) |
@@ -118,7 +106,7 @@ A buffered cursor over a file's bytes. `read`/`read_all` produce text; `read_byt
 | `position(): int` | current cursor offset in bytes |
 | `size(): int` | total number of buffered bytes |
 | `seek(offset): void` | move the cursor to an absolute offset (clamped to `[0, size]`) |
-| `reset(): void` | rewind the cursor to the start |
+| `reset(): void` | rewind to the start |
 | `close(): void` | release the buffer (advances the cursor to the end) |
 
 A runnable example lives in [`sample/interop/file_io.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/file_io.dream).

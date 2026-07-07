@@ -1,8 +1,10 @@
 # Getting Started
 
+This page gets you from nothing to a running Dream program in a few minutes.
+
 ## Prerequisites
 
-You need [Rust](https://rustup.rs) installed. That's it.
+You only need [Rust](https://rustup.rs) installed. The Dream compiler builds with `cargo`.
 
 ## Install
 
@@ -12,11 +14,11 @@ cd Dream
 cargo build --release
 ```
 
-The binary ends up at `target/release/dream`. You can run it directly from that path, or use `cargo run --` as shown below.
+The compiler binary lands at `target/release/dream`. You can call that path directly, or use `cargo run --` while developing (the examples below use `cargo run`).
 
-## Your First Program
+## Your first program
 
-Create a file called `hello.dream`:
+Create `hello.dream`:
 
 ```dream
 fun main() {
@@ -30,21 +32,19 @@ Run it:
 cargo run -- run hello.dream
 ```
 
-Output:
-
 ```
 Hello, world!
 ```
 
-The `run` subcommand compiles your file and executes it immediately using Wasmtime. To inspect the generated WebAssembly instead, drop the `run` subcommand:
+The `run` subcommand compiles and immediately executes your file with Wasmtime. To inspect the generated WebAssembly instead, drop `run`:
 
 ```bash
 cargo run -- hello.dream
 ```
 
-This writes a `hello.wat` file next to your source.
+That writes `hello.wat` (WebAssembly text) next to your source.
 
-## A Slightly Bigger Example
+## A bigger example
 
 ```dream
 fun factorial(n: int): int {
@@ -63,17 +63,18 @@ fun main() {
 }
 ```
 
-Things to notice:
+A few things to notice:
 
-- `fun` declares a function. The return type comes after `:`.
-- `let` declares a local variable. The type is inferred.
-- `print` and `println` work on any type — int, float, string, bool, char, classes.
-- The return type is optional when a function returns nothing (`fun main()`).
-- Conditions need parentheses: `if (n <= 1)`.
+- `fun` declares a function; its return type follows the `:`.
+- The return type is optional when a function returns nothing, as in `fun main()`.
+- `let` declares a local; its type is inferred from the initializer.
+- `println` works on any type — `int`, `float`, `string`, `bool`, `char`, and your own classes.
+- Conditions are parenthesized: `if (n <= 1)`.
 
-## Next Steps
+## Where to go next
 
-- [Variables](language/variables.md) — declaration, inference, and assignment rules.
-- [Types & Data](language/primitives.md) — primitives, collections, and unions.
-- [Classes & Structs](language/classes-structs.md) — define your own data types with methods.
-- [Collections](stdlib/collections.md) — `List<T>` and `Map<K, V>`.
+- [Variables](language/variables.md) — declaration, inference, and scope.
+- [Control Flow](language/control-flow.md) — `if`, `while`, `for`, and `switch`.
+- [Types & Data](language/types.md) — the full type landscape.
+- [Classes & Structs](language/classes-structs.md) — define your own types with methods.
+- [Collections](stdlib/collections.md) — `List<T>`, `Map<K, V>`, and `Set<T>`.

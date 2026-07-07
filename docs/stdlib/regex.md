@@ -1,22 +1,17 @@
 # Regex
 
-`Regex` is a regular-expression class. Construct one with a pattern and flags, then `test`,
-`replace`, or `match`. Like [`File`](file.md) and [`HttpClient`](http.md), it is backed by host
-functions implemented once per runtime, so the same `.dream` runs unchanged everywhere.
+`Regex` is a regular-expression class. Construct one with a pattern and flags, then `test`, `replace`, or `match`. Like [`File`](file.md) and [`HttpClient`](http.md), it is backed by host functions implemented once per runtime, so the same `.dream` runs unchanged everywhere. These calls are synchronous — no `await`.
 
 ## Runtime support
 
 | Runtime | Regex engine |
 | --- | --- |
-| Wasmtime (native CLI) | Rust's [`regex`](https://docs.rs/regex) crate (`cargo run -- run app.dream`) |
-| Node.js | JavaScript `RegExp` |
-| Browser | JavaScript `RegExp` |
+| Wasmtime (native CLI) | Rust's [`regex`](https://docs.rs/regex) crate |
+| Node.js / browser | JavaScript `RegExp` |
 
-The API is identical across all three. One caveat: the native (`regex`-crate) engine has no lookaround or backreferences, so a pattern that relies on those compiles under JS `RegExp` but not natively, where it falls back to a safe default (`test` returns `false`, `replace` returns the input unchanged, `match` returns an empty array). Stick to the common subset for portable patterns.
+The API is identical across all three. One caveat: the native `regex`-crate engine has no lookaround or backreferences, so a pattern relying on those works under JS `RegExp` but falls back to a safe default natively (`test` returns `false`, `replace` returns the input unchanged, `match` returns an empty array). Stick to the common subset for portable patterns.
 
 ## Usage
-
-Construct a `Regex` with a pattern and flags, then test, replace, or match. These calls are synchronous (no `await`):
 
 ```dream
 fun main(): void {
@@ -30,7 +25,7 @@ fun main(): void {
     System.println(cleaned);
 
     let parts = digits.match("a1b2c3");            // ["1", "2", "3"]
-    System.println(parts.size());        // 3
+    System.println(parts.size());                  // 3
 }
 ```
 
@@ -40,7 +35,7 @@ Flags are passed as a string, mirroring JavaScript:
 
 | Flag | Meaning |
 | --- | --- |
-| `g` | global - `replace` affects every match, and `match` returns all matches |
+| `g` | global — `replace` affects every match, and `match` returns all matches |
 | `i` | case-insensitive |
 | `m` | multi-line (`^`/`$` match at line boundaries) |
 | `s` | dot-all (`.` matches newlines) |
@@ -61,9 +56,9 @@ fun main(): void {
 
 | Method | Description |
 | --- | --- |
-| `Regex(pattern, flags)` | construct a regex from a pattern and a flags string |
+| `Regex(pattern, flags)` | construct from a pattern and a flags string |
 | `test(input): bool` | true if `input` contains a match |
-| `replace(input, replacement): string` | replace matches (use the `g` flag for all; `$1`/`${name}` group refs supported) |
-| `match(input): string[]` | the matches (every match with `g`, else the full match + capture groups) |
+| `replace(input, replacement): string` | replace matches (`g` for all; `$1`/`${name}` group refs supported) |
+| `match(input): string[]` | every match with `g`, else the full match + capture groups |
 
-A runnable example lives in [`sample/interop/regex.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/regex.dream) with its Node runner `regex.mjs`.
+A runnable example lives in [`sample/interop/regex.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/regex.dream).

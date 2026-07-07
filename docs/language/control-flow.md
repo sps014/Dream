@@ -1,7 +1,8 @@
 # Control Flow
 
-## if / else
+Control flow decides which code runs and how often. Dream has the usual `if`, loops, and `switch`, plus labeled loops for the tricky cases.
 
+## if / else
 
 ```dream
 if (score >= 90) {
@@ -13,11 +14,13 @@ if (score >= 90) {
 }
 ```
 
-A ternary expression is also available for value selection: `cond ? a : b` (see [operators](operators.md)).
+Conditions are parenthesized and must be `bool`. For selecting a *value*, the ternary `cond ? a : b` is often cleaner — see [Operators](operators.md).
 
-## while
+## Loops
 
-Runs the body repeatedly as long as the condition is `true`:
+### while
+
+Runs the body while the condition holds:
 
 ```dream
 let i = 0;
@@ -27,21 +30,9 @@ while (i < 10) {
 }
 ```
 
-## for
+### do / while
 
-Three-part loop: initializer, condition, increment. All three parts are optional:
-
-```dream
-for (let i = 0; i < 5; i = i + 1) {
-    println(i);
-}
-```
-
-The initializer runs once. The condition is checked before each iteration. The increment runs after each body execution.
-
-## do / while
-
-Like `while`, but the body always runs at least once because the condition is checked at the end:
+Same as `while`, but the condition is checked at the end, so the body always runs at least once:
 
 ```dream
 let i = 0;
@@ -51,9 +42,19 @@ do {
 } while (i < 3);
 ```
 
-## for-each
+### for
 
-Iterate the elements of an array directly with `for (let x in arr)`:
+A three-part loop: initializer, condition, increment. All three parts are optional. The initializer runs once, the condition is checked before each pass, and the increment runs after each body:
+
+```dream
+for (let i = 0; i < 5; i = i + 1) {
+    println(i);
+}
+```
+
+### for-each
+
+Iterate a collection's elements directly with `for (let x in ...)`. The loop variable takes each element in turn:
 
 ```dream
 let xs: int[] = [10, 20, 30];
@@ -62,12 +63,7 @@ for (let value in xs) {
 }
 ```
 
-The loop variable is bound to each element in turn (its type is the array's element type).
-
-`for..in` also works over any class that implements the enumerator protocol (an `iterator()`
-method returning an object with `next(): Option<T>`), including the standard `List` and `Map`, and
-over a `string` (which yields its characters as `char`). See
-[Indexers and enumerators](classes-structs.md#indexers-and-enumerators).
+`for..in` also works over a `string` (yielding each `char`) and over any type implementing the enumerator protocol — including `List` and `Map`. See [Indexers and enumerators](classes-structs.md#indexers-and-enumerators).
 
 ```dream
 for (let c in "abc") {
@@ -75,11 +71,29 @@ for (let c in "abc") {
 }
 ```
 
+## break and continue
+
+`break` leaves the nearest loop; `continue` skips to its next iteration:
+
+```dream
+for (let i = 0; i < 10; i = i + 1) {
+    if (i % 2 == 0) {
+        continue;   // skip even numbers
+    }
+    println(i);
+}
+```
+
+Using either outside a loop is a compile error.
+
 ## switch
 
-`switch` has two forms. The **C-style** form (described here) matches a subject against one or more constant labels; the **pattern-matching** form destructures [discriminated unions](enums-unions.md) with `pattern => body` arms. The parser picks the form from the body: a leading `case`/`default` is the C-style form, anything else is the pattern form.
+`switch` has two forms, and the parser picks based on the body:
 
-The C-style form has **no implicit fallthrough** - each `case` runs only its own block. A case may list several comma-separated labels, and a `default` clause is optional:
+- A **C-style** switch (below) starts with `case`/`default` and matches against constant labels.
+- A **pattern-matching** switch uses `pattern => body` arms to destructure [discriminated unions](enums-unions.md).
+
+The C-style form has **no fallthrough** — each `case` runs only its own block. A case may list comma-separated labels, and `default` is optional:
 
 ```dream
 switch (code) {
@@ -92,62 +106,27 @@ switch (code) {
 }
 ```
 
-Labels must be constants (integers, strings, booleans, or enum members) and match the subject's type. Duplicate labels are a compile error.
-
-## switch over enums
-
-`switch` works naturally with [enums](types.md#enums):
+Labels must be constants (integers, strings, booleans, or enum members) that match the subject's type. Duplicate labels are an error. Enums work naturally:
 
 ```dream
 enum Color { Red, Green, Blue }
 
 switch (c) {
-    case Color.Red:
-        print("red\n");
-    case Color.Green:
-        print("green\n");
-    default:
-        print("other\n");
+    case Color.Red:   print("red\n");
+    case Color.Green: print("green\n");
+    default:          print("other\n");
 }
 ```
 
-## break and continue
+## Advanced: labeled loops
 
-`break` exits the nearest enclosing loop immediately:
-
-```dream
-let i = 0;
-while (true) {
-    if (i >= 5) {
-        break;
-    }
-    println(i);
-    i = i + 1;
-}
-```
-
-`continue` skips the rest of the current iteration and goes back to the condition check:
-
-```dream
-for (let i = 0; i < 10; i = i + 1) {
-    if (i % 2 == 0) {
-        continue;   // skip even numbers
-    }
-    println(i);
-}
-```
-
-Both `break` and `continue` produce a compile error if used outside a loop.
-
-## Labeled loops
-
-A loop may be given a label so that `break`/`continue` can target an outer loop from within a nested one:
+Give a loop a label so `break`/`continue` can target an outer loop from inside a nested one:
 
 ```dream
 outer: for (let i = 0; i < 3; i = i + 1) {
     for (let j = 0; j < 3; j = j + 1) {
         if (j == 1) {
-            continue outer;   // jump to the next iteration of the outer loop
+            continue outer;   // next iteration of the outer loop
         }
         if (i == 2) {
             break outer;      // exit both loops

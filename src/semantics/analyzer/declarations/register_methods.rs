@@ -185,7 +185,10 @@ impl<'a> Analyzer<'a> {
     /// name, so the methods are available to monomorphize at the first instantiation of that type
     /// (which can happen as early as `register_enums`). Validation of the target is deferred to
     /// `register_extensions`, once all type templates are registered.
-    pub(in crate::semantics::analyzer) fn stash_generic_extensions(&mut self, node: &'a ProgramNode<'a>) {
+    pub(in crate::semantics::analyzer) fn stash_generic_extensions(
+        &mut self,
+        node: &'a ProgramNode<'a>,
+    ) {
         for ext in node.extends.iter() {
             if ext.generic_parameters.is_some() {
                 // A generic type may have several `extend` blocks (e.g. a base `extend List<T>` plus a

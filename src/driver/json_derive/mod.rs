@@ -112,8 +112,6 @@ fn has_json_attr<'a>(
     attributes.into_iter().any(|a| a.name.text == JSON_ATTR)
 }
 
-
-
 /// For every `@json` class and discriminated union, generates and parses its `to_json`/`from_json`
 /// converter `extend` block and appends the methods to `all_extends`. Runs after all user/prelude
 /// declarations are collected so cross-type (`@json` field) references resolve.

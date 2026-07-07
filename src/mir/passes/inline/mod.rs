@@ -287,7 +287,6 @@ fn perform_inline(mir: &mut crate::mir::Mir, fi: usize, site: Site, interner: &T
     });
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

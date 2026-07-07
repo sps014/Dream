@@ -29,7 +29,11 @@ pub(super) fn wasm_kind(interner: &TypeInterner, ty: TypeId) -> WasmKind {
 /// The type of an argument operand, for the cases the inliner can determine statically. Returns
 /// `None` for field/index/global reads (whose type needs layout resolution); the caller then either
 /// binds with a plain copy (safe for `i32`-width parameters) or declines to inline (wide parameters).
-pub(super) fn arg_type(caller: &MirFunction, op: &Operand, interner: &TypeInterner) -> Option<TypeId> {
+pub(super) fn arg_type(
+    caller: &MirFunction,
+    op: &Operand,
+    interner: &TypeInterner,
+) -> Option<TypeId> {
     match op {
         Operand::Copy(Place::Local(l)) => Some(caller.local_ty(*l)),
         Operand::Const(c) => Some(const_type(c, interner)),

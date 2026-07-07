@@ -1,24 +1,28 @@
 # Operators
 
+This page covers the operators Dream provides, grouped by what they do, plus string interpolation and the precedence table at the end.
+
 ## Arithmetic
 
-| Operator | Meaning         | Types              |
-|----------|-----------------|--------------------|
-| `+`      | Addition / string concat | `int`, `float`, `double`, `string` |
-| `-`      | Subtraction     | `int`, `float`, `double` |
-| `*`      | Multiplication  | `int`, `float`, `double` |
-| `/`      | Division        | `int`, `float`, `double` |
-| `%`      | Remainder       | `int`, `float`     |
+| Operator | Meaning | Types |
+|----------|---------|-------|
+| `+` | Addition / string concat | `int`, `float`, `double`, `string` |
+| `-` | Subtraction | `int`, `float`, `double` |
+| `*` | Multiplication | `int`, `float`, `double` |
+| `/` | Division | `int`, `float`, `double` |
+| `%` | Remainder | `int`, `float` |
 
-Both operands must be the same type. Use an explicit cast if they differ:
+Both operands must be the same type. Cast one if they differ:
 
 ```dream
 let x = 7 / (float)2;   // 3.5
 ```
 
-String concatenation uses `+`: when either operand is a `string`, the other is converted through
-its [`to_string`](../stdlib/builtins.md) (a C-style enum renders its variant *name*, not the raw
-discriminant), so any value can be appended without an explicit call:
+Prefix `-` negates a number: `let neg = -x;`.
+
+## String concatenation
+
+When either side of `+` is a `string`, the other side is converted through its [`to_string`](../stdlib/builtins.md). A C-style enum renders its variant *name*, not the number:
 
 ```dream
 let msg = "Hello, " + name + "!";
@@ -27,7 +31,7 @@ let line = "color = " + Color.Green;   // "color = Green"
 
 ## String interpolation
 
-An interpolated string is written with a `$` prefix: `$"..."`. Any expression wrapped in `{ ... }` (a *hole*) is evaluated and spliced into the string. Non-string values are converted automatically through the [`to_string`](../stdlib/builtins.md) object protocol, exactly like the `+` form:
+Prefix a string with `$` and wrap expressions in `{ ... }`. Each hole is evaluated and converted to a string, just like `+`:
 
 ```dream
 let name = "Ada";
@@ -35,66 +39,47 @@ let count = 3;
 let msg = $"{name} has {count + 1} items";   // "Ada has 4 items"
 ```
 
-Interpolation simply desugars to a `+` concatenation chain, so `$"{name} has {count + 1} items"` is equivalent to `"" + name + " has " + (count + 1) + " items"`.
+Interpolation desugars to a `+` chain, so the above equals `"" + name + " has " + (count + 1) + " items"`.
 
-Write a literal brace by doubling it: `{{` produces `{` and `}}` produces `}`.
+Double a brace to write it literally — `{{` produces `{`, `}}` produces `}`:
 
 ```dream
 let x = 5;
 let s = $"{{literal}} and {x}";   // "{literal} and 5"
 ```
 
-A hole cannot contain a string literal (the whole `$"..."` is a single token, so an inner `"` would end it). Build such strings with `+` instead.
+A hole cannot contain a string literal (the inner `"` would end the string). Use `+` for those cases.
 
 ## Comparison
 
-All comparison operators return `bool`.
+All comparisons return `bool`.
 
-| Operator | Meaning                   |
-|----------|---------------------------|
-| `==`     | Equal                     |
-| `!=`     | Not equal                 |
-| `<`      | Less than                 |
-| `<=`     | Less than or equal        |
-| `>`      | Greater than              |
-| `>=`     | Greater than or equal     |
+| Operator | Meaning |
+|----------|---------|
+| `==` | Equal |
+| `!=` | Not equal |
+| `<` `<=` `>` `>=` | Ordering |
 
-String `==` and `!=` compare the **contents** of the strings, not their addresses.
+String `==` and `!=` compare **contents**, not addresses.
 
 ## Logical
 
-| Operator | Meaning     |
-|----------|-------------|
-| `&&`     | Logical AND |
-| `\|\|`     | Logical OR  |
-| `!`      | Logical NOT |
-
-Both sides of `&&` and `||` must be `bool`. `&&` and `||` **short-circuit**: the right operand is only evaluated when it can still affect the result.
+`&&` (and), `||` (or), and `!` (not) operate on `bool`. `&&` and `||` **short-circuit**: the right operand runs only when it can still change the result.
 
 ## Bitwise
 
-These operate on `int` values:
+These work on `int`: `&` (and), `|` (or), `^` (xor), `<<` (shift left), `>>` (arithmetic shift right).
 
-| Operator | Meaning       |
-|----------|---------------|
-| `&`      | Bitwise AND   |
-| `\|`      | Bitwise OR    |
-| `^`      | Bitwise XOR   |
-| `<<`     | Shift left    |
-| `>>`     | Shift right (arithmetic) |
+## Null-coalescing and ternary
 
-## Null-coalescing
-
-`a ?? b` evaluates to `a` when it is non-null, otherwise to `b`. The left operand should be a nullable (`T?`) value and the result type is the unwrapped `T`:
+`a ?? b` yields `a` when it is non-null, otherwise `b`. The left side is a nullable `T?` and the result is the unwrapped `T`:
 
 ```dream
 let name: string? = lookup();
 let display: string = name ?? "anonymous";
 ```
 
-## Ternary
-
-`cond ? a : b` evaluates `cond` (a `bool`); the result is `a` when true and `b` when false. Both branches must share a type:
+`cond ? a : b` picks `a` when `cond` is true, else `b`. Both branches must share a type:
 
 ```dream
 let label = score >= 60 ? "pass" : "fail";
@@ -102,7 +87,7 @@ let label = score >= 60 ? "pass" : "fail";
 
 ## Assignment
 
-`=` assigns a new value to a variable, array element, or class field:
+`=` writes to a variable, array element, or field:
 
 ```dream
 x = 10;
@@ -110,41 +95,29 @@ arr[0] = 99;
 point.x = 3;
 ```
 
-### Compound assignment and increment
-
-`+=`, `-=`, `*=`, `/=`, and `%=` update a target in place, and `++`/`--` add or subtract one:
+Compound forms update in place, and `++`/`--` step by one:
 
 ```dream
-total += 5;     // total = total + 5
-count++;        // count = count + 1
+total += 5;   // total = total + 5
+count++;
 i--;
 ```
 
-## Negation
+## Precedence
 
-Prefix `-` negates a numeric value:
+Higher rows bind tighter; use parentheses when in doubt.
 
-```dream
-let neg = -x;
-```
-
-## Operator precedence
-
-Higher rows bind tighter:
-
-| Precedence | Operators         |
-|------------|-------------------|
-| unary      | unary `-`, `!`    |
-| highest    | `&`               |
-|            | `^`               |
-|            | `\|`               |
-|            | `%`               |
-|            | `*`, `/`          |
-|            | `+`, `-`          |
-|            | `<<`, `>>`        |
-|            | `<`, `<=`, `>`, `>=`, `==`, `!=`, `is` |
-|            | `&&`              |
-|            | `\|\|`             |
-| lowest     | `??`, then `? :`  |
-
-Use parentheses to make order explicit.
+| Precedence | Operators |
+|------------|-----------|
+| unary | unary `-`, `!` |
+| highest | `&` |
+| | `^` |
+| | `\|` |
+| | `%` |
+| | `*`, `/` |
+| | `+`, `-` |
+| | `<<`, `>>` |
+| | `<`, `<=`, `>`, `>=`, `==`, `!=`, `is` |
+| | `&&` |
+| | `\|\|` |
+| lowest | `??`, then `? :` |

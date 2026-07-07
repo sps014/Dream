@@ -1,6 +1,6 @@
-# Imports
+# Imports & Modules
 
-A Dream program can be split across multiple `.dream` files. Use `import` at the top of a file to pull in the declarations (functions, classes, enums) from another file.
+A Dream program can span several `.dream` files. `import` at the top of a file pulls in the public declarations — functions, classes, enums — of another file.
 
 ## Importing a file
 
@@ -8,10 +8,9 @@ A Dream program can be split across multiple `.dream` files. Use `import` at the
 import math_lib;
 ```
 
-- The path is a dotted module path (identifiers separated by `.`) ending with a semicolon.
-- Each `.` maps to a directory separator, and the `.dream` extension is added automatically: `import utils.math_lib;` resolves to `utils/math_lib.dream`.
-- The path is relative to the file that contains the `import`.
-- Imported declarations become directly usable — no namespace prefix.
+- The path is a dotted module path ending in a semicolon.
+- Each `.` maps to a directory separator, and `.dream` is added automatically: `import utils.math_lib;` resolves to `utils/math_lib.dream`, relative to the importing file.
+- Imported declarations are usable directly — there is no namespace prefix.
 
 ```dream
 // math_lib.dream
@@ -29,21 +28,20 @@ fun main() {
 }
 ```
 
-Imports are resolved recursively (an imported file may import others), and each file is processed only once even if imported from several places.
+Imports resolve recursively (an imported file may import others), and each file is processed only once even if imported from several places.
 
 ## Visibility
 
-Dream uses a single keyword, `public`, that controls two independent axes.
+Dream uses one keyword, `public`, for two independent axes.
 
-### File/module visibility
+### File / module visibility
 
-A top-level declaration (function, class, interface, enum, or global variable) is **file-private by default**: it may be used freely anywhere within its own `.dream` file, but it is invisible to any other file, even one that `import`s it. Mark it `public` to make it part of the file's exported surface (and, for functions, to expose it to the host environment).
+A top-level declaration (function, class, interface, enum, or global) is **file-private by default** — usable anywhere in its own file but invisible to any other file, even one that imports it. Mark it `public` to export it (and, for functions, to expose it to the host):
 
 ```dream
 // lib.dream
 public fun public_add(a: int, b: int): int { return a + b; }
-
-fun helper(): int { return 99; }   // file-private: only usable inside lib.dream
+fun helper(): int { return 99; }   // file-private
 ```
 
 ```dream
@@ -58,23 +56,19 @@ fun main() {
 
 ### Class member visibility
 
-A class member (field, instance method, static method, or property accessor) is **class-private by default**: it is accessible only from that class's own methods, regardless of file. Mark it `public` to make it accessible from outside the class. `static` never implies visibility on either axis — a `static` member must still be `public` to be called from outside its class.
+A class member (field, method, static method, or accessor) is **class-private by default** — reachable only from that class's own methods, regardless of file. Mark it `public` to expose it. `static` never implies visibility; a `static` member must still be `public` to be called from outside the class:
 
 ```dream
 public class Counter {
-    count: int;                              // class-private field
-
-    public fun value(): int { return this.count; }   // public method
-
-    static fun make(): Counter {             // class-private static method
-        return Counter();
-    }
+    count: int;                                     // class-private field
+    public fun value(): int { return this.count; }  // public method
+    static fun make(): Counter { return Counter(); } // class-private static
 }
 ```
 
 ### How they compose
 
-To use a member from another file you need **both**: the type must be `public` (so its name is reachable across files) and the member must be `public` (so it is accessible outside the class). A `public` function may not expose a class that is not itself `public`.
+To use a member from another file you need **both**: the type must be `public` (so its name is reachable), and the member must be `public` (so it is accessible outside the class). A `public` function may not expose a non-`public` class.
 
 ```dream
 public class Point {
@@ -89,4 +83,4 @@ public fun origin(): Point {
 
 ## Importing from JavaScript
 
-Pulling in functions from the JavaScript host (rather than another `.dream` file) uses `extern fun` and is covered in [JS Interop](interop.md).
+Pulling in functions from the JavaScript host (rather than another `.dream` file) uses `extern fun`. See [JS Interop](interop.md).

@@ -1,8 +1,6 @@
 # 04 — CFG MIR (`src/mir/`)
 
-MIR is where Dream becomes optimizable. It replaces structured control flow with an explicit
-**control-flow graph** and replaces implicit memory management with **explicit refcount operations**.
-Once a program is in MIR, ordinary dataflow analysis can reason about it.
+MIR is where Dream becomes optimizable. It replaces structured control flow with an explicit **control-flow graph** and replaces implicit memory management with **explicit refcount operations**. Once a program is in MIR, ordinary dataflow analysis can reason about it.
 
 ## Mental model
 
@@ -24,11 +22,8 @@ flowchart TD
 ```
 
 - A function is a list of `BasicBlock`s plus an `entry` block id.
-- Each block is `stmts: Vec<Statement>` then exactly one `terminator: Terminator`. Control can branch
-  *only* at the terminator.
-- Values live in `Local`s. Every intermediate result is materialized into a local, so an `Operand` is
-  always either a local/global read or a constant — never a nested computation. This "flattening" is
-  what makes the passes simple.
+- Each block is `stmts: Vec<Statement>` then exactly one `terminator: Terminator`. Control can branch *only* at the terminator.
+- Values live in `Local`s. Every intermediate result is materialized into a local, so an `Operand` is always a local/global read or a constant — never a nested computation. This flattening is what makes passes simple.
 
 ## Core types (`src/mir/mod.rs`)
 
@@ -56,13 +51,11 @@ pub enum Terminator {
 }
 ```
 
-`Terminator::successors()` is the one place CFG edges are defined — every traversal (passes, DCE,
-relooper) goes through it, so adding a terminator variant means updating exactly one function.
+`Terminator::successors()` is the one place CFG edges are defined — every traversal (passes, DCE, relooper) goes through it, so adding a terminator variant means updating exactly one function.
 
 ### Places, operands, constants
 
-- `Place` (assignable): `Local`, `Global`, `Field { base, field }`, `Index { base, index: Box<Operand> }`.
-  *(The `Box` breaks the `Place`→`Operand`→`Place` type cycle.)*
+- `Place` (assignable): `Local`, `Global`, `Field { base, field }`, `Index { base, index: Box<Operand> }`. *(The `Box` breaks the `Place`→`Operand`→`Place` type cycle.)*
 - `Operand` (readable): `Copy(Place)` or `Const(Const)`.
 - `Const`: `Int`, `Float`, `Bool`, `Char`, `Str(String)` (interned later), `Null`.
 
@@ -83,13 +76,11 @@ pub enum Rvalue {
 }
 ```
 
-`Callee { def, args, ret }` carries the resolved def, the concrete type args (for monomorphization),
-and the site return type. The emitted symbol name is derived from `(def, args)` at the backend.
+`Callee { def, args, ret }` carries the resolved def, the concrete type args (for monomorphization), and the site return type. The emitted symbol name is derived from `(def, args)` at the backend.
 
-## Lowering HIR → MIR (`src/mir/lower.rs`)
+## Lowering HIR → MIR (`src/mir/lower/`)
 
-`lower_program(hir, interner)` lowers each `HFunction` via `lower_function`; the `Lowerer` holds the
-block list and an "current block" cursor and appends statements as it walks the structured HIR.
+`lower_program(hir, interner)` lowers each `HFunction` via `lower_function`; the `Lowerer` holds the block list and a "current block" cursor and appends statements as it walks the structured HIR.
 
 The essential trick is that **every structured construct becomes blocks + terminators**:
 
@@ -114,41 +105,31 @@ flowchart TD
 | `??` (`Coalesce`) | null-test branch choosing lhs or rhs |
 | `Ternary` | same as `if` but both arms assign one result local |
 
-Expression lowering (`lower_expr`) returns an `Operand`: literals become `Const`; everything composite
-is assigned into a fresh temporary local and the temp is returned. `break`/`continue` consult a stack
-of `(break_target, continue_target)` block ids maintained around loops.
+Expression lowering (`lower_expr`) returns an `Operand`: literals become `Const`; everything composite is assigned into a fresh temporary local and the temp is returned. `break`/`continue` consult a stack of `(break_target, continue_target)` block ids maintained around loops.
 
-`is_reference(ty)` delegates to `interner.is_reference` — the same single source of truth used
-everywhere else.
+`is_reference(ty)` delegates to `interner.is_reference` — the same single source of truth used everywhere else.
 
 ## Why RC is explicit in MIR
 
-Making `Retain`/`Release` ordinary statements (rather than implicit backend behavior) lets the
-optimizer treat them like any other dataflow:
+Making `Retain`/`Release` ordinary statements (rather than implicit backend behavior) lets the optimizer treat them like any other dataflow:
 
 ```mermaid
 flowchart LR
     A["x = New{..}\nRetain(x)\n... use x ...\nRelease(x)"] -->|RcElision sees adjacent pair| B["x = New{..}\n... use x ..."]
 ```
 
-- `RcInsertion` (run *before* the optimization pipeline) conservatively inserts a `Retain` when a
-  reference is copied/escapes and a `Release` when it dies.
-- `RcElision` (in the pipeline) cancels redundant adjacent `Retain`/`Release` pairs that the other
-  passes exposed.
+- `RcInsertion` runs once, module-wide, *before* inlining and the per-function pipeline. It conservatively inserts a `Retain` when a reference is copied/escapes and a `Release` when it dies.
+- `RcElision` (in the per-function pipeline) cancels redundant adjacent `Retain`/`Release` pairs the other passes expose.
 
-See [05-writing-passes.md](./05-writing-passes.md) for the pass details.
+See [05-writing-passes.md](./05-writing-passes.md) for the details, including why RC must be inserted before inlining.
 
 ## Building MIR by hand — `src/mir/build.rs`
 
-`FunctionBuilder` is the ergonomic constructor used by tests and by anything that synthesizes MIR
-directly (e.g. compiler-generated trampolines). It hands out fresh `Local`s and `BlockId`s, lets you
-push statements into the current block, and finalizes a `MirFunction`. Use it instead of building the
-structs by hand — it keeps the locals/blocks vectors consistent.
+`FunctionBuilder` is the ergonomic constructor used by tests and anything that synthesizes MIR directly (e.g. compiler-generated trampolines). It hands out fresh `Local`s and `BlockId`s, lets you push statements into the current block, and finalizes a `MirFunction`. Use it instead of building the structs by hand — it keeps the locals/blocks vectors consistent.
 
 ## Pretty-printing — `src/mir/print.rs`
 
-MIR has a textual dump for debugging and snapshot tests. When a pass misbehaves, print the function
-before and after; the CFG dump is far easier to read than the WAT.
+MIR has a textual dump for debugging and snapshot tests. When a pass misbehaves, print the function before and after; the CFG dump is far easier to read than the WAT.
 
 ## Invariants MIR guarantees to the backend
 

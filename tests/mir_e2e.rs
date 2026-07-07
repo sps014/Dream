@@ -168,7 +168,9 @@ fn mir_backend_e2e_coverage() {
                     }
                 }
                 Ok(_) if is_xfail => return None,
-                Ok(actual) => Outcome::Fail(stem, format!("output mismatch: got {:?}", actual.trim())),
+                Ok(actual) => {
+                    Outcome::Fail(stem, format!("output mismatch: got {:?}", actual.trim()))
+                }
                 Err(_) if is_xfail => return None,
                 Err(e) => Outcome::Fail(stem, e),
             })
