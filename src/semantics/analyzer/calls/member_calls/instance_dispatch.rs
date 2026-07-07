@@ -33,14 +33,12 @@ impl<'a> Analyzer<'a> {
         receiver: Option<crate::hir::HExpr>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let mut arg_types = Vec::new();
-        let mut arg_hirs = Vec::new();
-        for param in params.iter() {
-            let t =
-                self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
-            arg_hirs.push(self.hir_take());
-            arg_types.push(t.get_type());
-        }
+        let (arg_types, arg_hirs) = self.analyze_call_arguments(
+            params,
+            ctx.parent_function,
+            ctx.symbol_table,
+            diagnostics,
+        )?;
 
         let methods = self
             .interface_methods
@@ -63,12 +61,7 @@ impl<'a> Analyzer<'a> {
         // Calling an `async` interface method is eager and yields a `Future<T>` handle (just like an
         // async instance method); the concrete implementation dispatches to a `Future`-producing
         // constructor. The caller must `await` the result.
-        let base_ret = im.return_type.clone().unwrap_or(Type::Void);
-        let ret_type = if im.is_async {
-            Self::future_type(base_ret)
-        } else {
-            base_ret
-        };
+        let ret_type = Self::async_return_type(im.is_async, im.return_type.clone());
         if expected.len() != arg_types.len() {
             diagnostics.report_error(
                 format!(
@@ -188,14 +181,12 @@ impl<'a> Analyzer<'a> {
 
         // Analyze the explicit arguments once, then resolve the method (overloaded methods select
         // by argument types, with the receiver supplied as the implicit `this` argument).
-        let mut arg_types = Vec::new();
-        let mut arg_hirs = Vec::new();
-        for param in params.iter() {
-            let t =
-                self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
-            arg_hirs.push(self.hir_take());
-            arg_types.push(t.get_type());
-        }
+        let (mut arg_types, mut arg_hirs) = self.analyze_call_arguments(
+            params,
+            ctx.parent_function,
+            ctx.symbol_table,
+            diagnostics,
+        )?;
 
         let store_sig = if self.function_table.is_overloaded(&mangled_name) {
             let mut selection_args = Vec::with_capacity(arg_types.len() + 1);
@@ -245,11 +236,8 @@ impl<'a> Analyzer<'a> {
             expected_defaults.remove(0);
         }
 
-        let required = expected_defaults
-            .iter()
-            .position(|d| d.is_some())
-            .unwrap_or(expected_params.len());
         let total = expected_params.len();
+        let required = Self::required_arg_count(&expected_defaults, total);
         let given = arg_types.len();
         if given < required || given > total {
             let message = if required == total {
@@ -286,15 +274,9 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        // Calling an `async` method is eager and yields a `Future<T>` handle (like free async
-        // functions); `await` retrieves the `T`.
         // An `async` method yields a `Future<T>` handle (carried by the `MethodCall`); `await`
         // unwraps it.
-        let ret_type = if store_sig.is_async {
-            Self::future_type(store_sig.return_type.unwrap_or(Type::Void))
-        } else {
-            store_sig.return_type.unwrap_or(Type::Void)
-        };
+        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
         // Overloaded methods each register a distinct `DefId` under their emitted (signature-mangled)
         // name; resolve to the selected overload's name so the call targets the right instance.
         // Non-overloaded methods keep their base-mangled name.

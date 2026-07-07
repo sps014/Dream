@@ -1,6 +1,3 @@
-//! Analysis of call expressions: free-function and overload resolution, method calls, static /
-//! namespaced calls (`Math.*` / `JSON.*` / async intrinsics / `derive` helpers), and constructors.
-
 use super::super::*;
 use crate::semantics::function_table::{FunctionTableInfo, OverloadResolution};
 

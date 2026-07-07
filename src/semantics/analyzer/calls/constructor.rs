@@ -1,6 +1,3 @@
-//! Analysis of call expressions: free-function and overload resolution, method calls, static /
-//! namespaced calls (`Math.*` / `JSON.*` / async intrinsics / `derive` helpers), and constructors.
-
 use super::super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
@@ -75,11 +72,8 @@ impl<'a> Analyzer<'a> {
                 (Vec::new(), Vec::new())
             };
 
-        let required = expected_defaults
-            .iter()
-            .position(|d| d.is_some())
-            .unwrap_or(expected.len());
         let total = expected.len();
+        let required = Self::required_arg_count(&expected_defaults, total);
         let given = params_types.len();
         if given < required || given > total {
             let message = if required == total {

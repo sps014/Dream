@@ -151,12 +151,12 @@ pub(crate) fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> 
                 .collect(),
             Box::new(substitute_generic_type(ret, bindings)),
         ),
-        Type::Generic(name) => bind_concrete(name, bindings).unwrap_or_else(|| ty.clone()),
+        Type::Generic(name) => lookup_binding(bindings, name).unwrap_or_else(|| ty.clone()),
         Type::Struct(token, args) => {
             // A bare struct whose name is itself a generic parameter (the common `T` case, since
             // unknown identifiers parse as `Type::Struct`).
             if args.is_none() {
-                if let Some(concrete) = bind_concrete(&token.text, bindings) {
+                if let Some(concrete) = lookup_binding(bindings, &token.text) {
                     return concrete;
                 }
             }
@@ -169,12 +169,6 @@ pub(crate) fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> 
         }
         other => other.clone(),
     }
-}
-
-/// Resolves a generic parameter name to its bound concrete `Type`, or `None` if `name` is not a
-/// bound generic parameter. Bindings now carry the concrete `Type` directly, so no reparse is needed.
-fn bind_concrete(name: &str, bindings: &GenericBindings) -> Option<Type> {
-    bindings.get(name).cloned()
 }
 
 /// Extracts the declared generic parameter names (`["T", "V"]`) from an optional parameter-token
@@ -259,6 +253,26 @@ pub struct SemanticInfo<'a> {
 pub struct AnalyzerContext<'a, 'b> {
     pub parent_function: &'b FunctionNode<'a>,
     pub symbol_table: &'b Rc<RefCell<SymbolTable>>,
+}
+
+/// Outcome of resolving `obj.member` as a struct field, shared by member reads (`obj.m`) and writes
+/// (`obj.m = v`) via [`Analyzer::resolve_member_field`]. Callers apply their own error-reporting and
+/// accessor (getter/setter) policy to the non-`Field` variants, which differs between read and write
+/// positions.
+pub(super) enum MemberField {
+    /// `member` is a declared field of the (possibly monomorphized) `struct_name`. Any "private
+    /// field" diagnostic has already been reported.
+    Field {
+        struct_name: String,
+        field_type: Type,
+    },
+    /// The receiver's type is not a class/struct.
+    NotAStruct,
+    /// The receiver is a struct instance whose table entry is missing.
+    StructNotFound { struct_name: String },
+    /// `member` is not a declared field of `struct_name` (the caller may still resolve it as a
+    /// getter/setter accessor).
+    NotAField { struct_name: String },
 }
 
 pub struct Analyzer<'a> {
@@ -443,6 +457,48 @@ impl<'a> Analyzer<'a> {
             synthetic_token(TokenKind::IdentifierToken, FUTURE_TYPE),
             Some(vec![inner]),
         )
+    }
+
+    /// Reports the shared "wrong number of type arguments" diagnostic for a generic instantiation
+    /// when `expected` and `actual` differ. `kind` is the declaration keyword used in the message
+    /// (e.g. "enum" / "class" / "interface" / "function") and `name` the generic base's name.
+    pub(super) fn check_generic_arity(
+        kind: &str,
+        name: &str,
+        expected: usize,
+        actual: usize,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if expected != actual {
+            diagnostics.report_error(
+                format!(
+                    "Generic {} '{}' expects {} type argument(s), but {} were provided",
+                    kind, name, expected, actual
+                ),
+                Some(*position),
+            );
+        }
+    }
+
+    /// The minimum number of arguments a call must supply, given the callee's parallel trailing
+    /// `defaults` list and its `total` parameter count: every parameter up to the first one carrying
+    /// a default is required. Mirrors `FunctionTableInfo::required_params` for callers that work on a
+    /// sliced defaults list (e.g. instance/constructor calls that first drop the implicit `this`).
+    pub(super) fn required_arg_count(defaults: &[Option<Type>], total: usize) -> usize {
+        defaults.iter().position(|d| d.is_some()).unwrap_or(total)
+    }
+
+    /// The result type of a (possibly `async`) call: calling an `async` function/method is eager and
+    /// yields a `Future<T>` handle (where `T` is the declared return type, defaulting to `void`),
+    /// which an enclosing `await` unwraps back to `T`. Non-async calls yield `T` directly.
+    pub(super) fn async_return_type(is_async: bool, return_type: Option<Type>) -> Type {
+        let base = return_type.unwrap_or(Type::Void);
+        if is_async {
+            Self::future_type(base)
+        } else {
+            base
+        }
     }
 
     /// If `ty` is a `Future<T>`, returns the inner `T`; otherwise `None`.

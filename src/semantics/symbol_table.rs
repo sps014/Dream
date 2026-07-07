@@ -50,13 +50,6 @@ impl SymbolTable {
     pub fn add_child(&mut self, child: Rc<RefCell<SymbolTable>>) {
         self.children.push(child);
     }
-    pub fn get_all(&self) -> Vec<(String, Type)> {
-        let mut result = Vec::new();
-        for (key, value) in self.symbols.iter() {
-            result.push((key.clone(), value.clone()));
-        }
-        result
-    }
 
     pub fn add_symbol(&mut self, name: String, token: Type) -> Result<(), SymbolError> {
         match self.symbols.insert(name.clone(), token) {

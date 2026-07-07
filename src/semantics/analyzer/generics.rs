@@ -73,12 +73,14 @@ impl<'a> Analyzer<'a> {
 
         if let Some(generics) = generic_args {
             if !generics.is_empty() {
-                if generics.len() != gen_params.len() {
-                    diagnostics.report_error(
-                        format!("Generic function '{}' expects {} type argument(s), but {} were provided", template.name.text, gen_params.len(), generics.len()),
-                        Some(*position),
-                    );
-                }
+                Self::check_generic_arity(
+                    "function",
+                    &template.name.text,
+                    gen_params.len(),
+                    generics.len(),
+                    position,
+                    diagnostics,
+                );
                 return gen_params
                     .iter()
                     .zip(generics.iter())

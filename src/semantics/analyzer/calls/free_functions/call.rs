@@ -1,18 +1,11 @@
-//! Analysis of call expressions: free-function and overload resolution, method calls, static /
-//! namespaced calls (`Math.*` / `JSON.*` / async intrinsics / `derive` helpers), and constructors.
+//! The main free-function call path: dispatches indirect (function-value) calls, constructor calls,
+//! generic monomorphization, and overload/arity resolution, then emits the resolved direct call.
+//! Also hosts `substitute_default_args`, shared with the constructor and instance-call paths.
 
-use super::super::*;
-use crate::diagnostics::DiagnosticBag;
-use crate::intrinsics;
-use crate::semantics::errors::SemanticError;
-use crate::semantics::function_table::FunctionTableInfo;
-use crate::semantics::symbol_table::SymbolTable;
+use super::*;
 use crate::syntax::nodes::types::mangle_generic;
-use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
-use crate::syntax::token::syntax_token::SyntaxToken;
+use crate::syntax::nodes::ExpressionNode;
 use crate::types::constructor_fn;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
     pub(crate) fn analyze_function_call(
@@ -274,16 +267,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        //let r_type=&store_sig.return_type;
-        // Calling an `async fun` is eager and yields a `Future<T>` handle (where `T` is the
-        // declared return type). It is NOT auto-awaited; `await` retrieves the `T`.
-        // Calling an `async fun` is eager and yields a `Future<T>` handle; the `Call` carries that
-        // future type and an enclosing `await` unwraps it.
-        let ret_type = if store_sig.is_async {
-            Self::future_type(store_sig.return_type.unwrap_or(Type::Void))
-        } else {
-            store_sig.return_type.unwrap_or(Type::Void)
-        };
+        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
         // Emit a resolved direct call. A generic call resolves to the template's base `DefId` plus
         // the monomorphization args (so it targets the emitted instance); a plain non-overloaded
         // free function resolves by name. Overloads would collide on the base name's single `DefId`,
@@ -300,190 +284,6 @@ impl<'a> Analyzer<'a> {
             self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
         }
         Ok(ret_type)
-    }
-
-    /// Types the async intrinsics: `sleep(ms: int): Future<void>`, `all(xs: Future<T>[]):
-    /// Future<T[]>`, `any`/`race(xs: Future<T>[]): Future<T>`.
-    pub(crate) fn analyze_async_intrinsic(
-        &mut self,
-        name: &SyntaxToken,
-        params: &Vec<ExpressionNode<'a>>,
-        parent_function: &FunctionNode<'a>,
-        symbol_table: &Rc<RefCell<SymbolTable>>,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Result<Type, SemanticError> {
-        if name.text == intrinsics::SLEEP {
-            if params.len() != 1 {
-                diagnostics.report_error(
-                    format!(
-                        "'sleep' expects exactly 1 argument (milliseconds), got {}",
-                        params.len()
-                    ),
-                    Some(name.position),
-                );
-            }
-            for p in params {
-                let pt = self.analyze_expression(p, parent_function, symbol_table, diagnostics)?;
-                if !pt.is_int() {
-                    diagnostics.report_error(
-                        format!("'sleep' expects an int argument, got {}", pt.get_type()),
-                        p.position(),
-                    );
-                }
-            }
-            return Ok(Type::Unknown);
-        }
-
-        // all/any/race take a single `Future<T>[]` argument.
-        if params.len() != 1 {
-            diagnostics.report_error(
-                format!(
-                    "'{}' expects exactly 1 argument (a Future array), got {}",
-                    name.text,
-                    params.len()
-                ),
-                Some(name.position),
-            );
-            return Ok(Type::Unknown);
-        }
-        let arg_type =
-            self.analyze_expression(&params[0], parent_function, symbol_table, diagnostics)?;
-        let inner_t = match &arg_type {
-            Type::Array(inner) => match Self::future_inner_type(inner) {
-                Some(t) => t,
-                None => {
-                    diagnostics.report_error(
-                        format!(
-                            "'{}' expects an array of Future values, got {}",
-                            name.text,
-                            arg_type.get_type()
-                        ),
-                        params[0].position(),
-                    );
-                    Type::Void
-                }
-            },
-            _ => {
-                diagnostics.report_error(
-                    format!(
-                        "'{}' expects an array of Future values, got {}",
-                        name.text,
-                        arg_type.get_type()
-                    ),
-                    params[0].position(),
-                );
-                Type::Void
-            }
-        };
-        if name.text == intrinsics::PROMISE_ALL {
-            // Future<T[]>
-            Ok(Self::future_type(Type::Array(Box::new(inner_t))))
-        } else {
-            // any / race -> Future<T>
-            Ok(Self::future_type(inner_t))
-        }
-    }
-
-    /// Registers one monomorphized instance of a generic free function under its mangled name
-    /// (`swap_int_string`, `natural_order_int`, ...), idempotently: a clone with its signature made
-    /// concrete is stashed in `instantiated_generics` so its body is analyzed under `bindings`, and
-    /// a matching signature is added to the function table. Shared by generic call resolution and by
-    /// using a generic function as a first-class value. Returns the mangled name.
-    pub(crate) fn register_generic_function_instance(
-        &mut self,
-        template: &'a FunctionNode<'a>,
-        bindings: &GenericBindings,
-    ) -> String {
-        let mangled_name = mangle_bindings(&template.name.text, bindings);
-        if self.function_table.get_function(&mangled_name).is_err() {
-            // Store a clone with its signature monomorphized (params + return type made concrete),
-            // mirroring how struct methods are specialized. The body is shared and resolved against
-            // the bindings during analysis/codegen, so the declared return type (e.g. `List<T>` ->
-            // `List_int`) stays consistent with what the body builds.
-            let mut specialized = template.clone();
-            Self::substitute_generic_signature(&mut specialized, bindings);
-            let specialized_ref: &'a FunctionNode<'a> = self.arena.alloc(specialized);
-            self.instantiated_generics
-                .insert(mangled_name.clone(), (bindings.clone(), specialized_ref));
-
-            let info = FunctionTableInfo {
-                name: mangled_name.clone(),
-                parameters: template
-                    .parameters
-                    .iter()
-                    .map(|p| Self::monomorphize_type(&p.type_, bindings).get_type())
-                    .collect(),
-                defaults: template
-                    .parameters
-                    .iter()
-                    .map(|p| p.default.clone())
-                    .collect(),
-                return_type: template
-                    .return_type
-                    .as_ref()
-                    .map(|ret| Self::monomorphize_type(ret, bindings)),
-                is_async: template.is_async,
-                is_static: template.is_static,
-                is_public: template.is_public,
-                intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
-                declaring_file: template.file_path.clone(),
-            };
-
-            let _ = self.function_table.add_function(mangled_name.clone(), info);
-        }
-        mangled_name
-    }
-
-    /// Instantiates a generic free function used as a first-class *value* (`let cmp: fun(T, T): int =
-    /// natural_order;`). The concrete type arguments are inferred by unifying the template's declared
-    /// parameter/return types with the `expected` function type at the use site; the instance is
-    /// registered (see `register_generic_function_instance`) and a `FuncValue` referencing its
-    /// mangled name is emitted. Returns the monomorphized function type, or `None` (with a
-    /// diagnostic) if there is no function-typed context to infer from.
-    pub(crate) fn instantiate_generic_function_value(
-        &mut self,
-        id: &SyntaxToken,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Option<Type> {
-        let template = *self.generic_functions.get(&id.text)?;
-
-        // The expected type at this site drives inference; it must be a concrete function type.
-        let expected = self
-            .current_expected_type
-            .as_ref()
-            .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
-        let Some(Type::Function(exp_params, exp_ret)) = expected else {
-            diagnostics.report_error(
-                format!(
-                    "generic function '{}' can only be used as a value in a context with a known function type (e.g. `let f: fun(int, int): int = {};`)",
-                    id.text, id.text
-                ),
-                Some(id.position),
-            );
-            return None;
-        };
-
-        // Infer bindings by matching the expected parameter types against the template's formals,
-        // then verify the type parameters' constraints are satisfied by those concrete types.
-        let param_strings: Vec<String> = exp_params.iter().map(|p| p.get_type()).collect();
-        let bindings =
-            self.infer_generic_bindings(template, &None, &param_strings, &id.position, diagnostics);
-        self.verify_generic_constraints(
-            &template.generic_constraints,
-            &bindings,
-            &id.position,
-            diagnostics,
-        );
-
-        self.register_generic_function_instance(template, &bindings);
-        // The func value must reference the base template's `DefId` + concrete instance args (in
-        // binding order) so it maps to the monomorphized instance's function-table slot.
-        let instance: Vec<crate::types::TypeId> =
-            bindings.values().map(|t| self.type_ctx.lower(t)).collect();
-        let ret = (*exp_ret).clone();
-        let func_ty = Type::Function(exp_params, exp_ret);
-        self.hir_set_generic_func_value(&template.name.text, instance, &func_ty, &ret);
-        Some(func_ty)
     }
 
     /// Appends the default values of any omitted trailing parameters to a call's argument lists.

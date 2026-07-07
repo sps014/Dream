@@ -103,17 +103,14 @@ impl<'a> Analyzer<'a> {
             None => return,
         };
         let params = template.generic_parameters.as_deref().unwrap_or(&[]);
-        if args.len() != params.len() {
-            diagnostics.report_error(
-                format!(
-                    "Generic interface '{}' expects {} type argument(s), but {} were provided",
-                    base_name,
-                    params.len(),
-                    args.len()
-                ),
-                Some(*position),
-            );
-        }
+        Self::check_generic_arity(
+            "interface",
+            base_name,
+            params.len(),
+            args.len(),
+            position,
+            diagnostics,
+        );
         let bindings = generic_bindings(params, args);
         let mut methods: Vec<&'a FunctionNode<'a>> = Vec::new();
         for method in template.methods.iter().filter(|m| !m.is_static) {
