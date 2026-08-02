@@ -384,6 +384,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
     // tag-dispatches to those per-type releases. Non-reference fields (`v: int`) are not released.
     let code = format!(
         "{SYSTEM_STUB}
+        @allow_cycle
         class Node {{ public next: Node; public v: int;
             del() {{ System.print(0); }}
             constructor(v: int) {{ this.v = v; }}
@@ -929,6 +930,7 @@ fn exec_container_store_retains_no_double_free() {
     // this double-frees `b`.
     let code = format!(
         "{SYSTEM_STUB}
+        @allow_cycle
         class Node {{ public next: Node;
             del() {{ System.print(1); }}
             constructor() {{ }}
@@ -1249,9 +1251,9 @@ fn test_hir_emission_generic_function_instances() {
 fn test_hir_emission_string_literal() {
     // A string literal resolves to its interned data pointer. The runtime constants are interned
     // first (`true`/`false`/`-`, then this function's located panic messages — none of which
-    // actually occur here, so only the `line == 0` fallback triple is added — then the
+    // actually occur here, so only the `line == 0` fallback quadruple is added — then the
     // object-protocol `null`/`<object>`/`[`/`]`/`, `/`length`), so the user's `"hi"` follows them at
-    // 1440 (each block carries a 4-byte length prefix, no NUL).
+    // 1532 (each block carries a 4-byte length prefix, no NUL).
     let code = "fun greet(): string { return \"hi\"; }";
     let (wat, count) = emit_hir_to_wat(code);
     assert_eq!(
@@ -1264,7 +1266,7 @@ fn test_hir_emission_string_literal() {
         wat
     );
     assert!(
-        wat.contains("(i32.const 1440)"),
+        wat.contains("(i32.const 1532)"),
         "string literal should resolve to its data pointer:\n{}",
         wat
     );

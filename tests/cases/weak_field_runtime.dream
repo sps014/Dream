@@ -1,0 +1,41 @@
+// Runtime semantics of `weak`: a `weak` field does not keep its referent alive, and is reset to
+// `None` once the referent's last strong reference is released — see `docs/language/memory.md`.
+class Node {
+    public value: int;
+    public weak parent: Option<Node>;
+
+    constructor(value: int) {
+        this.value = value;
+        this.parent = Option.None;
+    }
+}
+
+// `parent` is the only strong owner of the freshly-built `Node(99)`; it goes out of scope (and is
+// released) when this function returns, so `child.parent` — a `weak` reference to it — must observe
+// that and reset to `None`.
+fun attach_weak_parent(child: Node) {
+    let parent = Node(99);
+    child.parent = Option.Some(parent);
+    switch (child.parent) {
+        Some(p) => { System.println("inside: parent.value=" + p.value.to_string()); }
+        None => { System.println("inside: parent is None (unexpected)"); }
+    }
+}
+
+fun main() {
+    let child = Node(1);
+    attach_weak_parent(child);
+    switch (child.parent) {
+        Some(p) => { System.println("after: parent.value=" + p.value.to_string()); }
+        None => { System.println("after: parent is None"); }
+    }
+
+    // Reassigning a `weak` field to a *live* referent must still work like an ordinary read: it does
+    // not retain the new referent either.
+    let other = Node(2);
+    child.parent = Option.Some(other);
+    switch (child.parent) {
+        Some(p) => { System.println("live: parent.value=" + p.value.to_string()); }
+        None => { System.println("live: parent is None (unexpected)"); }
+    }
+}

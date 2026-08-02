@@ -165,6 +165,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             attributes: Vec::new(),
             name: field_name,
             is_public: true,
+            is_weak: false,
+            is_unowned: false,
             type_token: field_type_token,
             field_type: parsed_type,
         })
@@ -266,11 +268,29 @@ impl<'a, 'b> Parser<'a, 'b> {
             {
                 methods.push(self.parse_function(Some(field_attributes))?);
             } else {
-                // Fields are private by default; an explicit `public` exposes them.
+                // Fields are private by default; an explicit `public` exposes them. `weak`/
+                // `unowned` are storage qualifiers that break ARC reference cycles (see
+                // `docs/language/memory.md`); any order/combination with `public` is accepted here,
+                // with `weak`+`unowned` together rejected during semantic analysis.
                 let mut field_public = false;
-                if self.current_token().kind == TokenKind::PublicToken {
-                    self.match_token(TokenKind::PublicToken);
-                    field_public = true;
+                let mut field_weak = false;
+                let mut field_unowned = false;
+                loop {
+                    match self.current_token().kind {
+                        TokenKind::PublicToken => {
+                            self.match_token(TokenKind::PublicToken);
+                            field_public = true;
+                        }
+                        TokenKind::WeakToken => {
+                            self.match_token(TokenKind::WeakToken);
+                            field_weak = true;
+                        }
+                        TokenKind::UnownedToken => {
+                            self.match_token(TokenKind::UnownedToken);
+                            field_unowned = true;
+                        }
+                        _ => break,
+                    }
                 }
                 let field_name = self.match_token(TokenKind::IdentifierToken);
                 self.match_token(TokenKind::ColonToken);
@@ -290,6 +310,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                     attributes: field_attributes,
                     name: field_name,
                     is_public: field_public,
+                    is_weak: field_weak,
+                    is_unowned: field_unowned,
                     type_token: field_type_token,
                     field_type: parsed_type,
                 });

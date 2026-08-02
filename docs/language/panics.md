@@ -11,6 +11,7 @@ The compiler inserts automatic checks for the operations below. Each prints a me
 | Array or string index out of range (including negative) | `arr[arr.size()]`, `"abc"[-1]` |
 | Integer division or remainder by zero | `10 / 0`, `10 % 0` |
 | Casting an `object` to the wrong concrete type | `let o: object = "hi"; (int)o;` |
+| Reading an `unowned` field after its referent was freed | see [Memory > `weak`/`unowned`](memory.md#advanced-reference-cycles) |
 
 You can also panic explicitly:
 

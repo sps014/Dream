@@ -100,6 +100,60 @@ fn emit_embedded_value_drop(
     let _ = writeln!(out, " (call {})", vs_drop_sym(&name));
 }
 
+/// Emits the teardown of one `weak` field (`f.ty` is `Option<T>` for some class `T`): frees the
+/// field's private weak-box (see `src/mir/runtime/weak.wat`), first unregistering it from the side
+/// table if it currently watches a live referent (`Some`). The box is *never* passed to
+/// `$release_Option_...` — it never held a strong reference to its payload, so deep-releasing it would
+/// wrongly decrement the referent's real strong count.
+fn emit_release_weak_field(
+    out: &mut String,
+    f: &crate::hir::FieldLayout,
+    layouts: &LayoutTable,
+) {
+    let Some(u) = layouts.union(f.ty) else {
+        // A `weak` field always type-checks to `Option<T>`, which is always a registered union; this
+        // is unreachable in practice, but degrade to a no-op rather than emitting malformed WAT.
+        return;
+    };
+    let Some(some_disc) = u.variant("Some").map(|v| v.discriminant) else {
+        return;
+    };
+    let payload_off = u
+        .variant("Some")
+        .and_then(|v| v.fields.first())
+        .map(|f| f.offset)
+        .unwrap_or(4);
+    let _ = writeln!(out, "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)", f.offset);
+    out.push_str("    (local.get $__wbox) (if (then\n");
+    let _ = writeln!(
+        out,
+        "      (local.get $__wbox) (i32.load) (i32.const {}) (i32.eq) (if (then",
+        some_disc
+    );
+    let _ = writeln!(
+        out,
+        "        (local.get $__wbox) (i32.const {}) (i32.add) (i32.load)",
+        payload_off
+    );
+    out.push_str("        (local.get $__wbox)\n");
+    out.push_str("        (call $weak_unregister)\n");
+    out.push_str("      ))\n");
+    out.push_str("      (local.get $__wbox) (call $free)\n");
+    out.push_str("    ))\n");
+}
+
+/// Emits the teardown of one `unowned` field: unregisters it from the side table if it currently
+/// watches a live referent. There is no box to free — the field itself holds the raw (non-owning)
+/// pointer.
+fn emit_release_unowned_field(out: &mut String, f: &crate::hir::FieldLayout) {
+    let _ = writeln!(out, "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)", f.offset);
+    out.push_str("    (local.get $__wbox) (if (then\n");
+    out.push_str("      (local.get $__wbox)\n");
+    let _ = writeln!(out, "      (local.get $ptr) (i32.const {}) (i32.add)", f.offset);
+    out.push_str("      (call $weak_unregister)\n");
+    out.push_str("    ))\n");
+}
+
 /// Emits the deep-release runtime: a per-struct/union `$release_<Type>` (run `del()` if present,
 /// release reference fields, then `$free`), a `$release_array_t<E>` for each reference-element array
 /// type, and the tag-dispatching `$release_object`. Non-reference fields and scalar arrays never need
@@ -121,11 +175,24 @@ pub(super) fn emit_release_funcs(
     for layout in mir.layouts.structs.values() {
         let del = del_of(&layout.name);
         let _ = writeln!(out, "(func $release_{} (param $ptr i32)", layout.name);
-        out.push_str("  (local $rc i32) (local $nc i32)\n");
+        out.push_str("  (local $rc i32) (local $nc i32) (local $__wbox i32)\n");
         emit_release_prologue(out);
         emit_del_call(out, del.as_deref());
-        for f in layout.fields.iter().filter(|f| interner.is_reference(f.ty)) {
+        // `weak`/`unowned` fields never held a strong reference, so they are excluded from the
+        // generic reference-field release loop (which would otherwise wrongly decrement/deep-release
+        // a referent this object never owned) and are torn down via their own dedicated logic instead.
+        for f in layout
+            .fields
+            .iter()
+            .filter(|f| interner.is_reference(f.ty) && !f.is_weak && !f.is_unowned)
+        {
             emit_release_ref_field(out, "    ", f, interner, &mir.layouts);
+        }
+        for f in layout.fields.iter().filter(|f| f.is_weak) {
+            emit_release_weak_field(out, f, &mir.layouts);
+        }
+        for f in layout.fields.iter().filter(|f| f.is_unowned) {
+            emit_release_unowned_field(out, f);
         }
         // Inline value(`struct`) fields are dropped in place (their reference fields released, `del`
         // run) via the field type's drop-glue at `ptr + offset` — never freed, since they share the
@@ -133,6 +200,11 @@ pub(super) fn emit_release_funcs(
         for f in &layout.fields {
             emit_embedded_value_drop(out, mir, interner, value_glue, f, "    ");
         }
+        // Poison every `weak`/`unowned` slot elsewhere in the program that currently watches this
+        // object, before it is freed (see `src/mir/runtime/weak.wat`). Only classes can be a
+        // `weak`/`unowned` target (enforced during semantic analysis), so this need not run for
+        // unions or arrays.
+        out.push_str("    (local.get $ptr) (call $weak_clear_all)\n");
         out.push_str("    (local.get $ptr) (call $free)\n  ))\n)\n");
     }
 

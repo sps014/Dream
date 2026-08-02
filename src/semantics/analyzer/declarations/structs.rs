@@ -84,6 +84,11 @@ impl<'a> Analyzer<'a> {
                 );
             }
         }
+
+        // `weak`/`unowned` field validation and the whole-program class reference-cycle check run
+        // last, once every non-generic class's fields are in `self.struct_table` (needed to
+        // classify a field's target as a value struct vs. a class).
+        self.check_weak_unowned_and_cycles(node, diagnostics);
     }
 
     /// True when value struct `start` transitively embeds itself by value. Only value-typed,
@@ -176,6 +181,8 @@ impl<'a> Analyzer<'a> {
                 attributes: field.attributes.clone(),
                 name: field.name.clone(),
                 is_public: field.is_public,
+                is_weak: field.is_weak,
+                is_unowned: field.is_unowned,
                 type_token: substitute_generic_token(&field.type_token, &bindings),
                 field_type: substitute_generic_type(&field.field_type, &bindings),
             })

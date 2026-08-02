@@ -69,6 +69,7 @@ const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
 /// The shared `$dream_panic(msg)` runtime helper (print message + trap). Self-contained given only
 /// the always-present `$print_string`/`$print_char` imports.
 const RUNTIME_PANIC: &str = include_str!("../runtime/panic.wat");
+const RUNTIME_WEAK: &str = include_str!("../runtime/weak.wat");
 
 /// String constants the `*_to_string` runtime references by address: `bool` renders to `"true"`/
 /// `"false"`; the `double` formatter prepends `"-"`. Interned into every module so the runtime is
@@ -93,9 +94,17 @@ pub(crate) mod panic_msgs {
     pub const INDEX_OUT_OF_BOUNDS: &str = "panic: index out of bounds";
     pub const DIVIDE_BY_ZERO: &str = "panic: attempt to divide by zero";
     pub const INVALID_CAST: &str = "panic: invalid cast";
+    /// Reading an `unowned` field whose referent has already been deallocated (poisoned to `0` by
+    /// `$weak_clear_all` — see `src/mir/runtime/weak.wat` and `docs/language/memory.md`).
+    pub const UNOWNED_NULL_DEREF: &str = "panic: access to deallocated 'unowned' reference";
 
     /// Every located panic message base, in a fixed order matching [`located_all`].
-    pub const ALL: [&str; 3] = [INDEX_OUT_OF_BOUNDS, DIVIDE_BY_ZERO, INVALID_CAST];
+    pub const ALL: [&str; 4] = [
+        INDEX_OUT_OF_BOUNDS,
+        DIVIDE_BY_ZERO,
+        INVALID_CAST,
+        UNOWNED_NULL_DEREF,
+    ];
 
     /// Appends `(at <file or "<unknown>">:<line>, in <function>)` to a fixed base message (`line ==
     /// 0`, meaning no `SourceLine` marker preceded this check, renders as `?` rather than a
@@ -116,8 +125,8 @@ pub(crate) mod panic_msgs {
         )
     }
 
-    /// All three located messages for one function at `line`, in [`ALL`] order.
-    pub fn located_all(file: Option<&str>, func_name: &str, line: u32) -> [String; 3] {
+    /// All located messages for one function at `line`, in [`ALL`] order.
+    pub fn located_all(file: Option<&str>, func_name: &str, line: u32) -> [String; 4] {
         ALL.map(|base| located(base, file, func_name, line))
     }
 }

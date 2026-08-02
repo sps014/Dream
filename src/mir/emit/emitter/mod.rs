@@ -273,6 +273,12 @@ impl Emitter<'_> {
         // `emit_js_call`): the buffer is bump-allocated below `$__sp` and released right after the
         // single host crossing, so this need only survive one rvalue.
         self.line("  (local $__jsp i32)");
+        // Scratch pointers used only by `weak`/`unowned` field stores (see `emit_weak_field_store`/
+        // `emit_unowned_field_store` in `statements.rs`): `$__wsrc` holds the freshly evaluated RHS
+        // `Option<T>` value (for `weak`) or plain reference value (for `unowned`) while the old
+        // occupant is torn down; `$__wbox` holds the freshly allocated private weak-box pointer.
+        self.line("  (local $__wsrc i32)");
+        self.line("  (local $__wbox i32)");
 
         self.emit_value_frame_prologue();
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.
@@ -373,6 +379,20 @@ impl Emitter<'_> {
         self.line("     (call $dream_panic)");
     }
 
+    /// Traps if the just-loaded `unowned` field value (top of stack) is the poison sentinel `0`
+    /// (written by `$weak_clear_all` when the referent was freed — see `src/mir/runtime/weak.wat`),
+    /// otherwise leaves the value back on the stack unchanged. Runtime semantics for `unowned`: see
+    /// `docs/language/memory.md`.
+    fn emit_unowned_read_check(&mut self) {
+        self.line("     (local.set $__wsrc)");
+        self.line("     (local.get $__wsrc)");
+        self.line("     (i32.eqz)");
+        self.line("     (if (then");
+        self.emit_panic(super::panic_msgs::UNOWNED_NULL_DEREF);
+        self.line("     ))");
+        self.line("     (local.get $__wsrc)");
+    }
+
     /// Pushes the address of `base.field` (`base + offset`) onto the stack.
     fn field_addr(&mut self, base: crate::mir::Local, offset: u32) {
         self.line(&format!("     (local.get ${})", base.0));
@@ -435,6 +455,14 @@ impl Emitter<'_> {
         Some((f.offset, f.ty))
     }
 
+    /// Like [`Self::field_layout`], but also exposes the field's `weak`/`unowned` storage qualifiers
+    /// (see `docs/language/memory.md`), needed at both the store site (skip retain, register in the
+    /// weak side-table) and the read site (trap on a poisoned `unowned` field).
+    fn field_layout_full(&self, base: crate::mir::Local, field: usize) -> Option<&crate::hir::FieldLayout> {
+        let bty = self.func.local_ty(base);
+        self.layouts.get(bty)?.fields.get(field)
+    }
+
     /// The element type of an array-typed local, or `None` if `base` is not an array.
     fn array_elem_ty(&self, base: crate::mir::Local) -> Option<TypeId> {
         match self
@@ -462,12 +490,16 @@ impl Emitter<'_> {
             Operand::Copy(Place::Local(l)) => self.line(&format!("     (local.get ${})", l.0)),
             Operand::Copy(Place::Global(g)) => self.line(&format!("     (global.get $g{})", g.0)),
             Operand::Copy(Place::Field { base, field }) => {
-                if let Some((off, fty)) = self.field_layout(*base, *field) {
+                if let Some(f) = self.field_layout_full(*base, *field) {
+                    let (off, fty, is_unowned) = (f.offset, f.ty, f.is_unowned);
                     self.field_addr(*base, off);
                     // A value-struct field is addressed inline, not loaded: reading it yields the
                     // address of its inline storage (the consumer copies where a value is needed).
                     if !self.interner.is_value_type(fty) {
                         self.line(&format!("     ({})", self.load_instr(fty)));
+                    }
+                    if is_unowned {
+                        self.emit_unowned_read_check();
                     }
                 } else {
                     crate::internal_error!(

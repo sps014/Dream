@@ -220,9 +220,17 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
 /// is a hard `internal_error!` crash in [`Emitter::string_addr`].
 fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
     fn in_place(p: &Place, out: &mut Vec<&'static str>) {
-        if let Place::Index { index, .. } = p {
-            out.push(panic_msgs::INDEX_OUT_OF_BOUNDS);
-            in_operand(index, out);
+        match p {
+            Place::Index { index, .. } => {
+                out.push(panic_msgs::INDEX_OUT_OF_BOUNDS);
+                in_operand(index, out);
+            }
+            // A field *read* may be an `unowned` field, in which case
+            // `Emitter::emit_unowned_read_check` emits a located `UNOWNED_NULL_DEREF` panic; whether
+            // the field is actually `unowned` depends on layout info not available here, so this
+            // over-approximates (pre-interns the message for every field read).
+            Place::Field { .. } => out.push(panic_msgs::UNOWNED_NULL_DEREF),
+            Place::Local(_) | Place::Global(_) => {}
         }
     }
     fn in_operand(o: &Operand, out: &mut Vec<&'static str>) {

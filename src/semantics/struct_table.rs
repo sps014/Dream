@@ -10,6 +10,20 @@ pub struct StructFieldInfo {
     /// True when the field is declared `public`. Private (default) fields may only be accessed
     /// from within the declaring type's own methods.
     pub is_public: bool,
+    /// True when declared `weak`: an `Option<T>` field that does not hold a strong reference to
+    /// its referent and is excluded from the reference-cycle graph.
+    pub is_weak: bool,
+    /// True when declared `unowned`: a plain reference-type field that does not hold a strong
+    /// reference to its referent and is excluded from the reference-cycle graph.
+    pub is_unowned: bool,
+}
+
+impl StructFieldInfo {
+    /// True when this field is excluded from ARC strong-reference bookkeeping (`weak` or
+    /// `unowned`), and therefore does not contribute an edge to the reference-cycle graph.
+    pub fn is_non_owning(&self) -> bool {
+        self.is_weak || self.is_unowned
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +97,8 @@ impl StructTable {
                     type_: field_type,
                     offset: current_offset,
                     is_public: field.is_public,
+                    is_weak: field.is_weak,
+                    is_unowned: field.is_unowned,
                 },
             );
             current_offset += size;

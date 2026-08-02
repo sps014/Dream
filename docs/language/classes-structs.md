@@ -61,6 +61,8 @@ Both classes and structs support all of the following.
 
 Members are **class-private by default** — reachable only from the type's own methods, regardless of file. Mark a member `public` to expose it. Separately, the type itself is **file-private by default** and needs `public` to be used from another file. See [Imports > Visibility](imports.md#visibility) for how the two axes combine.
 
+A field may also carry `weak` or `unowned` (combinable with `public` in any order) to opt a strong-reference-cycle-prone field out of the compiler's cycle check — see [Memory > Reference cycles](memory.md#advanced-reference-cycles).
+
 ### Methods
 
 Declare methods with `fun`; each receives an implicit `this`:

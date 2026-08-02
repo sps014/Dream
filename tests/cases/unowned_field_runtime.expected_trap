@@ -1,0 +1,2 @@
+before
+panic: access to deallocated 'unowned' reference

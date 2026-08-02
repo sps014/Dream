@@ -1,7 +1,10 @@
 use super::*;
 
 /// A struct lowered for layout: `(interned type id, name, [(field name, interned field type)])`.
-type LoweredStruct = (TypeId, String, Vec<(String, TypeId)>);
+type LoweredStruct = (TypeId, String, Vec<(String, TypeId, bool, bool)>);
+/// One struct's fields as `(name, source type, is_weak, is_unowned)`, snapshotted from
+/// `StructFieldInfo` before `type_ctx` is re-borrowed mutably for lowering.
+type StructFieldSnapshot = (String, Type, bool, bool);
 
 impl<'a> Analyzer<'a> {
     /// Turns on HIR collection so a top-level variable's initializer expression is captured while it
@@ -59,7 +62,7 @@ impl<'a> Analyzer<'a> {
         // Discriminated unions are also registered in the struct table (for tagging/release), but they
         // get a variant-aware layout + `to_string` from the union table below — so exclude them here to
         // avoid a duplicate (empty) struct layout and a duplicate `$<Union>_to_string`.
-        let struct_snapshot: Vec<(String, Vec<(String, Type)>)> = self
+        let struct_snapshot: Vec<(String, Vec<StructFieldSnapshot>)> = self
             .struct_table
             .structs
             .iter()
@@ -68,7 +71,7 @@ impl<'a> Analyzer<'a> {
                 let fields = info
                     .fields
                     .iter()
-                    .map(|(fname, f)| (fname.clone(), f.type_.clone()))
+                    .map(|(fname, f)| (fname.clone(), f.type_.clone(), f.is_weak, f.is_unowned))
                     .collect();
                 (name.clone(), fields)
             })
@@ -102,9 +105,11 @@ impl<'a> Analyzer<'a> {
         let mut lowered: Vec<LoweredStruct> = Vec::with_capacity(struct_snapshot.len());
         for (name, fields) in struct_snapshot {
             let ty = self.type_ctx.lower_str(&name);
-            let defs: Vec<(String, TypeId)> = fields
+            let defs: Vec<(String, TypeId, bool, bool)> = fields
                 .iter()
-                .map(|(fname, t)| (fname.clone(), self.type_ctx.lower(t)))
+                .map(|(fname, t, is_weak, is_unowned)| {
+                    (fname.clone(), self.type_ctx.lower(t), *is_weak, *is_unowned)
+                })
                 .collect();
             lowered.push((ty, name, defs));
         }
@@ -114,7 +119,7 @@ impl<'a> Analyzer<'a> {
         // contributes a 4-byte pointer — and record it on the interner so `scalar_size` resolves it.
         let field_map: std::collections::HashMap<TypeId, Vec<TypeId>> = lowered
             .iter()
-            .map(|(ty, _, defs)| (*ty, defs.iter().map(|(_, t)| *t).collect()))
+            .map(|(ty, _, defs)| (*ty, defs.iter().map(|(_, t, ..)| *t).collect()))
             .collect();
         // A value union's inline footprint is `discriminant(4) + max value-aware variant payload`.
         // Collect each value union's variants as lists of payload field ids so the unified layout
@@ -197,6 +202,8 @@ impl<'a> Analyzer<'a> {
                         offset,
                         ty: fty,
                         name: fname,
+                        is_weak: false,
+                        is_unowned: false,
                     });
                     offset += fsize;
                 }

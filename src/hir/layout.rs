@@ -34,6 +34,12 @@ pub struct FieldLayout {
     pub offset: u32,
     pub ty: TypeId,
     pub name: String,
+    /// True when declared `weak` (an `Option<T>` field, `T` a class, excluded from strong ARC
+    /// bookkeeping and from the reference-cycle graph). Always `false` for union-variant fields.
+    pub is_weak: bool,
+    /// True when declared `unowned` (a plain class-typed field excluded from strong ARC
+    /// bookkeeping). Always `false` for union-variant fields.
+    pub is_unowned: bool,
 }
 
 /// The full layout of one nominal type.
@@ -53,18 +59,20 @@ impl TypeLayout {
     pub fn from_fields(
         interner: &TypeInterner,
         name: impl Into<String>,
-        field_defs: impl IntoIterator<Item = (String, TypeId)>,
+        field_defs: impl IntoIterator<Item = (String, TypeId, bool, bool)>,
     ) -> Self {
         let mut offset = 0u32;
         let mut max_align = 4u32;
         let mut fields = Vec::new();
-        for (field_name, ty) in field_defs {
+        for (field_name, ty, is_weak, is_unowned) in field_defs {
             let (size, align) = scalar_size(interner, ty);
             offset = align_up(offset, align);
             fields.push(FieldLayout {
                 offset,
                 ty,
                 name: field_name,
+                is_weak,
+                is_unowned,
             });
             offset += size;
             max_align = max_align.max(align);
@@ -110,6 +118,13 @@ pub struct UnionLayout {
     pub size: u32,
 }
 
+impl UnionLayout {
+    /// Looks up a variant by its source name (e.g. `"Some"`, `"None"`).
+    pub fn variant(&self, name: &str) -> Option<&UnionVariant> {
+        self.variants.iter().find(|v| v.name == name)
+    }
+}
+
 /// Layouts of all nominal types, keyed by the **interned type id** of the (fully monomorphized)
 /// type — so `Box<int>` and `Box<string>`, which share a base `DefId` but differ in field widths,
 /// get distinct layouts. Lookup-only (never iterated for emission), so iteration order does not
@@ -153,7 +168,11 @@ mod tests {
         let l = TypeLayout::from_fields(
             &i,
             "T",
-            [("b".into(), by), ("d".into(), dbl), ("n".into(), int)],
+            [
+                ("b".into(), by, false, false),
+                ("d".into(), dbl, false, false),
+                ("n".into(), int, false, false),
+            ],
         );
         assert_eq!(l.fields[0].offset, 0);
         assert_eq!(l.fields[1].offset, 8);

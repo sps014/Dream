@@ -1,0 +1,33 @@
+// Runtime semantics of `unowned`: an `unowned` field does not keep its referent alive; reading it
+// after the referent has been freed traps — see `docs/language/memory.md`.
+class Manager {
+    public name: string;
+
+    constructor(name: string) {
+        this.name = name;
+    }
+}
+
+class Cache {
+    public unowned owner: Manager;
+
+    constructor(owner: Manager) {
+        this.owner = owner;
+    }
+}
+
+// `m` is the only strong owner of the `Manager`; it goes out of scope (and is released) when this
+// function returns, so `c.owner` — an `unowned` reference to it — is poisoned before `c` is handed
+// back to the caller.
+fun make_dangling_cache(): Cache {
+    let m = Manager("temp");
+    let c = Cache(m);
+    return c;
+}
+
+fun main() {
+    let c = make_dangling_cache();
+    System.println("before");
+    System.println(c.owner.name);
+    System.println("after");
+}

@@ -9,6 +9,15 @@ pub struct StructFieldNode {
     /// True when the field is marked `public`. Private (the default) fields may only be read or
     /// written from within the declaring type's own methods.
     pub is_public: bool,
+    /// True when the field is marked `weak`: it must be `Option<T>` for some reference type `T`,
+    /// does not contribute to `T`'s strong reference count, and is automatically reset to `None`
+    /// once the referent's strong count reaches zero. Breaks ARC reference cycles without keeping
+    /// the referent alive. Mutually exclusive with `is_unowned` (enforced during semantic analysis).
+    pub is_weak: bool,
+    /// True when the field is marked `unowned`: a plain (non-`Option`) reference-type field that
+    /// does not contribute to the referent's strong reference count. Accessing it after the
+    /// referent has been freed traps at runtime. Mutually exclusive with `is_weak`.
+    pub is_unowned: bool,
     /// The field type's canonical spelling as a token (carries the source position and a flat
     /// display name like `List_JsonValue`). For the structured type (which preserves generic
     /// arguments such as `List<JsonValue>`), use `field_type`.

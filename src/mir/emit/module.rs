@@ -173,6 +173,8 @@ pub fn emit_module_with_debug(
 
     out.push_str(&runtime_prelude(debug));
     out.push('\n');
+    out.push_str(RUNTIME_WEAK);
+    out.push('\n');
     if crate::mir::async_emit::module_has_async(&mir.functions) {
         out.push_str(&crate::mir::async_emit::async_runtime_wat());
         out.push('\n');

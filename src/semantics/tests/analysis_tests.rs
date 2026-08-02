@@ -1248,3 +1248,142 @@ fn test_extend_non_sealed_class_is_allowed() {
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
 }
+
+// --- `weak`/`unowned` fields and the compile-time reference-cycle check ---
+
+#[test]
+fn test_class_self_reference_is_a_cycle_error() {
+    // A class holding a strong field of its own type is a self-loop in the reference-cycle
+    // graph: it is structurally capable of forming a leak (e.g. `n.next = n`), so it is a hard
+    // error even though this particular declaration never actually wires up a loop.
+    let code = "class Node { public next: Node; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected") && d.message.contains("Node.next")));
+}
+
+#[test]
+fn test_class_self_reference_allowed_with_allow_cycle() {
+    let code = "@allow_cycle class Node { public next: Node; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_option_wrapped_self_reference_is_a_cycle_error() {
+    let code = "enum Option<T> { Some(value: T), None }
+        class Node { public next: Option<Node>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected")));
+}
+
+#[test]
+fn test_array_field_self_reference_is_a_cycle_error() {
+    // Array elements are strong references, so `Node[]` contributes the same self-loop edge as a
+    // bare `Node` field.
+    let code = "class Node { public children: Node[]; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected")));
+}
+
+#[test]
+fn test_mutual_class_cycle_is_error() {
+    let code = "class A { public b: B; }
+        class B { public a: A; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("reference cycle detected")
+            && d.message.contains("A.b")
+            && d.message.contains("B.a")));
+}
+
+#[test]
+fn test_mutual_cycle_allow_cycle_on_only_one_class_still_errors() {
+    // `@allow_cycle` must be present on *every* class participating in the cycle; annotating only
+    // one side can't launder a multi-class cycle through it.
+    let code = "@allow_cycle class A { public b: B; }
+        class B { public a: A; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+}
+
+#[test]
+fn test_mutual_cycle_allow_cycle_on_both_suppresses() {
+    let code = "@allow_cycle class A { public b: B; }
+        @allow_cycle class B { public a: A; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_weak_field_breaks_self_cycle() {
+    let code = "enum Option<T> { Some(value: T), None }
+        class Node { weak next: Option<Node>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_unowned_field_breaks_self_cycle() {
+    let code = "class Node { unowned next: Node; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_weak_field_requires_option_type() {
+    let code = "class Node { weak next: Node; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("'weak' field") && d.message.contains("Option<T>")));
+}
+
+#[test]
+fn test_unowned_field_requires_class_type() {
+    let code = "enum Option<T> { Some(value: T), None }
+        class Node { unowned next: Option<Node>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("'unowned' field") && d.message.contains("class type")));
+}
+
+#[test]
+fn test_field_cannot_be_both_weak_and_unowned() {
+    let code = "enum Option<T> { Some(value: T), None }
+        class Node { weak unowned next: Option<Node>; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("cannot be both 'weak' and 'unowned'")));
+}
+
+#[test]
+fn test_no_false_positive_for_distinct_parent_child_types() {
+    // `Parent` holds a `Child`, but `Child` never references `Parent` back, so there is no cycle.
+    let code = "class Child { public name: string; }
+        class Parent { public child: Child; }";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}

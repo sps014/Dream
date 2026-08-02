@@ -654,6 +654,50 @@ fn test_parse_struct_keyword_sets_is_value() {
 }
 
 #[test]
+fn test_parse_weak_and_unowned_field_modifiers() {
+    // `weak`/`unowned` are field-level storage qualifiers; `public` may combine with either, in
+    // any order. A plain field leaves both flags false.
+    let code = "class Node {
+        public next: Node;
+        weak parent: Node;
+        unowned owner: Node;
+        public weak alias: Node;
+        unowned public other: Node;
+    }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let node = program
+        .structs
+        .iter()
+        .find(|s| s.name.text == "Node")
+        .expect("Node declaration");
+
+    let field = |name: &str| {
+        node.fields
+            .iter()
+            .find(|f| f.name.text == name)
+            .unwrap_or_else(|| panic!("field '{}' not found", name))
+    };
+
+    let next = field("next");
+    assert!(next.is_public && !next.is_weak && !next.is_unowned);
+
+    let parent = field("parent");
+    assert!(!parent.is_public && parent.is_weak && !parent.is_unowned);
+
+    let owner = field("owner");
+    assert!(!owner.is_public && !owner.is_weak && owner.is_unowned);
+
+    let alias = field("alias");
+    assert!(alias.is_public && alias.is_weak && !alias.is_unowned);
+
+    let other = field("other");
+    assert!(other.is_public && !other.is_weak && other.is_unowned);
+}
+
+#[test]
 fn test_parse_sealed_modifier() {
     // `sealed` may precede `class`/`struct`/`enum` (in either order with `public`) and sets
     // `is_sealed`; declarations without it leave the flag false.

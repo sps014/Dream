@@ -1,3 +1,7 @@
+// `next` is a self-reference (`Node` holding a strong `Option<Node>`), so the compiler's
+// structural cycle check flags it: it cannot prove this list is never wired into a loop. This
+// list is genuinely acyclic, so `@allow_cycle` documents that the author has checked it manually.
+@allow_cycle
 class Node {
     public value: int;
     public next: Option<Node>;

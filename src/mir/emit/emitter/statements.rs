@@ -191,9 +191,16 @@ impl Emitter<'_> {
                 self.line(&format!("     (global.set $g{})", g.0));
             }
             Place::Field { base, field } => {
-                if let Some((off, fty)) = self.field_layout(*base, *field) {
+                if let Some(f) = self.field_layout_full(*base, *field) {
+                    let (off, fty, is_weak, is_unowned) = (f.offset, f.ty, f.is_weak, f.is_unowned);
                     let b = *base;
-                    self.emit_place_store(fty, move |s| s.field_addr(b, off), rvalue);
+                    if is_weak {
+                        self.emit_weak_field_store(b, off, fty, rvalue);
+                    } else if is_unowned {
+                        self.emit_unowned_field_store(b, off, fty, rvalue);
+                    } else {
+                        self.emit_place_store(fty, move |s| s.field_addr(b, off), rvalue);
+                    }
                 } else {
                     crate::internal_error!(
                         "missing field layout for store (base {:?}, field {})",
@@ -234,6 +241,159 @@ impl Emitter<'_> {
         self.line(&format!("     ({})", self.store_instr(ty)));
         self.retain_stored_rvalue(ty, rvalue);
         self.release_stash(ty, stash);
+    }
+
+    /// Stores into a `weak` field (`ty` is `Option<T>` for a class `T`; see `docs/language/memory.md`
+    /// and `src/mir/runtime/weak.wat`). A `weak` field never holds a strong reference to its
+    /// payload, so it cannot be stored through the ordinary place-store path (which would retain the
+    /// payload on store and deep-release it on overwrite/teardown, just like a normal strong field).
+    /// Instead: the RHS is evaluated and fully strongly owned as usual (so any temporary is correctly
+    /// retained/released by the surrounding rvalue machinery), but only its `(discriminant, payload)`
+    /// bits are copied into a *fresh, privately managed* weak-box (never retaining the payload); that
+    /// box's address is registered as watching the payload (if `Some`) and stored into the field —
+    /// only *then* is the old occupant's box unregistered and freed directly (deferred exactly like
+    /// the ordinary stash/release rule, so a self-referential `n.parent = f(n.parent)` stays sound);
+    /// finally the RHS temporary itself is released (if owned), since the field never took ownership
+    /// of it.
+    fn emit_weak_field_store(
+        &mut self,
+        base: crate::mir::Local,
+        offset: u32,
+        option_ty: TypeId,
+        rvalue: &Rvalue,
+    ) {
+        let Some(u) = self.layouts.union(option_ty) else {
+            crate::internal_error!("weak field's type {:?} has no union layout", option_ty);
+        };
+        let some_disc = u.variant("Some").map(|v| v.discriminant).unwrap_or(0);
+        let none_disc = u.variant("None").map(|v| v.discriminant).unwrap_or(1);
+        let payload_off = u
+            .variant("Some")
+            .and_then(|v| v.fields.first())
+            .map(|fl| fl.offset)
+            .unwrap_or(4);
+        let box_size = u.size;
+
+        // Evaluate the RHS normally (a fully-owned-or-borrowed `Option<T>` per the usual rules) and
+        // peek at its bits.
+        self.emit_rvalue(rvalue);
+        self.line("     (local.set $__wsrc)");
+
+        // Stash the old occupant's box pointer (read-only; freed only after the new box is in place).
+        self.field_addr(base, offset);
+        self.line("     (i32.load)");
+        self.line("     (local.set $__rel)");
+
+        // Allocate the fresh private box and copy the (discriminant, payload) bits into it, without
+        // retaining the payload.
+        self.line(&format!("     (i32.const {})", box_size));
+        self.line("     (i32.const 0) ;; tag 0: never dispatched through $release_object");
+        self.line("     (call $malloc)");
+        self.line("     (local.set $__wbox)");
+        self.line("     (local.get $__wbox)");
+        self.line("     (local.get $__wsrc) (i32.load)");
+        self.line("     (i32.store)");
+        self.line(&format!(
+            "     (local.get $__wbox) (i32.const {}) (i32.add)",
+            payload_off
+        ));
+        self.line(&format!(
+            "     (local.get $__wsrc) (i32.const {}) (i32.add) (i32.load)",
+            payload_off
+        ));
+        self.line("     (i32.store)");
+
+        // Register the new box as watching its payload, if it's live.
+        self.line("     (local.get $__wsrc) (i32.load)");
+        self.line(&format!("     (i32.const {}) (i32.eq) (if (then", some_disc));
+        self.line(&format!(
+            "       (local.get $__wsrc) (i32.const {}) (i32.add) (i32.load)",
+            payload_off
+        ));
+        self.line("       (local.get $__wbox)");
+        self.line("       (i32.const 0) ;; kind: weak");
+        self.line(&format!("       (i32.const {}) ;; extra: None's discriminant", none_disc));
+        self.line("       (call $weak_register)");
+        self.line("     ))");
+
+        // Store the new box into the field.
+        self.field_addr(base, offset);
+        self.line("     (local.get $__wbox)");
+        self.line("     (i32.store)");
+
+        // Now that the new box is safely in place, tear down the old one: unregister it (if it
+        // currently watches a live referent) and free it directly — never through
+        // `$release_<Option_...>`, since the box was never a strong owner of its payload.
+        self.line("     (local.get $__rel)");
+        self.line("     (if (then");
+        self.line("       (local.get $__rel) (i32.load)");
+        self.line(&format!("       (i32.const {}) (i32.eq) (if (then", some_disc));
+        self.line(&format!(
+            "         (local.get $__rel) (i32.const {}) (i32.add) (i32.load)",
+            payload_off
+        ));
+        self.line("         (local.get $__rel)");
+        self.line("         (call $weak_unregister)");
+        self.line("       ))");
+        self.line("       (local.get $__rel) (call $free)");
+        self.line("     ))");
+
+        // The field never owns the RHS wrapper itself; release it if it was a fresh, owned value
+        // (a borrowed copy is left untouched, matching the ordinary store rule).
+        if !matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
+            self.line("     (local.get $__wsrc)");
+            let call = release_call(self.interner, self.layouts, option_ty);
+            self.line(&format!("     (call {})", call));
+        }
+    }
+
+    /// Stores into an `unowned` field (`ty` is a plain class type; see `docs/language/memory.md` and
+    /// `src/mir/runtime/weak.wat`). An `unowned` field holds the referent's raw pointer directly (no
+    /// wrapper), never retains it on store, and is poisoned to `0` by `$weak_clear_all` if the
+    /// referent is freed while still watched — a later read then traps (see
+    /// `Emitter::emit_unowned_read_check`).
+    fn emit_unowned_field_store(
+        &mut self,
+        base: crate::mir::Local,
+        offset: u32,
+        field_ty: TypeId,
+        rvalue: &Rvalue,
+    ) {
+        // Unregister the old occupant, if any (no box to free — the field itself was the slot).
+        self.field_addr(base, offset);
+        self.line("     (i32.load)");
+        self.line("     (local.set $__wsrc)");
+        self.line("     (local.get $__wsrc)");
+        self.line("     (if (then");
+        self.line("       (local.get $__wsrc)");
+        self.field_addr(base, offset);
+        self.line("       (call $weak_unregister)");
+        self.line("     ))");
+
+        // Evaluate the RHS, store it directly (no retain), and register it as a new watcher of its
+        // referent *before* possibly releasing it below — so an RHS that was its own referent's only
+        // owner is correctly poisoned back to `0` right away, rather than left dangling.
+        self.emit_rvalue(rvalue);
+        self.line("     (local.set $__wbox)");
+        self.field_addr(base, offset);
+        self.line("     (local.get $__wbox)");
+        self.line("     (i32.store)");
+        self.line("     (local.get $__wbox)");
+        self.line("     (if (then");
+        self.line("       (local.get $__wbox)");
+        self.field_addr(base, offset);
+        self.line("       (i32.const 1) ;; kind: unowned");
+        self.line("       (i32.const 0) ;; extra: unused");
+        self.line("       (call $weak_register)");
+        self.line("     ))");
+
+        // The field never takes ownership of the RHS; give back its `+1` if it was a fresh, owned
+        // value (a borrowed copy is left untouched).
+        if !matches!(rvalue, Rvalue::Use(Operand::Copy(_))) {
+            self.line("     (local.get $__wbox)");
+            let call = release_call(self.interner, self.layouts, field_ty);
+            self.line(&format!("     (call {})", call));
+        }
     }
 
     /// Stores `value` into the object under construction (`$__obj + offset`) with the field/element

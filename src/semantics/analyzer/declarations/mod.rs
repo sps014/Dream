@@ -12,6 +12,8 @@
 //!   monomorphization, the runtime interface table, and `validate_implements`.
 //! - [`register_methods`]: struct-method and `extend`-block method registration plus object-protocol
 //!   override validation.
+//! - [`reference_cycles`]: `weak`/`unowned` field validation and the compile-time class
+//!   reference-cycle check.
 //!
 //! All are `impl Analyzer` blocks split to keep each focused.
 
@@ -20,6 +22,7 @@ use super::*;
 mod enums;
 mod functions;
 mod globals;
+mod reference_cycles;
 mod register_interfaces;
 mod register_methods;
 mod structs;
