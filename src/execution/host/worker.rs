@@ -176,7 +176,14 @@ fn worker_thread(
     }
     let _exit_guard = ExitGuard(dap_tid);
 
-    let engine = Engine::default();
+    // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
+    // recursive `Option<T>`-boxed data structures.
+    let mut config = Config::new();
+    config.max_wasm_stack(16 * 1024 * 1024);
+    config.async_stack_size(20 * 1024 * 1024);
+    let Ok(engine) = Engine::new(&config) else {
+        return;
+    };
     let Ok(module) = Module::new(&engine, &bytes[..]) else {
         return;
     };

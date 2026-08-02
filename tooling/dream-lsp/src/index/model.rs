@@ -77,7 +77,7 @@ pub struct Located {
 /// Returns the innermost struct type backing `ty` (peeling arrays and nullables), if any.
 pub(crate) fn base_struct(ty: &Type) -> &Type {
     match ty {
-        Type::Array(inner) | Type::Nullable(inner) => base_struct(inner),
+        Type::Array(inner) => base_struct(inner),
         other => other,
     }
 }

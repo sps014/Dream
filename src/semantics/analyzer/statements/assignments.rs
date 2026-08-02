@@ -161,10 +161,7 @@ impl<'a> Analyzer<'a> {
         if let ExpressionNode::Identifier(id) = obj {
             let is_local = symbol_table.borrow().get_symbol(id).is_ok();
             if !is_local {
-                let type_name = crate::syntax::nodes::types::canonical_type_name(&id.text)
-                    .unwrap_or(id.text.as_str())
-                    .to_string();
-                let setter = method_fn(&type_name, &setter_member_name(&member.text));
+                let setter = method_fn(&id.text, &setter_member_name(&member.text));
                 if self.function_table.get_function(&setter).is_ok() {
                     let set_tok = synthetic_token(
                         TokenKind::IdentifierToken,

@@ -44,6 +44,7 @@ const DEBUG_ONLY_CASES: &[&str] = &[
 fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
+    let expected_trap_file = dream_file.with_extension("expected_trap");
 
     // Debug enables allocator instrumentation (so GC/leak probes report real counts) and keeps every
     // runtime helper; release runs the same program through `strip_dead_functions` and the
@@ -73,8 +74,13 @@ fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
 
     compile_result.unwrap_or_else(|_| panic!("Compilation failed for {:?}", dream_file));
 
-    let expected_output = fs::read_to_string(&expected_file)
-        .unwrap_or_else(|_| panic!("Missing .expected file for {:?}", dream_file));
+    let expects_trap = expected_trap_file.exists();
+    let expected_output = fs::read_to_string(if expects_trap {
+        &expected_trap_file
+    } else {
+        &expected_file
+    })
+    .unwrap_or_else(|_| panic!("Missing .expected/.expected_trap file for {:?}", dream_file));
 
     let wat_content = fs::read_to_string(&wat_path).unwrap();
 
@@ -86,7 +92,14 @@ fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
     set_worker_module(&wasm_bytes);
 
     // 3. Setup Wasmtime
-    let engine = Engine::default();
+    // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
+    // frame per node through both the struct's and its `Option` wrapper's release function, so the
+    // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up to match
+    // the production runner (`execution::wasm_runner::execute_wasm`).
+    let mut config = Config::new();
+    config.max_wasm_stack(16 * 1024 * 1024);
+    config.async_stack_size(20 * 1024 * 1024);
+    let engine = Engine::new(&config).expect("Failed to create engine");
     let module = Module::new(&engine, &wasm_bytes).expect("Failed to create module");
 
     let mut store = Store::new(&engine, ());
@@ -186,16 +199,40 @@ fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
         .get_typed_func::<(), ()>(&mut store, "main")
         .expect("Failed to get main function");
 
-    main_func.call(&mut store, ()).expect("Execution failed");
+    let result = main_func.call(&mut store, ());
+    if expects_trap {
+        assert!(
+            result.is_err(),
+            "Expected a runtime panic (trap) for {:?}, but execution completed normally",
+            dream_file
+        );
+    } else {
+        result.expect("Execution failed");
+    }
 
-    // 6. Assert Output
+    // 6. Assert Output (a `panic(msg)` prints its message, then the newline `$dream_panic` appends,
+    // before the `unreachable` trap unwinds execution — so the printed text is still asserted).
     let actual_output = env.output.lock().unwrap().clone();
-    assert_eq!(
-        actual_output.trim(),
-        expected_output.trim(),
-        "Output mismatch for {:?}",
-        dream_file
-    );
+    if expects_trap {
+        // Automatic-check panic messages are *located* with the source file's canonicalized
+        // absolute path (see `panic_msgs::located`), which is not reproducible across checkouts —
+        // so `.expected_trap` only pins the message's fixed prefix (everything up to and including
+        // the base message), not the trailing `(at <path>, in <function>)` suffix.
+        assert!(
+            actual_output.trim().starts_with(expected_output.trim()),
+            "Output mismatch for {:?}\n  expected prefix: {:?}\n  actual: {:?}",
+            dream_file,
+            expected_output.trim(),
+            actual_output.trim()
+        );
+    } else {
+        assert_eq!(
+            actual_output.trim(),
+            expected_output.trim(),
+            "Output mismatch for {:?}",
+            dream_file
+        );
+    }
 
     // Cleanup generated WAT
     let _ = fs::remove_file(wat_path);

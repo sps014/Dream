@@ -107,34 +107,27 @@ impl<'a> Analyzer<'a> {
     /// other conversions (reference→object, numeric widening) are left to the backend / call sites.
     fn coerce_to(&mut self, value: HExpr, target: TypeId) -> HExpr {
         use crate::types::{PrimTy, TyKind};
-        // Snapshot the (nullable-stripped) kinds so the interner borrow does not outlive the branches
-        // below that need `&mut self` (the `js` box/unbox helpers).
+        // Snapshot the kinds so the interner borrow does not outlive the branches below that need
+        // `&mut self` (the `js` box/unbox helpers).
         let (target_k, val_k) = {
             let i = &self.type_ctx.interner;
             (
-                i.kind(i.strip_nullable(target)).clone(),
-                i.kind(i.strip_nullable(value.ty)).clone(),
+                i.kind(target).clone(),
+                i.kind(value.ty).clone(),
             )
         };
         // Boxing a primitive into `object`.
         if matches!(target_k, TyKind::Object) && matches!(val_k, TyKind::Prim(_)) {
             return HExpr::new(target, HExprKind::Cast(Box::new(value)));
         }
-        // Boxing a value struct into `object`, an interface reference, or a nullable value struct
-        // (`T?`): the backend allocates a tagged heap copy so `null` is representable / the value
-        // participates in dynamic dispatch and the object protocol. Reference structs are already
-        // pointers (identity upcast), so only value structs box here.
-        let target_is_boxed_value = self.type_ctx.interner.is_nullable_boxed_value(target);
-        if (matches!(target_k, TyKind::Object | TyKind::Interface(..)) || target_is_boxed_value)
+        // Boxing a value struct into `object` or an interface reference: the backend allocates a
+        // tagged heap copy so the value participates in dynamic dispatch and the object protocol.
+        // Reference structs are already pointers (identity upcast), so only value structs box here.
+        if matches!(target_k, TyKind::Object | TyKind::Interface(..))
             && matches!(val_k, TyKind::Struct(..))
+            && self.type_ctx.interner.is_value_type(value.ty)
         {
-            let vty = self.type_ctx.interner.strip_nullable(value.ty);
-            // A bare value struct value being widened; not an already-boxed nullable one.
-            if self.type_ctx.interner.is_value_type(vty)
-                && !self.type_ctx.interner.is_nullable_boxed_value(value.ty)
-            {
-                return HExpr::new(target, HExprKind::Cast(Box::new(value)));
-            }
+            return HExpr::new(target, HExprKind::Cast(Box::new(value)));
         }
         // Dynamic `js`: box a primitive/`string` into a `js` handle, or unbox a `js` value into a
         // primitive/`string`, at this typed binding boundary (so `let x: js = 5` and
@@ -164,7 +157,7 @@ impl<'a> Analyzer<'a> {
         };
         if let (TyKind::Prim(tp), TyKind::Prim(vp)) = (target_k, val_k) {
             if tp != vp && is_num(tp) && is_num(vp) {
-                let target_prim = self.type_ctx.interner.strip_nullable(target);
+                let target_prim = target;
                 return HExpr::new(target_prim, HExprKind::Cast(Box::new(value)));
             }
         }
@@ -261,7 +254,11 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Appends a desugared `for (init; cond; step) { body }`. `init`/`step` must each be exactly one
-    /// statement (the surface form guarantees this) and `cond` must be present.
+    /// statement (the surface form guarantees this) and `cond` must be present. `hir_mark_line`
+    /// unconditionally opens each of `init`/`step` with a fresh-block [`HStmt::SourceLine`] marker
+    /// (see `hir_open_block`); stripped here since [`HStmt::For`] carries `init`/`step` as a single
+    /// bare statement, not a block, and losing marker precision on a `for` header's init/step is an
+    /// acceptable v1 tradeoff (its `body` is a real block and keeps its markers).
     pub(in crate::semantics::analyzer) fn hir_for(
         &mut self,
         mut init: Vec<HStmt>,
@@ -273,6 +270,8 @@ impl<'a> Analyzer<'a> {
         if !self.active() {
             return;
         }
+        init.retain(|s| !matches!(s, HStmt::SourceLine(_)));
+        step.retain(|s| !matches!(s, HStmt::SourceLine(_)));
         match (init.len(), step.len(), cond) {
             (1, 1, Some(cond)) => self.push_stmt(HStmt::For {
                 init: Box::new(init.remove(0)),

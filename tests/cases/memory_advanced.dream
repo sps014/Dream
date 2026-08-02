@@ -1,8 +1,8 @@
 class Node {
     val: int;
-    next: Node?;
+    next: Option<Node>;
 
-    constructor(val: int, next: Node?) {
+    constructor(val: int, next: Option<Node>) {
         this.val = val;
         this.next = next;
     }
@@ -23,9 +23,10 @@ enum Tree {
 }
 
 fun do_allocations() {
-    let n1 = Node(1, null);
-    let n2 = Node(2, n1);
-    let n3 = Node(3, n2);
+    let no_next: Option<Node> = Option.None;
+    let n1 = Node(1, no_next);
+    let n2 = Node(2, Option.Some(n1));
+    let n3 = Node(3, Option.Some(n2));
     // n3 goes out of scope, releasing n2, releasing n1
 }
 

@@ -83,8 +83,6 @@ impl<'a> Analyzer<'a> {
                     Some(struct_decl.name.position),
                 );
             }
-            // A nullable value struct field (`T?`) is stored as a nullable heap pointer to a boxed
-            // copy of `T` (see `is_nullable_boxed_value`), so `null` is representable. No rejection.
         }
     }
 
@@ -106,7 +104,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// The names of value-struct types embedded *by value* in `name`'s fields (the inline edges of
-    /// the value-containment graph). Nullable suffixes are stripped; array fields are references.
+    /// the value-containment graph). Array fields are references.
     fn value_struct_field_targets(&self, name: &str) -> Vec<String> {
         let Some(info) = self.struct_table.get_struct(name) else {
             return Vec::new();
@@ -117,7 +115,7 @@ impl<'a> Analyzer<'a> {
         let mut out = Vec::new();
         for f in info.fields.values() {
             let type_name = f.type_.get_type();
-            let base = type_name.trim_end_matches('?');
+            let base = type_name.as_str();
             if base.ends_with("[]") {
                 continue;
             }
@@ -203,8 +201,8 @@ impl<'a> Analyzer<'a> {
         }
 
         // Value-struct soundness is checked per instantiation (the template's fields are generic, so
-        // whether this monomorphization embeds itself by value or carries a nullable value field is
-        // only decidable once `T` is concrete).
+        // whether this monomorphization embeds itself by value is only decidable once `T` is
+        // concrete).
         if new_decl_ref.is_value && self.value_struct_contains_self(&mangled_name) {
             diagnostics.report_error(
                     format!(
@@ -214,8 +212,6 @@ impl<'a> Analyzer<'a> {
                     Some(*position),
                 );
         }
-        // A nullable value struct field (`T?`) boxes to a nullable heap pointer, so `null` is
-        // representable — no rejection (see the non-generic path above).
 
         self.register_struct_methods(new_decl_ref, &mangled_name, &bindings, diagnostics);
         self.register_generic_extension_methods(base_name, &mangled_name, args, diagnostics);

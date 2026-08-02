@@ -8,7 +8,6 @@ use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::semantics::union_table::UnionInfo;
-use crate::syntax::nodes::types::strip_nullable;
 use crate::syntax::nodes::{PatternNode, SwitchArm, Type};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,7 +23,7 @@ impl<'a> Analyzer<'a> {
         scope: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<PatternInfo, SemanticError> {
-        let expected_base = strip_nullable(&expected.get_type()).to_string();
+        let expected_base = expected.get_type();
         let union_info: Option<UnionInfo> = self.union_table.get(&expected_base).cloned();
 
         match pattern {
@@ -235,7 +234,7 @@ impl<'a> Analyzer<'a> {
         if patterns.iter().any(|p| self.pattern_is_irrefutable(p, ty)) {
             return true;
         }
-        let base = strip_nullable(&ty.get_type()).to_string();
+        let base = ty.get_type();
         let Some(info) = self.union_table.get(&base).cloned() else {
             return false;
         };
@@ -278,7 +277,7 @@ impl<'a> Analyzer<'a> {
         match p {
             PatternNode::Wildcard(_) => true,
             PatternNode::Binding(name) => {
-                let base = strip_nullable(&ty.get_type()).to_string();
+                let base = ty.get_type();
                 if let Some(info) = self.union_table.get(&base) {
                     if let Some(v) = info.variant(&name.text) {
                         if v.fields.is_empty() {

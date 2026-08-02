@@ -275,8 +275,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let field_name = self.match_token(TokenKind::IdentifierToken);
                 self.match_token(TokenKind::ColonToken);
 
-                // Parse the full type (supporting generic args like `Map<string, JsonValue>`,
-                // arrays, and nullable suffixes) and store its canonical spelling on the field.
+                // Parse the full type (supporting generic args like `Map<string, JsonValue>`
+                // and arrays) and store its canonical spelling on the field.
                 let type_position = self.current_token().position;
                 let parsed_type = self.parse_type()?;
                 let field_type_token = crate::token::syntax_token::SyntaxToken::new(
@@ -411,21 +411,17 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Parses an `extend Type { ... }` block: a set of methods attached to an existing type
     /// (a primitive, `object`, or a struct). The body holds method declarations only (no
-    /// fields, no `constructor`/`del`). The target name is normalized to its canonical primitive
-    /// spelling (e.g. `String` -> `string`).
+    /// fields, no `constructor`/`del`).
     pub(super) fn parse_extend_declaration(
         &mut self,
     ) -> Result<crate::nodes::ExtendNode<'a>, Error> {
         self.match_token(TokenKind::ExtendToken);
 
-        let mut target = if self.current_token().kind == TokenKind::DataTypeToken {
+        let target = if self.current_token().kind == TokenKind::DataTypeToken {
             self.match_token(TokenKind::DataTypeToken)
         } else {
             self.match_token(TokenKind::IdentifierToken)
         };
-        if let Some(canonical) = crate::nodes::types::canonical_type_name(&target.text) {
-            target.text = canonical.to_string();
-        }
 
         let (generic_parameters, generic_constraints) = self.take_generic_params();
 
@@ -528,10 +524,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else {
             self.match_token(TokenKind::IdentifierToken)
         };
-        // `from_token` only rejects one syntactic shape: a non-reference nullable such as `int?`.
-        // Route that through the diagnostics bag (syntax's single error channel) and recover with a
-        // poison type so parsing continues, rather than fabricating an `io::Error` that aborts the
-        // whole parse.
+        // `from_token` can fail to resolve a type token; route that through the diagnostics bag
+        // (syntax's single error channel) and recover with a poison type so parsing continues,
+        // rather than fabricating an `io::Error` that aborts the whole parse.
         let type_position = type_token.position;
         let mut parsed_type = match Type::from_token(type_token) {
             Ok(t) => t,
@@ -542,8 +537,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         };
 
-        // Resolve a type alias to its underlying type (unless generic args follow). Array/nullable
-        // suffixes below still apply to the resolved type.
+        // Resolve a type alias to its underlying type (unless generic args follow). The array
+        // suffix below still applies to the resolved type.
         if let Type::Struct(token, None) = &parsed_type {
             if self.current_token().kind != TokenKind::SmallerThanToken {
                 if let Some(alias) = self.type_aliases.get(&token.text) {
@@ -566,12 +561,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::OpenBracketToken);
             self.match_token(TokenKind::CloseBracketToken);
             parsed_type = Type::Array(Box::new(parsed_type));
-        }
-
-        // Check for nullable suffix `?`
-        if self.current_token().kind == TokenKind::QuestionMarkToken {
-            self.match_token(TokenKind::QuestionMarkToken);
-            parsed_type = Type::Nullable(Box::new(parsed_type));
         }
 
         Ok(parsed_type)

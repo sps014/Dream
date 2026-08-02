@@ -6,7 +6,6 @@
 
 use super::*;
 use crate::semantics::union_table::UnionInfo;
-use crate::syntax::nodes::types::strip_nullable;
 use crate::syntax::nodes::{PatternNode, SwitchArm, Type};
 
 impl<'a> Analyzer<'a> {
@@ -117,7 +116,7 @@ impl<'a> Analyzer<'a> {
         Vec<(String, Type, crate::hir::HExpr)>,
     )> {
         use crate::hir::{BinOp, HExpr, HExprKind};
-        let base = strip_nullable(&value_type.get_type()).to_string();
+        let base = value_type.get_type();
         match pattern {
             PatternNode::Wildcard(_) => Some((vec![], vec![])),
             PatternNode::Binding(name) => {
@@ -152,7 +151,7 @@ impl<'a> Analyzer<'a> {
                     return None;
                 }
                 let lowered = self.type_ctx.lower(value_type);
-                let union_ty_id = self.type_ctx.interner.strip_nullable(lowered);
+                let union_ty_id = lowered;
                 let mut conds = vec![self.hx_bin(
                     BinOp::Eq,
                     self.hx_disc(value.clone()),

@@ -2,7 +2,7 @@
 //! operations.
 //!
 //! Where HIR keeps structured control flow, MIR desugars everything (if/while/for/foreach/switch/
-//! match/ternary/`&&`/`||`/`??`/async) into blocks joined by [`Terminator`]s. Reference-counting
+//! match/ternary/`&&`/`||`/async) into blocks joined by [`Terminator`]s. Reference-counting
 //! (`Retain`/`Release`) and allocation are explicit [`Statement`]s, which lets the optimization
 //! passes reason about them with ordinary dataflow. The backend  reconstructs
 //! structured WASM control flow from this CFG via a relooper.
@@ -137,6 +137,15 @@ pub enum Statement {
     Retain(Operand),
     /// Decrement the refcount of a reference operand (and free at zero).
     Release(Operand),
+    /// Prints `Operand` (a `string`-typed panic message, always a compile-time-known literal built
+    /// during HIR emission) via the shared `$dream_panic` runtime helper, then traps unconditionally.
+    /// The single, shared halt point for every runtime failure: array/string bounds checks,
+    /// division by zero, bad object-unbox casts, null-reference dereference, and the user-callable
+    /// `panic(msg)` builtin. Like [`Statement::Print`], it is an observable side effect: passes must
+    /// not delete, hoist, or reorder it, and code that follows it in the same block is unreachable at
+    /// runtime (though still validated, since the WASM `unreachable` inside `$dream_panic` — not this
+    /// statement itself — is what actually diverges).
+    Panic(Operand),
     /// A call evaluated for its effect only (return value discarded).
     Call { callee: Callee, args: Vec<Operand> },
     /// An interface method call evaluated for effect only (result dropped if any). See
@@ -162,6 +171,14 @@ pub enum Statement {
     /// side-effecting barrier that optimization passes preserve (they must not reorder observable
     /// operations across it or delete it). Carries no value and reads no locals.
     DebugLine(u32),
+    /// A compile-time-only source-line marker (1-based line within the function's source file),
+    /// always present (unlike [`Statement::DebugLine`], which requires `-g`). Emits no WAT at all:
+    /// the backend just records it as "the current line" so a following automatic runtime check
+    /// (bounds/division/cast) can attribute its panic message to a real line (see
+    /// [`crate::mir::emit::panic_msgs`]). Treated identically to [`Statement::DebugLine`] by every
+    /// pass — an inert, order-preserving barrier — purely so scanning the pre-emission MIR for panic
+    /// call sites (which tracks the same marker) sees the same line the backend will.
+    SourceLine(u32),
 }
 
 /// How a block transfers control. Every block ends in exactly one terminator.

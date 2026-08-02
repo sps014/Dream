@@ -1,6 +1,6 @@
-// A nullable value struct (`Point?`) is stored as a nullable heap pointer to a boxed copy, so
-// `null` is representable. Assignment boxes the value; null-checks compare the pointer; coalescing
-// with a non-null value unboxes it back to an inline `Point`.
+// An optional value struct (`Option<Point>`) replaces the old nullable-value-struct feature:
+// `Some`/`None` make the "no value" case explicit, and `unwrap_or` (the `??` sugar) hands back an
+// inline `Point` either way.
 
 struct Point {
     public x: int;
@@ -8,8 +8,8 @@ struct Point {
     constructor(x: int, y: int) { this.x = x; this.y = y; }
 }
 
-fun show(p: Point?): void {
-    if (p == null) {
+fun show(p: Option<Point>): void {
+    if (p.is_none()) {
         System.println("none");
     } else {
         System.println("some");
@@ -17,8 +17,8 @@ fun show(p: Point?): void {
 }
 
 fun main(): void {
-    let a: Point? = Point(3, 4);
-    let b: Point? = null;
+    let a: Option<Point> = Option.Some(Point(3, 4));
+    let b: Option<Point> = Option.None;
     show(a);
     show(b);
 

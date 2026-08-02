@@ -30,20 +30,37 @@ impl<'a> Analyzer<'a> {
             self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
         let right_hir = self.hir_take();
 
-        // Null-coalescing `a ?? b`: `a` should be nullable; the result is the unwrapped element
-        // type, and `b` must be assignable to it (or itself nullable of the same element type).
+        // `a ?? b`: pure sugar for `a.unwrap_or(b)` on an `Option<T>` left operand — the same
+        // method the stdlib already exposes, just spelled as an operator for the common inline
+        // "unwrap with a default" case. `a` must be `Option<T>`; `b` must be assignable to `T`.
         if opr.kind == TokenKind::QuestionQuestionToken {
-            let result_type = match &left_value {
-                Type::Nullable(inner) => (**inner).clone(),
-                other => other.clone(),
+            let Some((base, args)) = Self::resolve_struct_parts(&left_value) else {
+                diagnostics.report_error(
+                    format!(
+                        "'??' requires an Option<T> operand, got {}",
+                        left_value.display_name()
+                    ),
+                    Some(opr.position),
+                );
+                return Ok(right_value);
             };
-            let right_unwrapped = match &right_value {
-                Type::Nullable(inner) => (**inner).clone(),
-                other => other.clone(),
-            };
-            self.compare_data_type(&result_type, &right_unwrapped, &opr.position, diagnostics)?;
-            self.hir_set_coalesce(left_hir, right_hir, &result_type);
-            return Ok(result_type);
+            if base != "Option" || args.len() != 1 {
+                diagnostics.report_error(
+                    format!(
+                        "'??' requires an Option<T> operand, got {}",
+                        left_value.display_name()
+                    ),
+                    Some(opr.position),
+                );
+                return Ok(right_value);
+            }
+            self.ensure_union_instantiated("Option", &args, &opr.position, diagnostics);
+            let inner = args[0].clone();
+            self.compare_data_type(&inner, &right_value, &opr.position, diagnostics)?;
+            let recv = mangle_generic(&base, &args);
+            let method = method_fn(&recv, "unwrap_or");
+            self.hir_set_method_call(left_hir, &method, vec![right_hir], &inner);
+            return Ok(inner);
         }
 
         // String concatenation: `string + T` (or `T + string`) yields a string, auto-converting
@@ -117,19 +134,15 @@ impl<'a> Analyzer<'a> {
     }
 
     /// If `==`/`!=` on a value of type `left` should dispatch to a user-defined `equals`, returns
-    /// the mangled method symbol (e.g. `Money_equals`). Applies when `left`'s concrete (non-nullable)
-    /// type is a class/struct that implements `Equatable<Self>`; the caller has already verified the
-    /// operands are type-compatible.
+    /// the mangled method symbol (e.g. `Money_equals`). Applies when `left`'s concrete type is a
+    /// class/struct that implements `Equatable<Self>`; the caller has already verified the operands
+    /// are type-compatible.
     fn equatable_equals_fn(&self, left: &Type) -> Option<String> {
         let (base, args) = Self::resolve_struct_parts(left)?;
         let recv = mangle_generic(&base, &args);
         // The interface argument is the receiver type itself (the `Equatable<Self>` convention),
         // mangled exactly as `validate_implements` recorded it.
-        let self_ty = match left {
-            Type::Nullable(inner) => (**inner).clone(),
-            other => other.clone(),
-        };
-        let iface = mangle_generic("Equatable", std::slice::from_ref(&self_ty));
+        let iface = mangle_generic("Equatable", std::slice::from_ref(left));
         if self.class_implements(&recv, &iface) {
             return Some(method_fn(&recv, "equals"));
         }

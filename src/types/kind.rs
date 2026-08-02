@@ -106,8 +106,6 @@ pub enum TyKind {
     Error,
     /// `T[]`, a heap-allocated reference.
     Array(TypeId),
-    /// `T?`, a value of `T` or `null`.
-    Nullable(TypeId),
     /// A user struct/class definition applied to zero or more type arguments (monomorphization is
     /// keyed by `(DefId, args)` rather than a mangled name).
     Struct(DefId, Vec<TypeId>),
@@ -130,8 +128,7 @@ pub enum TyKind {
 
 impl TyKind {
     /// True if a value of this type is a heap-allocated, reference-counted object (strings, arrays,
-    /// objects, structs, and unions). Nullable wrappers defer to their inner type via the interner;
-    /// this method only inspects the immediate kind, so callers strip `Nullable` first when needed.
+    /// objects, structs, and unions).
     pub fn is_reference(&self) -> bool {
         matches!(
             self,

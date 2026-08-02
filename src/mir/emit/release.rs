@@ -7,7 +7,7 @@ use super::*;
 /// `$release_object` since their concrete type is unknown until runtime. Callers guard on
 /// [`TypeInterner::is_reference`] first, so non-reference types never reach here.
 pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: TypeId) -> String {
-    let ty = interner.strip_nullable(ty);
+    let ty = ty;
     match interner.kind(ty) {
         TyKind::Struct(..) | TyKind::Union(..) => {
             if let Some(l) = layouts.structs.get(&ty) {
@@ -85,7 +85,7 @@ fn emit_embedded_value_drop(
     if !interner.is_value_type(f.ty) {
         return;
     }
-    let stripped = interner.strip_nullable(f.ty);
+    let stripped = f.ty;
     if !value_glue.contains(&stripped) {
         return;
     }
@@ -170,7 +170,7 @@ pub(super) fn emit_release_funcs(
                 .iter()
                 .filter(|f| {
                     interner.is_value_type(f.ty)
-                        && value_glue.contains(&interner.strip_nullable(f.ty))
+                        && value_glue.contains(&f.ty)
                 })
                 .collect();
             if value_fields.is_empty() {
@@ -218,9 +218,9 @@ pub(super) fn emit_release_funcs(
             out.push_str(
                 "      (local.get $i) (i32.const 1) (i32.add) (local.set $i) (br $scan)))\n",
             );
-        } else if value_glue.contains(&interner.strip_nullable(elem)) {
+        } else if value_glue.contains(&elem) {
             // Drop each inline element (stride = its inline size) via `$__vs_drop_<T>` at its address.
-            let name = mir.layouts.structs[&interner.strip_nullable(elem)]
+            let name = mir.layouts.structs[&elem]
                 .name
                 .clone();
             let (stride, _) = crate::hir::scalar_size(interner, elem);

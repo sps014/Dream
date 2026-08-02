@@ -70,7 +70,7 @@ impl<'a> Analyzer<'a> {
     /// call site, pointing at `js.object()` / `js.array()`).
     pub(super) fn box_to_js(&mut self, e: HExpr) -> Option<HExpr> {
         let js = self.type_ctx.interner.js();
-        let stripped = self.type_ctx.interner.strip_nullable(e.ty);
+        let stripped = e.ty;
         let kind = self.type_ctx.interner.kind(stripped).clone();
         match kind {
             TyKind::Js => Some(e),
@@ -117,7 +117,7 @@ impl<'a> Analyzer<'a> {
     /// a widening/narrowing cast when `target` is not the bridge's own result type). Used at typed
     /// boundaries by `coerce_to`.
     pub(super) fn unbox_from_js(&mut self, e: HExpr, target: TypeId) -> HExpr {
-        let target_stripped = self.type_ctx.interner.strip_nullable(target);
+        let target_stripped = target;
         // A reference struct/class target reconstructs from the JS object's properties via the
         // generated `$js_to_<Type>` marshaler that the `Cast` dispatches to.
         if matches!(
@@ -167,7 +167,7 @@ impl<'a> Analyzer<'a> {
     /// `enum`, a `fun(js)`/`fun()` callback, and a primitive/`string`/`js` array are all accepted as
     /// they are; any other type returns `None` (a compile error pointing at `js.object()`/`js.array()`).
     fn js_slot_arg(&mut self, e: HExpr) -> Option<HExpr> {
-        let stripped = self.type_ctx.interner.strip_nullable(e.ty);
+        let stripped = e.ty;
         let kind = self.type_ctx.interner.kind(stripped).clone();
         match kind {
             TyKind::Js | TyKind::Enum(_) => Some(e),
@@ -181,7 +181,7 @@ impl<'a> Analyzer<'a> {
                 let ek = self
                     .type_ctx
                     .interner
-                    .kind(self.type_ctx.interner.strip_nullable(elem))
+                    .kind(elem)
                     .clone();
                 match ek {
                     TyKind::Prim(_) | TyKind::Js | TyKind::Enum(_) => Some(e),
@@ -208,7 +208,7 @@ impl<'a> Analyzer<'a> {
             let arg_display = crate::types::display_name(
                 &self.type_ctx.interner,
                 &self.type_ctx.defs,
-                self.type_ctx.interner.strip_nullable(arg.ty),
+                arg.ty,
             );
             match self.js_slot_arg(arg) {
                 Some(a) => out.push(a),

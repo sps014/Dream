@@ -5,7 +5,7 @@ use super::super::super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::intrinsics;
 use crate::semantics::errors::SemanticError;
-use crate::syntax::nodes::types::{mangle_generic, strip_nullable};
+use crate::syntax::nodes::types::mangle_generic;
 use crate::syntax::nodes::{ExpressionNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
@@ -33,7 +33,7 @@ impl<'a> Analyzer<'a> {
         // `arr.size()` / `str.size()`: built-in element-count method on arrays and strings (the same
         // `size()` the stdlib `List`/`Map` expose, so every collection is queried the same way).
         if method.text == intrinsics::SIZE {
-            let base = strip_nullable(&obj_type.get_type()).to_string();
+            let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
                 if !params.is_empty() {
                     diagnostics.report_error(
@@ -50,7 +50,7 @@ impl<'a> Analyzer<'a> {
         }
 
         // `str.char_at(i)`: built-in character accessor on strings (low-level read).
-        if method.text == intrinsics::CHAR_AT && strip_nullable(&obj_type.get_type()) == "string" {
+        if method.text == intrinsics::CHAR_AT && obj_type.get_type() == "string" {
             if params.len() != 1 {
                 diagnostics.report_error(
                     format!(
@@ -89,7 +89,7 @@ impl<'a> Analyzer<'a> {
         if method.text == intrinsics::TO_STRING || method.text == intrinsics::HASH_CODE {
             let receiver_name = match Self::resolve_struct_parts(obj_type) {
                 Some((base_name, generic_args)) => mangle_generic(&base_name, &generic_args),
-                None => strip_nullable(&obj_type.get_type()).to_string(),
+                None => obj_type.get_type(),
             };
             let user_method = method_fn(&receiver_name, &method.text);
             let has_override = self.function_table.is_overloaded(&user_method)

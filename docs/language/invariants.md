@@ -6,7 +6,8 @@ Some rules in Dream are permanent by design, not features waiting to be built. T
 
 Primitive and literal names cannot be reused for a variable, function, parameter, or global:
 
-- Primitives and aliases: `int`, `float`, `double`, `string`, `bool`, `char`, `object`, `void`, `long`, `uint`, `ulong`, `byte`, plus the C#-style spellings `String`, `Int32`, `Int64`, `UInt32`, `UInt64`, `Byte`, `Single`, `Double`, `Boolean`, `Char`, `Object`, `Void`.
+- Primitives: `int`, `float`, `double`, `string`, `bool`, `char`, `object`, `void`, `long`, `uint`, `ulong`, `byte`.
+- Former C#-style spellings (`String`, `Int32`, `Int64`, `UInt32`, `UInt64`, `Byte`, `Single`, `Double`, `Boolean`, `Char`, `Object`, `Void`) are no longer usable as types, but remain reserved as identifiers so old code fails loudly instead of silently shadowing them.
 - Literals: `true`, `false`, `null`.
 
 The print combinators `__print` / `__println` and any `$`-prefixed name are reserved for the compiler.

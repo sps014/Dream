@@ -15,6 +15,7 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 06 | [Relooper & Backend](./06-relooper-and-backend.md) | Recovering structured control flow and emitting WAT |
 | 07 | [Adding a Feature](./07-adding-a-language-feature.md) | A worked example touching every stage |
 | 08 | [Testing & Determinism](./08-testing-and-determinism.md) | How to test, the determinism contract, conventions |
+| 09 | [Nullable Purge Design Note](./09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
 
 ## Why a multi-pass architecture
 

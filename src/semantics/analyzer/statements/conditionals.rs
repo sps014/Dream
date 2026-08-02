@@ -5,7 +5,6 @@ use super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::hir::{HExpr, HStmt};
 use crate::semantics::errors::SemanticError;
-use crate::syntax::nodes::types::strip_nullable;
 use crate::syntax::nodes::{ExpressionNode, StatementNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 
@@ -50,7 +49,7 @@ impl<'a> Analyzer<'a> {
                 let left_t = self
                     .analyze_expression(left, ctx.parent_function, ctx.symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
-                let left_name = strip_nullable(&left_t.get_type()).to_string();
+                let left_name = left_t.get_type();
                 let runtime =
                     left_t.is_object() || left_t.is_unknown() || self.is_interface_name(&left_name);
                 if !runtime {

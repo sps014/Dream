@@ -62,7 +62,12 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     let wasm = wat::parse_str(&wat).map_err(|e| format!("assemble: {e}"))?;
     // Make the module bytes available to `WebWorker` spawns on this thread.
     set_worker_module(&wasm);
-    let engine = Engine::default();
+    // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
+    // recursive `Option<T>`-boxed data structures.
+    let mut config = Config::new();
+    config.max_wasm_stack(16 * 1024 * 1024);
+    config.async_stack_size(20 * 1024 * 1024);
+    let engine = Engine::new(&config).map_err(|e| format!("engine: {e:#}"))?;
     let module = Module::new(&engine, &wasm).map_err(|e| format!("module: {e:#}"))?;
     let mut store = Store::new(&engine, ());
     let mut linker = Linker::new(&engine);

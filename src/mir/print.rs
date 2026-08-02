@@ -28,6 +28,7 @@ fn stmt(s: &Statement) -> String {
         Statement::Assign(p, r) => format!("{} = {}", place(p), rvalue(r)),
         Statement::Retain(o) => format!("retain {}", operand(o)),
         Statement::Release(o) => format!("release {}", operand(o)),
+        Statement::Panic(o) => format!("panic {}", operand(o)),
         Statement::Call { callee, args } => {
             format!("call def{}({})", callee.def.0, ops(args))
         }
@@ -52,6 +53,7 @@ fn stmt(s: &Statement) -> String {
         }
         Statement::Nop => "nop".to_string(),
         Statement::DebugLine(line) => format!("dbg_line {}", line),
+        Statement::SourceLine(line) => format!("src_line {}", line),
     }
 }
 

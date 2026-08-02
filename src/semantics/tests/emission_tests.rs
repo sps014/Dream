@@ -154,10 +154,20 @@ fn test_hir_emission_logical_and_ternary() {
 
 #[test]
 fn test_hir_emission_coalesce() {
-    // `lhs ?? rhs` lowers to a null-test branch joining into one temp.
-    let code = "fun or_default(x: string?): string { return x ?? \"d\"; }";
+    // `lhs ?? rhs` is sugar for `lhs.unwrap_or(rhs)` on an `Option<T>` left operand. This unit test
+    // runs outside the stdlib prelude, so it declares a minimal stand-in `Option<T>` with the
+    // `unwrap_or` method the desugar dispatches to.
+    let code = "
+        enum Option<T> { Some(value: T), None }
+        extend Option<T> {
+            fun unwrap_or(fallback: T): T {
+                return switch (this) { Some(v) => v, None => fallback };
+            }
+        }
+        fun or_default(x: Option<string>): string { return x ?? \"d\"; }
+    ";
     let (wat, count) = emit_hir_to_wat(code);
-    assert_eq!(count, 1, "the coalesce function should be emitted as HIR");
+    assert_eq!(count, 2, "unwrap_or and or_default should be emitted as HIR");
     assert!(
         wat.contains("(func $or_default"),
         "missing emitted function:\n{}",
@@ -374,7 +384,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
     // tag-dispatches to those per-type releases. Non-reference fields (`v: int`) are not released.
     let code = format!(
         "{SYSTEM_STUB}
-        class Node {{ public next: Node?; public v: int;
+        class Node {{ public next: Node; public v: int;
             del() {{ System.print(0); }}
             constructor(v: int) {{ this.v = v; }}
         }}
@@ -919,7 +929,7 @@ fn exec_container_store_retains_no_double_free() {
     // this double-frees `b`.
     let code = format!(
         "{SYSTEM_STUB}
-        class Node {{ public next: Node?;
+        class Node {{ public next: Node;
             del() {{ System.print(1); }}
             constructor() {{ }}
         }}
@@ -1171,7 +1181,7 @@ fn func_value_argument_is_not_reference_counted() {
             if let Operand::Copy(Place::Local(l)) = op {
                 let ty = main.locals[l.0 as usize].ty;
                 if matches!(
-                    interner.kind(interner.strip_nullable(ty)),
+                    interner.kind(ty),
                     crate::types::TyKind::Func(_, _)
                 ) {
                     func_value_rc += 1;
@@ -1238,8 +1248,10 @@ fn test_hir_emission_generic_function_instances() {
 #[test]
 fn test_hir_emission_string_literal() {
     // A string literal resolves to its interned data pointer. The runtime constants are interned
-    // first (`true`/`false`/`-` then the object-protocol `null`/`<object>`/`[`/`]`/`, `/`length`),
-    // so the user's `"hi"` follows them at 1228 (each block carries a 4-byte length prefix, no NUL).
+    // first (`true`/`false`/`-`, then this function's located panic messages — none of which
+    // actually occur here, so only the `line == 0` fallback triple is added — then the
+    // object-protocol `null`/`<object>`/`[`/`]`/`, `/`length`), so the user's `"hi"` follows them at
+    // 1440 (each block carries a 4-byte length prefix, no NUL).
     let code = "fun greet(): string { return \"hi\"; }";
     let (wat, count) = emit_hir_to_wat(code);
     assert_eq!(
@@ -1252,7 +1264,7 @@ fn test_hir_emission_string_literal() {
         wat
     );
     assert!(
-        wat.contains("(i32.const 1228)"),
+        wat.contains("(i32.const 1440)"),
         "string literal should resolve to its data pointer:\n{}",
         wat
     );

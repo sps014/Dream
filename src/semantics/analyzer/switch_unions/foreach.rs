@@ -4,7 +4,6 @@ use super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
-use crate::syntax::nodes::types::strip_nullable;
 use crate::syntax::nodes::{StatementNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use std::cell::RefCell;
@@ -125,7 +124,7 @@ impl<'a> Analyzer<'a> {
 
         // Ensure the concrete `Option<T>` layout is registered so its discriminant/field are known.
         self.ensure_union_instantiated("Option", &opt_args, &element.position, diagnostics);
-        let opt_key = strip_nullable(&next_ret.get_type()).to_string();
+        let opt_key = next_ret.get_type();
         let some_variant = match self
             .union_table
             .get(&opt_key)
@@ -183,7 +182,7 @@ impl<'a> Analyzer<'a> {
         if let (Some(it_l), Some(opt_l), Some(elem_l)) = (it_local, opt_local, elem_slot) {
             let enum_ty_id = self.type_ctx.lower(&enumerator_type);
             let opt_ty_id = self.type_ctx.lower(&next_ret);
-            let union_ty_id = self.type_ctx.interner.strip_nullable(opt_ty_id);
+            let union_ty_id = opt_ty_id;
             let field_ty_id = self.type_ctx.lower(&element_type);
 
             // `$opt = $it.next();`

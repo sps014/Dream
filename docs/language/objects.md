@@ -4,7 +4,7 @@
 
 ## Storing and reading a value
 
-Assigning to an `object` variable automatically **boxes** the value. To read it back, cast with the concrete type; a mismatch traps at runtime:
+Assigning to an `object` variable automatically **boxes** the value. To read it back, cast with the concrete type; a mismatch [panics](panics.md) at runtime (the program prints a message and halts) rather than silently reinterpreting the wrong bytes:
 
 ```dream
 let o: object = 42;       // boxing an int

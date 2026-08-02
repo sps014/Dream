@@ -96,7 +96,7 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
     ---
 
-    Core utilities: `print`, `println`, `to_string`, `hash_code`, `Array<T>`, `Buffer`, `Math`.
+    Core utilities: `print`, `println`, `to_string`, `hash_code`, `List<T>`, `Buffer`, `Math`.
 
     [:octicons-arrow-right-24: Built-ins](stdlib/builtins.md)
 

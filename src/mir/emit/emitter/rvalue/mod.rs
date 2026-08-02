@@ -32,7 +32,7 @@ impl Emitter<'_> {
                 // String equality compares contents, not pointers, via the runtime `$string_eq`.
                 let str_eq = matches!(op, BinOp::Eq | BinOp::Ne)
                     && matches!(
-                        self.interner.kind(self.interner.strip_nullable(ta)),
+                        self.interner.kind(ta),
                         TyKind::Prim(PrimTy::String)
                     );
                 if str_eq {
@@ -48,6 +48,19 @@ impl Emitter<'_> {
                     // Without this a mixed-width pair emits e.g. `i64.gt_s` over an i32 operand,
                     // which fails WASM validation.
                     let common = self.wider_numeric(ta, tb);
+                    let w = self.wasm_ty(common);
+                    // Integer `/`/`%` by zero would otherwise hit WASM's own opaque
+                    // `integer divide by zero` trap (no message, no location); check explicitly and
+                    // route through `$dream_panic` instead so the failure is diagnosable like every
+                    // other runtime check.
+                    if matches!(op, BinOp::Div | BinOp::Rem) && (w == "i32" || w == "i64") {
+                        self.emit_operand(b);
+                        self.emit_numeric_conv(tb, common);
+                        self.line(&format!("     ({}.eqz)", w));
+                        self.line("     (if (then");
+                        self.emit_panic(super::super::panic_msgs::DIVIDE_BY_ZERO);
+                        self.line("     ))");
+                    }
                     self.emit_operand(a);
                     self.emit_numeric_conv(ta, common);
                     self.emit_operand(b);
@@ -358,11 +371,7 @@ impl Emitter<'_> {
                 self.line("     (memory.copy)");
                 self.line("     (local.get $__obj)");
             }
-            Rvalue::CharAt(s, i) => {
-                self.emit_operand(s);
-                self.emit_operand(i);
-                self.line("     (call $char_at)");
-            }
+            Rvalue::CharAt(s, i) => self.emit_char_at(s, i),
             Rvalue::Concat(a, b) => {
                 self.emit_operand(a);
                 self.emit_operand(b);
@@ -413,7 +422,7 @@ impl Emitter<'_> {
                         return;
                     }
                 }
-                match self.interner.kind(self.interner.strip_nullable(oty)) {
+                match self.interner.kind(oty) {
                     // Integer-family values (and enums) are their own hash.
                     TyKind::Prim(
                         PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte,

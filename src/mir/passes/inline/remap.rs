@@ -18,7 +18,7 @@ pub(super) enum WasmKind {
 }
 
 pub(super) fn wasm_kind(interner: &TypeInterner, ty: TypeId) -> WasmKind {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => WasmKind::F64,
         TyKind::Prim(PrimTy::Float) => WasmKind::F32,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => WasmKind::I64,
@@ -59,6 +59,16 @@ fn const_type(c: &Const, interner: &TypeInterner) -> TypeId {
 
 pub(super) fn remap_block(bb: &mut BasicBlock, local_base: u32, block_base: u32) {
     for s in &mut bb.stmts {
+        // A callee's `SourceLine` markers name lines in *its own* source file; spliced verbatim
+        // into the caller they would silently mislabel any checked construct that follows them
+        // (still in the caller's block, now past the inlined body) with the callee's file/line.
+        // Dropping them here leaves the caller's own most-recent marker (from before the call) in
+        // effect through the inlined body instead — a precision loss for checks inside a small
+        // inlined callee, but never a wrong (cross-file) location for the caller's own code.
+        if matches!(s, Statement::SourceLine(_)) {
+            *s = Statement::Nop;
+            continue;
+        }
         remap_stmt(s, local_base);
     }
     remap_terminator(&mut bb.terminator, local_base, block_base);
@@ -160,7 +170,9 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             remap_place(place, base);
             remap_rvalue(rv, base);
         }
-        Statement::Retain(o) | Statement::Release(o) => remap_operand(o, base),
+        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+            remap_operand(o, base)
+        }
         Statement::Call { args, .. } => {
             for a in args {
                 remap_operand(a, base);
@@ -173,7 +185,7 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             }
         }
         Statement::Print { arg, .. } => remap_operand(arg, base),
-        Statement::Nop | Statement::DebugLine(_) => {}
+        Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
 

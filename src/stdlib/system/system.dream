@@ -17,6 +17,12 @@ public class System {
     @js("Dream", "consoleExit")
     static extern fun __exit(code: int): void;
 
+    // Halts the program immediately with `message`, after printing it to standard output. Fatal
+    // and non-recoverable (there is no catch/recover) — the same halt point every automatic
+    // runtime check (bounds, division by zero, bad cast) already uses.
+    @intrinsic("dream_panic")
+    static extern fun panic(message: string): void;
+
     // Reads a line of input from stdin.
     public static fun readLine(): string {
         return System.__read_line();

@@ -173,7 +173,7 @@ fn needs_glue(
     out: &mut HashSet<TypeId>,
     visiting: &mut HashSet<TypeId>,
 ) -> bool {
-    let ty = interner.strip_nullable(ty);
+    let ty = ty;
     if out.contains(&ty) {
         return true;
     }
@@ -276,7 +276,7 @@ pub(super) fn emit_value_glue(
                     .filter(|f| {
                         interner.is_reference(f.ty)
                             || (interner.is_value_type(f.ty)
-                                && glue.contains(&interner.strip_nullable(f.ty)))
+                                && glue.contains(&f.ty))
                     })
                     .collect();
                 if live.is_empty() {
@@ -332,8 +332,8 @@ fn emit_field_glue(
                 );
             }
         }
-    } else if interner.is_value_type(f.ty) && glue.contains(&interner.strip_nullable(f.ty)) {
-        let stripped = interner.strip_nullable(f.ty);
+    } else if interner.is_value_type(f.ty) && glue.contains(&f.ty) {
+        let stripped = f.ty;
         // A nested value field is either a value struct or a value union; resolve its glue name from
         // whichever layout table holds it.
         let name = mir

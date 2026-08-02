@@ -27,6 +27,10 @@ impl Emitter<'_> {
                 self.emit_operand(o);
                 self.line(&format!("     (call {})", call));
             }
+            Statement::Panic(msg) => {
+                self.emit_operand(msg);
+                self.line("     (call $dream_panic)");
+            }
             Statement::Call { callee, args } => {
                 self.emit_call_args(callee, args);
                 self.line(&format!("     (call ${})", self.callee_symbol(callee)));
@@ -58,7 +62,7 @@ impl Emitter<'_> {
                 // every other scalar is first rendered with its in-wasm `*_to_string` and printed as a
                 // string. `println` appends a trailing newline (`\n` = 10) via `$print_char`.
                 self.emit_operand(arg);
-                match self.interner.kind(self.interner.strip_nullable(*ty)) {
+                match self.interner.kind(*ty) {
                     TyKind::Prim(PrimTy::Int) => self.line("     (call $print_int)"),
                     TyKind::Prim(PrimTy::Char) => self.line("     (call $print_char)"),
                     TyKind::Prim(PrimTy::String) => self.line("     (call $print_string)"),
@@ -100,6 +104,9 @@ impl Emitter<'_> {
             }
             Statement::Nop => {}
             Statement::DebugLine(line) => self.emit_debug_line(*line),
+            // Emits nothing: just remembers the line so a following automatic runtime check can
+            // attribute its panic message to it (see `Emitter::current_line`/`Emitter::emit_panic`).
+            Statement::SourceLine(line) => self.current_line = *line,
         }
     }
 

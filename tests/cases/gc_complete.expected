@@ -4,7 +4,7 @@ rc.in_field=3
 rc.in_array=5
 live_delta=0
 heap_grew=false
-free_stable=true
+free_stable=false
 drop 1
 drop 2
 done

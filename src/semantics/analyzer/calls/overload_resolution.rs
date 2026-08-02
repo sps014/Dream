@@ -11,8 +11,8 @@ impl<'a> Analyzer<'a> {
         arg_types: &[String],
     ) -> Result<FunctionTableInfo, String> {
         // Overload viability is a structural relation over interned ids (object widening, enum/int,
-        // numeric, nullable): lower each spelling and defer to `types::overload_compatible` rather
-        // than re-deriving the rules from strings.
+        // numeric): lower each spelling and defer to `types::overload_compatible` rather than
+        // re-deriving the rules from strings.
         let type_ctx = &mut self.type_ctx;
         let compat = |param: &str, arg: &str| {
             let p = type_ctx.lower_str(param);
@@ -40,8 +40,7 @@ impl<'a> Analyzer<'a> {
 
     /// String-level assignability check for argument vs. parameter/field types, mirroring the
     /// rules in [`compare_data_type`] (which works on `Type`). An `expected` type accepts a `given`
-    /// when they are identical, the target is `object`, they are enum/int compatible, or the target
-    /// is nullable (`T?`) and the argument is `T`, `T?`, or the `null` literal (`void?`). Used by
+    /// when they are identical, the target is `object`, or they are enum/int compatible. Used by
     /// constructor-call checking, which only has the type names (not structured `Type`s) available.
     pub(crate) fn type_str_assignable(&mut self, expected: &str, given: &str) -> bool {
         // The poison type unifies with everything so an earlier error never cascades into a
@@ -53,17 +52,17 @@ impl<'a> Analyzer<'a> {
             return true;
         }
         // Directional assignability over interned types: `given` (value) must be assignable to
-        // `expected` (target). Covers identity, `object` widening, enum/int, numeric widening, and
-        // nullable/`null` handling via the structured rules.
+        // `expected` (target). Covers identity, `object` widening, enum/int, and numeric widening
+        // via the structured rules.
         let e = self.type_ctx.lower_str(expected);
         let g = self.type_ctx.lower_str(given);
         if crate::types::assignable(&self.type_ctx.interner, e, g) {
             return true;
         }
         // Implicit upcast to an interface parameter: the argument's concrete class implements it.
-        let iface = crate::syntax::nodes::types::strip_nullable(expected);
+        let iface = expected;
         if self.is_interface_name(iface) {
-            let given_class = crate::syntax::nodes::types::strip_nullable(given);
+            let given_class = given;
             return self.implements_as_interface_ref(given_class, iface);
         }
         false

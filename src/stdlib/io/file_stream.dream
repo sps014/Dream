@@ -41,10 +41,10 @@ public class FileStream {
         if (count < 0) {
             count = 0;
         }
-        let out = String.alloc(count);
+        let out = string.alloc(count);
         let i = 0;
         while (i < count) {
-            String.set(out, i, (char)this.data[this.pos + i]);
+            string.set(out, i, (char)this.data[this.pos + i]);
             i = i + 1;
         }
         this.pos = end;

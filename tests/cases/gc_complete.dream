@@ -9,19 +9,19 @@
 
 class Node {
     public val: int;
-    public next: Node?;
+    public next: Option<Node>;
 
-    constructor(val: int, next: Node?) {
+    constructor(val: int, next: Option<Node>) {
         this.val = val;
         this.next = next;
     }
 }
 
 class Holder {
-    public item: Node?;
+    public item: Option<Node>;
     public label: string;
 
-    constructor(item: Node?, label: string) {
+    constructor(item: Option<Node>, label: string) {
         this.item = item;
         this.label = label;
     }
@@ -43,14 +43,17 @@ class Tracked {
 // --- Allocation patterns, each self-contained so everything is released at scope exit. ---
 
 fun build_chain(): Node {
-    let head = Node(1, null);
-    head.next = Node(2, null);
-    head.next.next = Node(3, null);
+    let no_next: Option<Node> = Option.None;
+    let head = Node(1, no_next);
+    let n3 = Node(3, no_next);
+    let n2 = Node(2, Option.Some(n3));
+    head.next = Option.Some(n2);
     return head;
 }
 
 fun struct_array() {
-    let xs = [Node(1, null), Node(2, null), Node(3, null)];
+    let no_next: Option<Node> = Option.None;
+    let xs = [Node(1, no_next), Node(2, no_next), Node(3, no_next)];
     let total = 0;
     let i = 0;
     while (i < 3) {
@@ -79,25 +82,28 @@ fun string_builder() {
 }
 
 fun field_reassign() {
-    let h = Holder(Node(1, null), "first");
-    h.item = Node(2, null);
+    let no_next: Option<Node> = Option.None;
+    let h = Holder(Option.Some(Node(1, no_next)), "first");
+    h.item = Option.Some(Node(2, no_next));
     h.label = "second";
 }
 
 fun local_reassign() {
-    let n = Node(0, null);
+    let no_next: Option<Node> = Option.None;
+    let n = Node(0, no_next);
     let i = 1;
     while (i <= 4) {
-        n = Node(i, null);
+        n = Node(i, no_next);
         i = i + 1;
     }
 }
 
 fun nullable_paths() {
-    let a: Node? = null;
-    let b: Node? = Node(7, null);
+    let no_next: Option<Node> = Option.None;
+    let a: Option<Node> = Option.None;
+    let b: Option<Node> = Option.Some(Node(7, no_next));
     a = b;
-    b = null;
+    b = Option.None;
 }
 
 fun pass_borrow(n: Node): int {
@@ -105,10 +111,11 @@ fun pass_borrow(n: Node): int {
 }
 
 fun branchy(flag: bool) {
+    let no_next: Option<Node> = Option.None;
     if (flag) {
-        let x = Node(1, null);
+        let x = Node(1, no_next);
     } else {
-        let y = Holder(Node(2, null), "branch");
+        let y = Holder(Option.Some(Node(2, no_next)), "branch");
     }
 }
 
@@ -136,13 +143,14 @@ fun stress() {
 // --- Targeted reference-count assertions. ---
 
 fun check_ref_counts() {
-    let n = Node(1, null);
+    let no_next: Option<Node> = Option.None;
+    let n = Node(1, no_next);
     System.println("rc.fresh=" + Debug.ref_count(n).to_string());
 
     let alias = n;
     System.println("rc.aliased=" + Debug.ref_count(n).to_string());
 
-    let h = Holder(n, "held");
+    let h = Holder(Option.Some(n), "held");
     System.println("rc.in_field=" + Debug.ref_count(n).to_string());
 
     let arr = [n, n];

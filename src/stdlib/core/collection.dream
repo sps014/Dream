@@ -1,5 +1,5 @@
-// `Collection<T>` - the shared interface implemented by the built-in sequence collections
-// (`Array<T>`, `List<T>`). It captures the two primitive operations every ordered collection can
+// `Collection<T>` - the shared interface implemented by the built-in sequence collection
+// (`List<T>`). It captures the two primitive operations every ordered collection can
 // answer - how many elements it holds and how to read one by position - and layers a handful of
 // convenience methods on top as *default* implementations, so a function that accepts any
 // `Collection<T>` can iterate, test emptiness, and peek the ends uniformly.

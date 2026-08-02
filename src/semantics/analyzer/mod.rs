@@ -115,15 +115,13 @@ fn mangle_bindings(base: &str, bindings: &GenericBindings) -> String {
     mangle_with_suffixes(base, bindings.values().map(|concrete| concrete.get_type()))
 }
 
-/// Rewrites a field type token that refers to a generic parameter (e.g. `T`, `T[]`, `T?`)
-/// into its concrete form, preserving the array/nullable suffix. Tokens that do not name a
+/// Rewrites a field type token that refers to a generic parameter (e.g. `T`, `T[]`)
+/// into its concrete form, preserving the array suffix. Tokens that do not name a
 /// generic parameter are returned unchanged.
 fn substitute_generic_token(token: &SyntaxToken, bindings: &GenericBindings) -> SyntaxToken {
     let mut result = token.clone();
     let (base, suffix) = if let Some(base) = token.text.strip_suffix("[]") {
         (base, "[]")
-    } else if let Some(base) = token.text.strip_suffix('?') {
-        (base, "?")
     } else {
         (token.text.as_str(), "")
     };
@@ -134,13 +132,12 @@ fn substitute_generic_token(token: &SyntaxToken, bindings: &GenericBindings) -> 
 }
 
 /// Rewrites a structured field type, substituting any generic parameter that appears in it with
-/// its bound concrete type. Unlike `substitute_generic_token` (which only understands `T`, `T[]`,
-/// `T?` on a flat token), this recurses through arrays, nullables, generic arguments, and function
-/// types, so a field like `List<T>` becomes `List<JsonValue>` rather than being flattened.
+/// its bound concrete type. Unlike `substitute_generic_token` (which only understands `T`, `T[]`
+/// on a flat token), this recurses through arrays, generic arguments, and function types, so a
+/// field like `List<T>` becomes `List<JsonValue>` rather than being flattened.
 pub(crate) fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> Type {
     match ty {
         Type::Array(inner) => Type::Array(Box::new(substitute_generic_type(inner, bindings))),
-        Type::Nullable(inner) => Type::Nullable(Box::new(substitute_generic_type(inner, bindings))),
         Type::Function(params, ret) => Type::Function(
             params
                 .iter()
@@ -549,16 +546,15 @@ impl<'a> Analyzer<'a> {
         primitive_type(name, token.clone()).unwrap_or(Type::Struct(token, None))
     }
 
-    /// If `ty` is a struct (or nullable struct), returns its base name and the list of
-    /// concrete generic type arguments (empty for non-generic structs). Returns `None`
-    /// for any non-struct type. Does NOT recurse into arrays (a method/member access on an
-    /// array is invalid and must surface as an error).
+    /// If `ty` is a struct, returns its base name and the list of concrete generic type
+    /// arguments (empty for non-generic structs). Returns `None` for any non-struct type. Does
+    /// NOT recurse into arrays (a method/member access on an array is invalid and must surface
+    /// as an error).
     fn resolve_struct_parts(ty: &Type) -> Option<(String, Vec<Type>)> {
         match ty {
             Type::Struct(token, args) => {
                 Some((token.text.clone(), args.clone().unwrap_or_default()))
             }
-            Type::Nullable(inner) => Self::resolve_struct_parts(inner),
             _ => None,
         }
     }

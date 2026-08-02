@@ -1,11 +1,6 @@
 use crate::token::syntax_token::SyntaxToken;
 use std::io::Error;
 
-/// Returns the given type name with a single trailing nullable (`?`) suffix removed.
-pub fn strip_nullable(type_name: &str) -> &str {
-    type_name.strip_suffix('?').unwrap_or(type_name)
-}
-
 /// Single source of truth for name mangling: joins `base` with each suffix using `_`
 /// separators, e.g. base `Pair` with `["int", "string"]` becomes `Pair_int_string`.
 /// With no suffixes the base name is returned unchanged.
@@ -32,28 +27,6 @@ pub fn mangle_with_suffixes<S: AsRef<str>>(
 /// arguments the base name is returned unchanged.
 pub fn mangle_generic(base: &str, args: &[Type]) -> String {
     mangle_with_suffixes(base, args.iter().map(|arg| arg.get_type()))
-}
-
-/// Maps a C#/.NET-style type name to its canonical Dream primitive spelling, or returns
-/// `None` if `name` is not a recognized alias. `String`/`Int32`/... become
-/// `string`/`int`/..., so the two spellings are fully interchangeable while every
-/// downstream stage continues to see the lowercase canonical names.
-pub fn canonical_type_name(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "String" => "string",
-        "Int32" => "int",
-        "Int64" => "long",
-        "UInt32" => "uint",
-        "UInt64" => "ulong",
-        "Byte" => "byte",
-        "Single" => "float",
-        "Double" => "double",
-        "Boolean" => "bool",
-        "Char" => "char",
-        "Object" => "object",
-        "Void" => "void",
-        _ => return None,
-    })
 }
 
 /// Constructs the primitive `Type` named by `name`, backed by `token`, or returns `None`
@@ -166,7 +139,6 @@ pub enum Type {
     Array(Box<Type>),
     Struct(SyntaxToken, Option<Vec<Type>>),
     Generic(String),
-    Nullable(Box<Type>),
     /// A first-class function value `fun(params...): ret`. Represented at runtime as an `i32`
     /// index into the module's function table (used with `call_indirect`).
     Function(Vec<Type>, Box<Type>),
@@ -184,8 +156,8 @@ pub const UNKNOWN_TYPE_NAME: &str = "<unknown>";
 
 /// True if `name` is the poison sentinel produced on type errors (see [`Type::Unknown`]).
 pub fn is_unknown_type_name(name: &str) -> bool {
-    // Strip any nullable/array suffixes a caller may have appended before comparing.
-    let base = strip_array(strip_nullable(name));
+    // Strip any array suffix a caller may have appended before comparing.
+    let base = strip_array(name);
     base == UNKNOWN_TYPE_NAME
 }
 
@@ -211,7 +183,6 @@ impl Type {
                 None => token.text.clone(),
             },
             Type::Generic(name) => name.clone(),
-            Type::Nullable(inner) => format!("{}?", inner.get_type()),
             Type::Function(params, ret) => {
                 let params_str = params
                     .iter()
@@ -243,7 +214,6 @@ impl Type {
                 }
                 None => token.text.clone(),
             },
-            Type::Nullable(inner) => format!("{}?", inner.display_name()),
             Type::Function(params, ret) => {
                 let params_str = params
                     .iter()
@@ -261,11 +231,6 @@ impl Type {
     /// True if this is the poison [`Type::Unknown`] produced on a semantic error.
     pub fn is_unknown(&self) -> bool {
         matches!(self, Type::Unknown)
-    }
-
-    /// Returns true if this type is a nullable (`T?`) type.
-    pub fn is_nullable(&self) -> bool {
-        matches!(self, Type::Nullable(_))
     }
 
     /// True if this is the primitive `bool` type (a bare `bool`, not `bool?`/`bool[]`). Structural
@@ -296,13 +261,8 @@ impl Type {
         matches!(self, Type::Array(_))
     }
 
-    /// Returns the type name with any trailing nullable (`?`) suffix removed.
-    pub fn base_name(&self) -> String {
-        strip_nullable(&self.get_type()).to_string()
-    }
-
     /// Returns the source span of the token backing this type, if any.
-    /// Composite types (arrays, nullables) defer to their inner type; `Void`/`Generic`
+    /// Composite types (arrays) defer to their inner type; `Void`/`Generic`
     /// have no backing token and return `None`.
     pub fn get_span(&self) -> Option<dream_text::text_span::TextSpan> {
         match self {
@@ -318,7 +278,7 @@ impl Type {
             | Type::Byte(token)
             | Type::Object(token)
             | Type::Struct(token, _) => Some(token.position),
-            Type::Array(inner) | Type::Nullable(inner) => inner.get_span(),
+            Type::Array(inner) => inner.get_span(),
             Type::Void | Type::Generic(_) | Type::Function(_, _) | Type::Unknown => None,
         }
     }
@@ -341,19 +301,13 @@ impl Type {
             Type::Array(inner) => inner.get_line_str(),
             Type::Struct(token, _) => token.position.get_point_str(),
             Type::Generic(_) => "".to_string(), // Can be improved
-            Type::Nullable(inner) => inner.get_line_str(),
             Type::Function(_, _) => "".to_string(),
             Type::Unknown => "".to_string(),
         }
     }
 
     /// Parses a Type from a given SyntaxToken
-    pub fn from_token(mut token: SyntaxToken) -> Result<Type, Error> {
-        // Normalize C#/.NET-style type names (String, Int32, ...) to their canonical Dream
-        // primitive spelling before any further classification, so the two are interchangeable.
-        if let Some(canonical) = canonical_type_name(&token.text) {
-            token.text = canonical.to_string();
-        }
+    pub fn from_token(token: SyntaxToken) -> Result<Type, Error> {
         if let Some(primitive) = primitive_type(&token.text, token.clone()) {
             return Ok(primitive);
         }
@@ -361,26 +315,6 @@ impl Type {
             "object" => Type::Object(token),
             "void" => Type::Void,
             _ => {
-                if token.text.ends_with("?") {
-                    let base_type_str = &token.text[0..token.text.len() - 1];
-                    let mut base_token = token.clone();
-                    base_token.text = base_type_str.to_string();
-                    let base_type = Type::from_token(base_token)?;
-
-                    // Restrict nullable to reference types
-                    match &base_type {
-                        Type::String(_)
-                        | Type::Object(_)
-                        | Type::Array(_)
-                        | Type::Struct(_, _)
-                        | Type::Void => {
-                            return Ok(Type::Nullable(Box::new(base_type)));
-                        }
-                        _ => {
-                            return Err(Error::other(format!("Type '{}' cannot be nullable. Only reference types (string, arrays, structs) can be nullable.", base_type.get_type())));
-                        }
-                    }
-                }
                 // Handle array types like "int[]" or "Point[]"
                 if token.text.ends_with("[]") {
                     let base_type_str = &token.text[0..token.text.len() - 2];

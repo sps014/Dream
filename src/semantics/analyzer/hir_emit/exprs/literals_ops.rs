@@ -24,8 +24,6 @@ impl<'a> Analyzer<'a> {
                 .and_then(char::from_u32)
                 .map(HExprKind::CharLit),
             Type::String(t) => Some(HExprKind::StringLit(string_lit_value(&t.text))),
-            // The parser models the bare `null` literal as `Nullable(Void)` until its type is known.
-            Type::Nullable(inner) if matches!(**inner, Type::Void) => Some(HExprKind::Null),
             _ => None,
         };
         let mut ty = self.type_ctx.lower(lit);
@@ -155,32 +153,6 @@ impl<'a> Analyzer<'a> {
                         cond: Box::new(cond),
                         then_expr: Box::new(then_expr),
                         else_expr: Box::new(else_expr),
-                    },
-                ));
-            }
-            _ => self.hir.last = None,
-        }
-    }
-
-    /// Records the HIR for null-coalescing `lhs ?? rhs`.
-    pub(in crate::semantics::analyzer) fn hir_set_coalesce(
-        &mut self,
-        lhs: Option<HExpr>,
-        rhs: Option<HExpr>,
-        result_ty: &Type,
-    ) {
-        if !self.active() {
-            self.hir.last = None;
-            return;
-        }
-        match (lhs, rhs) {
-            (Some(lhs), Some(rhs)) => {
-                let ty = self.type_ctx.lower(result_ty);
-                self.hir.last = Some(HExpr::new(
-                    ty,
-                    HExprKind::Coalesce {
-                        lhs: Box::new(lhs),
-                        rhs: Box::new(rhs),
                     },
                 ));
             }

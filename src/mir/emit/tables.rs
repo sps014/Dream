@@ -65,7 +65,7 @@ pub(super) fn func_sig(
     interner: &TypeInterner,
     ty: TypeId,
 ) -> Option<(String, Vec<&'static str>, Option<&'static str>)> {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Func(params, ret) => {
             let mut ptys: Vec<&'static str> =
                 params.iter().map(|p| wasm_ty_of(interner, *p)).collect();
@@ -93,7 +93,7 @@ pub(super) fn func_sig(
 /// True when interface method signature `ty` (a `Func(params, ret)`) returns a value type by the
 /// sret ABI, so its dispatch trampoline and call sites carry a hidden leading destination pointer.
 pub(super) fn func_sig_is_sret(interner: &TypeInterner, ty: TypeId) -> bool {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Func(_, ret) => interner.is_value_type(*ret),
         _ => false,
     }

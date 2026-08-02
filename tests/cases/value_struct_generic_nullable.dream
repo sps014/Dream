@@ -1,5 +1,6 @@
-// A generic field substituted to a nullable value struct (`Wrapper<Point>.inner : Point?`) is now
-// supported: it boxes to a nullable heap pointer, so `null` is representable per instantiation.
+// A generic field substituted to an optional value struct (`Wrapper<Point>.inner : Option<Point>`)
+// is supported per instantiation: `Option<T>` makes "no value" explicit regardless of whether `T`
+// is a value or reference type.
 
 struct Point {
     public x: int;
@@ -10,19 +11,20 @@ struct Point {
 }
 
 struct Wrapper<T> {
-    public inner: T?;
+    public inner: Option<T>;
 
-    constructor(inner: T?) {
+    constructor(inner: Option<T>) {
         this.inner = inner;
     }
 }
 
 fun main(): void {
-    let w = Wrapper<Point>(Point(1));
+    let w = Wrapper<Point>(Option.Some(Point(1)));
     let p: Point = w.inner ?? Point(-1);
     System.println(p.x);
 
-    let empty = Wrapper<Point>(null);
+    let no_point: Option<Point> = Option.None;
+    let empty = Wrapper<Point>(no_point);
     let q: Point = empty.inner ?? Point(-1);
     System.println(q.x);
 }

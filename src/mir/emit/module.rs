@@ -19,7 +19,7 @@ fn build_tables(mir: &crate::mir::Mir, interner: &TypeInterner) -> ModuleTables 
     ModuleTables {
         symbols: symbol_table(mir),
         sigs: signature_table(mir),
-        strings: string_table(mir),
+        strings: string_table(mir, interner),
         tags: struct_tags(mir),
         ftable: func_table(mir),
         value_glue: value_glue_types(mir, interner),
@@ -178,6 +178,8 @@ pub fn emit_module_with_debug(
         out.push('\n');
     }
     out.push_str(&to_string_runtime(&strings));
+    out.push('\n');
+    out.push_str(RUNTIME_PANIC);
     out.push('\n');
     emit_object_protocol(&mut out, mir, interner, &strings, &tags);
     out.push('\n');

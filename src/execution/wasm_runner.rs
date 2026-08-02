@@ -15,7 +15,14 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     // fresh copy of the same module).
     set_worker_module(&wasm_bytes);
 
-    let engine = Engine::default();
+    // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
+    // frame per node through both the struct's and its `Option` wrapper's release function, so the
+    // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up to match
+    // a typical native thread stack.
+    let mut config = Config::new();
+    config.max_wasm_stack(16 * 1024 * 1024);
+    config.async_stack_size(20 * 1024 * 1024);
+    let engine = Engine::new(&config)?;
     let module = Module::new(&engine, &wasm_bytes)?;
 
     let mut store = Store::new(&engine, ());

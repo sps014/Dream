@@ -202,6 +202,9 @@
     i32.const 1
 )
 
+;; Unchecked byte read; every call site emits its own located bounds check first (see
+;; `Emitter::emit_char_at`), so a string-index panic reports a precise file:line instead of the one
+;; bare, unlocated message this shared helper would otherwise be stuck with.
 (func $char_at (param $ptr i32) (param $i i32) (result i32)
     local.get $ptr
     i32.const 4

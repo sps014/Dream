@@ -4,6 +4,18 @@
 
 use super::*;
 
+/// If `ty` is `Option<T>`, returns `T`'s spelling (as written in source); otherwise `None`.
+fn option_inner(ty: &crate::syntax::nodes::Type) -> Option<String> {
+    match ty {
+        crate::syntax::nodes::Type::Struct(token, Some(args))
+            if token.text == "Option" && args.len() == 1 =>
+        {
+            Some(args[0].get_type())
+        }
+        _ => None,
+    }
+}
+
 /// Generates `extend <Class> { fun to_json(): JsonValue {...} static fun from_json(v): <Class> {...} }`
 /// source for a single `@json` class, or `None` (after reporting a diagnostic) if a field type is
 /// outside the supported set (primitives, `string`, other `@json` classes, and arrays of those).
@@ -45,34 +57,34 @@ pub(super) fn generate_json_extend(
             }
         }
 
-        // Nullable field (`T?`): a JSON `null` maps to/from the Dream `null`, otherwise the inner
-        // value is converted as usual. Only reference types can be nullable in Dream, so the inner
-        // type is `string` or another `@json` class (nullable arrays are out of scope).
-        if let Some(base) = ftype.strip_suffix('?') {
+        // Optional field (`Option<T>`): a JSON `null` maps to/from `None`, otherwise the inner
+        // value (`Some`'s payload) is converted as usual. The inner type is `string` or another
+        // `@json` class (optional arrays are out of scope).
+        if let Some(base) = option_inner(&field.field_type) {
             let (to_inner, from_inner) = if base == "string" {
                 (
-                    format!("JsonValue.from_string(this.{f} ?? \"\")", f = fname),
+                    format!("JsonValue.from_string(__v_{f})", f = fname),
                     format!("__src_{f}.as_string()", f = fname),
                 )
-            } else if json_names.contains(base) {
+            } else if json_names.contains(&base) {
                 (
-                    format!("this.{f}.to_json()", f = fname),
+                    format!("__v_{f}.to_json()", f = fname),
                     format!("{c}.from_json(__src_{f})", c = base, f = fname),
                 )
             } else {
                 diagnostics.report_error(
-                    format!("@json class '{}' field '{}' has unsupported nullable type '{}' (only `string?` and nullable @json classes are supported){}", name, fname, ftype, missing_json_hint(base, jsonable)),
+                    format!("@json class '{}' field '{}' has unsupported optional type '{}' (only `Option<string>` and `Option<@json class>` are supported){}", name, fname, ftype, missing_json_hint(&base, jsonable)),
                     Some(field.name.position),
                 );
                 return None;
             };
             to_body.push_str(&format!(
-                "        if (this.{f} == null) {{\n            __o.set(\"{k}\", JsonValue.none());\n        }} else {{\n            __o.set(\"{k}\", {to_inner});\n        }}\n",
+                "        switch (this.{f}) {{\n            Some(__v_{f}) => {{ __o.set(\"{k}\", {to_inner}); }}\n            None => {{ __o.set(\"{k}\", JsonValue.none()); }}\n        }}\n",
                 f = fname, k = json_key, to_inner = to_inner
             ));
             from_prelude.push_str(&format!(
-                "        let __{f}: {ty} = null;\n        let __src_{f} = v.get(\"{k}\").unwrap_or(JsonValue.none());\n        if (__src_{f}.is_null() == false) {{\n            __{f} = {from_inner};\n        }}\n",
-                f = fname, k = json_key, ty = ftype, from_inner = from_inner
+                "        let __{f}: Option<{base}> = Option.None;\n        let __src_{f} = v.get(\"{k}\").unwrap_or(JsonValue.none());\n        if (__src_{f}.is_null() == false) {{\n            __{f} = Option.Some({from_inner});\n        }}\n",
+                f = fname, k = json_key, base = base, from_inner = from_inner
             ));
             from_fields.push(format!("__{f}", f = fname));
             continue;

@@ -235,6 +235,12 @@ pub enum HStmt {
     /// Emitted only when the compiler runs with debug-info enabled; lowers to a `Statement::DebugLine`
     /// in MIR and, ultimately, a call to the host `dream_debug.line` hook. Carries no runtime value.
     DebugLine(u32),
+    /// A compile-time-only marker recording the 1-based source line of the *next* executable
+    /// statement, unconditionally (unlike [`HStmt::DebugLine`], which requires `-g`). Lowers to a
+    /// `Statement::SourceLine` in MIR, which never emits any WAT: the backend just tracks it as "the
+    /// current line" so an automatic runtime check (bounds/division/cast) at that point in the
+    /// statement stream can attribute its panic message to a real source line, at zero runtime cost.
+    SourceLine(u32),
 }
 
 /// One arm of a `switch`.
@@ -290,8 +296,6 @@ pub enum HExprKind {
     BoolLit(bool),
     CharLit(char),
     StringLit(String),
-    /// The `null` literal (typed as `T?` at its use site).
-    Null,
     /// A resolved variable read.
     Var(Binding),
     Binary {
@@ -402,11 +406,6 @@ pub enum HExprKind {
         cond: Box<HExpr>,
         then_expr: Box<HExpr>,
         else_expr: Box<HExpr>,
-    },
-    /// Null-coalescing `lhs ?? rhs`.
-    Coalesce {
-        lhs: Box<HExpr>,
-        rhs: Box<HExpr>,
     },
     /// `await e` used as a value (only valid in the limited await positions; carries the awaited
     /// future's inner type as `ty`).

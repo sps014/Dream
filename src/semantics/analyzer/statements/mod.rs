@@ -60,7 +60,8 @@ impl<'a> Analyzer<'a> {
         const RESERVED_TYPE_AND_LITERAL_NAMES: &[&str] = &[
             "int", "float", "double", "string", "bool", "char", "object", "void", "long", "uint",
             "ulong", "byte",
-            // C#/.NET-style aliases for the primitives (see `canonical_type_name`).
+            // Former C#/.NET-style primitive aliases: no longer usable as types (removed), but
+            // still reserved as identifiers so old code fails loudly instead of silently shadowing.
             "String", "Int32", "Int64", "UInt32", "UInt64", "Byte", "Single", "Double", "Boolean",
             "Char", "Object", "Void", "true", "false", "null",
         ];

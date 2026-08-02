@@ -130,6 +130,12 @@ struct Emitter<'a> {
     /// Debug-info metadata for this function when compiled with source-level debug-info (line hooks
     /// + local spilling). `None` disables all instrumentation (release builds, async bodies).
     debug_fn: Option<&'a crate::mir::emit::debug_map::DebugFunction>,
+    /// The most recent [`Statement::SourceLine`] seen while emitting this function's statements (0
+    /// before the first one). Read by [`Self::emit_panic`] to attribute an automatic runtime check to
+    /// a real source line; see [`crate::mir::emit::panic_msgs`]. `mir::emit::strings::string_table`
+    /// tracks this identically while scanning the same (already fully-optimized) MIR, so the two
+    /// stay in lockstep and every message `emit_panic` looks up is guaranteed pre-interned.
+    current_line: u32,
 }
 
 impl<'a> Emitter<'a> {
@@ -169,6 +175,7 @@ impl<'a> Emitter<'a> {
             async_user_locals,
             debug,
             debug_fn,
+            current_line: 0,
         }
     }
 }
@@ -347,6 +354,25 @@ impl Emitter<'_> {
         })
     }
 
+    /// Emits `(i32.const <addr>) (call $dream_panic)` for one of the fixed panic message bases (see
+    /// [`super::panic_msgs`]) — the shared halt point every automatic runtime check (bounds,
+    /// division by zero, bad cast) funnels through. The message is *located*: `base` is combined
+    /// with the current function's file/name (already on [`Emitter::func`]) and [`Self::current_line`]
+    /// (kept up to date by `Statement::SourceLine` markers as statements are emitted — see
+    /// [`super::panic_msgs::located`]) so the failure is attributable to a real source line without
+    /// threading source spans through MIR. Always emitted inside an unconditional branch of an `if`;
+    /// the caller is responsible for the guarding comparison.
+    fn emit_panic(&mut self, base: &str) {
+        let msg = super::panic_msgs::located(
+            base,
+            self.func.file.as_deref(),
+            &self.func.name,
+            self.current_line,
+        );
+        self.line(&format!("     (i32.const {})", self.string_addr(&msg)));
+        self.line("     (call $dream_panic)");
+    }
+
     /// Pushes the address of `base.field` (`base + offset`) onto the stack.
     fn field_addr(&mut self, base: crate::mir::Local, offset: u32) {
         self.line(&format!("     (local.get ${})", base.0));
@@ -356,10 +382,27 @@ impl Emitter<'_> {
         }
     }
 
+    /// Traps via `$dream_panic` if `index` (reinterpreted as unsigned, so a negative index also
+    /// trips it as a huge positive value) is `>=` the length stored at `base`'s heap header (offset
+    /// 0 — see the array/string layout comments on [`elem_addr`]/`$char_at`). `len_addr` computes
+    /// the address holding the length (usually just `base`, but callers pass a projected address
+    /// for other layouts, e.g. a string's payload pointer).
+    fn emit_bounds_check(&mut self, len_addr: impl FnOnce(&mut Self), index: &Operand) {
+        self.emit_operand(index);
+        len_addr(self);
+        self.line("     (i32.load)");
+        self.line("     (i32.ge_u)");
+        self.line("     (if (then");
+        self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
+        self.line("     ))");
+    }
+
     /// Pushes the address of `base[index]` (`base + 4 + index * elem_size`) onto the stack. The
-    /// length occupies the first word, so element 0 is at offset 4.
+    /// length occupies the first word, so element 0 is at offset 4. Checked: traps via `$dream_panic`
+    /// if `index` is out of range (see [`Self::emit_bounds_check`]).
     fn elem_addr(&mut self, base: crate::mir::Local, elem_ty: TypeId, index: &Operand) {
         let (size, _) = scalar_size(self.interner, elem_ty);
+        self.emit_bounds_check(|s| s.line(&format!("     (local.get ${})", base.0)), index);
         self.line(&format!("     (local.get ${})", base.0));
         self.line("     (i32.const 4)");
         self.line("     (i32.add)");
@@ -369,10 +412,23 @@ impl Emitter<'_> {
         self.line("     (i32.add)");
     }
 
+    /// Emits a checked `s[i]` (`char At(int)`): a located bounds check (see
+    /// [`Self::emit_bounds_check`]) ahead of the raw `$char_at` byte read, which no longer checks
+    /// internally — moving the check to the call site gives string indexing the same precise
+    /// file:line attribution as array indexing, rather than the one bare message a shared runtime
+    /// helper could otherwise give every caller.
+    fn emit_char_at(&mut self, s: &Operand, i: &Operand) {
+        let s_for_check = s.clone();
+        self.emit_bounds_check(move |slf| slf.emit_operand(&s_for_check), i);
+        self.emit_operand(s);
+        self.emit_operand(i);
+        self.line("     (call $char_at)");
+    }
+
     /// The struct field's `(byte offset, type)` from the layout table, or `None` when `base` is not a
     /// laid-out nominal type (e.g. a union, or a type whose layout was not recorded).
     fn field_layout(&self, base: crate::mir::Local, field: usize) -> Option<(u32, TypeId)> {
-        let bty = self.interner.strip_nullable(self.func.local_ty(base));
+        let bty = self.func.local_ty(base);
         // Layouts are keyed by the full (monomorphized) type id, so `Box<int>` and `Box<string>`
         // resolve to their own field widths.
         let f = self.layouts.get(bty)?.fields.get(field)?;
@@ -383,7 +439,7 @@ impl Emitter<'_> {
     fn array_elem_ty(&self, base: crate::mir::Local) -> Option<TypeId> {
         match self
             .interner
-            .kind(self.interner.strip_nullable(self.func.local_ty(base)))
+            .kind(self.func.local_ty(base))
         {
             TyKind::Array(e) => Some(*e),
             _ => None,
@@ -481,7 +537,7 @@ impl Emitter<'_> {
     fn binop_instr(&self, op: BinOp, ty: TypeId) -> String {
         let w = self.wasm_ty(ty);
         let signed = !matches!(
-            self.interner.kind(self.interner.strip_nullable(ty)),
+            self.interner.kind(ty),
             TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
         );
         let s = if signed { "_s" } else { "_u" };

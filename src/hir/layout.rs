@@ -19,7 +19,7 @@ pub fn scalar_size(interner: &TypeInterner, ty: TypeId) -> (u32, u32) {
     if let Some(sz) = interner.value_layout(ty) {
         return sz;
     }
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         // Delegates to `PrimTy::size_align` (see there) so this agrees byte-for-byte with the
         // string-keyed `crate::types::naming::value_size_align` used by the legacy struct tables.
         TyKind::Prim(p) => p.size_align(),

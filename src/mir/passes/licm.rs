@@ -270,14 +270,14 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             place_base_reads(place, f);
             rvalue_reads(rv, f);
         }
-        Statement::Retain(o) | Statement::Release(o) => operand_reads(o, f),
+        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => operand_reads(o, f),
         Statement::Call { args, .. } => args.iter().for_each(|a| operand_reads(a, f)),
         Statement::InterfaceCall { receiver, args, .. } => {
             operand_reads(receiver, f);
             args.iter().for_each(|a| operand_reads(a, f));
         }
         Statement::Print { arg, .. } => operand_reads(arg, f),
-        Statement::Nop | Statement::DebugLine(_) => {}
+        Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
 

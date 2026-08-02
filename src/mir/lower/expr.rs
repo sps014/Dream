@@ -1,5 +1,5 @@
 //! Expression lowering to [`Operand`]/[`Rvalue`]/[`Place`], including the short-circuiting forms
-//! (`&&`/`||`/`?:`/`??`) and `await`. Split out of `lower.rs`; these are methods on the parent's
+//! (`&&`/`||`/`?:`) and `await`. Split out of `lower.rs`; these are methods on the parent's
 //! private `Lowerer`.
 
 use super::*;
@@ -8,7 +8,7 @@ impl Lowerer<'_> {
     /// Selects the integer constant width from the literal's static type: `long`/`ulong` lower to a
     /// 64-bit [`Const::Long`], everything else (`int`/`uint`/`byte`) to a 32-bit [`Const::Int`].
     fn int_const(&self, ty: TypeId, v: i64) -> Const {
-        match self.interner.kind(self.interner.strip_nullable(ty)) {
+        match self.interner.kind(ty) {
             TyKind::Prim(PrimTy::Long | PrimTy::ULong) => Const::Long(v),
             _ => Const::Int(v),
         }
@@ -17,7 +17,7 @@ impl Lowerer<'_> {
     /// Selects the float constant width from the literal's static type: `float` lowers to a 32-bit
     /// [`Const::F32`], `double` (and anything else) to a 64-bit [`Const::Float`].
     fn float_const(&self, ty: TypeId, v: f64) -> Const {
-        match self.interner.kind(self.interner.strip_nullable(ty)) {
+        match self.interner.kind(ty) {
             TyKind::Prim(PrimTy::Float) => Const::F32(v as f32),
             _ => Const::Float(v),
         }
@@ -31,7 +31,6 @@ impl Lowerer<'_> {
             HExprKind::BoolLit(v) => Operand::Const(Const::Bool(*v)),
             HExprKind::CharLit(v) => Operand::Const(Const::Char(*v)),
             HExprKind::StringLit(s) => Operand::Const(Const::Str(s.clone())),
-            HExprKind::Null => Operand::Const(Const::Null),
             HExprKind::EnumValue(v) => Operand::Const(Const::Int(*v)),
             HExprKind::Var(Binding::Local(l)) => Operand::Copy(Place::Local(self.mir_local(*l))),
             HExprKind::Var(Binding::Global(g)) => {
@@ -39,7 +38,6 @@ impl Lowerer<'_> {
             }
             HExprKind::Binary { op, .. } if op.is_logical() => self.lower_short_circuit(e),
             HExprKind::Ternary { .. } => self.lower_ternary(e),
-            HExprKind::Coalesce { .. } => self.lower_coalesce(e),
             // In a coroutine, `await` is a suspend point that splits the current block; elsewhere the
             // outer await is a no-op wrapper (the value is the inner future expression).
             HExprKind::Await(inner) => {
@@ -333,49 +331,6 @@ impl Lowerer<'_> {
         self.b.switch_to(else_blk);
         let ev = self.lower_operand(else_e);
         self.b.assign(Place::Local(result), Rvalue::Use(ev));
-        self.b.terminate(Terminator::Goto(join));
-
-        self.b.switch_to(join);
-        Operand::Copy(Place::Local(result))
-    }
-
-    fn lower_coalesce(&mut self, e: &HExpr) -> Operand {
-        // `lhs ?? rhs`: result = lhs unless lhs is null, then rhs.
-        let (lhs, rhs) = match &e.kind {
-            HExprKind::Coalesce { lhs, rhs } => (lhs, rhs),
-            _ => unreachable!(),
-        };
-        let result = self.b.new_temp(e.ty);
-        let l = self.operand_into_local(lhs);
-
-        let is_null = self.b.new_temp(self.interner.bool());
-        self.b.assign(
-            Place::Local(is_null),
-            Rvalue::Binary(
-                super::super::BinOp::Eq,
-                Operand::Copy(Place::Local(l)),
-                Operand::Const(Const::Null),
-            ),
-        );
-        let rhs_blk = self.b.new_block();
-        let lhs_blk = self.b.new_block();
-        let join = self.b.new_block();
-        self.b.terminate(Terminator::If {
-            cond: Operand::Copy(Place::Local(is_null)),
-            then_blk: rhs_blk,
-            else_blk: lhs_blk,
-        });
-
-        self.b.switch_to(lhs_blk);
-        self.b.assign(
-            Place::Local(result),
-            Rvalue::Use(Operand::Copy(Place::Local(l))),
-        );
-        self.b.terminate(Terminator::Goto(join));
-
-        self.b.switch_to(rhs_blk);
-        let rv = self.lower_operand(rhs);
-        self.b.assign(Place::Local(result), Rvalue::Use(rv));
         self.b.terminate(Terminator::Goto(join));
 
         self.b.switch_to(join);

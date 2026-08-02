@@ -115,14 +115,16 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_place_base(place, read);
             read_rvalue(rvalue, read);
         }
-        Statement::Retain(o) | Statement::Release(o) => read_operand(o, read),
+        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+            read_operand(o, read)
+        }
         Statement::Call { args, .. } => args.iter().for_each(|a| read_operand(a, read)),
         Statement::InterfaceCall { receiver, args, .. } => {
             read_operand(receiver, read);
             args.iter().for_each(|a| read_operand(a, read));
         }
         Statement::Print { arg, .. } => read_operand(arg, read),
-        Statement::Nop | Statement::DebugLine(_) => {}
+        Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
 

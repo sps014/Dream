@@ -76,7 +76,12 @@ fn run_program(
     let wasm_bytes = wat::parse_str(&wat_content)?;
     crate::execution::host::set_worker_module(&wasm_bytes);
 
-    let engine = Engine::default();
+    // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
+    // recursive `Option<T>`-boxed data structures.
+    let mut config = Config::new();
+    config.max_wasm_stack(16 * 1024 * 1024);
+    config.async_stack_size(20 * 1024 * 1024);
+    let engine = Engine::new(&config)?;
     let module = Module::new(&engine, &wasm_bytes)?;
     let mut store = Store::new(&engine, ());
     let mut linker: Linker<()> = Linker::new(&engine);

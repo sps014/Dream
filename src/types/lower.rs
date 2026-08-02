@@ -112,10 +112,6 @@ impl TypeCtx {
                 let e = self.lower_with(inner, bindings);
                 self.interner.array(e)
             }
-            Type::Nullable(inner) => {
-                let i = self.lower_with(inner, bindings);
-                self.interner.nullable(i)
-            }
             Type::Function(params, ret) => {
                 let ps = params
                     .iter()
@@ -133,9 +129,9 @@ impl TypeCtx {
                 if let Some(bound) = bindings.get(name) {
                     return *bound;
                 }
-                // A bare name (no structured args) may be stringly-reconstructed and encode array/
-                // nullable suffixes, a primitive spelling, or a pre-mangled generic instance; route
-                // it through name-based lowering so every spelling of a type interns identically.
+                // A bare name (no structured args) may be stringly-reconstructed and encode an array
+                // suffix, a primitive spelling, or a pre-mangled generic instance; route it through
+                // name-based lowering so every spelling of a type interns identically.
                 if generic_args.is_none() {
                     return self.lower_name(name, bindings);
                 }
@@ -168,9 +164,9 @@ impl TypeCtx {
     }
 
     /// Lowers a bare type *name* (as opposed to a structured AST node) to an interned id, absorbing
-    /// the stringly-typed spellings the legacy pipeline still produces: array (`T[]`) and nullable
-    /// (`T?`) suffixes, primitive names, `object`/`void`, pre-mangled generic instances, and nominal
-    /// references. This keeps every spelling of the same type interning to one [`TypeId`].
+    /// the stringly-typed spellings the legacy pipeline still produces: array (`T[]`) suffixes,
+    /// primitive names, `object`/`void`, pre-mangled generic instances, and nominal references. This
+    /// keeps every spelling of the same type interning to one [`TypeId`].
     fn lower_name(&mut self, name: &str, bindings: &IndexMap<String, TypeId>) -> TypeId {
         if let Some(&bound) = bindings.get(name) {
             return bound;
@@ -178,10 +174,6 @@ impl TypeCtx {
         if let Some(base) = name.strip_suffix("[]") {
             let inner = self.lower_name(base, bindings);
             return self.interner.array(inner);
-        }
-        if let Some(base) = name.strip_suffix('?') {
-            let inner = self.lower_name(base, bindings);
-            return self.interner.nullable(inner);
         }
         if let Some(prim) = PrimTy::from_name(name) {
             return self.interner.prim(prim);

@@ -59,11 +59,17 @@ impl MirPass for Dse {
                     | Statement::InterfaceCall { .. }
                     | Statement::Print { .. }
                     | Statement::Retain(_)
-                    | Statement::Release(_) => pending.clear(),
+                    | Statement::Release(_)
+                    | Statement::Panic(_) => pending.clear(),
                     // A debug line-hook is an observable host call: it must see every prior store, so
                     // it forgets all pending (still-eliminable) stores.
                     Statement::DebugLine(_) => pending.clear(),
-                    Statement::Nop => {}
+                    // Unlike `DebugLine`, this marker is never lowered to any runtime call (see
+                    // `Statement::SourceLine`), so it observes no memory and is not a barrier: DSE may
+                    // freely eliminate stores across it. It also never moves (DSE only nulls out dead
+                    // statements in place), so this cannot desync it from the pre-emission scan in
+                    // `mir::emit::strings::string_table`.
+                    Statement::SourceLine(_) | Statement::Nop => {}
                 }
             }
             if !dead.is_empty() {

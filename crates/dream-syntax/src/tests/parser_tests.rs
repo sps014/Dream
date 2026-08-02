@@ -493,7 +493,7 @@ fn test_parse_error_recovery() {
 #[test]
 fn test_parse_nested_generic_type_annotation() {
     // Nested generics close with `>>` (a single ShiftRight token); the parser must split it.
-    let code = "fun main(): void { let b: Box<Box<int>> = null; }";
+    let code = "fun main(): void { let b: Box<Box<int>> = make(); }";
     let arena = bumpalo::Bump::new();
     let (_, diagnostics) = parse_code(code, &arena);
     assert_eq!(diagnostics.has_errors(), false);
@@ -734,7 +734,7 @@ fn fuzz_random_token_soup_never_panics() {
         "await",
         "true",
         "false",
-        "null",
+        "is",
         "int",
         "string",
         "bool",

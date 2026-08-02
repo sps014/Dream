@@ -50,7 +50,7 @@ impl MirPass for Algebraic {
 /// True for the unsigned integer primitives, whose `/` and `%` map to `shr_u` / `and`.
 fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
     matches!(
-        interner.kind(interner.strip_nullable(ty)),
+        interner.kind(ty),
         TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
     )
 }
@@ -59,7 +59,7 @@ fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
 /// integer shifts/masks (see the guard in [`Algebraic::run`]).
 fn is_float(interner: &TypeInterner, ty: TypeId) -> bool {
     matches!(
-        interner.kind(interner.strip_nullable(ty)),
+        interner.kind(ty),
         TyKind::Prim(PrimTy::Float | PrimTy::Double)
     )
 }

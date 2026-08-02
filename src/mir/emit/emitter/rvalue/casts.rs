@@ -39,31 +39,26 @@ impl Emitter<'_> {
             self.line(&format!("     (call {})", sym));
             return;
         }
-        // Boxing a value struct into a reference target (`object`, an interface, or a nullable value
-        // struct `T?`): allocate a tagged heap block, byte-copy the inline value in, and retain the
-        // copy's embedded references. The result is a refcounted heap object indistinguishable from
-        // a class instance for dynamic dispatch, the object protocol, and deep release.
-        let to_ref = self.interner.strip_nullable(to);
-        let from_bare = self.interner.strip_nullable(from);
+        // Boxing a value struct into a reference target (`object` or an interface): allocate a
+        // tagged heap block, byte-copy the inline value in, and retain the copy's embedded
+        // references. The result is a refcounted heap object indistinguishable from a class
+        // instance for dynamic dispatch, the object protocol, and deep release.
         let to_is_ref_box = matches!(
-            self.interner.kind(to_ref),
+            self.interner.kind(to),
             TyKind::Object | TyKind::Interface(..)
-        ) || self.interner.is_nullable_boxed_value(to);
-        if to_is_ref_box
-            && self.interner.is_value_type(from_bare)
-            && !self.interner.is_nullable_boxed_value(from)
-        {
-            self.emit_box_value_struct(o, from_bare);
+        );
+        if to_is_ref_box && self.interner.is_value_type(from) {
+            self.emit_box_value_struct(o, from);
             return;
         }
         let from_prim = prim_of(self.interner, from);
         let to_prim = prim_of(self.interner, to);
         let to_is_object = matches!(
-            self.interner.kind(self.interner.strip_nullable(to)),
+            self.interner.kind(to),
             TyKind::Object
         );
         let from_is_object = matches!(
-            self.interner.kind(self.interner.strip_nullable(from)),
+            self.interner.kind(from),
             TyKind::Object
         );
         // Boxing a primitive into `object` (reference types are already pointers → identity).
@@ -74,11 +69,25 @@ impl Emitter<'_> {
             }
             return;
         }
-        // Unboxing `object` to a primitive (or leaving a reference pointer as-is).
+        // Unboxing `object` to a primitive (or leaving a reference pointer as-is). An unbox to the
+        // wrong primitive checks the boxed value's runtime tag first and panics on mismatch, instead
+        // of silently reinterpreting the wrong bytes (e.g. reading a boxed `string`'s data pointer as
+        // an `int`).
         if from_is_object {
-            self.emit_operand(o);
             if let Some(unboxfn) = to_prim.and_then(unbox_fn_for) {
+                if let Some(expected_tag) = runtime_tag_for(self.interner, self.tags, to) {
+                    self.emit_operand(o);
+                    self.line("     (call $object_tag)");
+                    self.line(&format!("     (i32.const {})", expected_tag));
+                    self.line("     (i32.ne)");
+                    self.line("     (if (then");
+                    self.emit_panic(super::super::super::panic_msgs::INVALID_CAST);
+                    self.line("     ))");
+                }
+                self.emit_operand(o);
                 self.line(&format!("     (call {})", unboxfn));
+            } else {
+                self.emit_operand(o);
             }
             return;
         }
@@ -124,7 +133,7 @@ impl Emitter<'_> {
             let (fw, tw) = (fw.as_str(), tw.as_str());
             let int_signed = |ty: TypeId| {
                 !matches!(
-                    self.interner.kind(self.interner.strip_nullable(ty)),
+                    self.interner.kind(ty),
                     TyKind::Prim(PrimTy::UInt | PrimTy::ULong | PrimTy::Byte)
                 )
             };

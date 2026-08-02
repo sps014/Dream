@@ -22,7 +22,7 @@ for (let c in s) {
 Indexing is read-only (no `s[i] = c`). Build derived strings with `substring`, `+`, or the low-level `String.alloc`/`String.set` helpers.
 
 !!! note
-    `char_at` and `s[i]` do no bounds checking.
+    `char_at` and `s[i]` [panic](../language/panics.md) on an out-of-range (including negative) index: the program prints a message and halts, rather than reading past the string's data.
 
 ## Searching
 

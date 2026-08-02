@@ -1,5 +1,5 @@
 // Named tuning constants shared by the stdlib collections, so the near-identical growable-sequence
-// (`Array<T>`/`List<T>`) and open-addressing hash-table (`Set<T>`/`Map<K, V>`) implementations
+// (`List<T>`) and open-addressing hash-table (`Set<T>`/`Map<K, V>`) implementations
 // cannot silently disagree on what a magic number means.
 //
 // These are plain zero-argument functions rather than top-level `const` globals because the
@@ -15,7 +15,7 @@
 public fun sequence_min_capacity(): int { return 4; }
 
 // A hash-table probe slot has never been occupied. Also the sentinel value that ends a probe
-// sequence in `find`/`add`/`put` (searching stops at the first empty slot).
+// sequence in `find`/`add`/`set` (searching stops at the first empty slot).
 public fun hash_slot_empty(): int { return 0; }
 // A hash-table probe slot currently holds a live key/value.
 public fun hash_slot_occupied(): int { return 1; }

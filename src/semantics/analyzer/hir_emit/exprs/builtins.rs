@@ -23,7 +23,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         };
-        let base = self.type_ctx.interner.strip_nullable(arg.ty);
+        let base = arg.ty;
         // Scalars print directly; enums print as their `int` value; every reference type (struct,
         // union, array, `object`) renders through the backend's tag-dispatching `$print_object`.
         let printable = matches!(
@@ -65,7 +65,7 @@ impl<'a> Analyzer<'a> {
                 let is_string = matches!(
                     self.type_ctx
                         .interner
-                        .kind(self.type_ctx.interner.strip_nullable(e.ty)),
+                        .kind(e.ty),
                     TyKind::Prim(PrimTy::String)
                 );
                 let kind = if is_string {
@@ -153,7 +153,7 @@ impl<'a> Analyzer<'a> {
         if ty.is_string() {
             return e;
         }
-        let base = crate::syntax::nodes::types::strip_nullable(&ty.get_type()).to_string();
+        let base = ty.get_type();
         if let Some(members) = self.enum_table.get(&base) {
             let arms: Vec<(i64, String)> = members
                 .iter()

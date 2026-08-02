@@ -68,7 +68,7 @@ let first = nums[0];   // 10
 nums[1] = 99;
 ```
 
-For a growable sequence, use [`List<T>`](../stdlib/collections.md) or `Array<T>`. See [Arrays](arrays.md) for the full story.
+For a growable sequence, use [`List<T>`](../stdlib/collections.md). See [Arrays](arrays.md) for the full story.
 
 ## Nullable types
 
@@ -80,6 +80,8 @@ node = Node(5, null);
 ```
 
 Primitives cannot be nullable. Use `??` to supply a fallback (see [Operators](operators.md)).
+
+Dereferencing a `null` nullable value (e.g. reading a field or array element through it) [panics](panics.md) rather than reading a bogus address.
 
 ## User-defined types
 

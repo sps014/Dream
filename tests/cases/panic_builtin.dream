@@ -1,0 +1,7 @@
+// The user-callable `System.panic(msg)` builtin: prints the message, then halts fatally
+// (no catch/recover — matching every automatic runtime check).
+fun main(): void {
+    System.println("before");
+    System.panic("boom: something went wrong");
+    System.println("after");
+}

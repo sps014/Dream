@@ -1,0 +1,9 @@
+// Integer division/remainder by zero must halt with a diagnosable message rather than the
+// opaque native WASM "integer divide by zero" trap.
+fun main(): void {
+    let a = 10;
+    let b = 0;
+    System.println("before");
+    System.println(a / b);
+    System.println("after");
+}

@@ -63,7 +63,9 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             c |= subst_rvalue_reads(rvalue, known);
             c
         }
-        Statement::Retain(o) | Statement::Release(o) => subst_operand(o, known),
+        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+            subst_operand(o, known)
+        }
         Statement::Call { args, .. } => args
             .iter_mut()
             .fold(false, |c, a| c | subst_operand(a, known)),
@@ -75,7 +77,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             c
         }
         Statement::Print { arg, .. } => subst_operand(arg, known),
-        Statement::Nop | Statement::DebugLine(_) => false,
+        Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => false,
     }
 }
 

@@ -78,7 +78,7 @@ pub(crate) mod tag {
 /// `FUNC` slot (so the host wraps the funcref with the right arity); it is `0` otherwise. The payload
 /// store is `i64.store`/`f64.store` for wide scalars, else `i32.store`.
 pub(crate) fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, &'static str) {
-    let stripped = interner.strip_nullable(ty);
+    let stripped = ty;
     match interner.kind(stripped) {
         TyKind::Js => (tag::JS, 0, "i32.store"),
         TyKind::Enum(_) => (tag::INT, 0, "i32.store"),

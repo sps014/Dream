@@ -34,7 +34,7 @@ fun main(): void {
     let squares = Map<int, int>();
     let n = 0;
     while (n < 64) {
-        squares.put(n, n * n);
+        squares.set(n, n * n);
         n = n + 1;
     }
     System.println(squares.size());

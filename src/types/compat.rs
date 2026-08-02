@@ -1,6 +1,6 @@
 //! Structural type relations over interned [`TypeId`]s: numeric widening and assignability. These
 //! replace the string-comparison rules (`compare_data_type`, `type_str_assignable`,
-//! `overload_arg_compatible`) with `TypeId`-equality plus explicit widen/nullable handling.
+//! `overload_arg_compatible`) with `TypeId`-equality plus explicit widen handling.
 
 use super::{PrimTy, TyKind, TypeId, TypeInterner};
 
@@ -35,8 +35,8 @@ pub fn numeric_widen(from: PrimTy, to: PrimTy) -> bool {
 
 /// True if a value of type `value` may be assigned to a binding/parameter of type `target`. Encodes
 /// the same rules as the legacy string checks: `Error` poison is bidirectionally compatible, any
-/// value widens into `object`, enums interconvert with `int`, numeric primitives widen per the
-/// lattice, and nullable targets accept the bare inner type or the `null` literal (`void?`).
+/// value widens into `object`, enums interconvert with `int`, and numeric primitives widen per the
+/// lattice.
 pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> bool {
     if target == value {
         return true;
@@ -53,16 +53,15 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
         return true;
     }
 
-    // The dynamic `js` type: any primitive/`string`/`null` boxes into `js`, and a `js` value
-    // unboxes into any primitive/`string`. The actual box/unbox conversion is materialized by the
-    // analyzer's coercion pass; here we only permit the assignment to type-check. `js <-> js` is the
-    // identity handled above.
+    // The dynamic `js` type: any primitive/`string` boxes into `js`, and a `js` value unboxes into
+    // any primitive/`string`. The actual box/unbox conversion is materialized by the analyzer's
+    // coercion pass; here we only permit the assignment to type-check. `js <-> js` is the identity
+    // handled above.
     // A struct/class also deep-copies into a `js` object and reconstructs from one (the backend
     // generates the `$<Type>_to_js` / `$js_to_<Type>` marshalers); reconstruction targets a reference
     // class only.
     if matches!(tk, TyKind::Js) {
-        return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..))
-            || is_null_literal(interner, value);
+        return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..));
     }
     if matches!(vk, TyKind::Js) {
         if matches!(tk, TyKind::Prim(_)) {
@@ -86,32 +85,7 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
         }
     }
 
-    // Nullable target: accept `T`, `T?` (handled by eq above), or the `null` literal (`void?`).
-    if let TyKind::Nullable(inner) = tk {
-        if is_null_literal(interner, value) {
-            return true;
-        }
-        if assignable(interner, *inner, value) {
-            return true;
-        }
-        // `T?` accepts a `U?` whose stripped inner is assignable to `T`.
-        if let TyKind::Nullable(v_inner) = vk {
-            return assignable(interner, *inner, *v_inner);
-        }
-        return false;
-    }
-
-    // A non-nullable reference target still accepts the `null` literal (legacy behavior).
-    if tk.is_reference() && is_null_literal(interner, value) {
-        return true;
-    }
-
     false
-}
-
-/// True for the `null` literal type, modeled as `void?` (`Nullable(Void)`).
-fn is_null_literal(interner: &TypeInterner, id: TypeId) -> bool {
-    matches!(interner.kind(id), TyKind::Nullable(inner) if matches!(interner.kind(*inner), TyKind::Void))
 }
 
 fn is_enum_int_pair(a: &TyKind, b: &TyKind) -> bool {
@@ -143,5 +117,5 @@ pub fn overload_compatible(interner: &TypeInterner, param: TypeId, arg: TypeId) 
             return true;
         }
     }
-    interner.strip_nullable(param) == interner.strip_nullable(arg)
+    false
 }

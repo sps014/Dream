@@ -12,11 +12,11 @@ class Address {
 @json
 class Profile {
     public name: string;
-    public nickname: string?;
-    public address: Address?;
+    public nickname: Option<string>;
+    public address: Option<Address>;
     public age: int;
 
-    constructor(name: string, nickname: string?, address: Address?, age: int) {
+    constructor(name: string, nickname: Option<string>, address: Option<Address>, age: int) {
         this.name = name;
         this.nickname = nickname;
         this.address = address;
@@ -26,24 +26,26 @@ class Profile {
 
 fun main(): void {
     // Present values round-trip.
-    let p1 = Profile("Ada", "Countess", Address("London", "NW1"), 36);
+    let p1 = Profile("Ada", Option.Some("Countess"), Option.Some(Address("London", "NW1")), 36);
     let t1 = JSON.serialize(p1);
     System.println(t1);
     let b1 = JSON.deserialize<Profile>(t1);
     System.println(b1.nickname ?? "<none>");
     let addr = b1.address;
-    System.println(addr == null);
+    System.println(addr.is_none());
 
-    // Null values serialize to JSON null and round-trip back to null.
-    let p2 = Profile("Bob", null, null, 20);
+    // None values serialize to JSON null and round-trip back to None.
+    let no_name: Option<string> = Option.None;
+    let no_addr: Option<Address> = Option.None;
+    let p2 = Profile("Bob", no_name, no_addr, 20);
     let t2 = JSON.serialize(p2);
     System.println(t2);
     let b2 = JSON.deserialize<Profile>(t2);
     System.println(b2.nickname ?? "<none>");
-    System.println(b2.address == null);
+    System.println(b2.address.is_none());
 
-    // A missing key and an explicit null both deserialize to null.
+    // A missing key and an explicit null both deserialize to None.
     let b3 = JSON.deserialize<Profile>("{\"name\":\"Cee\",\"nickname\":null,\"age\":7}");
     System.println(b3.nickname ?? "<none>");
-    System.println(b3.address == null);
+    System.println(b3.address.is_none());
 }

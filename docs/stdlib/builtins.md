@@ -38,6 +38,8 @@ switch (System.readInt()) {
 
 `System.exit(code)` terminates the process immediately and never returns.
 
+`System.panic(message)` halts the program with a fatal, non-recoverable error after printing `message` — see [Panics](../language/panics.md).
+
 ## `to_string` and `hash_code`
 
 Both are universal instance methods on every value:
@@ -81,7 +83,7 @@ System.println("hello".size());        // 5
 
 ## `Buffer.alloc`
 
-Allocates a zeroed, fixed-length `T[]` of a given size — the low-level primitive the collections build on. Reach for it only when you need a raw array whose size isn't known at compile time; otherwise prefer the growable [`Array<T>`](../language/arrays.md).
+Allocates a zeroed, fixed-length `T[]` of a given size — the low-level primitive the collections build on. Reach for it only when you need a raw array whose size isn't known at compile time; otherwise prefer the growable [`List<T>`](../stdlib/collections.md).
 
 ```dream
 let buf = Buffer.alloc<int>(100);   // int[] with 100 zero-initialized slots

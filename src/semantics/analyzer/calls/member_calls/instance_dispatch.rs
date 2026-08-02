@@ -4,16 +4,15 @@
 use super::super::super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
-use crate::syntax::nodes::types::{mangle_generic, strip_nullable};
+use crate::syntax::nodes::types::mangle_generic;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::types::method_fn;
 
 impl<'a> Analyzer<'a> {
-    /// If `obj_type` (ignoring any nullable wrapper) names an interface, returns that interface's
-    /// name; otherwise `None`.
+    /// If `obj_type` names an interface, returns that interface's name; otherwise `None`.
     pub(crate) fn interface_receiver_name(&self, obj_type: &Type) -> Option<String> {
-        let name = strip_nullable(&obj_type.get_type()).to_string();
+        let name = obj_type.get_type();
         if self.is_interface_name(&name) {
             Some(name)
         } else {
@@ -174,7 +173,7 @@ impl<'a> Analyzer<'a> {
                 );
                 mangle_generic(&base_name, &generic_args)
             }
-            None => strip_nullable(&obj_type.get_type()).to_string(),
+            None => obj_type.get_type(),
         };
 
         let mangled_name = method_fn(&struct_name, &method.text);
@@ -216,7 +215,7 @@ impl<'a> Analyzer<'a> {
         if !store_sig.is_public {
             let base_name = Self::resolve_struct_parts(obj_type)
                 .map(|(b, _)| b)
-                .unwrap_or_else(|| strip_nullable(&obj_type.get_type()).to_string());
+                .unwrap_or_else(|| obj_type.get_type());
             if !self.in_methods_of(ctx.parent_function, &base_name) {
                 diagnostics.report_error(
                     format!("'{}' is private to '{}'", method.text, base_name),
@@ -309,7 +308,7 @@ impl<'a> Analyzer<'a> {
         }
         let this_base = Self::resolve_struct_parts(&first.type_)
             .map(|(b, _)| b)
-            .unwrap_or_else(|| strip_nullable(&first.type_.get_type()).to_string());
+            .unwrap_or_else(|| first.type_.get_type());
         this_base == base_name
             || this_base.starts_with(&format!("{}_", base_name))
             || base_name.starts_with(&format!("{}_", this_base))

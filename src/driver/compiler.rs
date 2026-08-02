@@ -156,6 +156,12 @@ impl Compiler {
         // duration of this call: the panic is already a well-formed internal-error message (see
         // `render_internal_error` below), and we don't want a Rust backtrace header confusing users
         // who never expect to see a stack trace from a compiler CLI.
+        // `take_hook`/`set_hook` operate on process-global state, so concurrent `compile()` calls
+        // (e.g. the e2e corpus running on a rayon pool) racing on this swap can permanently clobber
+        // the hook with another thread's no-op — the mutex below serializes the swap+restore so each
+        // call's `take_hook` always observes the real previous hook.
+        static HOOK_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let hook_guard = HOOK_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         let previous_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let codegen_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -183,6 +189,7 @@ impl Compiler {
             }
         }));
         std::panic::set_hook(previous_hook);
+        drop(hook_guard);
 
         let (text, debug_map) = codegen_result.map_err(|panic_payload| {
             let message = panic_message(&panic_payload);

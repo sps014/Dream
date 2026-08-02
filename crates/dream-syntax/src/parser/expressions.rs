@@ -88,12 +88,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             return Ok(ExpressionNode::Literal(Type::Boolean(
                 self.match_token(TokenKind::BooleanToken),
             )));
-        } else if self.current_token().kind == TokenKind::NullToken {
-            self.match_token(TokenKind::NullToken);
-            // `Nullable(Void)` represents the `null` literal until its concrete type is known.
-            return Ok(ExpressionNode::Literal(Type::Nullable(Box::new(
-                Type::Void,
-            ))));
         }
         // A primitive type name used as a static-call receiver, e.g. `int.parse("5")`. The
         // keyword is treated as an identifier so the member/method-access loop below applies;
@@ -520,17 +514,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    /// Parses a literal used as a pattern (`0`, `-5`, `3.14`, `"s"`, `'c'`, `true`, `null`). Also
+    /// Parses a literal used as a pattern (`0`, `-5`, `3.14`, `"s"`, `'c'`, `true`). Also
     /// reused to parse constant-literal default parameter values.
     pub(super) fn parse_literal_pattern(&mut self) -> Result<Type, Error> {
         let cur = self.current_token();
         match cur.kind {
             TokenKind::BooleanToken => Ok(Type::Boolean(self.match_token(TokenKind::BooleanToken))),
             TokenKind::StringToken => Ok(Type::String(self.match_token(TokenKind::StringToken))),
-            TokenKind::NullToken => {
-                self.match_token(TokenKind::NullToken);
-                Ok(Type::Nullable(Box::new(Type::Void)))
-            }
             TokenKind::CharToken => {
                 let tok = self.next_token();
                 let value = Self::char_literal_value(&tok.text);

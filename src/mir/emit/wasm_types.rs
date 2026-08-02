@@ -9,7 +9,7 @@ use super::*;
 /// The WASM value type for a Dream type (`i32`/`i64`/`f32`/`f64`). Nullability is stripped first;
 /// every reference/`object`/`void` type is an `i32` pointer/word.
 pub(crate) fn wasm_ty_of(interner: &TypeInterner, ty: TypeId) -> &'static str {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => "f64",
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64",
         TyKind::Prim(PrimTy::Float) => "f32",
@@ -29,7 +29,7 @@ pub(super) fn zero_literal(wasm_ty: &str) -> &'static str {
 
 /// The load instruction for a value of `ty` (width-aware; sub-word scalars zero-extend).
 pub(super) fn load_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static str {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(PrimTy::Float) => "f32.load",
         TyKind::Prim(PrimTy::Double) => "f64.load",
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.load",
@@ -40,7 +40,7 @@ pub(super) fn load_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static st
 
 /// The store instruction matching [`load_instr_for`] (width-aware; sub-word scalars truncate).
 pub(super) fn store_instr_for(interner: &TypeInterner, ty: TypeId) -> &'static str {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(PrimTy::Float) => "f32.store",
         TyKind::Prim(PrimTy::Double) => "f64.store",
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => "i64.store",

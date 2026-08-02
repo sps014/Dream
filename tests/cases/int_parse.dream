@@ -1,7 +1,7 @@
 fun main(): void {
     System.println(int.parse("123").unwrap_or(0));
     System.println(int.parse("-45").unwrap_or(0));
-    System.println(Int32.parse("7").unwrap_or(0));
+    System.println(int.parse("7").unwrap_or(0));
     let n = 0 - 9;
     System.println(n.abs());
     let two = 2;

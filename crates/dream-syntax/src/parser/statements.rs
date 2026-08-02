@@ -129,7 +129,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let inner_ref = self.arena.alloc(inner);
                 Ok(StatementNode::Labeled(label.text, inner_ref))
             }
-            TokenKind::IdentifierToken => {
+            // A primitive keyword (`string`, `int`, ...) can head a static-method call statement,
+            // e.g. `string.set(buf, i, c);` (an `extend <primitive> { static fun ... }` member) —
+            // the same call shape as an identifier-headed one, just spelled with the reserved
+            // keyword since primitives have no capitalized alias to fall back on.
+            TokenKind::IdentifierToken | TokenKind::DataTypeToken => {
                 // Parse an expression first
                 let expr = self.parse_primary_expression()?;
 

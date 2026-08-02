@@ -6,7 +6,7 @@
 //! - [`plain`]: plain (non-generic) static-method resolution (`analyze_static_call`).
 
 use super::super::super::*;
-use crate::syntax::nodes::types::{canonical_type_name, mangle_generic};
+use crate::syntax::nodes::types::mangle_generic;
 use crate::syntax::nodes::ExpressionNode;
 use crate::types::method_fn;
 
@@ -47,9 +47,7 @@ impl<'a> Analyzer<'a> {
             return Ok(Some(t));
         }
 
-        let type_name = canonical_type_name(&id.text)
-            .unwrap_or(id.text.as_str())
-            .to_string();
+        let type_name = id.text.clone();
         let base = method_fn(&type_name, &method.text);
 
         // File/module-level visibility (Axis 2): reaching a static member requires the type itself

@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::semantics::function_table::FunctionTableInfo;
-use crate::syntax::nodes::types::{strip_array, strip_nullable};
+use crate::syntax::nodes::types::strip_array;
 
 impl<'a> Analyzer<'a> {
     /// Pass 1: register every (non-generic) function signature; stash generic templates.
@@ -83,7 +83,7 @@ impl<'a> Analyzer<'a> {
             .iter()
             .chain(function.parameters.iter().map(|p| &p.type_));
         for type_to_check in signature_types {
-            let base_type_str = strip_nullable(strip_array(&type_to_check.get_type())).to_string();
+            let base_type_str = strip_array(&type_to_check.get_type()).to_string();
             if let Some(struct_info) = self.struct_table.get_struct(&base_type_str) {
                 if !struct_info.is_public {
                     diagnostics.report_error(

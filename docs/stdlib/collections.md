@@ -45,8 +45,8 @@ A hash map with average O(1) lookups and insertions:
 
 ```dream
 let scores = Map<string, int>();
-scores.put("alice", 95);
-scores.put("bob", 80);
+scores.set("alice", 95);
+scores.set("bob", 80);
 ```
 
 Maps support bracket indexing and `for..in` (yielding a `KeyValuePair<K, V>` with `key` and `value` fields). Indexed reads return an `Option<V>`:
@@ -63,7 +63,7 @@ for (let pair in scores) {
 
 Methods:
 
-- `.put(key, value)` / `.set(key, value)` — insert or update.
+- `.set(key, value)` — insert or update.
 - `.get(key)` — value as `Option<V>`; `.get_or(key, fallback)` — value or `fallback`.
 - `.contains(key)` — key present.
 - `.remove(key)` — remove, returning `true` if it existed.

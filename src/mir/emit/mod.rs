@@ -66,10 +66,61 @@ const RUNTIME_OBJECT: &str = include_str!("../runtime/object.wat");
 /// data pointer of the interned `"-"`) and `{TAG_STRING}` are substituted.
 const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
 
-/// String constants the `*_to_string` runtime references by address (`bool` renders to `"true"`/
-/// `"false"`; the `double` formatter prepends `"-"`). Interned into every module so the runtime is
-/// always self-contained.
+/// The shared `$dream_panic(msg)` runtime helper (print message + trap). Self-contained given only
+/// the always-present `$print_string`/`$print_char` imports.
+const RUNTIME_PANIC: &str = include_str!("../runtime/panic.wat");
+
+/// String constants the `*_to_string` runtime references by address: `bool` renders to `"true"`/
+/// `"false"`; the `double` formatter prepends `"-"`. Interned into every module so the runtime is
+/// always self-contained, regardless of which literals the program itself uses.
 const RUNTIME_STR_CONSTS: [&str; 3] = ["true", "false", "-"];
+
+/// The fixed, compile-time-constant panic messages for the automatic runtime checks (bounds,
+/// division by zero, bad cast). v1 does not interpolate the actual out-of-range index/length or
+/// the failing type name — see [`crate::mir::emit::emitter::mod::Emitter::emit_panic`]. Each is
+/// *located*: [`located`] appends the declaring function's source file + name (carried inertly on
+/// [`crate::mir::MirFunction`] as `file`/`name`, for debug-info) plus the precise 1-based source
+/// line of the checked construct, Rust-style. The line comes from `Statement::SourceLine` markers
+/// interleaved into MIR unconditionally (see [`crate::hir::HStmt::SourceLine`]): the backend tracks
+/// "the most recent one seen" as `Emitter::current_line` while it walks a function's statements, and
+/// [`crate::mir::emit::strings::string_table`] tracks the identical value while pre-scanning the same
+/// (already fully-optimized) MIR for every call site that will need a located string interned, so
+/// the two stay in lockstep with no `TextSpan` plumbing through the rest of MIR. The one exception is
+/// `$char_at`'s own internal bounds check has been moved to each call site (see `emit_char_at`), so
+/// even string indexing gets a precise, located message rather than the single shared, unlocated one
+/// a truly shared runtime helper would be stuck with.
+pub(crate) mod panic_msgs {
+    pub const INDEX_OUT_OF_BOUNDS: &str = "panic: index out of bounds";
+    pub const DIVIDE_BY_ZERO: &str = "panic: attempt to divide by zero";
+    pub const INVALID_CAST: &str = "panic: invalid cast";
+
+    /// Every located panic message base, in a fixed order matching [`located_all`].
+    pub const ALL: [&str; 3] = [INDEX_OUT_OF_BOUNDS, DIVIDE_BY_ZERO, INVALID_CAST];
+
+    /// Appends `(at <file or "<unknown>">:<line>, in <function>)` to a fixed base message (`line ==
+    /// 0`, meaning no `SourceLine` marker preceded this check, renders as `?` rather than a
+    /// misleading `0`), so a bounds check inside `fun foo` in `a.dream` reports a different,
+    /// distinguishable string than the same check on a different line, or inside a different
+    /// function/file. Used both to seed the string table ([`crate::mir::emit::strings::string_table`]
+    /// pre-computes exactly which `(base, file, func_name, line)` tuples will be looked up) and,
+    /// identically, at each check's call site (`Emitter::emit_panic`).
+    pub fn located(base: &str, file: Option<&str>, func_name: &str, line: u32) -> String {
+        let line = if line == 0 {
+            "?".to_string()
+        } else {
+            line.to_string()
+        };
+        format!(
+            "{base} (at {}:{line}, in {func_name})",
+            file.unwrap_or("<unknown>")
+        )
+    }
+
+    /// All three located messages for one function at `line`, in [`ALL`] order.
+    pub fn located_all(file: Option<&str>, func_name: &str, line: u32) -> [String; 3] {
+        ALL.map(|base| located(base, file, func_name, line))
+    }
+}
 
 pub mod debug_map;
 mod emitter;

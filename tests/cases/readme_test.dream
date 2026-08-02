@@ -1,42 +1,52 @@
 class Node {
     public value: int;
-    public next: Node?;
+    public next: Option<Node>;
 
-    constructor(value: int, next: Node?) {
+    constructor(value: int, next: Option<Node>) {
         this.value = value;
         this.next = next;
     }
 
     public fun has_next(): bool {
-        return this.next != null;
+        return this.next.is_some();
     }
 }
 
-fun create_list(n: int): Node? {
+fun create_list(n: int): Option<Node> {
     if (n <= 0) {
-        return null;
+        return Option.None;
     }
-    let head = Node(n, null);
-    let curr: Node? = head;
+    let no_next: Option<Node> = Option.None;
+    let head = Node(n, no_next);
+    let curr = head;
     let i = n - 1;
     while (i > 0) {
-        curr.next = Node(i, null);
-        curr = curr.next;
+        let nxt = Node(i, no_next);
+        curr.next = Option.Some(nxt);
+        curr = nxt;
         i = i - 1;
     }
-    return head;
+    return Option.Some(head);
 }
 
 fun main(): void {
     let list = create_list(3);
-    
+
     let curr = list;
-    while (curr != null) {
-        System.println(curr.value);
-        if (curr.has_next()) {
-            System.print(" -> ");
+    let done = false;
+    while (!done) {
+        switch (curr) {
+            Some(n) => {
+                System.println(n.value);
+                if (n.has_next()) {
+                    System.print(" -> ");
+                }
+                curr = n.next;
+            }
+            None => {
+                done = true;
+            }
         }
-        curr = curr.next;
     }
     System.print("\n");
 }

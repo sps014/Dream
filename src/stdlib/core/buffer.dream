@@ -1,7 +1,6 @@
 // `Buffer` - low-level, fixed-length array allocation backing a compiler intrinsic. This is the
-// raw primitive the higher-level `Array<T>` collection (and `List`/`Map`/`Set`) build on; user
-// code should normally prefer `Array<T>` and only reach for `Buffer.alloc` for tight, manual
-// storage control.
+// raw primitive the higher-level `List`/`Map`/`Set` collections build on; user code should
+// normally prefer `List<T>` and only reach for `Buffer.alloc` for tight, manual storage control.
 
 public class Buffer {
     // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.

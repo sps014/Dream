@@ -3,10 +3,10 @@ extend int {
 }
 
 fun main(): void {
-    let n: Int32 = -7;
+    let n: int = -7;
     System.println(n.abs());        // 7  (prelude extend)
     System.println(n.doubled());    // -14 (user extend)
 
-    let s: String = "hello";
+    let s: string = "hello";
     System.println(s.size());       // 5  (prelude extend)
 }

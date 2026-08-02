@@ -13,8 +13,8 @@ pub(super) fn cast_sym(
     from: TypeId,
     to: TypeId,
 ) -> Option<String> {
-    let from_s = interner.strip_nullable(from);
-    let to_s = interner.strip_nullable(to);
+    let from_s = from;
+    let to_s = to;
     let is_js = |t: TypeId| matches!(interner.kind(t), TyKind::Js);
     if is_js(to_s) {
         return layouts.get(from_s).map(|l| struct_to_js_sym(&l.name));
@@ -59,7 +59,7 @@ pub(super) fn emit_js_marshal(
 /// `string`, `js`, reference struct/class types, and arrays of the same. Inline value structs, maps,
 /// interfaces, and functions are not marshalable here.
 fn is_marshalable(interner: &TypeInterner, ty: TypeId) -> bool {
-    let s = interner.strip_nullable(ty);
+    let s = ty;
     match interner.kind(s) {
         TyKind::Prim(_) | TyKind::Enum(_) | TyKind::Js => true,
         TyKind::Array(elem) => is_marshalable(interner, *elem),
@@ -118,7 +118,7 @@ fn value_to_js(
     addr: &str,
     ty: TypeId,
 ) -> Option<String> {
-    let s = interner.strip_nullable(ty);
+    let s = ty;
     let load = load_instr_for(interner, ty);
     match interner.kind(s) {
         TyKind::Prim(p) => {
@@ -157,7 +157,7 @@ fn value_from_js(
     jsval: &str,
     ty: TypeId,
 ) -> Option<String> {
-    let s = interner.strip_nullable(ty);
+    let s = ty;
     match interner.kind(s) {
         TyKind::Prim(p) => {
             let (unbox, post) = unbox_prim(*p);

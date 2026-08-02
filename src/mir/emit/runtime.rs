@@ -18,11 +18,11 @@ pub(super) fn runtime_prelude(debug: bool) -> String {
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
         .replace(";;@DEBUG_FREE_COUNT@", free_count);
     out.push('\n');
-    // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`; keep
-    // `abi.rs` authoritative rather than baking the literal into the `.wat`.
-    out.push_str(
-        &RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()),
-    );
+    // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. `$char_at`
+    // itself no longer bounds-checks: callers emit a located check inline before calling it (see
+    // `Emitter::emit_char_at`), so a string-index panic gets a precise file:line rather than the one
+    // bare, unlocated message a truly shared runtime helper would be stuck with.
+    out.push_str(&RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()));
     out
 }
 

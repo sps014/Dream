@@ -4,7 +4,6 @@ use super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
-use crate::syntax::nodes::types::strip_nullable;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use crate::syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
@@ -238,13 +237,12 @@ impl<'a> Analyzer<'a> {
                 let left_hir = self.hir_take();
                 let left_name = left_type.get_type();
                 let right_name = right_type.get_type();
-                let stripped = strip_nullable(&left_name);
                 if left_type.is_unknown() {
                     self.hir_none();
-                } else if stripped == "object" || self.is_interface_name(stripped) {
+                } else if left_name == "object" || self.is_interface_name(&left_name) {
                     self.hir_set_is_type(left_hir, right_type);
                 } else {
-                    self.hir_set_bool(stripped == strip_nullable(&right_name));
+                    self.hir_set_bool(left_name == right_name);
                 }
                 Ok(Type::Boolean(synthetic_token(
                     TokenKind::BooleanToken,

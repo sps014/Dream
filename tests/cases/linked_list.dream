@@ -1,26 +1,37 @@
 class Node {
     public value: int;
-    public next: Node?;
+    public next: Option<Node>;
 
-    constructor(value: int, next: Node?) {
+    constructor(value: int, next: Option<Node>) {
         this.value = value;
         this.next = next;
     }
 }
 
 fun create_node(val: int): Node {
-    let n = Node(val, null);
+    let no_next: Option<Node> = Option.None;
+    let n = Node(val, no_next);
     return n;
 }
 
 fun main(): void {
     let head = create_node(10);
-    head.next = create_node(20);
-    head.next.next = create_node(30);
-    
-    let curr: Node? = head;
-    while (curr != null ) {
-        System.println(curr.value);
-        curr = curr.next;
+    let second = create_node(20);
+    let third = create_node(30);
+    second.next = Option.Some(third);
+    head.next = Option.Some(second);
+
+    let curr: Option<Node> = Option.Some(head);
+    let done = false;
+    while (!done) {
+        switch (curr) {
+            Some(n) => {
+                System.println(n.value);
+                curr = n.next;
+            }
+            None => {
+                done = true;
+            }
+        }
     }
 }

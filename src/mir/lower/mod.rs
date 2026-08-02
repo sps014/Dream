@@ -1,7 +1,7 @@
 //! Lowering from the structured HIR to the CFG-based MIR.
 //!
 //! All structured control flow is desugared into basic blocks here: `if`/`while`/`for`/`foreach`
-//! become block graphs, and the short-circuiting forms (`&&`, `||`, `?:`, `??`) materialize their
+//! become block graphs, and the short-circuiting forms (`&&`, `||`, `?:`) materialize their
 //! result into a temporary across branches. Every non-trivial expression is reduced to an
 //! [`Operand`] (a local read or a constant); intermediate computations are written into fresh
 //! temporaries. Reference-counting is left to a dedicated MIR pass ; this stage only
@@ -13,7 +13,7 @@
 //! - [`switch`]: `switch`/`match` lowering (string content-equality chain, int/enum `br_table`, or
 //!   union-variant dispatch with payload binding), dispatched by [`Lowerer::lower_switch`].
 //! - [`expr`]: expression lowering to [`Operand`]/[`Rvalue`]/[`Place`], including the
-//!   short-circuiting forms (`&&`/`||`/`?:`/`??`) and `await`.
+//!   short-circuiting forms (`&&`/`||`/`?:`) and `await`.
 
 use super::build::FunctionBuilder;
 use super::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
@@ -314,6 +314,7 @@ impl Lowerer<'_> {
             HStmt::Break(label) => self.lower_break(label.as_deref()),
             HStmt::Continue(label) => self.lower_continue(label.as_deref()),
             HStmt::DebugLine(line) => self.b.push(Statement::DebugLine(*line)),
+            HStmt::SourceLine(line) => self.b.push(Statement::SourceLine(*line)),
         }
     }
 }

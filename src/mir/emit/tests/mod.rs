@@ -223,11 +223,13 @@ fn strings_get_data_segments_and_addresses() {
         ..Default::default()
     };
     let wat = emit_module(&mir, &i, false);
-    // The runtime constants are interned first (`true`/`false`/`-` then the object-protocol
-    // `null`/`<object>`/`[`/`]`/`, `/`length`), so the user's "hi" follows at block 1216 / data
-    // pointer 1228. Each block carries a 4-byte length prefix and no NUL terminator.
+    // The runtime constants are interned first (`true`/`false`/`-`, then this function's located
+    // panic messages — 3 checked-construct bases plus the `line == 0` fallback triple, none of
+    // which actually occur here so all 3 collapse onto the one fallback triple — then the
+    // object-protocol `null`/`<object>`/`[`/`]`/`, `/`length`), so the user's "hi" follows at block
+    // 1428 / data pointer 1440. Each block carries a 4-byte length prefix and no NUL terminator.
     assert!(
-        wat.contains("(i32.const 1228)"),
+        wat.contains("(i32.const 1440)"),
         "string data pointer:\n{}",
         wat
     );
@@ -235,7 +237,7 @@ fn strings_get_data_segments_and_addresses() {
     // `ref_count=1`, then the length prefix `2`, then the bytes 'h','i' (no NUL terminator).
     assert!(
             wat.contains(
-                "(data (i32.const 1216) \"\\00\\00\\00\\00\\05\\00\\00\\00\\01\\00\\00\\00\\02\\00\\00\\00\\68\\69\")"
+                "(data (i32.const 1428) \"\\00\\00\\00\\00\\05\\00\\00\\00\\01\\00\\00\\00\\02\\00\\00\\00\\68\\69\")"
             ),
             "string data segment:\n{}",
             wat

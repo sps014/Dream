@@ -52,7 +52,7 @@ pub(super) fn emit_object_protocol(
 /// Integer-family values (and enums) are their own hash; wider/reference types route through a
 /// helper or the tag-dispatching `$object_hash_code`. Mirrors [`value_to_string_call`].
 pub(super) fn value_hash_code_instrs(interner: &TypeInterner, ty: TypeId) -> &'static str {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(p) => prim_info(*p).hash,
         TyKind::Enum(_) => "",
         _ => "(call $object_hash_code)",
@@ -318,7 +318,7 @@ pub(super) fn array_elem_types(mir: &crate::mir::Mir, interner: &TypeInterner) -
 /// If `ty` (after nullable stripping) is an array, records its element type in `order` (dedup,
 /// first-seen order).
 pub(super) fn push_array_elem(order: &mut Vec<TypeId>, interner: &TypeInterner, ty: TypeId) {
-    if let Some(e) = interner.unwrap_array(interner.strip_nullable(ty)) {
+    if let Some(e) = interner.unwrap_array(ty) {
         if !order.contains(&e) {
             order.push(e);
         }

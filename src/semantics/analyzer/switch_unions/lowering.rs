@@ -10,7 +10,6 @@ use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::semantics::union_table::UnionInfo;
-use crate::syntax::nodes::types::strip_nullable;
 use crate::syntax::nodes::{
     ExpressionNode, FunctionNode, PatternNode, SwitchArm, SwitchArmBody, Type,
 };
@@ -42,7 +41,7 @@ impl<'a> Analyzer<'a> {
                 self.ensure_union_instantiated(&base.text, args, &base.position, diagnostics);
             }
         }
-        let subject_base = strip_nullable(&subject_type.get_type()).to_string();
+        let subject_base = subject_type.get_type();
         let union_info: Option<UnionInfo> = self.union_table.get(&subject_base).cloned();
         Ok((subject_type, subject_hir, subject_base, union_info))
     }

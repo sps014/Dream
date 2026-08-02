@@ -46,13 +46,6 @@ impl<'a> Analyzer<'a> {
                     None
                 }
             }
-            Type::Nullable(inner) => {
-                if let Some(arg_inner) = arg.strip_suffix('?') {
-                    Self::match_generic_type(inner, arg_inner, param_name)
-                } else {
-                    Self::match_generic_type(inner, arg, param_name)
-                }
-            }
             _ => None,
         }
     }
@@ -109,7 +102,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Returns `ty` with any generic parameter substituted for its concrete type per the
-    /// monomorphization bindings, recursing through array and nullable wrappers (`T`, `T[]`, `T?`).
+    /// monomorphization bindings, recursing through array wrappers (`T`, `T[]`).
     pub(super) fn monomorphize_type(ty: &Type, bindings: &GenericBindings) -> Type {
         match ty {
             Type::Struct(token, None) => match lookup_binding(bindings, &token.text) {
@@ -127,9 +120,6 @@ impl<'a> Analyzer<'a> {
                 ),
             ),
             Type::Array(inner) => Type::Array(Box::new(Self::monomorphize_type(inner, bindings))),
-            Type::Nullable(inner) => {
-                Type::Nullable(Box::new(Self::monomorphize_type(inner, bindings)))
-            }
             // First-class function types (`fun(T, T): int`) must substitute inside their parameter
             // and return types so a monomorphized callback param (e.g. `sort_by`'s comparator)
             // type-checks against concrete arguments.
@@ -176,11 +166,11 @@ impl<'a> Analyzer<'a> {
                 if !self.type_satisfies_kind(concrete, *kind) {
                     let (want, why) = match kind {
                         crate::syntax::nodes::ConstraintKind::Struct => {
-                            ("struct", "it is not a (non-nullable) value type")
+                            ("struct", "it is not a value type")
                         }
                         crate::syntax::nodes::ConstraintKind::Unmanaged => (
                             "unmanaged",
-                            "it is not a blittable value type (it contains reference-typed fields, or is nullable/a reference type)",
+                            "it is not a blittable value type (it contains reference-typed fields, or is a reference type)",
                         ),
                         crate::syntax::nodes::ConstraintKind::Class => {
                             ("class", "it is not a reference type")
@@ -202,27 +192,22 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when `concrete` satisfies a `struct`/`unmanaged`/`class` kind constraint (C#-aligned):
-    /// `struct` requires a non-nullable *value type* (a non-`string` scalar primitive or a value
-    /// `struct`), which may still hold reference-typed fields; `unmanaged` additionally requires it
-    /// to be *blittable* (recursively only value fields, no inner heap pointers - a self-contained
-    /// run of bytes); `class` requires a reference type.
+    /// `struct` requires a *value type* (a non-`string` scalar primitive or a value `struct`),
+    /// which may still hold reference-typed fields; `unmanaged` additionally requires it to be
+    /// *blittable* (recursively only value fields, no inner heap pointers - a self-contained run of
+    /// bytes); `class` requires a reference type.
     pub(super) fn type_satisfies_kind(
         &self,
         concrete: &Type,
         kind: crate::syntax::nodes::ConstraintKind,
     ) -> bool {
         let name = concrete.get_type();
-        let base = crate::syntax::nodes::types::strip_nullable(&name);
         match kind {
-            // A nullable value type is boxed to a heap pointer, so it is not a plain value type.
-            crate::syntax::nodes::ConstraintKind::Struct => {
-                !name.ends_with('?') && self.name_is_value_type(base)
-            }
+            crate::syntax::nodes::ConstraintKind::Struct => self.name_is_value_type(&name),
             crate::syntax::nodes::ConstraintKind::Unmanaged => {
-                !name.ends_with('?')
-                    && self.name_is_blittable_value(base, &mut std::collections::HashSet::new())
+                self.name_is_blittable_value(&name, &mut std::collections::HashSet::new())
             }
-            crate::syntax::nodes::ConstraintKind::Class => self.name_is_reference_type(base),
+            crate::syntax::nodes::ConstraintKind::Class => self.name_is_reference_type(&name),
         }
     }
 
@@ -239,7 +224,7 @@ impl<'a> Analyzer<'a> {
         if !self.type_satisfies_kind(ty, crate::syntax::nodes::ConstraintKind::Unmanaged) {
             diagnostics.report_error(
                 format!(
-                    "'{}' requires an unmanaged (blittable) type, but '{}' is not (it is a reference type, is nullable, or contains reference-typed fields)",
+                    "'{}' requires an unmanaged (blittable) type, but '{}' is not (it is a reference type, or contains reference-typed fields)",
                     who,
                     ty.get_type()
                 ),
@@ -248,7 +233,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// The coarse shape of a (nullable-stripped) type name, as needed to decide the `struct`/
+    /// The coarse shape of a type name, as needed to decide the `struct`/
     /// `unmanaged`/`class` kind constraints. Single source of truth for "what counts as an array /
     /// a string / a scalar primitive / a declared value struct", shared by
     /// [`Self::name_is_value_type`], [`Self::name_is_blittable_value`], and
@@ -300,11 +285,7 @@ impl<'a> Analyzer<'a> {
                 }
                 for f in info.fields.values() {
                     let fname = f.type_.get_type();
-                    if fname.ends_with('?') {
-                        return false; // nullable field is a boxed/nullable pointer
-                    }
-                    let fbase = crate::syntax::nodes::types::strip_nullable(&fname);
-                    if !self.name_is_blittable_value(fbase, seen) {
+                    if !self.name_is_blittable_value(&fname, seen) {
                         return false;
                     }
                 }
@@ -337,7 +318,7 @@ impl<'a> Analyzer<'a> {
         };
         let concrete_name = match Self::resolve_struct_parts(concrete) {
             Some((base, args)) => mangle_generic(&base, &args),
-            None => crate::syntax::nodes::types::strip_nullable(&concrete.get_type()).to_string(),
+            None => concrete.get_type(),
         };
         self.class_implements(&concrete_name, &iface)
     }

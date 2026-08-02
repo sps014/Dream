@@ -6,7 +6,7 @@ use super::{DefTable, TyKind, TypeId, TypeInterner};
 /// The poison type's display spelling, matching the legacy `UNKNOWN_TYPE_NAME`.
 pub const UNKNOWN_TYPE_NAME: &str = "<unknown>";
 
-/// Renders `id` as source-level syntax (`int[]`, `Box<int>`, `int?`, `fun(int): bool`).
+/// Renders `id` as source-level syntax (`int[]`, `Box<int>`, `fun(int): bool`).
 pub fn display_name(interner: &TypeInterner, defs: &DefTable, id: TypeId) -> String {
     match interner.kind(id) {
         TyKind::Prim(p) => p.name().to_string(),
@@ -14,7 +14,6 @@ pub fn display_name(interner: &TypeInterner, defs: &DefTable, id: TypeId) -> Str
         TyKind::Void => "void".to_string(),
         TyKind::Error => UNKNOWN_TYPE_NAME.to_string(),
         TyKind::Array(e) => format!("{}[]", display_name(interner, defs, *e)),
-        TyKind::Nullable(inner) => format!("{}?", display_name(interner, defs, *inner)),
         TyKind::Enum(def) => defs.name(*def).to_string(),
         TyKind::Js => "js".to_string(),
         TyKind::Struct(def, args) | TyKind::Union(def, args) | TyKind::Interface(def, args) => {

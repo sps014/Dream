@@ -1,6 +1,6 @@
 # Arrays
 
-An array is a fixed-size, ordered block of same-typed values. Arrays are reference types, so passing one around shares the same buffer rather than copying it. For a growable sequence, reach for `Array<T>` or [`List<T>`](../stdlib/collections.md).
+An array is a fixed-size, ordered block of same-typed values. Arrays are reference types, so passing one around shares the same buffer rather than copying it. For a growable sequence, reach for [`List<T>`](../stdlib/collections.md).
 
 ## Creating, reading, writing
 
@@ -14,8 +14,8 @@ let first = nums[0];   // 1
 nums[2] = 99;          // [1, 2, 99, 4, 5]
 ```
 
-!!! warning
-    Indexing out of bounds is undefined behavior — there is no runtime bounds check.
+!!! note
+    Indexing out of bounds — including with a negative index — [panics](panics.md): the program prints a message and halts. It is not undefined behavior, but it is fatal and non-recoverable, so keep indices in range rather than relying on the check.
 
 ## Size
 
@@ -66,32 +66,30 @@ buf[0] = 10;
 
 ## Advanced: growable arrays
 
-### `Array<T>`
+### `List<T>`
 
-`Array<T>` is a class wrapping a `T[]` buffer that doubles on demand:
+[`List<T>`](../stdlib/collections.md) is a class wrapping a `T[]` buffer that doubles on demand:
 
 ```dream
-let xs = Array<int>();
+let xs = List<int>();
 xs.push(10);
 xs.push(20);
 println(xs.size());                // 2
 println(xs.get(0).unwrap_or(-1));  // 10
 ```
 
-It offers `push`, `pop`, `get`/`set` (and the `xs[i]` indexer), `contains`, `index_of`, `remove_at`, `clear`, `iterator` (so `for (let x in xs)` works), and `sort_by`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
+It offers `push`, `pop`, `get`/`set` (and the `xs[i]` indexer), `contains`, `index_of`, `remove_at`, `clear`, `iterator` (so `for (let x in xs)` works). When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
 
 ```dream
-let ys = Array<int>();
+let ys = List<int>();
 ys.push(3); ys.push(1); ys.push(2);
 ys.sort();                                   // 1, 2, 3
 println(ys.binary_search(2).unwrap_or(-1));  // 1
 ```
 
-[`List<T>`](../stdlib/collections.md) is a near-identical growable collection.
-
 ### The `Collection<T>` interface
 
-`Array<T>` and `List<T>` both implement `Collection<T>`, which exposes `size()` and `get(index)` plus the defaults `is_empty()`, `first()`, and `last()`. A function can accept any collection by that interface and dispatch dynamically:
+`List<T>` implements `Collection<T>`, which exposes `size()` and `get(index)` plus the defaults `is_empty()`, `first()`, and `last()`. A function can accept any collection by that interface and dispatch dynamically:
 
 ```dream
 fun sum(xs: Collection<int>): int {

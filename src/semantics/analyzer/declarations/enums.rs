@@ -191,12 +191,11 @@ impl<'a> Analyzer<'a> {
     /// heap unions are references (which force the enclosing union onto the heap).
     fn payload_type_is_value(&mut self, ty: &Type) -> bool {
         let tid = self.type_ctx.lower(ty);
-        let stripped = self.type_ctx.interner.strip_nullable(tid);
-        if self.type_ctx.interner.is_value_type(stripped) {
+        if self.type_ctx.interner.is_value_type(tid) {
             return true;
         }
         matches!(
-            self.type_ctx.interner.kind(stripped),
+            self.type_ctx.interner.kind(tid),
             crate::types::TyKind::Prim(p) if *p != crate::types::PrimTy::String
         )
     }

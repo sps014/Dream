@@ -85,19 +85,14 @@ public class Map<K, V> {
         let i = 0;
         while (i < old_cap) {
             if (old_states[i] == hash_slot_occupied()) {
-                this.put(old_keys[i], old_values[i]);
+                this.set(old_keys[i], old_values[i]);
             }
             i = i + 1;
         }
     }
 
-    // Sets the value for a key.
-    public fun set(key: K, value: V): void {
-        this.put(key, value);
-    }
-
     // Inserts or updates the value for a key.
-    public fun put(key: K, value: V): void {
+    public fun set(key: K, value: V): void {
         if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
             this.rehash();
         }

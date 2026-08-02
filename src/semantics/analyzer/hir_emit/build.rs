@@ -413,7 +413,7 @@ fn value_field_size(
     interner: &crate::types::TypeInterner,
 ) -> (u32, u32) {
     use crate::types::{PrimTy, TyKind};
-    let stripped = interner.strip_nullable(fty);
+    let stripped = fty;
     if interner.is_value_type(stripped) {
         return compute_inline_layout(
             stripped,

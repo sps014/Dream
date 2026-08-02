@@ -66,13 +66,13 @@ impl Emitter<'_> {
 
     /// True when value struct `ty` needs retain/drop glue (embeds references or declares `del`).
     pub(super) fn value_has_glue(&self, ty: TypeId) -> bool {
-        self.value_glue.contains(&self.interner.strip_nullable(ty))
+        self.value_glue.contains(&ty)
     }
 
     /// The layout name of value type `ty` (a value struct or value union), if laid out. Used to name
     /// its retain/drop glue.
     pub(super) fn value_name(&self, ty: TypeId) -> Option<String> {
-        let stripped = self.interner.strip_nullable(ty);
+        let stripped = ty;
         if let Some(l) = self.layouts.get(stripped) {
             return Some(l.name.clone());
         }

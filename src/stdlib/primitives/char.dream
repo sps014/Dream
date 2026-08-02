@@ -63,8 +63,8 @@ extend char : Comparable<char> {
 
     // A new single-character string containing this character.
     public fun as_string(): string {
-        let result = String.alloc(1);
-        String.set(result, 0, this);
+        let result = string.alloc(1);
+        string.set(result, 0, this);
         return result;
     }
 }

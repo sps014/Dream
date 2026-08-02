@@ -45,22 +45,12 @@ mod tests {
     }
 
     #[test]
-    fn nullable_collapses() {
-        let mut i = TypeInterner::new();
-        let n = i.nullable(i.int());
-        let nn = i.nullable(n);
-        assert_eq!(n, nn, "T?? collapses to T?");
-    }
-
-    #[test]
     fn reference_classification() {
         let mut i = TypeInterner::new();
         assert!(!i.is_reference(i.int()));
         assert!(i.is_reference(i.string()));
         let arr = i.array(i.int());
         assert!(i.is_reference(arr));
-        let nullable_arr = i.nullable(arr);
-        assert!(i.is_reference(nullable_arr), "nullable wrapper is stripped");
     }
 
     #[test]
@@ -72,8 +62,6 @@ mod tests {
         assert_eq!(display_name(&i, &defs, boxed_int), "Box<int>");
         let arr = i.array(i.int());
         assert_eq!(display_name(&i, &defs, arr), "int[]");
-        let opt = i.nullable(i.string());
-        assert_eq!(display_name(&i, &defs, opt), "string?");
     }
 
     #[test]
@@ -108,12 +96,6 @@ mod tests {
         let color_ty = i.enum_ty(color);
         assert!(assignable(&i, color_ty, i.int()));
         assert!(assignable(&i, i.int(), color_ty));
-
-        // Nullable target accepts bare inner and the null literal.
-        let opt_int = i.nullable(i.int());
-        assert!(assignable(&i, opt_int, i.int()));
-        let null_lit = i.nullable(i.void());
-        assert!(assignable(&i, opt_int, null_lit));
 
         // Poison is bidirectionally compatible.
         assert!(assignable(&i, i.int(), i.error()));

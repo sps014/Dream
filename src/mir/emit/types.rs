@@ -2,7 +2,7 @@ use super::*;
 
 /// The primitive kind of `ty` (stripping nullability), or `None` for reference/`object`/other types.
 pub(super) fn prim_of(interner: &TypeInterner, ty: TypeId) -> Option<PrimTy> {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(p) => Some(*p),
         _ => None,
     }
@@ -27,7 +27,7 @@ pub(super) fn runtime_tag_for(
     tags: &HashMap<TypeId, i32>,
     ty: TypeId,
 ) -> Option<i32> {
-    let stripped = interner.strip_nullable(ty);
+    let stripped = ty;
     match interner.kind(stripped) {
         TyKind::Prim(p) => Some(prim_info(*p).tag),
         TyKind::Array(_) => Some(crate::mir::abi::TAG_ARRAY),
@@ -41,7 +41,7 @@ pub(super) fn runtime_tag_for(
 /// self-describing at runtime, so the call is chosen statically); other reference types route through
 /// the tag-dispatching `$object_to_string`.
 pub(super) fn value_to_string_call(interner: &TypeInterner, ty: TypeId) -> Option<String> {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(p) => prim_info(*p).to_string.map(|s| s.to_string()),
         TyKind::Enum(_) => Some("$int_to_string".to_string()),
         TyKind::Array(elem) => Some(array_to_string_sym(*elem)),

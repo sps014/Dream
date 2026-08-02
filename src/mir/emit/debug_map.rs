@@ -34,7 +34,7 @@ pub fn spill_kind(interner: &TypeInterner, ty: TypeId) -> SpillKind {
     if interner.value_layout(ty).is_some() {
         return SpillKind::I32;
     }
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => SpillKind::F64,
         TyKind::Prim(PrimTy::Float) => SpillKind::F32,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => SpillKind::I64,
@@ -63,7 +63,7 @@ impl<'a> TypeRegistry<'a> {
 
     /// Interns `ty`, returning its index into `descs` (registering it and its components first).
     fn intern(&mut self, ty: TypeId) -> u32 {
-        let key = self.interner.strip_nullable(ty);
+        let key = ty;
         if let Some(&idx) = self.by_ty.get(&key) {
             return idx;
         }

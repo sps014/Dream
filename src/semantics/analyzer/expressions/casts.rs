@@ -5,7 +5,7 @@ use super::*;
 use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
-use crate::syntax::nodes::types::{is_numeric_primitive, strip_nullable};
+use crate::syntax::nodes::types::is_numeric_primitive;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use crate::text::text_span::TextSpan;
 use std::cell::RefCell;
@@ -13,9 +13,9 @@ use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
     /// Types a cast `expr as T`: instantiates a generic target struct if needed, then validates the
-    /// conversion (identity, numeric<->numeric, `char`<->`int`/`byte`, boxing/unboxing via `object`,
-    /// and `int`->pointer for null literals). Always yields the target type, reporting an error for
-    /// disallowed conversions so analysis can continue.
+    /// conversion (identity, numeric<->numeric, `char`<->`int`/`byte`, boxing/unboxing via `object`).
+    /// Always yields the target type, reporting an error for disallowed conversions so analysis can
+    /// continue.
     pub(in crate::semantics::analyzer) fn analyze_cast(
         &mut self,
         target_type: &Type,
@@ -57,18 +57,16 @@ impl<'a> Analyzer<'a> {
             Ok(target_type.clone())
         } else if expr_type_str == "int"
             && (self.struct_table.get_struct(&target_type_str).is_some()
-                || target_type_str.ends_with("[]")
-                || target_type_str.ends_with("?"))
+                || target_type_str.ends_with("[]"))
         {
             // Allow casting int to pointer types (for null pointers)
             Ok(target_type.clone())
-        } else if self.is_interface_name(strip_nullable(&target_type_str)) {
+        } else if self.is_interface_name(&target_type_str) {
             // Cast to an interface (`(Animal)cat`). Allowed from another interface, or a class that
             // implements the interface (an upcast). Both are identity at runtime (same tagged
             // pointer); only the static type changes.
-            let src = strip_nullable(&expr_type_str);
-            if self.is_interface_name(src)
-                || self.implements_as_interface_ref(src, strip_nullable(&target_type_str))
+            let src = &expr_type_str;
+            if self.is_interface_name(src) || self.implements_as_interface_ref(src, &target_type_str)
             {
                 Ok(target_type.clone())
             } else {
@@ -81,7 +79,7 @@ impl<'a> Analyzer<'a> {
                 );
                 Ok(target_type.clone())
             }
-        } else if self.is_interface_name(strip_nullable(&expr_type_str)) {
+        } else if self.is_interface_name(&expr_type_str) {
             // Downcast from an interface to a concrete class or another interface: permitted
             // (identity at runtime; like unboxing `object`, a wrong downcast is the caller's risk).
             Ok(target_type.clone())
@@ -108,19 +106,11 @@ impl<'a> Analyzer<'a> {
         }
 
         // Directional assignability over interned types: `right` (value) must be assignable to
-        // `left` (target). Covers identity, `object` widening, enum/int, numeric widening, and
-        // nullable/`null` handling via the structured rules.
+        // `left` (target). Covers identity, `object` widening, enum/int, and numeric widening via
+        // the structured rules.
         let l = self.type_ctx.lower(left);
         let r = self.type_ctx.lower(right);
         if crate::types::assignable(&self.type_ctx.interner, l, r) {
-            return Ok(());
-        }
-        // `compare_data_type` also backs equality comparisons (`ref == null`, `null == ref`),
-        // where `null` may appear on either side. Accept the reverse direction, but only for the
-        // `null`-literal case so a narrowing assignment is still rejected.
-        if (left.get_type() == "void?" || right.get_type() == "void?")
-            && crate::types::assignable(&self.type_ctx.interner, r, l)
-        {
             return Ok(());
         }
 

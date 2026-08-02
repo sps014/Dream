@@ -89,7 +89,7 @@ fn hir_stmt_edges(stmt: &crate::hir::HStmt, out: &mut HirEdges) {
             }
             hir_body_edges(default, out);
         }
-        HStmt::Break(_) | HStmt::Continue(_) | HStmt::DebugLine(_) => {}
+        HStmt::Break(_) | HStmt::Continue(_) | HStmt::DebugLine(_) | HStmt::SourceLine(_) => {}
     }
 }
 
@@ -147,7 +147,7 @@ fn hir_expr_edges(e: &crate::hir::HExpr, out: &mut HirEdges) {
                 hir_expr_edges(a, out);
             }
         }
-        K::Binary { lhs, rhs, .. } | K::Concat(lhs, rhs) | K::Coalesce { lhs, rhs } => {
+        K::Binary { lhs, rhs, .. } | K::Concat(lhs, rhs) => {
             hir_expr_edges(lhs, out);
             hir_expr_edges(rhs, out);
         }
@@ -213,7 +213,6 @@ fn hir_expr_edges(e: &crate::hir::HExpr, out: &mut HirEdges) {
         | K::FloatLit(_)
         | K::BoolLit(_)
         | K::CharLit(_)
-        | K::Null
         | K::Var(_)
         | K::EnumValue(_) => {}
     }

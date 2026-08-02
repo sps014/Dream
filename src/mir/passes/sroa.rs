@@ -170,7 +170,7 @@ fn transform(
 
 /// The zero value literal for a promoted field local of type `ty`.
 fn zero_for(interner: &TypeInterner, ty: TypeId) -> Const {
-    match interner.kind(interner.strip_nullable(ty)) {
+    match interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => Const::Float(0.0),
         TyKind::Prim(PrimTy::Float) => Const::F32(0.0),
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => Const::Long(0),

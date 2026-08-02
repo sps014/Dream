@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::diagnostics::DiagnosticBag;
-use crate::syntax::nodes::types::{mangle_generic, strip_nullable};
+use crate::syntax::nodes::types::mangle_generic;
 use crate::syntax::nodes::{FunctionNode, ProgramNode, Type};
 use crate::types::method_fn;
 
@@ -180,7 +180,7 @@ impl<'a> Analyzer<'a> {
         InterfaceTable { interfaces, impls }
     }
 
-    /// True when `name` (a bare type name, no nullable/array suffix) is a registered interface.
+    /// True when `name` (a bare type name, no array suffix) is a registered interface.
     /// Recognizes both plain interfaces (`Animal`) and mangled generic interface instances
     /// (`Container_int`), even before the latter has been instantiated.
     pub(in crate::semantics::analyzer) fn is_interface_name(&self, name: &str) -> bool {
@@ -220,17 +220,16 @@ impl<'a> Analyzer<'a> {
 
     /// True when a value of type `value` may be implicitly converted to interface-typed `target`
     /// (an upcast): `target` names an interface and `value`'s concrete class implements it.
-    /// Nullable wrappers on either side are ignored.
     pub(in crate::semantics::analyzer) fn value_assignable_to_interface(
         &self,
         target: &Type,
         value: &Type,
     ) -> bool {
-        let iface = strip_nullable(&target.get_type()).to_string();
+        let iface = target.get_type();
         if !self.is_interface_name(&iface) {
             return false;
         }
-        let val = strip_nullable(&value.get_type()).to_string();
+        let val = value.get_type();
         self.implements_as_interface_ref(&val, &iface)
     }
 

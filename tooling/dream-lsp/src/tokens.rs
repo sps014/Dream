@@ -104,7 +104,7 @@ pub fn lex_category(kind: TokenKind) -> Option<LexCategory> {
         DataTypeToken => LexCategory::Type,
         NumberToken => LexCategory::Number,
         StringToken | InterpolatedStringToken | CharToken => LexCategory::String,
-        BooleanToken | NullToken => LexCategory::Keyword,
+        BooleanToken => LexCategory::Keyword,
         IfToken | ElseToken | ForToken | WhileToken | DoToken | ReturnToken | BreakToken
         | ContinueToken | LetToken | ConstToken | FunToken | StaticToken | ImportToken
         | PublicToken | ExternToken | ClassToken | StructToken | UnmanagedToken | ExtendToken

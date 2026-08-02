@@ -55,10 +55,10 @@ extend string : Comparable<string> {
         if (len < 0) {
             len = 0;
         }
-        let result = String.alloc(len);
+        let result = string.alloc(len);
         let i = 0;
         while (i < len) {
-            String.set(result, i, this.char_at(start + i));
+            string.set(result, i, this.char_at(start + i));
             i = i + 1;
         }
         return result;
@@ -117,11 +117,11 @@ extend string : Comparable<string> {
     // A new string with every uppercase letter lowercased.
     public fun to_lower(): string {
         let n = this.size();
-        let result = String.alloc(n);
+        let result = string.alloc(n);
         let i = 0;
         while (i < n) {
             let c = this.char_at(i);
-            String.set(result, i, c.to_lower());
+            string.set(result, i, c.to_lower());
             i = i + 1;
         }
         return result;
@@ -130,11 +130,11 @@ extend string : Comparable<string> {
     // A new string with every lowercase letter uppercased.
     public fun to_upper(): string {
         let n = this.size();
-        let result = String.alloc(n);
+        let result = string.alloc(n);
         let i = 0;
         while (i < n) {
             let c = this.char_at(i);
-            String.set(result, i, c.to_upper());
+            string.set(result, i, c.to_upper());
             i = i + 1;
         }
         return result;
@@ -161,12 +161,12 @@ extend string : Comparable<string> {
         if (total < 0) {
             total = 0;
         }
-        let result = String.alloc(total);
+        let result = string.alloc(total);
         let i = 0;
         while (i < times) {
             let j = 0;
             while (j < n) {
-                String.set(result, i * n + j, this.char_at(j));
+                string.set(result, i * n + j, this.char_at(j));
                 j = j + 1;
             }
             i = i + 1;

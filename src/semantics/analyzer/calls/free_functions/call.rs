@@ -22,20 +22,34 @@ impl<'a> Analyzer<'a> {
         let mut arg_hirs = vec![];
         // When the callee is an unambiguous (non-overloaded) free function, publish each parameter's
         // declared type as the expected type while analyzing the matching argument, so untyped
-        // literals such as an empty array `[]` infer their element type from the signature.
+        // literals such as an empty array `[]` infer their element type from the signature. A plain
+        // (non-generic) constructor call gets the same treatment via its `constructor`'s parameter
+        // types, so e.g. an `Option<T>`-typed field's `None`/`Some(...)` argument can infer `T`
+        // without an explicit annotation.
         let expected_params: Option<Vec<Type>> =
             if self.function_table.is_overloaded(&function_name) {
                 None
-            } else {
+            } else if let Ok(info) = self.function_table.get_function(&function_name) {
+                Some(
+                    info.parameters
+                        .iter()
+                        .map(|p| Self::type_from_name(p))
+                        .collect(),
+                )
+            } else if generic_args.is_none() && self.struct_table.get_struct(&function_name).is_some()
+            {
                 self.function_table
-                    .get_function(&function_name)
+                    .get_function(&constructor_fn(&function_name))
                     .ok()
                     .map(|info| {
                         info.parameters
                             .iter()
+                            .skip(1)
                             .map(|p| Self::type_from_name(p))
                             .collect()
                     })
+            } else {
+                None
             };
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();

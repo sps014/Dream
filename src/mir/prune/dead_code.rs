@@ -244,7 +244,9 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             }
             collect_global_reads_rvalue(rv, out);
         }
-        Statement::Retain(o) | Statement::Release(o) => collect_global_reads_operand(o, out),
+        Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => {
+            collect_global_reads_operand(o, out)
+        }
         Statement::Call { args, .. } => args
             .iter()
             .for_each(|a| collect_global_reads_operand(a, out)),
@@ -254,7 +256,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
                 .for_each(|a| collect_global_reads_operand(a, out));
         }
         Statement::Print { arg, .. } => collect_global_reads_operand(arg, out),
-        Statement::Nop | Statement::DebugLine(_) => {}
+        Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
 
