@@ -41,6 +41,10 @@ pub enum ExpressionNode<'a> {
     /// `ExpressionStatement`, as a statement (arms may be blocks yielding `void`). The first field
     /// is the subject. (The C-style `switch` with `case`/`default` is `StatementNode::Switch`.)
     Switch(&'a ExpressionNode<'a>, Vec<SwitchArm<'a>>),
+    /// `expr?` — early-return propagation on a `Result<T, E>` or `Option<T>` operand. Desugars
+    /// during semantic analysis to a pattern-matching `switch` that binds the success payload and
+    /// early-`return`s the failure/absence variant, so no dedicated HIR/MIR node exists for it.
+    Try(&'a ExpressionNode<'a>),
 }
 
 /// One arm of a pattern-matching `switch`: a pattern, an optional `if` guard, and a body.
@@ -80,6 +84,7 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::Unary(token, _) => Some(token.position),
             ExpressionNode::Parenthesized(inner)
             | ExpressionNode::Await(inner)
+            | ExpressionNode::Try(inner)
             | ExpressionNode::IsExpression(inner, _, _) => inner.position(),
             ExpressionNode::Switch(subject, _) => subject.position(),
             ExpressionNode::Ternary(cond, _, _) => cond.position(),
@@ -106,6 +111,7 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.start_position(),
             ExpressionNode::Parenthesized(inner)
             | ExpressionNode::Await(inner)
+            | ExpressionNode::Try(inner)
             | ExpressionNode::IsExpression(inner, _, _) => inner.start_position(),
             ExpressionNode::Switch(subject, _) => subject.start_position(),
             ExpressionNode::Ternary(cond, _, _) => cond.start_position(),

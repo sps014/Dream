@@ -598,6 +598,7 @@ impl Builder {
                 }
             }
             ExpressionNode::Literal(_) => {}
+            ExpressionNode::Try(e) => self.walk_expr(e, scope),
         }
     }
 

@@ -352,6 +352,118 @@ fn test_analyze_switch_expression_arm_type_mismatch() {
     assert_eq!(diagnostics.has_errors(), true);
 }
 
+// -- `expr?` try-propagation --
+
+#[test]
+fn test_try_propagation_result_ok() {
+    let code = "
+        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        fun half(n: int): Result<int, string> {
+            if (n % 2 != 0) { return Result.Err(\"odd\"); }
+            return Result.Ok(n / 2);
+        }
+        fun quarter(n: int): Result<int, string> {
+            let h = half(n)?;
+            return Result.Ok(half(h)?);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_try_propagation_option_ok() {
+    let code = "
+        enum Option<T> { Some(value: T), None }
+        fun first(n: int): Option<int> {
+            if (n < 0) { return Option.None; }
+            return Option.Some(n);
+        }
+        fun doubled(n: int): Option<int> {
+            let v = first(n)?;
+            return Option.Some(v * 2);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_try_propagation_requires_result_or_option_operand() {
+    let code = "
+        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        fun f(): Result<int, string> {
+            let n = 5;
+            let x = n?;
+            return Result.Ok(x);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("requires a Result<T, E> or Option<T> operand")));
+}
+
+#[test]
+fn test_try_propagation_requires_matching_return_type() {
+    // `?` on a `Result<..>` inside a function that doesn't itself return a `Result<..>` (here
+    // `void`) has nowhere to propagate the `Err` to.
+    let code = "
+        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        fun half(n: int): Result<int, string> {
+            if (n % 2 != 0) { return Result.Err(\"odd\"); }
+            return Result.Ok(n / 2);
+        }
+        fun main(): void {
+            let h = half(4)?;
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("requires the enclosing function to return a matching")));
+}
+
+#[test]
+fn test_try_propagation_rejects_mismatched_error_type() {
+    // The enclosing function's `Result<_, E>` error type must match the operand's exactly.
+    let code = "
+        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        fun half(n: int): Result<int, string> {
+            if (n % 2 != 0) { return Result.Err(\"odd\"); }
+            return Result.Ok(n / 2);
+        }
+        fun f(n: int): Result<int, int> {
+            let h = half(n)?;
+            return Result.Ok(h);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+}
+
+#[test]
+fn test_try_propagation_rejects_option_result_mismatch() {
+    let code = "
+        enum Option<T> { Some(value: T), None }
+        enum Result<T, E> { Ok(value: T), Err(error: E) }
+        fun first(n: int): Option<int> {
+            if (n < 0) { return Option.None; }
+            return Option.Some(n);
+        }
+        fun f(n: int): Result<int, string> {
+            let v = first(n)?;
+            return Result.Ok(v);
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+}
+
 // -- Class indexer (`obj[i]` / `obj[i] = v`) and enumerator (`for (let x in obj)`) --
 
 #[test]

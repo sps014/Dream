@@ -17,6 +17,7 @@ mod exhaustiveness;
 mod foreach;
 mod lowering;
 mod patterns;
+mod try_propagation;
 mod variant_construction;
 
 /// The HIR shape a switch pattern lowers to (for statement-position `switch` → [`HStmt::Switch`]).

@@ -1,0 +1,68 @@
+// `expr?` propagates a `Result<T, E>`/`Option<T>` failure/absence immediately (an early `return`
+// of the same variant, re-boxed into the enclosing function's own `Result`/`Option` return type),
+// or yields the success payload as the expression's value.
+
+fun half(n: int): Result<int, string> {
+    if (n % 2 != 0) {
+        return Result.Err("odd");
+    }
+    return Result.Ok(n / 2);
+}
+
+// Chains two fallible calls: each `?` either propagates the `Err` immediately or unwraps to `int`.
+fun quarter(n: int): Result<int, string> {
+    let h = half(n)?;
+    let q = half(h)?;
+    return Result.Ok(q);
+}
+
+fun first_positive(xs: int[]): Option<int> {
+    for (let x in xs) {
+        if (x > 0) {
+            return Option.Some(x);
+        }
+    }
+    return Option.None;
+}
+
+// `?` on an `Option<int>` inside a function returning `Option<string>`.
+fun describe_first_positive(xs: int[]): Option<string> {
+    let v = first_positive(xs)?;
+    return Option.Some("first positive: " + v.to_string());
+}
+
+// `?` used directly inside a call argument (not just a `let` initializer). A `?` immediately
+// followed by a token that could start a ternary's "then" branch (like `+`) is ambiguous with
+// `cond ? a : b` and is parsed as ternary; parens disambiguate it as try-propagation instead.
+fun quarter_plus_one(n: int): Result<int, string> {
+    return Result.Ok((half(n)?) + 1);
+}
+
+fun main(): void {
+    switch (quarter(20)) {
+        Ok(v)  => System.println(v),
+        Err(e) => System.println("err: " + e),
+    }
+    switch (quarter(21)) {
+        Ok(v)  => System.println(v),
+        Err(e) => System.println("err: " + e),
+    }
+    switch (quarter(22)) {
+        Ok(v)  => System.println(v),
+        Err(e) => System.println("err: " + e),
+    }
+
+    switch (describe_first_positive([-3, -1, 4, 5])) {
+        Some(s) => System.println(s),
+        None    => System.println("none"),
+    }
+    switch (describe_first_positive([-3, -1])) {
+        Some(s) => System.println(s),
+        None    => System.println("none"),
+    }
+
+    switch (quarter_plus_one(20)) {
+        Ok(v)  => System.println(v),
+        Err(e) => System.println("err: " + e),
+    }
+}

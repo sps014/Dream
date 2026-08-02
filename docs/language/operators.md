@@ -85,6 +85,23 @@ let display: string = name ?? "anonymous";
 let label = score >= 60 ? "pass" : "fail";
 ```
 
+## Try-propagation
+
+`expr?` unwraps a `Result<T, E>`/`Option<T>`, or `return`s the failure/absence variant from the
+enclosing function immediately. See [Option & Result](../stdlib/option-result.md#try-propagation)
+for the full rules.
+
+```dream
+fun quarter(n: int): Result<int, string> {
+    let h = half(n)?;
+    return Result.Ok(half(h)?);
+}
+```
+
+A bare `expr?` immediately followed by a token that could start an expression (like `+`) is parsed
+as the ternary's leading `cond ?`, not try-propagation; parenthesize it (`(half(n)?) + 1`) to
+disambiguate.
+
 ## Assignment
 
 `=` writes to a variable, array element, or field:
@@ -109,6 +126,7 @@ Higher rows bind tighter; use parentheses when in doubt.
 
 | Precedence | Operators |
 |------------|-----------|
+| postfix | `?` (try-propagation) |
 | unary | unary `-`, `!` |
 | highest | `&` |
 | | `^` |

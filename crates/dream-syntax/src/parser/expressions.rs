@@ -275,11 +275,37 @@ impl<'a, 'b> Parser<'a, 'b> {
                 expr = ExpressionNode::IndexAccess(self.arena.alloc(expr), self.arena.alloc(index));
             } else if self.current_token().kind == TokenKind::DotToken {
                 expr = self.parse_member_access_step(expr)?;
+            } else if self.current_token().kind == TokenKind::QuestionMarkToken
+                && self.is_try_propagation_question_mark()
+            {
+                self.match_token(TokenKind::QuestionMarkToken);
+                expr = ExpressionNode::Try(self.arena.alloc(expr));
             } else {
                 break;
             }
         }
         Ok(expr)
+    }
+
+    /// Disambiguates a postfix `?` (try-propagation, `expr?`) from the leading `?` of a ternary
+    /// (`cond ? a : b`), both of which start with a bare `?` right after an expression. A `?` is
+    /// recognized as postfix propagation only when the token immediately following it cannot
+    /// start an expression — i.e. it cannot be the "then" branch of a ternary — which covers the
+    /// overwhelming majority of real usage (`x?;`, `x?.foo()`, `f(x?, y)`, `[x?]`, `return x?;`).
+    /// Any other following token is left for the ternary parse in [`parse_expression`]. Genuinely
+    /// ambiguous cases are rare and can be disambiguated by the caller with parens.
+    fn is_try_propagation_question_mark(&self) -> bool {
+        matches!(
+            self.peek_token(1).kind,
+            TokenKind::SemicolonToken
+                | TokenKind::CommaToken
+                | TokenKind::CloseParenthesisToken
+                | TokenKind::CloseBracketToken
+                | TokenKind::CurlyCloseBracketToken
+                | TokenKind::DotToken
+                | TokenKind::QuestionMarkToken
+                | TokenKind::EndOfFileToken
+        )
     }
 
     /// Parses a single `.member` access step onto `base`, consuming the `.`, an optional method

@@ -288,6 +288,73 @@ fn test_parse_switch_arm_guard() {
 }
 
 #[test]
+fn test_parse_try_propagation_before_semicolon() {
+    let code = "fun f(): int { let x = half(4)?; return x; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::Try(inner), _) = &func.body[0] else {
+        panic!("expected a `let` binding of a Try expression, got {:?}", func.body[0]);
+    };
+    assert!(matches!(**inner, ExpressionNode::FunctionCall(_, _, _)));
+}
+
+#[test]
+fn test_parse_try_propagation_chained_with_method_call() {
+    // `expr?.method()`: the `?` is recognized (followed by `.`), then the postfix chain continues.
+    let code = "fun f(): int { return half(4)?.abs(); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Return(Some(ExpressionNode::MethodCall(receiver, method, _, _))) =
+        &func.body[0]
+    else {
+        panic!("expected a return of a method call on a Try expression");
+    };
+    assert_eq!(method.text, "abs");
+    assert!(matches!(**receiver, ExpressionNode::Try(_)));
+}
+
+#[test]
+fn test_parse_bare_question_mark_still_parses_as_ternary() {
+    // With no parens, `x? + 1` is ambiguous with `cond ? a : b`; ternary parsing wins (a `?`
+    // followed by a token that could start an expression is never try-propagation).
+    let code = "fun f(): int { return half(4) ? 1 : 2; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    assert!(matches!(
+        &func.body[0],
+        StatementNode::Return(Some(ExpressionNode::Ternary(_, _, _)))
+    ));
+}
+
+#[test]
+fn test_parse_try_propagation_disambiguated_with_parens() {
+    // Parens around the try-propagated call resolve the `? +` ambiguity in favor of `?`, since the
+    // `?` is then immediately followed by the closing `)`.
+    let code = "fun f(): int { return (half(4)?) + 1; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Return(Some(ExpressionNode::Binary(left, _, _))) = &func.body[0] else {
+        panic!("expected a return of a binary expression");
+    };
+    let ExpressionNode::Parenthesized(inner) = &**left else {
+        panic!("expected the left operand to be parenthesized");
+    };
+    assert!(matches!(**inner, ExpressionNode::Try(_)));
+}
+
+#[test]
 fn test_parse_switch_statement_pattern_arms() {
     // A pattern-arm `switch` used as a statement parses to an `ExpressionStatement` wrapping an
     // `ExpressionNode::Switch` (distinct from the C-style `case`/`default` form).
