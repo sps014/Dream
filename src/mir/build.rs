@@ -55,7 +55,11 @@ impl FunctionBuilder {
     /// Declares a local with an optional source name and returns its handle.
     pub fn new_local(&mut self, ty: TypeId, name: Option<String>) -> Local {
         let id = Local(self.locals.len() as u32);
-        self.locals.push(LocalDecl { ty, name });
+        self.locals.push(LocalDecl {
+            ty,
+            name,
+            is_ref: false,
+        });
         id
     }
 
@@ -68,6 +72,14 @@ impl FunctionBuilder {
     pub fn new_param(&mut self, ty: TypeId, name: Option<String>) -> Local {
         let l = self.new_local(ty, name);
         self.params.push(l);
+        l
+    }
+
+    /// Declares a `ref` parameter: like [`Self::new_param`], but its value-struct-typed slot aliases
+    /// the caller's storage in place (see [`LocalDecl::is_ref`]) instead of taking a private copy.
+    pub fn new_ref_param(&mut self, ty: TypeId, name: Option<String>) -> Local {
+        let l = self.new_param(ty, name);
+        self.locals[l.0 as usize].is_ref = true;
         l
     }
 

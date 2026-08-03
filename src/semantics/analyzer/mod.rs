@@ -288,6 +288,12 @@ pub struct Analyzer<'a> {
     /// `expressions::capture_scan::scan_function_captures`, run once as a pre-pass before the
     /// function's body is analyzed). Cleared and repopulated per function in `hir_begin_function`.
     boxed_locals: std::collections::HashSet<String>,
+    /// Names that are `ref`-passed somewhere in the current function's body
+    /// (`expressions::capture_scan::scan_ref_argument_targets`) but are *not* in `boxed_locals` —
+    /// i.e. never closure-captured. These are boxed into the stack-resident `__RefBox<T>` value
+    /// struct instead of the heap `__Cell<T>` (see `hir_declare_local`/`hir_begin_function`).
+    /// Cleared and repopulated per function in `hir_begin_function`.
+    ref_boxed_locals: std::collections::HashSet<String>,
     /// For each synthesized capturing-lambda function (keyed by its lifted name, e.g. `__lambda_3`):
     /// the ordered list of `(captured name, its type in the enclosing scope)` it closes over.
     /// Consulted by identifier resolution *inside that lifted function's own body* to redirect a
@@ -381,6 +387,7 @@ impl<'a> Analyzer<'a> {
             pending_lambdas: IndexMap::new(),
             lambda_counter: 0,
             boxed_locals: std::collections::HashSet::new(),
+            ref_boxed_locals: std::collections::HashSet::new(),
             closure_captures: HashMap::new(),
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),

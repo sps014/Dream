@@ -1,0 +1,7 @@
+fun bad(ref ...xs: int[]): void {
+    System.println(xs.len());
+}
+
+fun main(): void {
+    bad();
+}

@@ -509,6 +509,19 @@ impl<'a> Analyzer<'a> {
                     Some(name.position),
                 ))
             }
+            // A `ref` argument (`f(ref x)`) is only meaningful inside a call's argument list,
+            // where the call-analysis paths (`analyze_ref_argument`) resolve and strip it before
+            // any argument reaches general expression analysis. Reaching this arm means one
+            // appeared somewhere else (e.g. `let y = ref x;`) — report it, don't silently analyze
+            // the inner place as if `ref` weren't there.
+            ExpressionNode::RefArgument(inner) => {
+                self.hir_none();
+                Err(report(
+                    diagnostics,
+                    "'ref' is only allowed as a call argument".to_string(),
+                    inner.position(),
+                ))
+            }
         }
     }
 

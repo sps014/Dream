@@ -45,8 +45,18 @@ impl<'a> Analyzer<'a> {
     /// `src/stdlib/core/closure.dream`) — the shared mutable box every reader of a captured name
     /// (the enclosing function and every closure that captures it) reads/writes through.
     pub(in crate::semantics::analyzer) fn cell_type(elem: &Type) -> Type {
+        Self::boxed_type("__Cell", elem)
+    }
+
+    /// The `__RefBox<elem>` value-struct type wrapping a local/parameter that is `ref`-passed but
+    /// never closure-captured (see `src/stdlib/core/closure.dream` and `docs/compiler/03-hir.md`).
+    pub(in crate::semantics::analyzer) fn ref_box_type(elem: &Type) -> Type {
+        Self::boxed_type("__RefBox", elem)
+    }
+
+    fn boxed_type(base: &str, elem: &Type) -> Type {
         Type::Struct(
-            crate::semantics::analyzer::synthetic_token(TokenKind::IdentifierToken, "__Cell"),
+            crate::semantics::analyzer::synthetic_token(TokenKind::IdentifierToken, base),
             Some(vec![elem.clone()]),
         )
     }
@@ -61,9 +71,29 @@ impl<'a> Analyzer<'a> {
         elem_ty: &Type,
         value: HExpr,
     ) -> Option<HExpr> {
+        self.hir_build_boxed_new("__Cell", Self::cell_type(elem_ty), elem_ty, value)
+    }
+
+    /// Builds `__RefBox<elem_ty>(value)`, the same shape as [`Self::hir_build_cell_new`] but backed
+    /// by the value-struct box a purely `ref`-passed (not closure-captured) name uses instead of the
+    /// heap `__Cell<T>` — see `hir_declare_local`/`Analyzer::hir_begin_function`.
+    pub(in crate::semantics::analyzer) fn hir_build_ref_box_new(
+        &mut self,
+        elem_ty: &Type,
+        value: HExpr,
+    ) -> Option<HExpr> {
+        self.hir_build_boxed_new("__RefBox", Self::ref_box_type(elem_ty), elem_ty, value)
+    }
+
+    fn hir_build_boxed_new(
+        &mut self,
+        base: &str,
+        boxed_ty: Type,
+        elem_ty: &Type,
+        value: HExpr,
+    ) -> Option<HExpr> {
         use crate::syntax::nodes::types::mangle_generic;
         use crate::types::constructor_fn;
-        const BASE: &str = "__Cell";
         let mut throwaway = crate::diagnostics::DiagnosticBag::new(None);
         let no_span = TextSpan {
             start: 0,
@@ -71,20 +101,14 @@ impl<'a> Analyzer<'a> {
             line_no: 0,
             col_no: 0,
         };
-        self.ensure_struct_instantiated(
-            BASE,
-            std::slice::from_ref(elem_ty),
-            &no_span,
-            &mut throwaway,
-        );
-        let mangled = mangle_generic(BASE, std::slice::from_ref(elem_ty));
-        let def = self.type_ctx.defs.lookup(DefKind::Struct, BASE)?;
+        self.ensure_struct_instantiated(base, std::slice::from_ref(elem_ty), &no_span, &mut throwaway);
+        let mangled = mangle_generic(base, std::slice::from_ref(elem_ty));
+        let def = self.type_ctx.defs.lookup(DefKind::Struct, base)?;
         let ctor = self
             .type_ctx
             .defs
             .lookup(DefKind::Function, &constructor_fn(&mangled));
-        let cell_ty = Self::cell_type(elem_ty);
-        let ty = self.type_ctx.lower(&cell_ty);
+        let ty = self.type_ctx.lower(&boxed_ty);
         Some(HExpr::new(
             ty,
             HExprKind::New {

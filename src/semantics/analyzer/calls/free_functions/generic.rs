@@ -47,6 +47,7 @@ impl<'a> Analyzer<'a> {
                     .last()
                     .map(|p| p.is_variadic)
                     .unwrap_or(false),
+                is_ref: template.parameters.iter().map(|p| p.is_ref).collect(),
                 defaults: template
                     .parameters
                     .iter()

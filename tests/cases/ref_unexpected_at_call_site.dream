@@ -1,0 +1,8 @@
+fun takes_value(x: int): void {
+    System.println(x);
+}
+
+fun main(): void {
+    let a: int = 1;
+    takes_value(ref a); // error: 'ref' given for a plain-value parameter
+}

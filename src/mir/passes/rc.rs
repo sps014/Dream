@@ -78,6 +78,7 @@ impl MirPass for RcInsertion {
                         extra_locals.push(LocalDecl {
                             ty: local_types[dest.0 as usize],
                             name: None,
+                            is_ref: false,
                         });
                         out.push(Statement::Assign(
                             Place::Local(tmp),
@@ -130,6 +131,7 @@ impl MirPass for RcInsertion {
                 spills.push(LocalDecl {
                     ty: func.ret,
                     name: None,
+                    is_ref: false,
                 });
                 block
                     .stmts

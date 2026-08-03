@@ -889,6 +889,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let index_before = self.current_token_index;
 
+            // A `ref name: T` parameter: the callee shares the caller's storage. Mutually
+            // exclusive with variadic/default, enforced below.
+            let is_ref = self.current_token().kind == TokenKind::RefToken;
+            if is_ref {
+                self.match_token(TokenKind::RefToken);
+            }
+
             // A trailing variadic parameter: `...name: T[]`. Must be the last parameter and
             // carries no default (an omitted variadic simply collects zero elements).
             let is_variadic = self.current_token().kind == TokenKind::DotDotDotToken;
@@ -902,6 +909,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::ColonToken);
 
             let param_type = self.parse_type()?;
+
+            if is_ref && is_variadic {
+                self.diagnostics.report_error(
+                    format!(
+                        "parameter '{}' cannot be both 'ref' and variadic",
+                        param.text
+                    ),
+                    Some(param.position),
+                );
+            }
 
             if is_variadic {
                 if seen_variadic {
@@ -931,25 +948,35 @@ impl<'a, 'b> Parser<'a, 'b> {
                         Some(param.position),
                     );
                 }
-                // Optional default value: `= <literal>`. Restricted to constant literals so no
-                // evaluation is needed at the call site.
-                let default = if self.current_token().kind == TokenKind::EqualToken {
-                    self.match_token(TokenKind::EqualToken);
-                    seen_default = true;
-                    Some(self.parse_literal_pattern()?)
-                } else {
-                    if seen_default {
+                if is_ref {
+                    if self.current_token().kind == TokenKind::EqualToken {
                         self.diagnostics.report_error(
-                            format!(
-                                "required parameter '{}' cannot follow a parameter with a default value",
-                                param.text
-                            ),
+                            format!("'ref' parameter '{}' cannot have a default value", param.text),
                             Some(param.position),
                         );
                     }
-                    None
-                };
-                params.push(ParameterNode::with_default(param, param_type, default));
+                    params.push(ParameterNode::by_ref(param, param_type));
+                } else {
+                    // Optional default value: `= <literal>`. Restricted to constant literals so no
+                    // evaluation is needed at the call site.
+                    let default = if self.current_token().kind == TokenKind::EqualToken {
+                        self.match_token(TokenKind::EqualToken);
+                        seen_default = true;
+                        Some(self.parse_literal_pattern()?)
+                    } else {
+                        if seen_default {
+                            self.diagnostics.report_error(
+                                format!(
+                                    "required parameter '{}' cannot follow a parameter with a default value",
+                                    param.text
+                                ),
+                                Some(param.position),
+                            );
+                        }
+                        None
+                    };
+                    params.push(ParameterNode::with_default(param, param_type, default));
+                }
             }
 
             // Safety: if a malformed parameter consumed no tokens (e.g. a reserved keyword used
@@ -959,10 +986,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             //if we have comma and it is not trailing comma
             if self.current_token().kind == TokenKind::CommaToken {
-                //next token of comma is identifier (or `...` starting a variadic parameter) eat comma then
+                //next token of comma is identifier (or `...`/`ref` starting the next parameter) eat comma then
                 if matches!(
                     self.peek_token(1).kind,
-                    TokenKind::IdentifierToken | TokenKind::DotDotDotToken
+                    TokenKind::IdentifierToken | TokenKind::DotDotDotToken | TokenKind::RefToken
                 ) {
                     //eat the comma
                     self.match_token(TokenKind::CommaToken);

@@ -615,6 +615,7 @@ impl Builder {
                 LambdaBody::Block(stmts) => self.walk_block(stmts, scope),
             },
             ExpressionNode::NamedArg(_, e) => self.walk_expr(e, scope),
+            ExpressionNode::RefArgument(e) => self.walk_expr(e, scope),
         }
     }
 

@@ -1,0 +1,21 @@
+// A closure-captured local passed by `ref` to a helper shares the exact same heap box the closure
+// itself reads/writes through (rather than getting its own separate stack slot) — no double
+// boxing, and mutations through either path stay visible to both.
+
+fun increment(ref x: int): void {
+    x = x + 1;
+}
+
+fun main(): void {
+    let counter: int = 0;
+    let inc: fun(): int = () => {
+        increment(ref counter); // ref-passes the closure's own captured cell
+        return counter;
+    };
+    System.println(inc()); // 1
+    System.println(inc()); // 2
+    System.println(counter); // 2: visible to the enclosing scope too
+
+    increment(ref counter); // and the enclosing scope's ref-passing is visible to the closure
+    System.println(inc()); // 4
+}

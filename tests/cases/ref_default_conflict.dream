@@ -1,0 +1,8 @@
+fun bad(ref x: int = 5): void {
+    x = x + 1;
+}
+
+fun main(): void {
+    let a: int = 1;
+    bad(ref a);
+}

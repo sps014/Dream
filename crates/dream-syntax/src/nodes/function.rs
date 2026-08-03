@@ -18,6 +18,11 @@ pub struct ParameterNode {
     /// into a `T[]` array bound to `name` inside the body. Always `false` except on that one
     /// parameter, and mutually exclusive with `default` (enforced by the parser).
     pub is_variadic: bool,
+    /// True for a `ref name: T` parameter: the callee shares the caller's storage instead of
+    /// receiving a copy, so writes inside the body are visible to the caller. Mutually exclusive
+    /// with `default`/`is_variadic` (enforced by the parser). Call sites must pass a matching
+    /// `ref` argument (`ExpressionNode::RefArgument`).
+    pub is_ref: bool,
 }
 
 impl ParameterNode {
@@ -28,6 +33,7 @@ impl ParameterNode {
             type_,
             default: None,
             is_variadic: false,
+            is_ref: false,
         }
     }
 
@@ -38,6 +44,7 @@ impl ParameterNode {
             type_,
             default,
             is_variadic: false,
+            is_ref: false,
         }
     }
 
@@ -48,6 +55,18 @@ impl ParameterNode {
             type_,
             default: None,
             is_variadic: true,
+            is_ref: false,
+        }
+    }
+
+    /// Creates a `ref name: T` parameter node.
+    pub fn by_ref(name: SyntaxToken, type_: Type) -> ParameterNode {
+        ParameterNode {
+            name,
+            type_,
+            default: None,
+            is_variadic: false,
+            is_ref: true,
         }
     }
 }

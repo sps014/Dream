@@ -378,6 +378,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
             let index_before = self.current_token_index;
+
+            // A `ref name: T` lambda parameter, mirroring named-function ref parameters.
+            let is_ref = self.current_token().kind == TokenKind::RefToken;
+            if is_ref {
+                self.match_token(TokenKind::RefToken);
+            }
+
             let param = self.match_token(TokenKind::IdentifierToken);
 
             let param_type = if self.current_token().kind == TokenKind::ColonToken {
@@ -387,29 +394,42 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Type::Unknown
             };
 
-            let default = if self.current_token().kind == TokenKind::EqualToken {
-                self.match_token(TokenKind::EqualToken);
-                seen_default = true;
-                Some(self.parse_literal_pattern()?)
-            } else {
-                if seen_default {
+            if is_ref {
+                if self.current_token().kind == TokenKind::EqualToken {
                     self.diagnostics.report_error(
-                        format!(
-                            "required parameter '{}' cannot follow a parameter with a default value",
-                            param.text
-                        ),
+                        format!("'ref' parameter '{}' cannot have a default value", param.text),
                         Some(param.position),
                     );
                 }
-                None
-            };
-            params.push(ParameterNode::with_default(param, param_type, default));
+                params.push(ParameterNode::by_ref(param, param_type));
+            } else {
+                let default = if self.current_token().kind == TokenKind::EqualToken {
+                    self.match_token(TokenKind::EqualToken);
+                    seen_default = true;
+                    Some(self.parse_literal_pattern()?)
+                } else {
+                    if seen_default {
+                        self.diagnostics.report_error(
+                            format!(
+                                "required parameter '{}' cannot follow a parameter with a default value",
+                                param.text
+                            ),
+                            Some(param.position),
+                        );
+                    }
+                    None
+                };
+                params.push(ParameterNode::with_default(param, param_type, default));
+            }
 
             if self.current_token_index == index_before {
                 self.next_token();
             }
             if self.current_token().kind == TokenKind::CommaToken
-                && self.peek_token(1).kind == TokenKind::IdentifierToken
+                && matches!(
+                    self.peek_token(1).kind,
+                    TokenKind::IdentifierToken | TokenKind::RefToken
+                )
             {
                 self.match_token(TokenKind::CommaToken);
             }
@@ -481,6 +501,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::ColonToken);
             let value = self.parse_expression(0)?;
             return Ok(ExpressionNode::NamedArg(name, self.arena.alloc(value)));
+        }
+        // A pass-by-reference argument: `ref place`. The place shape (identifier/member/index) is
+        // validated by the analyzer, not here — parsing accepts any unary-level expression.
+        if self.current_token().kind == TokenKind::RefToken {
+            self.match_token(TokenKind::RefToken);
+            let value = self.parse_expression(0)?;
+            return Ok(ExpressionNode::RefArgument(self.arena.alloc(value)));
         }
         self.parse_expression(0)
     }

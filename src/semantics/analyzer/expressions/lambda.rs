@@ -36,6 +36,23 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        // `ref` lambda parameters are parsed (mirroring named-function parameters) but not yet
+        // lowered: every lambda is invoked through the `fun(...)` funcbox/`call_indirect` ABI,
+        // which has no notion of a `ref` slot (its `Type::Function` parameter list carries only
+        // types). Reject clearly here rather than let one through into codegen, where it would
+        // silently pass the raw value instead of the shared `__Cell<T>` pointer the body expects.
+        if let Some(bad) = lambda.parameters.iter().find(|p| p.is_ref) {
+            self.hir_none();
+            return Err(report(
+                diagnostics,
+                format!(
+                    "'ref' parameter '{}' is not yet supported on a lambda expression (only on named functions/methods)",
+                    bad.name.text
+                ),
+                Some(lambda.open_paren_position),
+            ));
+        }
+
         // The return type — and any parameter left untyped (`(a, b) => ...`, parsed with a
         // `Type::Unknown` placeholder; see `parse_lambda_parameters`) — must come from the expected
         // `fun(...)` context at this use site: the return type can't be inferred by analyzing the
@@ -110,6 +127,26 @@ impl<'a> Analyzer<'a> {
             }
         }
         captures.sort_by(|a, b| a.0.cmp(&b.0));
+
+        // A `ref` parameter's box (`__RefBox<T>`, see `docs/compiler/03-hir.md`) is a stack-resident
+        // value struct aliasing the *caller's* frame slot: it is only valid for the lifetime of this
+        // call. A lambda that captures it could escape past that call's return (e.g. returned as a
+        // `fun(...)` value), leaving a dangling address — the same hazard C# guards against by
+        // rejecting `ref`/`out` parameter captures in an anonymous method/lambda. Reject it here too.
+        if let Some((bad, _)) = captures
+            .iter()
+            .find(|(name, _)| parent_function.parameters.iter().any(|p| p.is_ref && p.name.text == *name))
+        {
+            self.hir_none();
+            return Err(report(
+                diagnostics,
+                format!(
+                    "cannot capture 'ref' parameter '{}' in a lambda expression (its storage is only valid for the call's duration)",
+                    bad
+                ),
+                Some(lambda.open_paren_position),
+            ));
+        }
 
         let body: &'a [StatementNode<'a>] = match &lambda.body {
             LambdaBody::Block(stmts) => stmts,

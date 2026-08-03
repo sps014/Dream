@@ -64,6 +64,12 @@ pub enum ExpressionNode<'a> {
     /// any other analysis sees it; encountering one outside that resolution step is a semantic
     /// error (reported, not a panic), never a valid standalone expression.
     NamedArg(SyntaxToken, &'a ExpressionNode<'a>),
+    /// `ref place` — a pass-by-reference call argument (`f(ref x)`), produced only inside a call's
+    /// argument list by the shared call-argument parser. The inner expression must be an
+    /// addressable place (identifier, member access, or index access); the analyzer validates this
+    /// and rejects anything else, and rejects a `RefArgument` supplied to a non-`ref` parameter
+    /// slot (or a plain argument supplied to a `ref` slot). Never a valid standalone expression.
+    RefArgument(&'a ExpressionNode<'a>),
 }
 
 /// An arrow-lambda literal: `(x: int, y: int) => x + y` or `(x: int) => { ...; return x; }`.
@@ -137,6 +143,7 @@ impl<'a> ExpressionNode<'a> {
             }
             ExpressionNode::Lambda(l) => Some(l.open_paren_position),
             ExpressionNode::NamedArg(name, _) => Some(name.position),
+            ExpressionNode::RefArgument(inner) => inner.position(),
         }
     }
 

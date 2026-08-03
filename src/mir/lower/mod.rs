@@ -100,7 +100,11 @@ fn init_builder(func: &HFunction, is_async: bool) -> (FunctionBuilder, HashMap<u
     b.set_file(func.file.clone());
     let mut locals: HashMap<u32, Local> = HashMap::new();
     for p in &func.params {
-        let l = b.new_param(p.ty, Some(p.name.clone()));
+        let l = if p.is_ref {
+            b.new_ref_param(p.ty, Some(p.name.clone()))
+        } else {
+            b.new_param(p.ty, Some(p.name.clone()))
+        };
         locals.insert(p.local.0, l);
     }
     for decl in &func.locals {
@@ -355,6 +359,7 @@ mod tests {
                 local: LocalId(0),
                 name: "x".into(),
                 ty: int,
+                is_ref: false,
             }],
             ret: int,
             locals: vec![],

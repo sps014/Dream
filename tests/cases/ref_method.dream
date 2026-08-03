@@ -1,0 +1,24 @@
+// `ref` on instance/static method parameters: the implicit `this` is unaffected, `ref` applies to
+// the explicit parameter list exactly like a free function.
+
+struct Doubler {
+    constructor() {}
+
+    public fun apply(ref x: int): void {
+        x = x * 2;
+    }
+
+    public static fun apply_static(ref x: int): void {
+        x = x * 2;
+    }
+}
+
+fun main(): void {
+    let d: Doubler = Doubler();
+    let n: int = 5;
+    d.apply(ref n);
+    System.println(n); // 10
+
+    Doubler.apply_static(ref n);
+    System.println(n); // 20
+}

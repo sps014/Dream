@@ -131,7 +131,11 @@ fn transform(
     let mut promo: BTreeMap<usize, Local> = BTreeMap::new();
     for (&field, &ty) in fields {
         let l = Local(func.locals.len() as u32);
-        func.locals.push(LocalDecl { ty, name: None });
+        func.locals.push(LocalDecl {
+            ty,
+            name: None,
+            is_ref: false,
+        });
         promo.insert(field, l);
     }
 

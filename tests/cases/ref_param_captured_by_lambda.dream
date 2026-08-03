@@ -1,0 +1,14 @@
+// A `ref` parameter's box is a stack-resident value struct aliasing the caller's frame slot: it is
+// only valid for the duration of this call. Capturing it in a lambda (which could escape past the
+// call's return) is rejected, mirroring C#'s rule against capturing `ref`/`out` parameters.
+
+fun makeReader(ref x: int): fun(): int {
+    let read: fun(): int = () => x;
+    return read;
+}
+
+fun main(): void {
+    let n: int = 1;
+    let f: fun(): int = makeReader(ref n);
+    System.println(f());
+}

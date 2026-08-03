@@ -120,6 +120,11 @@ pub struct LocalDecl {
     pub ty: TypeId,
     /// Optional source name (params/user `let`s); synthetic temporaries have `None`.
     pub name: Option<String>,
+    /// True for a `ref` parameter whose value-struct-typed slot (see
+    /// `src/mir/emit/valuetype.rs::ValueFrame`) must alias the caller's storage in place rather than
+    /// take a private copy — the same treatment the `this` receiver already gets. Meaningless (and
+    /// always `false`) for a local whose type is not a value struct.
+    pub is_ref: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -460,11 +465,13 @@ mod tests {
                     local: LocalId(0),
                     name: "a".into(),
                     ty: int,
+                    is_ref: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
+                    is_ref: false,
                 },
             ],
             ret: int,

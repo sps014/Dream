@@ -41,6 +41,187 @@ pub(in crate::semantics::analyzer) fn scan_function_captures(
     out
 }
 
+/// Every name anywhere in `stmts` (a whole function body, same traversal shape as
+/// [`scan_function_captures`]) that is ever passed as a `ref` argument to a local/parameter place
+/// (`f(ref x)`). Run as a pre-pass alongside `scan_function_captures` (feeding
+/// `Analyzer::ref_boxed_locals`, minus whatever `scan_function_captures` already claims for
+/// `Analyzer::boxed_locals`) so `x`'s slot is boxed (into `__RefBox<T>`, or `__Cell<T>` if `x` is
+/// also captured) from its very first `let`/parameter binding — a `ref` argument always needs the
+/// shared box pointer, exactly like a
+/// closure capture does, and the two triggers simply union into one boxing set. Over-approximates
+/// like its sibling: a name is collected regardless of whether the call it's passed to turns out
+/// to actually resolve to a `ref` parameter (a later mismatch is a separate diagnostic, not this
+/// pass's concern) — boxing a name that wasn't strictly needed is never unsound, only unnecessary.
+pub(in crate::semantics::analyzer) fn scan_ref_argument_targets(
+    stmts: &[StatementNode],
+) -> HashSet<String> {
+    let mut out = HashSet::new();
+    walk_stmts_for_ref_targets(stmts, &mut out);
+    out
+}
+
+fn walk_stmts_for_ref_targets(stmts: &[StatementNode], out: &mut HashSet<String>) {
+    for s in stmts {
+        walk_stmt_for_ref_targets(s, out);
+    }
+}
+
+fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
+    match stmt {
+        StatementNode::Assignment(_, e) => walk_expr_for_ref_targets(e, out),
+        StatementNode::IndexAssignment(a, b, v) => {
+            walk_expr_for_ref_targets(a, out);
+            walk_expr_for_ref_targets(b, out);
+            walk_expr_for_ref_targets(v, out);
+        }
+        StatementNode::MemberAssignment(a, _, v) => {
+            walk_expr_for_ref_targets(a, out);
+            walk_expr_for_ref_targets(v, out);
+        }
+        StatementNode::Declaration(_, _, e, _) => walk_expr_for_ref_targets(e, out),
+        StatementNode::FunctionInvocation(_, _, args) => {
+            for a in args {
+                walk_expr_for_ref_targets(a, out);
+            }
+        }
+        StatementNode::MethodInvocation(recv, _, _, args) => {
+            walk_expr_for_ref_targets(recv, out);
+            for a in args {
+                walk_expr_for_ref_targets(a, out);
+            }
+        }
+        StatementNode::Return(Some(e)) => walk_expr_for_ref_targets(e, out),
+        StatementNode::Return(None) => {}
+        StatementNode::IfElse(cond, then_b, elifs, else_b) => {
+            walk_expr_for_ref_targets(cond, out);
+            walk_stmts_for_ref_targets(then_b, out);
+            for (c, b) in elifs {
+                walk_expr_for_ref_targets(c, out);
+                walk_stmts_for_ref_targets(b, out);
+            }
+            if let Some(b) = else_b {
+                walk_stmts_for_ref_targets(b, out);
+            }
+        }
+        StatementNode::While(cond, body) => {
+            walk_expr_for_ref_targets(cond, out);
+            walk_stmts_for_ref_targets(body, out);
+        }
+        StatementNode::DoWhile(body, cond) => {
+            walk_stmts_for_ref_targets(body, out);
+            walk_expr_for_ref_targets(cond, out);
+        }
+        StatementNode::For(init, cond, step, body) => {
+            if let Some(i) = init {
+                walk_stmt_for_ref_targets(i, out);
+            }
+            if let Some(c) = cond {
+                walk_expr_for_ref_targets(c, out);
+            }
+            if let Some(s) = step {
+                walk_stmt_for_ref_targets(s, out);
+            }
+            walk_stmts_for_ref_targets(body, out);
+        }
+        StatementNode::Labeled(_, s) => walk_stmt_for_ref_targets(s, out),
+        StatementNode::Break(_) | StatementNode::Continue(_) => {}
+        StatementNode::ExpressionStatement(e) => walk_expr_for_ref_targets(e, out),
+        StatementNode::AwaitStmt(e) => walk_expr_for_ref_targets(e, out),
+        StatementNode::ForEach(_, iter, _, _, body) => {
+            walk_expr_for_ref_targets(iter, out);
+            walk_stmts_for_ref_targets(body, out);
+        }
+        StatementNode::Switch(subj, cases, default) => {
+            walk_expr_for_ref_targets(subj, out);
+            for (labels, body) in cases {
+                for l in labels {
+                    walk_expr_for_ref_targets(l, out);
+                }
+                walk_stmts_for_ref_targets(body, out);
+            }
+            if let Some(b) = default {
+                walk_stmts_for_ref_targets(b, out);
+            }
+        }
+    }
+}
+
+fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
+    match expr {
+        ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
+        ExpressionNode::RefArgument(inner) => {
+            if let ExpressionNode::Identifier(tok) = inner {
+                out.insert(tok.text.clone());
+            }
+            walk_expr_for_ref_targets(inner, out);
+        }
+        ExpressionNode::ArrayLiteral(es) | ExpressionNode::SetLiteral(es) => {
+            for e in es {
+                walk_expr_for_ref_targets(e, out);
+            }
+        }
+        ExpressionNode::MapLiteral(entries) => {
+            for (k, v) in entries {
+                walk_expr_for_ref_targets(k, out);
+                walk_expr_for_ref_targets(v, out);
+            }
+        }
+        ExpressionNode::Binary(l, _, r) => {
+            walk_expr_for_ref_targets(l, out);
+            walk_expr_for_ref_targets(r, out);
+        }
+        ExpressionNode::Unary(_, e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::Parenthesized(e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::FunctionCall(_, _, args) => {
+            for a in args {
+                walk_expr_for_ref_targets(a, out);
+            }
+        }
+        ExpressionNode::IndexAccess(a, i) => {
+            walk_expr_for_ref_targets(a, out);
+            walk_expr_for_ref_targets(i, out);
+        }
+        ExpressionNode::Cast(_, e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::MemberAccess(e, _) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::IsExpression(e, _, _) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::MethodCall(recv, _, _, args) => {
+            walk_expr_for_ref_targets(recv, out);
+            for a in args {
+                walk_expr_for_ref_targets(a, out);
+            }
+        }
+        ExpressionNode::Ternary(c, t, e) => {
+            walk_expr_for_ref_targets(c, out);
+            walk_expr_for_ref_targets(t, out);
+            walk_expr_for_ref_targets(e, out);
+        }
+        ExpressionNode::Await(e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::Switch(subj, arms) => {
+            walk_expr_for_ref_targets(subj, out);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    walk_expr_for_ref_targets(g, out);
+                }
+                match &arm.body {
+                    SwitchArmBody::Expr(e) => walk_expr_for_ref_targets(e, out),
+                    SwitchArmBody::Block(stmts) => walk_stmts_for_ref_targets(stmts, out),
+                }
+            }
+        }
+        ExpressionNode::Try(e) => walk_expr_for_ref_targets(e, out),
+        // A lambda's own ref-argument uses are that lambda's own concern (scanned again when its
+        // own turn to be analyzed comes up, exactly like `walk_expr_for_lambdas` treats a nested
+        // lambda's captures) — except a ref target that is itself one of *this* function's names,
+        // reached through the lambda body, still needs to be found: descend the same as
+        // `collect_names_expr` does for captures.
+        ExpressionNode::Lambda(l) => match &l.body {
+            LambdaBody::Expr(e) => walk_expr_for_ref_targets(e, out),
+            LambdaBody::Block(stmts) => walk_stmts_for_ref_targets(stmts, out),
+        },
+        ExpressionNode::NamedArg(_, e) => walk_expr_for_ref_targets(e, out),
+    }
+}
+
 fn walk_stmts_for_lambdas(stmts: &[StatementNode], out: &mut HashSet<String>) {
     for s in stmts {
         walk_stmt_for_lambdas(s, out);
@@ -186,6 +367,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
         ExpressionNode::Try(e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::Lambda(l) => out.extend(lambda_free_names(l)),
         ExpressionNode::NamedArg(_, e) => walk_expr_for_lambdas(e, out),
+        ExpressionNode::RefArgument(e) => walk_expr_for_lambdas(e, out),
     }
 }
 
@@ -411,5 +593,6 @@ fn collect_names_expr(
             }
         }
         ExpressionNode::NamedArg(_, e) => collect_names_expr(e, bound, referenced),
+        ExpressionNode::RefArgument(e) => collect_names_expr(e, bound, referenced),
     }
 }

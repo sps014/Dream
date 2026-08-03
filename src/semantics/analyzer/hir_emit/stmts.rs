@@ -1,5 +1,16 @@
 use super::*;
 
+/// Which box a boxed local's slot holds — see `Analyzer::hir_declare_local`.
+enum BoxKind {
+    /// `__Cell<T>`: heap-allocated, ARC-managed. Used when the name is captured by a lambda (its
+    /// storage may need to outlive this function's stack frame).
+    Cell,
+    /// `__RefBox<T>`: a stack-resident value struct. Used when the name is only ever `ref`-passed
+    /// (never captured) — its storage never needs to outlive this call, so no heap allocation or
+    /// ARC bookkeeping is needed.
+    RefBox,
+}
+
 impl<'a> Analyzer<'a> {
     /// Appends `await e;` at statement position.
     pub(in crate::semantics::analyzer) fn hir_await_stmt(&mut self, value: Option<HExpr>) {
@@ -81,9 +92,12 @@ impl<'a> Analyzer<'a> {
     /// computed by the capture-scan pre-pass in `hir_begin_function`), the local is boxed instead:
     /// the slot holds a `__Cell<T>` object (constructed here around `value`) rather than a raw `T`,
     /// so a later capturing closure can alias the very same storage (see
-    /// `expressions::lambda`/`hir_read_capture_cell`). `self.hir.boxed` records the unboxed element
-    /// type so subsequent reads/writes of `name` (`hir_set_var`/`hir_assign_local`) know to go
-    /// through the cell's `.value` field transparently — every other analyzer-facing type stays `T`.
+    /// `expressions::lambda`/`hir_read_capture_cell`). If `name` is only ever `ref`-passed (never
+    /// captured, `self.ref_boxed_locals`), it is boxed into `__RefBox<T>` instead — a stack-resident
+    /// value struct, since its storage never needs to outlive this call (see `BoxKind`). Either way
+    /// `self.hir.boxed` records the unboxed element type so subsequent reads/writes of `name`
+    /// (`hir_set_var`/`hir_assign_local`) know to go through the box's `.value` field transparently
+    /// — every other analyzer-facing type stays `T`.
     pub(in crate::semantics::analyzer) fn hir_declare_local(
         &mut self,
         name: &str,
@@ -98,7 +112,11 @@ impl<'a> Analyzer<'a> {
             return;
         };
         if self.boxed_locals.contains(name) {
-            self.declare_boxed_local(name, ty, value);
+            self.declare_boxed_local(name, ty, value, BoxKind::Cell);
+            return;
+        }
+        if self.ref_boxed_locals.contains(name) {
+            self.declare_boxed_local(name, ty, value, BoxKind::RefBox);
             return;
         }
         let ty_id = self.type_ctx.lower(ty);
@@ -118,12 +136,15 @@ impl<'a> Analyzer<'a> {
         });
     }
 
-    fn declare_boxed_local(&mut self, name: &str, ty: &Type, value: HExpr) {
-        let Some(cell) = self.hir_build_cell_new(ty, value) else {
+    fn declare_boxed_local(&mut self, name: &str, ty: &Type, value: HExpr, kind: BoxKind) {
+        let (cell, cell_ty) = match kind {
+            BoxKind::Cell => (self.hir_build_cell_new(ty, value), Self::cell_type(ty)),
+            BoxKind::RefBox => (self.hir_build_ref_box_new(ty, value), Self::ref_box_type(ty)),
+        };
+        let Some(cell) = cell else {
             self.hir.ok = false;
             return;
         };
-        let cell_ty = Self::cell_type(ty);
         let cell_tid = self.type_ctx.lower(&cell_ty);
         let elem_tid = self.type_ctx.lower(ty);
         let local = LocalId(self.hir.next_local);

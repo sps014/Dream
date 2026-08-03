@@ -22,6 +22,9 @@ use dream_text::text_span::TextSpan;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Per-argument type strings, HIR, and `ref`-ness returned by [`Analyzer::analyze_call_arguments_expecting_ref`].
+type CallArgAnalysis = (Vec<String>, Vec<Option<HExpr>>, Vec<bool>);
+
 impl<'a> Analyzer<'a> {
     /// The structured (never string-mangled) parameter types of `sig`, suitable for publishing as
     /// `current_expected_type` while analyzing a non-overloaded callee's arguments. Prefers
@@ -127,6 +130,48 @@ impl<'a> Analyzer<'a> {
         Ok(slots.into_iter().map(|s| s.unwrap()).collect())
     }
 
+    /// Resolves a `ref` call argument's inner place (`f(ref x)` -> `x`) to its declared type and
+    /// the HIR for the shared box pointer backing it — the *box*, not the current value, so the
+    /// callee sees the exact same shared storage (see `Analyzer::hir_read_cell_ref`). The box is
+    /// `__Cell<T>` (heap) if `x` is also closure-captured, or `__RefBox<T>` (stack-resident value
+    /// struct, no heap allocation) otherwise — either way `x` must already be one of
+    /// `self.boxed_locals`/`self.ref_boxed_locals` by the time this runs (guaranteed by the
+    /// `scan_ref_argument_targets` pre-pass in `hir_begin_function` having found this very call
+    /// site).
+    ///
+    /// v1 only supports a plain local-variable/parameter place; a field or array element (`ref
+    /// obj.field`, `ref arr[i]`) is not yet an addressable place the backend can hand out a stable
+    /// pointer to, so it is rejected here with a clear diagnostic rather than silently miscompiling.
+    /// Returns `None` (having already reported) for any unsupported shape or unresolved name.
+    pub(crate) fn analyze_ref_argument(
+        &mut self,
+        inner: &'a ExpressionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Option<(Type, Option<HExpr>)> {
+        let ExpressionNode::Identifier(tok) = inner else {
+            diagnostics.report_error(
+                "a 'ref' argument must be a local variable or parameter (fields and array elements are not yet supported)".to_string(),
+                inner.position(),
+            );
+            self.hir_none();
+            return None;
+        };
+        let ty = match (**symbol_table).borrow().get_symbol(tok) {
+            Ok(t) => t,
+            Err(e) => {
+                diagnostics.report_error(e.to_string(), Some(tok.position));
+                self.hir_none();
+                return None;
+            }
+        };
+        let hir = self.hir_read_cell_ref(&tok.text);
+        if hir.is_none() {
+            self.hir_fail();
+        }
+        Some((ty, hir))
+    }
+
     /// Collects a variadic call's trailing arguments into a single array literal, so the rest of
     /// argument analysis sees an ordinary positional list whose last slot is the `T[]` value the
     /// variadic parameter expects — reusing the existing array-literal analysis path (including
@@ -184,16 +229,91 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(Vec<String>, Vec<Option<HExpr>>), SemanticError> {
+        let (arg_types, arg_hirs, _is_ref) = self.analyze_call_arguments_expecting_ref(
+            params,
+            expected_params,
+            parent_function,
+            symbol_table,
+            diagnostics,
+        )?;
+        Ok((arg_types, arg_hirs))
+    }
+
+    /// Like [`analyze_call_arguments_expecting`](Self::analyze_call_arguments_expecting), but also
+    /// returns which argument slots were written as a `ref` argument (`f(ref x)`), so the caller
+    /// can validate each one against the resolved callee's `is_ref` parameter flags (mismatches are
+    /// the caller's diagnostic, not this helper's — the callee's signature isn't always known yet
+    /// at the point arguments are analyzed, e.g. before overload resolution).
+    pub(super) fn analyze_call_arguments_expecting_ref(
+        &mut self,
+        params: &[ExpressionNode<'a>],
+        expected_params: Option<&[Type]>,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<CallArgAnalysis, SemanticError> {
         let mut arg_types = Vec::new();
         let mut arg_hirs = Vec::new();
+        let mut arg_is_ref = Vec::new();
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();
             self.current_expected_type = expected_params.and_then(|ps| ps.get(i).cloned());
+            if let ExpressionNode::RefArgument(inner) = param {
+                arg_is_ref.push(true);
+                self.current_expected_type = saved_expected;
+                match self.analyze_ref_argument(inner, symbol_table, diagnostics) {
+                    Some((t, hir)) => {
+                        arg_hirs.push(hir);
+                        arg_types.push(t.get_type());
+                    }
+                    None => {
+                        arg_hirs.push(None);
+                        arg_types.push(Type::Unknown.get_type());
+                    }
+                }
+                continue;
+            }
+            arg_is_ref.push(false);
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
             self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
             arg_types.push(t.get_type());
         }
-        Ok((arg_types, arg_hirs))
+        Ok((arg_types, arg_hirs, arg_is_ref))
+    }
+
+    /// Reports a diagnostic for every argument slot whose `ref`-ness (`given_is_ref`) disagrees
+    /// with the resolved callee's declared parameter (`expected_is_ref`) — either a plain value was
+    /// passed where `ref` is required, or `ref` was written for a parameter that isn't one.
+    pub(crate) fn validate_ref_arguments(
+        &mut self,
+        error_prefix: &str,
+        expected_is_ref: &[bool],
+        given_is_ref: &[bool],
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        for (i, &given) in given_is_ref.iter().enumerate() {
+            let expected = expected_is_ref.get(i).copied().unwrap_or(false);
+            if given && !expected {
+                diagnostics.report_error(
+                    format!(
+                        "{} expects parameter {} to be passed by value, but 'ref' was given",
+                        error_prefix,
+                        i + 1
+                    ),
+                    Some(position),
+                );
+            } else if !given && expected {
+                diagnostics.report_error(
+                    format!(
+                        "{} expects parameter {} to be passed with 'ref', but it was passed by value",
+                        error_prefix,
+                        i + 1
+                    ),
+                    Some(position),
+                );
+            }
+        }
     }
 }

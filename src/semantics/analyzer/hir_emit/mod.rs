@@ -186,6 +186,18 @@ impl<'a> Analyzer<'a> {
         // Must run before the body itself is analyzed, since a captured local's very first `let` has
         // to be boxed from the start (its declaration may come before the lambda that captures it).
         self.boxed_locals = super::expressions::capture_scan::scan_function_captures(function.body);
+        // Every name ever passed as a `ref` argument (`scan_ref_argument_targets`) needs its address
+        // taken so the callee can alias it. A name already captured (above) already has a stable,
+        // heap-durable box (`__Cell<T>`) whose pointer serves that purpose unchanged. A name that is
+        // *only* `ref`-passed gets its own address-taking box instead: the stack-resident
+        // `__RefBox<T>` value struct (`ref_boxed_locals`, see `hir_declare_local`) — no heap
+        // allocation or ARC bookkeeping, since its storage never needs to outlive this call.
+        let ref_targets =
+            super::expressions::capture_scan::scan_ref_argument_targets(function.body);
+        self.ref_boxed_locals = ref_targets
+            .difference(&self.boxed_locals)
+            .cloned()
+            .collect();
         self.hir.locals.clear();
         self.hir.boxed.clear();
         self.hir.next_local = 0;
@@ -210,6 +222,48 @@ impl<'a> Analyzer<'a> {
         );
 
         for param in function.parameters.iter() {
+            if param.is_ref {
+                // A `ref` parameter *is* the caller's `__RefBox<T>` (see
+                // `Analyzer::analyze_ref_argument`): the incoming pointer is the caller's box,
+                // aliased in place (`LocalDecl::is_ref`/`ValueFrame` classifies it `Borrow`, so no
+                // private copy is taken), so this slot is registered straight into `self.hir.boxed`
+                // rather than going through the box-on-first-write path `box_captured_param` uses
+                // for a captured-but-not-`ref` parameter. Reads/writes redirect through `.value`
+                // (`hir_set_var`/`hir_assign_local`) exactly like any other boxed name.
+                let elem_ty = self.type_ctx.lower(&param.type_);
+                // The box type may never be constructed via `hir_build_ref_box_new` anywhere else in
+                // the program (e.g. a function whose only `ref` use is this very parameter, never a
+                // plain `ref`-passed local of the same element type), so its monomorphized struct
+                // must be instantiated here explicitly rather than relying on a construction site.
+                let mut throwaway = crate::diagnostics::DiagnosticBag::new(None);
+                let no_span = TextSpan {
+                    start: 0,
+                    end: 0,
+                    line_no: 0,
+                    col_no: 0,
+                };
+                self.ensure_struct_instantiated(
+                    "__RefBox",
+                    std::slice::from_ref(&param.type_),
+                    &no_span,
+                    &mut throwaway,
+                );
+                let box_ty = Self::ref_box_type(&param.type_);
+                let box_tid = self.type_ctx.lower(&box_ty);
+                let local = LocalId(self.hir.next_local);
+                self.hir.next_local += 1;
+                self.hir
+                    .locals
+                    .insert(param.name.text.clone(), (local, box_tid));
+                self.hir.params.push(HParam {
+                    local,
+                    name: param.name.text.clone(),
+                    ty: box_tid,
+                    is_ref: true,
+                });
+                self.hir.boxed.insert(param.name.text.clone(), elem_ty);
+                continue;
+            }
             let ty = self.type_ctx.lower(&param.type_);
             let local = LocalId(self.hir.next_local);
             self.hir.next_local += 1;
@@ -218,6 +272,7 @@ impl<'a> Analyzer<'a> {
                 local,
                 name: param.name.text.clone(),
                 ty,
+                is_ref: false,
             });
         }
 
@@ -226,9 +281,17 @@ impl<'a> Analyzer<'a> {
         // captured `let` (see `hir_declare_local`) — rebind its slot to a freshly-boxed copy of the
         // raw incoming argument, immediately after every parameter has its ordinary slot (so the
         // raw argument value is always available to box, regardless of declaration order above).
+        // A parameter that is only ever `ref`-passed (never captured, `self.ref_boxed_locals`) gets
+        // the same treatment but boxed into `__RefBox<T>` instead (see `box_ref_only_param`).
+        // A `ref` parameter is already boxed (above) and must not be boxed a second time.
         for param in function.parameters.iter() {
+            if param.is_ref {
+                continue;
+            }
             if self.boxed_locals.contains(&param.name.text) {
                 self.box_captured_param(&param.name.text, &param.type_);
+            } else if self.ref_boxed_locals.contains(&param.name.text) {
+                self.box_ref_only_param(&param.name.text, &param.type_);
             }
         }
 
@@ -278,6 +341,37 @@ impl<'a> Analyzer<'a> {
             local,
             ty: cell_tid,
             value: cell,
+        });
+    }
+
+    /// Like [`Self::box_captured_param`], but for a parameter that is only ever `ref`-passed (never
+    /// closure-captured, `self.ref_boxed_locals`): rebinds its slot to a fresh `__RefBox<T>` (a
+    /// value struct, so the new local gets its own private shadow-frame slot — no heap allocation)
+    /// wrapping the raw incoming argument.
+    fn box_ref_only_param(&mut self, name: &str, ty: &Type) {
+        let Some(&(raw_local, raw_ty)) = self.hir.locals.get(name) else {
+            return;
+        };
+        let raw_read = HExpr::new(raw_ty, HExprKind::Var(Binding::Local(raw_local)));
+        let Some(boxed) = self.hir_build_ref_box_new(ty, raw_read) else {
+            self.hir.ok = false;
+            return;
+        };
+        let box_tid = boxed.ty;
+        let elem_tid = self.type_ctx.lower(ty);
+        let local = LocalId(self.hir.next_local);
+        self.hir.next_local += 1;
+        self.hir.locals.insert(name.to_string(), (local, box_tid));
+        self.hir.local_decls.push(HLocal {
+            id: local,
+            name: name.to_string(),
+            ty: box_tid,
+        });
+        self.hir.boxed.insert(name.to_string(), elem_tid);
+        self.push_stmt(HStmt::Let {
+            local,
+            ty: box_tid,
+            value: boxed,
         });
     }
 

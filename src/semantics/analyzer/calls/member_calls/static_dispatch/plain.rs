@@ -34,7 +34,7 @@ impl<'a> Analyzer<'a> {
                 .map(|s| Self::expected_param_types(&s))
         };
 
-        let (arg_types, arg_hirs) = self.analyze_call_arguments_expecting(
+        let (arg_types, arg_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
             params,
             expected_params.as_deref(),
             parent_function,
@@ -71,6 +71,14 @@ impl<'a> Analyzer<'a> {
                 Some(method.position),
             );
         }
+
+        self.validate_ref_arguments(
+            &format!("static method '{}'", base),
+            &store_sig.is_ref,
+            &arg_is_ref,
+            method.position,
+            diagnostics,
+        );
 
         let expected_params = store_sig.parameters.clone();
         if expected_params.len() != arg_types.len() {

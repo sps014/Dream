@@ -261,7 +261,7 @@ impl<'a> Analyzer<'a> {
 
         // Analyze the explicit arguments once, then resolve the method (overloaded methods select
         // by argument types, with the receiver supplied as the implicit `this` argument).
-        let (mut arg_types, mut arg_hirs) = self.analyze_call_arguments_expecting(
+        let (mut arg_types, mut arg_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
             params,
             expected_params.as_deref(),
             ctx.parent_function,
@@ -308,6 +308,7 @@ impl<'a> Analyzer<'a> {
 
         let mut expected_params = store_sig.parameters.clone();
         let mut expected_defaults = store_sig.defaults.clone();
+        let mut expected_is_ref = store_sig.is_ref.clone();
 
         // Remove 'this' from the expected params check since we supply it implicitly
         if !expected_params.is_empty() {
@@ -316,6 +317,16 @@ impl<'a> Analyzer<'a> {
         if !expected_defaults.is_empty() {
             expected_defaults.remove(0);
         }
+        if !expected_is_ref.is_empty() {
+            expected_is_ref.remove(0);
+        }
+        self.validate_ref_arguments(
+            &format!("method '{}'", method.text),
+            &expected_is_ref,
+            &arg_is_ref,
+            method.position,
+            diagnostics,
+        );
 
         let total = expected_params.len();
         let required = Self::required_arg_count(&expected_defaults, total);

@@ -122,9 +122,26 @@ impl<'a> Analyzer<'a> {
         } else {
             None
         };
+        let mut arg_is_ref: Vec<bool> = Vec::with_capacity(params.len());
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();
             self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
+            if let ExpressionNode::RefArgument(inner) = param {
+                arg_is_ref.push(true);
+                self.current_expected_type = saved_expected;
+                match self.analyze_ref_argument(inner, symbol_table, diagnostics) {
+                    Some((t, hir)) => {
+                        arg_hirs.push(hir);
+                        params_types.push(t.get_type());
+                    }
+                    None => {
+                        arg_hirs.push(None);
+                        params_types.push(Type::Unknown.get_type());
+                    }
+                }
+                continue;
+            }
+            arg_is_ref.push(false);
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
             self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
@@ -312,6 +329,14 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
         }
+
+        self.validate_ref_arguments(
+            &format!("function '{}'", function_name),
+            &store_sig.is_ref,
+            &arg_is_ref,
+            name.position,
+            diagnostics,
+        );
 
         let required = store_sig.required_params();
         let total = store_sig.parameters.len();

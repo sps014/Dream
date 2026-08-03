@@ -1,0 +1,1 @@
+parameter 'xs' cannot be both 'ref' and variadic

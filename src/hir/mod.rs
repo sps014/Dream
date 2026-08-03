@@ -141,6 +141,10 @@ pub struct HParam {
     pub local: LocalId,
     pub name: String,
     pub ty: TypeId,
+    /// True for a `ref` parameter backed by a value-struct box (see
+    /// `Analyzer::ref_box_type`/`docs/compiler/03-hir.md`): its MIR local must alias the caller's
+    /// storage in place rather than take a private copy (`FunctionBuilder::new_ref_param`).
+    pub is_ref: bool,
 }
 
 /// Declaration metadata for a function local (used by the backend to allocate slots and by RC
@@ -485,11 +489,13 @@ mod tests {
                     local: LocalId(0),
                     name: "a".into(),
                     ty: int,
+                    is_ref: false,
                 },
                 HParam {
                     local: LocalId(1),
                     name: "b".into(),
                     ty: int,
+                    is_ref: false,
                 },
             ],
             ret: int,

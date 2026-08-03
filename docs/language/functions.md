@@ -184,6 +184,89 @@ Rules:
 - Variadic and named arguments don't combine in the same call: a variadic function's arguments are
   always supplied positionally.
 
+## Pass by reference (`ref`)
+
+A parameter marked `ref name: T` shares the caller's storage instead of receiving a copy: writes
+to it inside the callee are visible to the caller once the call returns (and, for anything the
+caller can still observe concurrently — a captured local, see below — immediately). This mirrors
+C#'s `ref`: the modifier is required on **both** the declaration and every call site, so nothing
+about a call's aliasing behavior is implicit.
+
+```dream
+fun swap(ref a: int, ref b: int): void {
+    let tmp: int = a;
+    a = b;
+    b = tmp;
+}
+
+let p: int = 1;
+let q: int = 2;
+swap(ref p, ref q);
+println(p);   // 2
+println(q);   // 1
+```
+
+`ref` works the same way on instance and static methods (the implicit `this` is unaffected — `ref`
+only ever applies to the explicit parameter list):
+
+```dream
+struct Doubler {
+    public fun apply(ref x: int): void {
+        x = x * 2;
+    }
+}
+
+let d: Doubler = Doubler();
+let n: int = 5;
+d.apply(ref n);
+println(n);   // 10
+```
+
+Rules:
+
+- `ref` must appear at the call site (`f(ref x)`), not just the declaration — omitting it, or
+  adding it where the parameter isn't `ref`, is a compile-time error.
+- v1 only supports a local variable or parameter as a `ref` argument's target — not yet a struct
+  field or array element.
+- `ref` cannot combine with a default value or a variadic (`...`) parameter on the same parameter.
+- A lambda expression cannot yet declare its own `ref` parameter — only named functions and
+  methods.
+- A lambda **cannot capture** an enclosing function's `ref` parameter, even though it can capture
+  an ordinary `let`/parameter (see [Capturing closures](#capturing-closures)). A `ref`
+  parameter's storage is only guaranteed to live for the duration of the call it came from; a
+  capturing lambda could outlive that call (e.g. by being returned), which would leave it holding
+  a dangling reference. This is a compile-time error, mirroring C#'s rule against capturing
+  `ref`/`out` parameters.
+
+### `ref` and closures
+
+Under the hood, a `ref` argument's target needs its *address* taken so the callee can alias it —
+a plain WASM local has no address, so the compiler gives the target its own stack-allocated slot
+(no heap allocation, no reference counting) unless it is *also* captured by a closure, in which
+case the target already has heap-durable storage for the closure's own sake, and `ref` simply
+reuses that same storage rather than adding a second box. Either way, mutations through the `ref`
+call and through the closure are visible to both:
+
+```dream
+fun increment(ref x: int): void {
+    x = x + 1;
+}
+
+fun main(): void {
+    let counter: int = 0;
+    let inc: fun(): int = () => {
+        increment(ref counter);   // ref-passes the closure's own captured storage
+        return counter;
+    };
+    println(inc());     // 1
+    println(inc());     // 2
+    println(counter);   // 2 — visible to the enclosing scope too
+
+    increment(ref counter);   // and the enclosing scope's writes are visible to the closure
+    println(inc());           // 4
+}
+```
+
 ## Public functions and entry point
 
 Functions are **file-private by default**. Mark one `public` to import it from other files and export it to the WebAssembly host (see [Imports](imports.md#visibility)). A `public` function cannot expose a non-`public` class.
@@ -285,6 +368,8 @@ println(inc());   // 2
 ```
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
+
+See [Pass by reference (`ref`)](#pass-by-reference-ref) for how a captured variable composes with a `ref` parameter on another function (they share the same underlying storage), and why a lambda cannot capture an enclosing `ref` parameter itself.
 
 Capturing more than one variable, and reaching past an immediate parent lambda to a grandparent's local, both work the same way:
 

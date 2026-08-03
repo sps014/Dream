@@ -1,0 +1,34 @@
+// `ref` parameters: the callee shares the caller's storage instead of receiving a copy. A local or
+// parameter passed by `ref` (but never closure-captured, see `ref_closure_capture.dream`) is given
+// its own private stack slot via the shadow-stack frame value-struct locals already use — no heap
+// allocation, no reference counting.
+
+fun swap(ref a: int, ref b: int): void {
+    let tmp: int = a;
+    a = b;
+    b = tmp;
+}
+
+fun increment(ref x: int): void {
+    x = x + 1;
+}
+
+fun add_to_both(ref a: int, b: int): int {
+    a = a + b;
+    return a;
+}
+
+fun main(): void {
+    let p: int = 1;
+    let q: int = 2;
+    swap(ref p, ref q);
+    System.println(p); // 2
+    System.println(q); // 1
+
+    increment(ref p);
+    System.println(p); // 3
+
+    let sum: int = add_to_both(ref p, 10);
+    System.println(sum); // 13
+    System.println(p); // 13
+}

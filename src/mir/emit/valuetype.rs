@@ -66,8 +66,11 @@ impl ValueFrame {
             let kind = if i < param_count {
                 // The receiver `this` is borrowed in place (methods/constructors mutate the caller's
                 // instance), so it takes no private copy; other value params are copied for value
-                // semantics.
-                if decl.name.as_deref() == Some("this") {
+                // semantics. A `ref` parameter (backed by a value-struct box, see
+                // `Analyzer::ref_box_type`) is likewise borrowed in place: the incoming pointer *is*
+                // the caller's box, aliased rather than copied, so writes through it are visible back
+                // to the caller.
+                if decl.name.as_deref() == Some("this") || decl.is_ref {
                     ValueLocalKind::Borrow
                 } else {
                     ValueLocalKind::Param

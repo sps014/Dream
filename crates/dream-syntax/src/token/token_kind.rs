@@ -168,6 +168,8 @@ pub enum TokenKind {
     WeakToken,
     #[token("unowned")]
     UnownedToken,
+    #[token("ref")]
+    RefToken,
     #[token("interface")]
     InterfaceToken,
     #[token("extend")]
@@ -284,6 +286,7 @@ impl TokenKind {
             TokenKind::SealedToken => "'sealed'",
             TokenKind::WeakToken => "'weak'",
             TokenKind::UnownedToken => "'unowned'",
+            TokenKind::RefToken => "'ref'",
             TokenKind::InterfaceToken => "'interface'",
             TokenKind::ExtendToken => "'extend'",
             TokenKind::IsToken => "'is'",
@@ -344,6 +347,7 @@ pub const KEYWORDS: &[&str] = &[
     "switch",
     "case",
     "default",
+    "ref",
     "int",
     "float",
     "double",
@@ -430,6 +434,7 @@ mod tests {
             "switch",
             "case",
             "default",
+            "ref",
             "int",
             "float",
             "double",
@@ -447,7 +452,7 @@ mod tests {
         }
         assert_eq!(
             KEYWORDS.len(),
-            42,
+            43,
             "a keyword token was added/removed; update both this list and KEYWORDS"
         );
     }
