@@ -136,6 +136,25 @@ public class Set<T> {
         return this.find(value) >= 0;
     }
 
+    // Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls).
+    // Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal
+    // with N elements costs one call, not N.
+    public fun add_all(items: T[]): void {
+        let i = 0;
+        while (i < items.size()) {
+            this.add(items[i]);
+            i = i + 1;
+        }
+    }
+
+    // Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}`
+    // set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.
+    public static fun from_array(items: T[]): Set<T> {
+        let result = Set<T>(items.size());
+        result.add_all(items);
+        return result;
+    }
+
     // Removes a value and returns true if it was removed.
     public fun remove(value: T): bool {
         let i = this.find(value);

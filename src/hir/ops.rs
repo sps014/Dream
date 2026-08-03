@@ -48,4 +48,6 @@ pub enum UnOp {
     Neg,
     /// Logical negation (`!x`).
     Not,
+    /// Bitwise complement (`~x`). Integer operands only (`int`/`long`/`uint`/`ulong`/`byte`).
+    BitNot,
 }

@@ -23,6 +23,28 @@ impl<'a> Analyzer<'a> {
                 Ok(number.clone())
             }
             ExpressionNode::ArrayLiteral(elements) => {
+                // `[e1, e2, ...]` lowers to `List<T>.from_array([e1, e2, ...])` (one bulk call, no
+                // per-element codegen) whenever the surrounding context expects a `List<T>`; the
+                // `T[]` array form below is otherwise completely unaffected.
+                if let Some(elem_ty) = self
+                    .current_expected_type
+                    .as_ref()
+                    .and_then(|t| Self::collection_generic_arg(t, "List"))
+                {
+                    let ctx = super::super::AnalyzerContext {
+                        parent_function,
+                        symbol_table,
+                    };
+                    return self.lower_collection_literal_call(
+                        "List",
+                        vec![elem_ty],
+                        "from_array",
+                        vec![ExpressionNode::ArrayLiteral(elements.clone())],
+                        &ctx,
+                        diagnostics,
+                    );
+                }
+
                 // The element type expected for this literal, taken from the surrounding array-typed
                 // context (`let xs: int[] = ...`, `return ...`, an argument slot, a field, etc.). It
                 // is threaded down into each element so nested empty literals (`int[][] = [[]]`) and
@@ -69,6 +91,89 @@ impl<'a> Analyzer<'a> {
                 let array_type = Type::Array(Box::new(first_type));
                 self.hir_set_array_lit(elem_hirs, &array_type);
                 Ok(array_type)
+            }
+            ExpressionNode::SetLiteral(elements) => {
+                // A Set literal always requires an expected `Set<T>` target type (unlike `[...]`,
+                // there is no bare-element fallback type to infer). An empty `{}` is ambiguous with
+                // an empty map, so it is reinterpreted as one here when the context calls for it.
+                match self.current_expected_type.clone() {
+                    Some(t) if elements.is_empty() && Self::collection_generic_arg2(&t, "Map").is_some() => {
+                        self.analyze_expression(
+                            &ExpressionNode::MapLiteral(vec![]),
+                            parent_function,
+                            symbol_table,
+                            diagnostics,
+                        )
+                    }
+                    Some(t) => {
+                        let Some(elem_ty) = Self::collection_generic_arg(&t, "Set") else {
+                            self.hir_none();
+                            self.hir_fail();
+                            diagnostics.report_error(
+                                format!(
+                                    "cannot use a Set literal where a '{}' is expected",
+                                    t.display_name()
+                                ),
+                                expression.position(),
+                            );
+                            return Ok(Type::Unknown);
+                        };
+                        let ctx = super::super::AnalyzerContext {
+                            parent_function,
+                            symbol_table,
+                        };
+                        self.lower_collection_literal_call(
+                            "Set",
+                            vec![elem_ty],
+                            "from_array",
+                            vec![ExpressionNode::ArrayLiteral(elements.clone())],
+                            &ctx,
+                            diagnostics,
+                        )
+                    }
+                    None => {
+                        self.hir_none();
+                        self.hir_fail();
+                        diagnostics.report_error(
+                            "a Set literal requires a target type, e.g. `let s: Set<int> = {1, 2};`".to_string(),
+                            expression.position(),
+                        );
+                        Ok(Type::Unknown)
+                    }
+                }
+            }
+            ExpressionNode::MapLiteral(entries) => {
+                // A Map literal always requires an expected `Map<K, V>` target type, for the same
+                // reason as `SetLiteral` above.
+                let Some((key_ty, val_ty)) = self
+                    .current_expected_type
+                    .clone()
+                    .and_then(|t| Self::collection_generic_arg2(&t, "Map"))
+                else {
+                    self.hir_none();
+                    self.hir_fail();
+                    diagnostics.report_error(
+                        "a Map literal requires a target type, e.g. `let m: Map<string, int> = {\"a\": 1};`".to_string(),
+                        expression.position(),
+                    );
+                    return Ok(Type::Unknown);
+                };
+                let (keys, values): (Vec<_>, Vec<_>) = entries.iter().cloned().unzip();
+                let ctx = super::super::AnalyzerContext {
+                    parent_function,
+                    symbol_table,
+                };
+                self.lower_collection_literal_call(
+                    "Map",
+                    vec![key_ty, val_ty],
+                    "from_arrays",
+                    vec![
+                        ExpressionNode::ArrayLiteral(keys),
+                        ExpressionNode::ArrayLiteral(values),
+                    ],
+                    &ctx,
+                    diagnostics,
+                )
             }
             ExpressionNode::IndexAccess(array_expr, index_expr) => {
                 let array_type = self.analyze_expression(
@@ -185,6 +290,19 @@ impl<'a> Analyzer<'a> {
                                 format!(
                                     "unary +/- requires a numeric type, got {}",
                                     right_type.get_type()
+                                ),
+                                Some(opr.position),
+                            );
+                        }
+                        self.hir_set_unary(opr, operand, &right_type);
+                        Ok(right_type)
+                    }
+                    TokenKind::TildeToken => {
+                        if !right_type.is_unknown() && !right_type.is_integer() {
+                            diagnostics.report_error(
+                                format!(
+                                    "~ operator requires an integer operand (int/long/uint/ulong/byte), got {}",
+                                    right_type.display_name()
                                 ),
                                 Some(opr.position),
                             );
@@ -442,5 +560,59 @@ impl<'a> Analyzer<'a> {
         let call =
             ExpressionNode::MethodCall(array_expr, get_tok, None, vec![(*index_expr).clone()]);
         self.analyze_expression(&call, parent_function, symbol_table, diagnostics)
+    }
+
+    /// If `t` is `{name}<A>` (a one-generic-argument struct named `name`, e.g. `List<int>`),
+    /// returns `A`. Used to recognize an expected `List<T>`/`Set<T>` target type for collection
+    /// literal lowering.
+    pub(in crate::semantics::analyzer) fn collection_generic_arg(t: &Type, name: &str) -> Option<Type> {
+        match t {
+            Type::Struct(tok, Some(args)) if tok.text == name && args.len() == 1 => {
+                Some(args[0].clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Like [`Self::collection_generic_arg`], but for a two-generic-argument struct (`Map<K, V>`).
+    fn collection_generic_arg2(t: &Type, name: &str) -> Option<(Type, Type)> {
+        match t {
+            Type::Struct(tok, Some(args)) if tok.text == name && args.len() == 2 => {
+                Some((args[0].clone(), args[1].clone()))
+            }
+            _ => None,
+        }
+    }
+
+    /// Lowers a collection literal (`[...]` as `List<T>`, `{...}` as `Set<T>`/`Map<K, V>`) into a
+    /// single synthetic static-factory call `{base}<{type_args}>.{method}(args)` and replays it
+    /// through the ordinary `analyze_expression` path, reusing the existing generic-class
+    /// static-dispatch machinery (the same one `Cache<int>.make(...)` uses) verbatim — no new HIR
+    /// shape, no per-element codegen. `args` are typically one or two synthetic `ArrayLiteral`
+    /// nodes wrapping the literal's original element/key/value sub-expressions; their element types
+    /// are inferred from the (now type-argument-aware, see `analyze_static_call`) callee signature,
+    /// so an empty literal like `let s: Set<int> = {};` still resolves correctly.
+    fn lower_collection_literal_call(
+        &mut self,
+        base: &str,
+        type_args: Vec<Type>,
+        method: &str,
+        args: Vec<ExpressionNode<'a>>,
+        ctx: &super::super::AnalyzerContext<'a, '_>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        let receiver = self
+            .arena
+            .alloc(ExpressionNode::Identifier(synthetic_token(
+                TokenKind::IdentifierToken,
+                base,
+            )));
+        let call = ExpressionNode::MethodCall(
+            receiver,
+            synthetic_token(TokenKind::IdentifierToken, method),
+            Some(type_args),
+            args,
+        );
+        self.analyze_expression(&call, ctx.parent_function, ctx.symbol_table, diagnostics)
     }
 }

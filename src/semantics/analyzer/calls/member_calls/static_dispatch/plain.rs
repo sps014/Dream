@@ -17,11 +17,32 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
         let base = method_fn(type_name, &method.text);
+        let is_overloaded = self.function_table.is_overloaded(&base);
 
-        let (arg_types, arg_hirs) =
-            self.analyze_call_arguments(params, parent_function, symbol_table, diagnostics)?;
+        // When the callee isn't overloaded, its declared parameter types are already known before
+        // the arguments are analyzed, so publish them as `current_expected_type` per argument
+        // (mirroring the free-function call path) — needed, e.g., for an empty array-literal
+        // argument to infer its element type from a `T[]` parameter rather than requiring its own
+        // annotation. An overloaded callee can't do this (the signature isn't known until the
+        // arguments are typed), so it falls back to no expected-type context, as before.
+        let expected_params: Option<Vec<Type>> = if is_overloaded {
+            None
+        } else {
+            self.function_table
+                .get_function(&base)
+                .ok()
+                .map(|s| Self::expected_param_types(&s))
+        };
 
-        let store_sig = if self.function_table.is_overloaded(&base) {
+        let (arg_types, arg_hirs) = self.analyze_call_arguments_expecting(
+            params,
+            expected_params.as_deref(),
+            parent_function,
+            symbol_table,
+            diagnostics,
+        )?;
+
+        let store_sig = if is_overloaded {
             match self.select_function_overload(&base, &arg_types) {
                 Ok(sig) => sig,
                 Err(message) => {

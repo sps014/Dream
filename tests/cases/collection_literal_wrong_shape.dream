@@ -1,0 +1,6 @@
+// A Set literal used where a `List<T>` (or any other type) is expected -> error, not a silent
+// misparse or wrong-type coercion.
+fun main(): void {
+    let xs: List<int> = {1, 2, 3};
+    System.println(xs.size());
+}

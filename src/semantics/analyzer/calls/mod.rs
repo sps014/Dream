@@ -23,6 +23,21 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
+    /// The structured (never string-mangled) parameter types of `sig`, suitable for publishing as
+    /// `current_expected_type` while analyzing a non-overloaded callee's arguments. Prefers
+    /// `sig.parameter_types` (populated by `FunctionTableInfo::from`, so a generic-struct-typed
+    /// parameter like `List<int>` keeps its `Struct(name, Some(args))` shape); falls back to
+    /// reconstructing from the mangled `sig.parameters` strings for synthesized/stdlib entries
+    /// that never populate `parameter_types` (only ever primitives there, so the round-trip is
+    /// lossless).
+    pub(super) fn expected_param_types(sig: &crate::semantics::function_table::FunctionTableInfo) -> Vec<Type> {
+        if sig.parameter_types.len() == sig.parameters.len() {
+            sig.parameter_types.clone()
+        } else {
+            sig.parameters.iter().map(|p| Self::type_from_name(p)).collect()
+        }
+    }
+
     /// Reorders a call's raw AST arguments into pure positional order when the source used named
     /// arguments (`f(a, name: value)`), resolving each `name` against `param_names` (the callee's
     /// declared parameter names) and filling any resulting gap from `defaults` (the callee's

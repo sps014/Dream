@@ -1,0 +1,33 @@
+// `StringBuilder`: incremental append, `append_char`/`append_line`, `clear`, `build`, growth past
+// the initial capacity, and the `@override to_string()` that makes `print`/`+`/interpolation use
+// it automatically.
+
+fun main(): void {
+    let sb = StringBuilder();
+    System.println(sb.is_empty());
+    sb.append("Hello, ");
+    sb.append("world");
+    sb.append_char('!');
+    System.println(sb.size());
+    System.println(sb.is_empty());
+    System.println(sb.build());
+
+    // `to_string()` override: `print` and `+` both use it without an explicit `.build()`.
+    System.println(sb);
+    System.println("say: " + sb);
+
+    sb.clear();
+    System.println(sb.is_empty());
+    sb.append_line("line1");
+    sb.append("line2");
+    System.println(sb.build());
+
+    // Force multiple growths past a small initial capacity.
+    let sb2 = StringBuilder(2);
+    let i = 0;
+    while (i < 50) {
+        sb2.append_char('x');
+        i = i + 1;
+    }
+    System.println(sb2.size());
+}

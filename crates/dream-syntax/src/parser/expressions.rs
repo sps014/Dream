@@ -90,6 +90,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             let elements =
                 self.parse_delimited_list(TokenKind::CloseBracketToken, |p| p.parse_expression(0))?;
             return Ok(ExpressionNode::ArrayLiteral(elements));
+        } else if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
+            return self.parse_set_or_map_literal();
         } else if self.current_token().kind == TokenKind::BooleanToken {
             return Ok(ExpressionNode::Literal(Type::Boolean(
                 self.match_token(TokenKind::BooleanToken),
@@ -187,6 +189,56 @@ impl<'a, 'b> Parser<'a, 'b> {
         let identifier = self.match_token(TokenKind::IdentifierToken);
         Ok(ExpressionNode::Identifier(identifier))
     }
+    /// Parses a `{...}` Set or Map literal, assuming the cursor is on the opening `{`.
+    /// Disambiguated from a statement block by parse position alone (a block never appears where
+    /// an expression is expected), and Set vs Map by whether a `:` follows the first element:
+    /// `{e1, e2, ...}` is a Set, `{k1: v1, k2: v2, ...}` is a Map. A stray `:` on a later element
+    /// of a Set (or a missing one in a Map) falls through to the shared delimited-list parser's
+    /// normal token-mismatch recovery, reporting a clear diagnostic rather than silently
+    /// misparsing. An empty `{}` is ambiguous between an empty Set and an empty Map, so it is
+    /// represented as an empty `SetLiteral`; the analyzer reinterprets it as an empty map when the
+    /// surrounding expected type says so (mirroring how an empty array literal `[]` infers its
+    /// element type from context).
+    fn parse_set_or_map_literal(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        self.match_token(TokenKind::CurlyOpenBracketToken);
+        if self.current_token().kind == TokenKind::CurlyCloseBracketToken {
+            self.match_token(TokenKind::CurlyCloseBracketToken);
+            return Ok(ExpressionNode::SetLiteral(vec![]));
+        }
+
+        let first = self.parse_expression(0)?;
+        if self.current_token().kind == TokenKind::ColonToken {
+            self.match_token(TokenKind::ColonToken);
+            let first_value = self.parse_expression(0)?;
+            let mut entries = vec![(first, first_value)];
+            if self.current_token().kind == TokenKind::CommaToken {
+                self.match_token(TokenKind::CommaToken);
+                let rest = self.parse_delimited_list(TokenKind::CurlyCloseBracketToken, |p| {
+                    let key = p.parse_expression(0)?;
+                    p.match_token(TokenKind::ColonToken);
+                    let value = p.parse_expression(0)?;
+                    Ok((key, value))
+                })?;
+                entries.extend(rest);
+            } else {
+                self.match_token(TokenKind::CurlyCloseBracketToken);
+            }
+            Ok(ExpressionNode::MapLiteral(entries))
+        } else {
+            let mut elements = vec![first];
+            if self.current_token().kind == TokenKind::CommaToken {
+                self.match_token(TokenKind::CommaToken);
+                let rest = self.parse_delimited_list(TokenKind::CurlyCloseBracketToken, |p| {
+                    p.parse_expression(0)
+                })?;
+                elements.extend(rest);
+            } else {
+                self.match_token(TokenKind::CurlyCloseBracketToken);
+            }
+            Ok(ExpressionNode::SetLiteral(elements))
+        }
+    }
+
     /// Disambiguates a leading `(` between a cast (`(Type)expr`) and a parenthesized expression
     /// (`(expr)`), assuming the cursor is on the `(`. A cast is recognized when the parenthesized
     /// content is a type name (`(int)`, `(Node)`, `(Foo[])`) immediately followed by an

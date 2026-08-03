@@ -13,6 +13,19 @@ use crate::types::method_fn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// True for the binary bitwise operator tokens (`&`/`|`/`^`/`<<`/`>>`) — the ones restricted to
+/// integer operands. `&&`/`||` are logical (bool-only, checked elsewhere), not bitwise.
+fn is_bitwise_op(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::BitWiseAmpersandToken
+            | TokenKind::BitWisePipeToken
+            | TokenKind::BitWiseXorToken
+            | TokenKind::ShiftLeftToken
+            | TokenKind::ShiftRightToken
+    )
+}
+
 impl<'a> Analyzer<'a> {
     pub(super) fn analyze_binary_expression(
         &mut self,
@@ -96,6 +109,23 @@ impl<'a> Analyzer<'a> {
         }
 
         self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
+
+        // Bitwise ops (`&`/`|`/`^`/`<<`/`>>`) are only meaningful on integer operands
+        // (`int`/`long`/`uint`/`ulong`/`byte`); `float`/`double` have no well-defined bitwise
+        // lowering. Caught here rather than left to the backend, which would otherwise emit an
+        // invalid WASM instruction (e.g. a nonexistent `f64.and`) instead of a clean diagnostic.
+        if is_bitwise_op(opr.kind) && !left_value.is_unknown() && !left_value.is_integer() {
+            diagnostics.report_error(
+                format!(
+                    "'{}' requires an integer operand (int/long/uint/ulong/byte), got {}",
+                    opr.text,
+                    left_value.display_name()
+                ),
+                Some(opr.position),
+            );
+            return Ok(Type::Unknown);
+        }
+
         match (&left_value, &opr.kind) {
             (Type::String(_), TokenKind::PlusToken) => {}
             // Reference (identity) equality is allowed on strings and objects.

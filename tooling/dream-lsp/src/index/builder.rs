@@ -583,9 +583,15 @@ impl Builder {
                 self.walk_expr(t, scope);
                 self.walk_expr(e, scope);
             }
-            ExpressionNode::ArrayLiteral(elems) => {
+            ExpressionNode::ArrayLiteral(elems) | ExpressionNode::SetLiteral(elems) => {
                 for elem in elems {
                     self.walk_expr(elem, scope);
+                }
+            }
+            ExpressionNode::MapLiteral(entries) => {
+                for (k, v) in entries {
+                    self.walk_expr(k, scope);
+                    self.walk_expr(v, scope);
                 }
             }
             ExpressionNode::Await(e) => self.walk_expr(e, scope),

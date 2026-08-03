@@ -28,13 +28,15 @@ impl<'a> Analyzer<'a> {
             self.instantiated_generics
                 .insert(mangled_name.clone(), (bindings.clone(), specialized_ref));
 
+            let monomorphized_params: Vec<Type> = template
+                .parameters
+                .iter()
+                .map(|p| Self::monomorphize_type(&p.type_, bindings))
+                .collect();
             let info = FunctionTableInfo {
                 name: mangled_name.clone(),
-                parameters: template
-                    .parameters
-                    .iter()
-                    .map(|p| Self::monomorphize_type(&p.type_, bindings).get_type())
-                    .collect(),
+                parameters: monomorphized_params.iter().map(|t| t.get_type()).collect(),
+                parameter_types: monomorphized_params,
                 param_names: template
                     .parameters
                     .iter()

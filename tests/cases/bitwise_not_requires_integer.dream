@@ -1,0 +1,4 @@
+fun main(): void {
+    let a: bool = true;
+    System.println(~a);
+}

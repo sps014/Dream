@@ -1,0 +1,1 @@
+a Set literal requires a target type, e.g. `let s: Set<int> = {1, 2};`

@@ -61,3 +61,26 @@ println("ab".repeat(3));                   // "ababab"
 println("hello".equals("hello"));   // true
 println("hello" == "hello");        // true
 ```
+
+## Building strings incrementally: `StringBuilder`
+
+`+` concatenation is fine for a handful of pieces, but each `+` allocates a new string and copies everything accumulated so far — building up a string across a loop with `s = s + piece;` costs O(n²) overall. `StringBuilder`, available in every program with no import, appends into a single growable buffer and produces the final string with one allocation:
+
+```dream
+let sb = StringBuilder();
+sb.append("Hello, ");
+sb.append("world");
+sb.append_char('!');
+println(sb.build());   // "Hello, world!"
+```
+
+Methods:
+
+- `.append(text)` — append a string.
+- `.append_char(c)` — append a single character.
+- `.append_line(text)` — append a string followed by `\n`.
+- `.size()` / `.is_empty()` — character count so far.
+- `.clear()` — remove everything appended, keeping the backing buffer for reuse.
+- `.build()` — materialize the accumulated characters into a new string.
+
+`StringBuilder` also overrides `to_string()`, so `print`/`println`/`+`/interpolation all use `build()`'s output automatically — `println(sb)` and `println(sb.build())` are equivalent.

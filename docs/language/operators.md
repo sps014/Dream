@@ -72,7 +72,22 @@ String `==` and `!=` compare **contents**, not addresses.
 
 ## Bitwise
 
-These work on `int`: `&` (and), `|` (or), `^` (xor), `<<` (shift left), `>>` (arithmetic shift right).
+`&` (and), `|` (or), `^` (xor), `<<` (shift left), `>>` (shift right), and prefix `~` (complement)
+work on any integer type: `int`, `uint`, `long`, `ulong`, `byte`. Both operands of a binary bitwise
+op must be the same type, same as arithmetic. `>>` is an *arithmetic* (sign-extending) shift on the
+signed types (`int`, `long`) and a *logical* (zero-filling) shift on the unsigned types (`uint`,
+`ulong`, `byte`).
+
+```dream
+let flags: uint = 6u;           // 0b0110
+let masked = flags & 4u;        // 4u   (0b0100)
+let shifted: byte = 200b >> 2b; // 50b, zero-filled
+let inverted = ~5;              // -6 (two's complement)
+let inverted_b: byte = ~5b;     // 250b (wraps within byte's 0..255 range)
+```
+
+Like arithmetic, `~` and the binary bitwise ops on `byte` wrap their result into `byte`'s `0..255`
+range — see [Primitives § Integer overflow](primitives.md#integer-overflow).
 
 ## Null-coalescing and ternary
 
@@ -131,7 +146,7 @@ Higher rows bind tighter; use parentheses when in doubt.
 | Precedence | Operators |
 |------------|-----------|
 | postfix | `?` (try-propagation) |
-| unary | unary `-`, `!` |
+| unary | unary `-`, `!`, `~` |
 | highest | `&` |
 | | `^` |
 | | `\|` |

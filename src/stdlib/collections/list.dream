@@ -62,6 +62,25 @@ public class List<T> : Collection<T> {
         this.count = this.count + 1;
     }
 
+    // Appends every element of `items`, in order, growing as necessary. The bulk counterpart to
+    // repeated `push` calls — also what the `[e1, e2, ...]` list-literal syntax lowers to via
+    // `from_array`, so a literal with N elements costs one call, not N.
+    public fun push_all(items: T[]): void {
+        let i = 0;
+        while (i < items.size()) {
+            this.push(items[i]);
+            i = i + 1;
+        }
+    }
+
+    // Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]`
+    // list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
+    public static fun from_array(items: T[]): List<T> {
+        let result = List<T>(items.size());
+        result.push_all(items);
+        return result;
+    }
+
     // Returns the element at `index`, or `None` if `index` is out of range.
     public fun get(index: int): Option<T> {
         if ((index < 0) || (index >= this.count)) {

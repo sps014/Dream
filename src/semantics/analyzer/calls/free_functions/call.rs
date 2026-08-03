@@ -108,21 +108,15 @@ impl<'a> Analyzer<'a> {
         {
             None
         } else if let Ok(info) = self.function_table.get_function(&function_name) {
-            Some(
-                info.parameters
-                    .iter()
-                    .map(|p| Self::type_from_name(p))
-                    .collect(),
-            )
+            Some(Self::expected_param_types(&info))
         } else if generic_args.is_none() && self.struct_table.get_struct(&function_name).is_some() {
             self.function_table
                 .get_function(&constructor_fn(&function_name))
                 .ok()
                 .map(|info| {
-                    info.parameters
-                        .iter()
+                    Self::expected_param_types(&info)
+                        .into_iter()
                         .skip(1)
-                        .map(|p| Self::type_from_name(p))
                         .collect()
                 })
         } else {

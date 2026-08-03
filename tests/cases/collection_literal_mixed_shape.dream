@@ -1,0 +1,6 @@
+// A `{...}` literal must be consistently either a Set (bare elements) or a Map (`k: v` pairs); a
+// stray `:` after a bare first element is a clear parse error, not a silent misparse.
+fun main(): void {
+    let s: Set<int> = {1, 2: 3};
+    System.println(s.size());
+}

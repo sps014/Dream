@@ -1,0 +1,1 @@
+a Map literal requires a target type, e.g. `let m: Map<string, int> = {"a": 1};`

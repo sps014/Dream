@@ -245,6 +245,18 @@ impl Type {
         matches!(self, Type::Integer(_))
     }
 
+    /// True for any of the five integer primitives (`int`/`long`/`uint`/`ulong`/`byte`) — the
+    /// operand types the bitwise operators (`&`/`|`/`^`/`<<`/`>>`/unary `~`) accept. `float`/
+    /// `double` are numeric but not integral, so they are excluded (bitwise ops on them have no
+    /// well-defined WASM lowering and must be rejected at analysis time, not surfaced as an
+    /// invalid-instruction failure from the backend).
+    pub fn is_integer(&self) -> bool {
+        matches!(
+            self,
+            Type::Integer(_) | Type::Long(_) | Type::UInt(_) | Type::ULong(_) | Type::Byte(_)
+        )
+    }
+
     /// True if this is the primitive `string` type. Structural replacement for
     /// `get_type() == "string"`.
     pub fn is_string(&self) -> bool {

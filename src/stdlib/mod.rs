@@ -118,6 +118,12 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
         "<std>/text/string_iterator.dream",
         include_str!("text/string_iterator.dream"),
     ),
+    // Needs `Buffer` (core/buffer.dream) and `sequence_min_capacity` (core/collection_tuning.dream),
+    // both merged well before this point.
+    (
+        "<std>/text/string_builder.dream",
+        include_str!("text/string_builder.dream"),
+    ),
     ("<std>/text/regex.dream", include_str!("text/regex.dream")),
     // JSON: value tree, parser, and the public `JSON` API (one class per file).
     (

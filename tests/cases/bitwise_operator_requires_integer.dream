@@ -1,0 +1,5 @@
+fun main(): void {
+    let a: double = 1.5;
+    let b: double = 2.5;
+    System.println(a & b);
+}

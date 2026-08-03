@@ -73,6 +73,9 @@ pub enum TokenKind {
     ShiftLeftToken,
     #[token(">>")]
     ShiftRightToken,
+    /// Unary bitwise complement (`~x`); never a binary operator.
+    #[token("~")]
+    TildeToken,
     #[token("??")]
     QuestionQuestionToken,
     #[token("=>")]
@@ -237,6 +240,7 @@ impl TokenKind {
             TokenKind::BitWiseXorToken => "'^'",
             TokenKind::ShiftLeftToken => "'<<'",
             TokenKind::ShiftRightToken => "'>>'",
+            TokenKind::TildeToken => "'~'",
             TokenKind::QuestionQuestionToken => "'??'",
             TokenKind::FatArrowToken => "'=>'",
             TokenKind::EqualToken => "'='",

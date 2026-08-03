@@ -1,0 +1,69 @@
+// Bitwise binary ops (`&`, `|`, `^`, `<<`, `>>`) and unary `~` across every integer type
+// (int/long/uint/ulong/byte). `>>` is arithmetic (sign-extending) on the signed types and logical
+// (zero-filling) on the unsigned types; `byte` results wrap into `0..255`.
+
+fun main(): void {
+    // int
+    let a = 12;
+    let b = 10;
+    System.println(a & b);   // 8
+    System.println(a | b);   // 14
+    System.println(a ^ b);   // 6
+    System.println(a << 2);  // 48
+    System.println(a >> 1);  // 6
+    System.println(~a);      // -13
+    let neg: int = 0 - 1;
+    System.println(neg >> 1); // -1 (arithmetic shift keeps the sign bit)
+
+    // long
+    let la: long = 12l;
+    let lb: long = 10l;
+    System.println(la & lb);   // 8
+    System.println(la | lb);   // 14
+    System.println(la ^ lb);   // 6
+    System.println(la << 2l);  // 48
+    System.println(la >> 1l);  // 6
+    System.println(~la);       // -13
+    let lneg: long = 0l - 1l;
+    System.println(lneg >> 1l); // -1
+
+    // uint
+    let ua: uint = 12u;
+    let ub: uint = 10u;
+    System.println(ua & ub);         // 8
+    System.println(ua | ub);         // 14
+    System.println(ua ^ ub);         // 6
+    System.println(ua << 2u);        // 48
+    System.println(ua >> 1u);        // 6
+    System.println(~ua);             // 4294967283 (unsigned complement)
+    System.println(4000000000u >> 1u); // 2000000000, zero-filled
+
+    // ulong
+    let uga: ulong = 12ul;
+    let ugb: ulong = 10ul;
+    System.println(uga & ugb);  // 8
+    System.println(uga | ugb);  // 14
+    System.println(uga ^ ugb);  // 6
+    System.println(uga << 2ul); // 48
+    System.println(uga >> 1ul); // 6
+    System.println(~uga);       // 18446744073709551603
+
+    // byte (wraps into 0..255)
+    let ba: byte = 12b;
+    let bb: byte = 10b;
+    System.println(ba & bb);   // 8
+    System.println(ba | bb);   // 14
+    System.println(ba ^ bb);   // 6
+    System.println(ba << 2b);  // 48
+    System.println(200b >> 2b); // 50, zero-filled
+    System.println(~ba);       // 243
+    System.println(~5b);       // 250
+
+    // dynamic (non-constant-foldable) byte value through a function call, to exercise the
+    // runtime masking path rather than just the constant-folding path.
+    System.println(flip((byte)(5 + 0)));
+}
+
+fun flip(x: byte): byte {
+    return ~x;
+}

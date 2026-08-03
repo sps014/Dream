@@ -10,6 +10,16 @@ use dream_text::text_span::TextSpan;
 pub enum ExpressionNode<'a> {
     Literal(Type),
     ArrayLiteral(Vec<ExpressionNode<'a>>),
+    /// `{e1, e2, ...}` — a Set literal. Parsed whenever `{` opens a primary expression (never
+    /// ambiguous with a statement block, since blocks never appear in expression position) and a
+    /// `:` does not follow the first element (see `MapLiteral`). Always requires an expected
+    /// `Set<T>` target type at analysis time (there is no bare-element type to fall back on, the
+    /// way `T[]` is the default for `ArrayLiteral`); an empty `{}` is represented here too and
+    /// reinterpreted as an empty map by the analyzer when the expected type is `Map<K, V>`.
+    SetLiteral(Vec<ExpressionNode<'a>>),
+    /// `{k1: v1, k2: v2, ...}` — a Map literal, disambiguated from `SetLiteral` by a `:` after the
+    /// first element. Always requires an expected `Map<K, V>` target type at analysis time.
+    MapLiteral(Vec<(ExpressionNode<'a>, ExpressionNode<'a>)>),
     Binary(&'a ExpressionNode<'a>, SyntaxToken, &'a ExpressionNode<'a>),
     Unary(SyntaxToken, &'a ExpressionNode<'a>),
     Identifier(SyntaxToken),
@@ -121,6 +131,10 @@ impl<'a> ExpressionNode<'a> {
                 target_type.get_span().or_else(|| expr.position())
             }
             ExpressionNode::ArrayLiteral(elements) => elements.first().and_then(|e| e.position()),
+            ExpressionNode::SetLiteral(elements) => elements.first().and_then(|e| e.position()),
+            ExpressionNode::MapLiteral(entries) => {
+                entries.first().and_then(|(k, _)| k.position())
+            }
             ExpressionNode::Lambda(l) => Some(l.open_paren_position),
             ExpressionNode::NamedArg(name, _) => Some(name.position),
         }

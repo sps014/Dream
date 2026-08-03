@@ -102,6 +102,22 @@ impl Emitter<'_> {
                         self.emit_operand(a);
                         self.line("     (i32.eqz)");
                     }
+                    UnOp::BitNot => {
+                        // No dedicated bitwise-complement instruction in WASM: `x ^ -1` flips every
+                        // bit of the value's native width, which is exactly `~x` for a two's-complement
+                        // integer.
+                        let wty = self.wasm_ty(ty);
+                        self.emit_operand(a);
+                        self.line(&format!("     ({}.const -1)", wty));
+                        self.line(&format!("     ({}.xor)", wty));
+                        // `byte` shares WASM's `i32` register (see the `Rvalue::Binary` byte-masking
+                        // comment above): flipping all 32 bits leaves the top 24 non-zero, so mask
+                        // back down to `[0, 255]` immediately, same as every other byte-producing op.
+                        if matches!(self.interner.kind(ty), TyKind::Prim(PrimTy::Byte)) {
+                            self.line("     (i32.const 255)");
+                            self.line("     (i32.and)");
+                        }
+                    }
                 }
             }
             Rvalue::Call { callee, args } => {

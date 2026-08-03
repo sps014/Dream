@@ -130,9 +130,15 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
 fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
     match expr {
         ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
-        ExpressionNode::ArrayLiteral(es) => {
+        ExpressionNode::ArrayLiteral(es) | ExpressionNode::SetLiteral(es) => {
             for e in es {
                 walk_expr_for_lambdas(e, out);
+            }
+        }
+        ExpressionNode::MapLiteral(entries) => {
+            for (k, v) in entries {
+                walk_expr_for_lambdas(k, out);
+                walk_expr_for_lambdas(v, out);
             }
         }
         ExpressionNode::Binary(l, _, r) => {
@@ -328,9 +334,15 @@ fn collect_names_expr(
         ExpressionNode::Identifier(tok) => {
             referenced.insert(tok.text.clone());
         }
-        ExpressionNode::ArrayLiteral(es) => {
+        ExpressionNode::ArrayLiteral(es) | ExpressionNode::SetLiteral(es) => {
             for e in es {
                 collect_names_expr(e, bound, referenced);
+            }
+        }
+        ExpressionNode::MapLiteral(entries) => {
+            for (k, v) in entries {
+                collect_names_expr(k, bound, referenced);
+                collect_names_expr(v, bound, referenced);
             }
         }
         ExpressionNode::Binary(l, _, r) => {

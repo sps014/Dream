@@ -185,6 +185,12 @@ fn fold_unary(op: UnOp, a: &Const) -> Option<Const> {
         (UnOp::Neg, Const::Float(x)) => Const::Float(-x),
         (UnOp::Neg, Const::F32(x)) => Const::F32(-x),
         (UnOp::Not, Const::Bool(x)) => Const::Bool(!x),
+        // `wrap32` truncates the flipped bit pattern back to the value's native 32-bit register
+        // width (see its doc comment) — the same width `x ^ -1` flips at in codegen. `byte`'s
+        // further `[0, 255]` mask is applied uniformly by `fold`'s caller for any `is_byte`
+        // destination, exactly as for the binary integer folds above.
+        (UnOp::BitNot, Const::Int(x)) => Const::Int(wrap32(!x)),
+        (UnOp::BitNot, Const::Long(x)) => Const::Long(!x),
         _ => return None,
     })
 }

@@ -81,6 +81,15 @@ public fun origin(): Point {
 }
 ```
 
+### Why no `protected`/`internal`
+
+Dream deliberately has only two visibility levels — file-private/public (Axis 1) and class-private/public (Axis 2) — and no `protected` or `internal`-style middle ground. Both of those modifiers exist in other languages to solve problems Dream's design doesn't have:
+
+- **`protected`** (accessible to subclasses) has no reason to exist because Dream [has no class inheritance](classes-structs.md) — classes cannot extend one another, only implement interfaces (which contribute no member implementations to override or share). With no derived-class hierarchy, there is nothing for "accessible to this class and its subclasses" to mean.
+- **`internal`** (accessible package/assembly-wide but not beyond it) has no reason to exist because Dream has no package/assembly grouping above the individual file: a program is just a set of `.dream` files linked by `import`, with no intermediate module boundary for "internal" to scope to. File-private (the default) already gives the tightest useful grouping, and `public` already gives the widest; there is no third granularity in between for `internal` to occupy.
+
+If a future version of Dream gains class inheritance or a package system, revisiting this is reasonable — but retrofitting either keyword today would add surface area with no corresponding semantics to back it.
+
 ## Importing from JavaScript
 
 Pulling in functions from the JavaScript host (rather than another `.dream` file) uses `extern fun`. See [JS Interop](interop.md).

@@ -29,11 +29,16 @@ impl<'a> Analyzer<'a> {
             .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
         let type_annotation = &mono_annotation;
         // Empty array literals carry no element type, so the declaration must supply one via an
-        // array-typed annotation (e.g. `let xs: int[] = [];`). With a valid annotation the literal is
-        // handled on the normal path below (the annotation is published as the expected type, which
-        // the array-literal analysis uses to allocate a zero-length array).
+        // array-typed (`int[]`) or `List<T>` annotation (e.g. `let xs: int[] = [];` / `let xs:
+        // List<int> = [];`). With a valid annotation the literal is handled on the normal path
+        // below (the annotation is published as the expected type, which the array-literal
+        // analysis uses to allocate a zero-length array, or lower to `List<T>.from_array([])`).
         if let ExpressionNode::ArrayLiteral(elements) = right {
-            if elements.is_empty() && !type_annotation.as_ref().is_some_and(|t| t.is_array()) {
+            if elements.is_empty()
+                && !type_annotation.as_ref().is_some_and(|t| {
+                    t.is_array() || Self::collection_generic_arg(t, "List").is_some()
+                })
+            {
                 self.hir_fail();
                 diagnostics.report_error(
                     "cannot infer the element type of an empty array literal; add an array type annotation, e.g. `let xs: int[] = [];`".to_string(),

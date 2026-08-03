@@ -237,6 +237,16 @@ pub struct FunctionTableInfo {
     pub name: String,
     pub return_type: Option<Type>,
     pub parameters: Vec<String>,
+    /// The fully structured (never string-mangled) counterpart of `parameters`, parallel to it.
+    /// Populated by [`FunctionTableInfo::from`] straight from the declaration's (possibly
+    /// generic-substituted) `ParameterNode::type_`, so a generic-struct-typed parameter (e.g.
+    /// `List<T>`, concretized to `List<int>` on a monomorphized method) keeps its `Struct(name,
+    /// Some(args))` shape instead of collapsing to the opaque mangled name `parameters` stores.
+    /// Used to publish `current_expected_type` per call argument (see `analyze_call_arguments_expecting`),
+    /// which a string round-trip through `parameters` cannot do losslessly for generic structs.
+    /// Empty for synthesized/stdlib entries built via [`FunctionTableInfo::new`] (host functions
+    /// only ever take primitive parameters, so the string form round-trips losslessly there).
+    pub parameter_types: Vec<Type>,
     /// Per-parameter declared names, parallel to `parameters`, used to resolve named arguments
     /// (`f(name: value)`) at call sites back to a positional index. Empty for entries with no
     /// source-level parameter names (synthesized/stdlib entries built via
@@ -282,6 +292,7 @@ impl FunctionTableInfo {
             name,
             return_type,
             parameters,
+            parameter_types: Vec::new(),
             param_names,
             is_variadic: false,
             defaults,
@@ -296,11 +307,13 @@ impl FunctionTableInfo {
         let name = func.name.clone();
         let return_type = func.return_type.clone();
         let mut parameters: Vec<String> = vec![];
+        let mut parameter_types: Vec<Type> = vec![];
         let mut param_names: Vec<String> = vec![];
         let mut defaults: Vec<Option<Type>> = vec![];
         for i in func.parameters.iter() {
             let j = i.clone();
             parameters.push(j.type_.get_type());
+            parameter_types.push(j.type_);
             param_names.push(j.name.text);
             defaults.push(j.default);
         }
@@ -311,6 +324,7 @@ impl FunctionTableInfo {
             .map(|p| p.is_variadic)
             .unwrap_or(false);
         let mut info = FunctionTableInfo::new(name.text, return_type, parameters);
+        info.parameter_types = parameter_types;
         info.param_names = param_names;
         info.is_variadic = is_variadic;
         info.defaults = defaults;

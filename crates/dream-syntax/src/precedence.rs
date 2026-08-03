@@ -43,6 +43,7 @@ impl TokenKind {
             TokenKind::PlusToken => 6,
             TokenKind::MinusToken => 6,
             TokenKind::BangToken => 6,
+            TokenKind::TildeToken => 6,
             _ => 0,
         }
     }

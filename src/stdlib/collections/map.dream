@@ -140,6 +140,30 @@ public class Map<K, V> {
         return this.find(key) >= 0;
     }
 
+    // Inserts or updates a value for every `keys[i] -> values[i]` pair. If the two arrays differ in
+    // length, the extra tail of the longer one is ignored. Also what the `{k1: v1, ...}`
+    // map-literal syntax lowers to via `from_arrays`, so a literal with N entries costs one call to
+    // build each backing array plus one call here, not N `set` calls.
+    public fun set_all(keys: K[], values: V[]): void {
+        let n = keys.size();
+        if (values.size() < n) {
+            n = values.size();
+        }
+        let i = 0;
+        while (i < n) {
+            this.set(keys[i], values[i]);
+            i = i + 1;
+        }
+    }
+
+    // Builds a map from parallel `keys`/`values` arrays. The `{k1: v1, k2: v2, ...}` map-literal
+    // syntax (e.g. `let m: Map<string, int> = {"a": 1, "b": 2};`) desugars to this.
+    public static fun from_arrays(keys: K[], values: V[]): Map<K, V> {
+        let result = Map<K, V>(keys.size());
+        result.set_all(keys, values);
+        return result;
+    }
+
     // Gets the value for a key, or None.
     public fun get(key: K): Option<V> {
         let i = this.find(key);

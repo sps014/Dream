@@ -125,7 +125,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records the HIR for a unary expression. Unary `+` is the identity (passes the operand
-    /// through); `-` and `!` map to [`UnOp::Neg`]/[`UnOp::Not`].
+    /// through); `-`, `!`, and `~` map to [`UnOp::Neg`]/[`UnOp::Not`]/[`UnOp::BitNot`].
     pub(in crate::semantics::analyzer) fn hir_set_unary(
         &mut self,
         opr: &SyntaxToken,
@@ -143,6 +143,7 @@ impl<'a> Analyzer<'a> {
             }
             TokenKind::MinusToken => UnOp::Neg,
             TokenKind::BangToken => UnOp::Not,
+            TokenKind::TildeToken => UnOp::BitNot,
             _ => {
                 self.hir.last = None;
                 return;
