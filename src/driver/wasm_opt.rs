@@ -44,7 +44,7 @@ impl FromStr for OptLevel {
 /// Runs Binaryen's `wasm-opt` over the `.wasm` file at `path` in place, at the given [`OptLevel`].
 #[cfg(feature = "wasm-opt")]
 pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
-    use wasm_opt::{FeatureBaseline, OptimizationOptions};
+    use wasm_opt::{Feature, FeatureBaseline, OptimizationOptions};
 
     let mut options = match level {
         OptLevel::O0 => OptimizationOptions::new_opt_level_0(),
@@ -57,12 +57,32 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
     };
 
     // Codegen unconditionally emits bulk-memory ops (`memory.fill`/`memory.copy`, see
-    // `src/mir/emit/emitter/`) and other post-MVP instructions, matching what `wasmtime`'s default
-    // `Config` already accepts at runtime (`src/execution/wasm_runner.rs`). `wasm-opt`'s default
-    // feature baseline is narrower than that and mis-validates them as errors, so opt in to the
-    // full feature set here to match the rest of the pipeline instead of guessing which subset of
-    // proposals codegen currently happens to use.
-    options.features.baseline = FeatureBaseline::All;
+    // `src/mir/emit/emitter/`) and other post-MVP instructions, so `wasm-opt`'s narrow default
+    // feature baseline (sign-extension + mutable-globals only) mis-validates them as errors.
+    // `FeatureBaseline::All` looked like the obvious fix, but it over-shoots: it also licenses
+    // Binaryen to *emit* far newer proposals (e.g. typed function references) that this project's
+    // `wasmtime::Config` (`src/execution/wasm_runner.rs`) never opts into, silently producing a
+    // `.wasm` that fails to parse at runtime (`-Oz` was observed doing exactly this). Instead,
+    // start from the MVP baseline and enable precisely the proposals Wasmtime enables by default
+    // (`wasmtime::Config::features`: the WASM 2.0 bundle plus multi-memory/relaxed-simd/tail-call/
+    // extended-const/memory64) — the same instruction set the rest of the toolchain already
+    // targets — so `wasm-opt` can neither choke on codegen's output nor introduce anything the
+    // runtime can't load.
+    options.features.baseline = FeatureBaseline::MvpOnly;
+    options.features.enabled.extend([
+        Feature::MutableGlobals,
+        Feature::SignExt,
+        Feature::TruncSat,
+        Feature::BulkMemory,
+        Feature::ReferenceTypes,
+        Feature::Multivalue,
+        Feature::Simd,
+        Feature::MultiMemory,
+        Feature::RelaxedSimd,
+        Feature::TailCall,
+        Feature::ExtendedConst,
+        Feature::Memory64,
+    ]);
 
     options
         .run(path, path)
