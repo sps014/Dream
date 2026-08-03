@@ -104,10 +104,8 @@ fn solve(
             }
             for stmt in &block.stmts {
                 if let Statement::Assign(Place::Local(l), rv) = stmt {
-                    let is_byte = matches!(
-                        interner.kind(func.local_ty(*l)),
-                        TyKind::Prim(PrimTy::Byte)
-                    );
+                    let is_byte =
+                        matches!(interner.kind(func.local_ty(*l)), TyKind::Prim(PrimTy::Byte));
                     let v = eval_rvalue(rv, &lat, is_byte);
                     let merged = meet(next.get(l).cloned().unwrap_or(Lat::Top), v);
                     next.insert(*l, merged);
@@ -177,12 +175,10 @@ fn eval_rvalue(rv: &Rvalue, lat: &BTreeMap<crate::mir::Local, Lat>, is_byte: boo
             }
         }
         Rvalue::Unary(op, a) => match eval_operand(a, lat) {
-            Lat::Const(x) => {
-                match fold_rvalue(&Rvalue::Unary(*op, Operand::Const(x)), is_byte) {
-                    Some(c) => Lat::Const(c),
-                    None => Lat::Bottom,
-                }
-            }
+            Lat::Const(x) => match fold_rvalue(&Rvalue::Unary(*op, Operand::Const(x)), is_byte) {
+                Some(c) => Lat::Const(c),
+                None => Lat::Bottom,
+            },
             Lat::Top => Lat::Top,
             Lat::Bottom => Lat::Bottom,
         },

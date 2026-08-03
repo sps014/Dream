@@ -22,7 +22,9 @@ pub(super) fn runtime_prelude(debug: bool) -> String {
     // itself no longer bounds-checks: callers emit a located check inline before calling it (see
     // `Emitter::emit_char_at`), so a string-index panic gets a precise file:line rather than the one
     // bare, unlocated message a truly shared runtime helper would be stuck with.
-    out.push_str(&RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()));
+    out.push_str(
+        &RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()),
+    );
     out
 }
 

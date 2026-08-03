@@ -305,7 +305,11 @@ impl FunctionTableInfo {
             defaults.push(j.default);
         }
         let intrinsic_name = crate::intrinsics::intrinsic_key(&func.attributes);
-        let is_variadic = func.parameters.last().map(|p| p.is_variadic).unwrap_or(false);
+        let is_variadic = func
+            .parameters
+            .last()
+            .map(|p| p.is_variadic)
+            .unwrap_or(false);
         let mut info = FunctionTableInfo::new(name.text, return_type, parameters);
         info.param_names = param_names;
         info.is_variadic = is_variadic;

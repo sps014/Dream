@@ -36,7 +36,11 @@ impl<'a> Analyzer<'a> {
 
     /// `weak` fields must be `Option<T>` for a class `T`; `unowned` fields must themselves be a
     /// bare class type `T`; a field cannot be both.
-    fn validate_weak_unowned_fields(&self, node: &'a ProgramNode<'a>, diagnostics: &mut DiagnosticBag) {
+    fn validate_weak_unowned_fields(
+        &self,
+        node: &'a ProgramNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
         for struct_decl in node.structs.iter() {
             for field in &struct_decl.fields {
                 if !field.is_weak && !field.is_unowned {
@@ -54,14 +58,18 @@ impl<'a> Analyzer<'a> {
                 }
                 if field.is_weak {
                     let option_inner = match &field.field_type {
-                        Type::Struct(token, Some(args)) if token.text == "Option" && args.len() == 1 => {
+                        Type::Struct(token, Some(args))
+                            if token.text == "Option" && args.len() == 1 =>
+                        {
                             Some(&args[0])
                         }
                         _ => None,
                     };
                     let is_class_option = option_inner
                         .and_then(Self::resolve_struct_parts)
-                        .and_then(|(base, _)| self.struct_table.get_struct(&base).map(|i| !i.is_value))
+                        .and_then(|(base, _)| {
+                            self.struct_table.get_struct(&base).map(|i| !i.is_value)
+                        })
                         .unwrap_or(false);
                     if !is_class_option {
                         diagnostics.report_error(
@@ -75,7 +83,9 @@ impl<'a> Analyzer<'a> {
                     }
                 } else {
                     let is_class = Self::resolve_struct_parts(&field.field_type)
-                        .and_then(|(base, _)| self.struct_table.get_struct(&base).map(|i| !i.is_value))
+                        .and_then(|(base, _)| {
+                            self.struct_table.get_struct(&base).map(|i| !i.is_value)
+                        })
                         .unwrap_or(false);
                     if !is_class {
                         diagnostics.report_error(
@@ -98,7 +108,8 @@ impl<'a> Analyzer<'a> {
     fn check_reference_cycles(&self, node: &'a ProgramNode<'a>, diagnostics: &mut DiagnosticBag) {
         let mut edges: IndexMap<String, Vec<ClassEdge>> = IndexMap::new();
         let mut allow_cycle: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut positions: std::collections::HashMap<String, TextSpan> = std::collections::HashMap::new();
+        let mut positions: std::collections::HashMap<String, TextSpan> =
+            std::collections::HashMap::new();
 
         for struct_decl in node.structs.iter() {
             // Generic templates aren't monomorphized here (their field types aren't concrete
@@ -109,7 +120,11 @@ impl<'a> Analyzer<'a> {
             }
             let name = struct_decl.name.text.clone();
             positions.insert(name.clone(), struct_decl.name.position);
-            if struct_decl.attributes.iter().any(|a| a.name.text == "allow_cycle") {
+            if struct_decl
+                .attributes
+                .iter()
+                .any(|a| a.name.text == "allow_cycle")
+            {
                 allow_cycle.insert(name.clone());
             }
 

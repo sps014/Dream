@@ -458,17 +458,18 @@ impl Emitter<'_> {
     /// Like [`Self::field_layout`], but also exposes the field's `weak`/`unowned` storage qualifiers
     /// (see `docs/language/memory.md`), needed at both the store site (skip retain, register in the
     /// weak side-table) and the read site (trap on a poisoned `unowned` field).
-    fn field_layout_full(&self, base: crate::mir::Local, field: usize) -> Option<&crate::hir::FieldLayout> {
+    fn field_layout_full(
+        &self,
+        base: crate::mir::Local,
+        field: usize,
+    ) -> Option<&crate::hir::FieldLayout> {
         let bty = self.func.local_ty(base);
         self.layouts.get(bty)?.fields.get(field)
     }
 
     /// The element type of an array-typed local, or `None` if `base` is not an array.
     fn array_elem_ty(&self, base: crate::mir::Local) -> Option<TypeId> {
-        match self
-            .interner
-            .kind(self.func.local_ty(base))
-        {
+        match self.interner.kind(self.func.local_ty(base)) {
             TyKind::Array(e) => Some(*e),
             _ => None,
         }

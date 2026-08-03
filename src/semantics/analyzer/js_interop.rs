@@ -183,11 +183,7 @@ impl<'a> Analyzer<'a> {
             // parameters. Any arity is marshalable through the slot buffer.
             TyKind::Func(..) => Some(e),
             TyKind::Array(elem) => {
-                let ek = self
-                    .type_ctx
-                    .interner
-                    .kind(elem)
-                    .clone();
+                let ek = self.type_ctx.interner.kind(elem).clone();
                 match ek {
                     TyKind::Prim(_) | TyKind::Js | TyKind::Enum(_) => Some(e),
                     _ => None,
@@ -210,11 +206,8 @@ impl<'a> Analyzer<'a> {
         let mut out = Vec::with_capacity(args.len());
         for arg in args {
             let arg = arg?;
-            let arg_display = crate::types::display_name(
-                &self.type_ctx.interner,
-                &self.type_ctx.defs,
-                arg.ty,
-            );
+            let arg_display =
+                crate::types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, arg.ty);
             match self.js_slot_arg(arg) {
                 Some(a) => out.push(a),
                 None => {

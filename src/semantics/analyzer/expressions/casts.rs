@@ -66,7 +66,8 @@ impl<'a> Analyzer<'a> {
             // implements the interface (an upcast). Both are identity at runtime (same tagged
             // pointer); only the static type changes.
             let src = &expr_type_str;
-            if self.is_interface_name(src) || self.implements_as_interface_ref(src, &target_type_str)
+            if self.is_interface_name(src)
+                || self.implements_as_interface_ref(src, &target_type_str)
             {
                 Ok(target_type.clone())
             } else {

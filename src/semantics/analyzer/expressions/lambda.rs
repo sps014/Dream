@@ -20,7 +20,9 @@ use crate::diagnostics::DiagnosticBag;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::function_table::FunctionTableInfo;
 use crate::semantics::symbol_table::SymbolTable;
-use crate::syntax::nodes::{FunctionNode, LambdaBody, LambdaNode, ParameterNode, StatementNode, Type};
+use crate::syntax::nodes::{
+    FunctionNode, LambdaBody, LambdaNode, ParameterNode, StatementNode, Type,
+};
 use crate::syntax::token::token_kind::TokenKind;
 use crate::types::DefKind;
 use std::cell::RefCell;

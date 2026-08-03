@@ -104,11 +104,7 @@ fn emit_embedded_value_drop(
 /// table if it currently watches a live referent (`Some`). The box is *never* passed to
 /// `$release_Option_...` — it never held a strong reference to its payload, so deep-releasing it would
 /// wrongly decrement the referent's real strong count.
-fn emit_release_weak_field(
-    out: &mut String,
-    f: &crate::hir::FieldLayout,
-    layouts: &LayoutTable,
-) {
+fn emit_release_weak_field(out: &mut String, f: &crate::hir::FieldLayout, layouts: &LayoutTable) {
     let Some(u) = layouts.union(f.ty) else {
         // A `weak` field always type-checks to `Option<T>`, which is always a registered union; this
         // is unreachable in practice, but degrade to a no-op rather than emitting malformed WAT.
@@ -122,7 +118,11 @@ fn emit_release_weak_field(
         .and_then(|v| v.fields.first())
         .map(|f| f.offset)
         .unwrap_or(4);
-    let _ = writeln!(out, "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)", f.offset);
+    let _ = writeln!(
+        out,
+        "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)",
+        f.offset
+    );
     out.push_str("    (local.get $__wbox) (if (then\n");
     let _ = writeln!(
         out,
@@ -145,10 +145,18 @@ fn emit_release_weak_field(
 /// watches a live referent. There is no box to free — the field itself holds the raw (non-owning)
 /// pointer.
 fn emit_release_unowned_field(out: &mut String, f: &crate::hir::FieldLayout) {
-    let _ = writeln!(out, "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)", f.offset);
+    let _ = writeln!(
+        out,
+        "    (local.get $ptr) (i32.const {}) (i32.add) (i32.load) (local.set $__wbox)",
+        f.offset
+    );
     out.push_str("    (local.get $__wbox) (if (then\n");
     out.push_str("      (local.get $__wbox)\n");
-    let _ = writeln!(out, "      (local.get $ptr) (i32.const {}) (i32.add)", f.offset);
+    let _ = writeln!(
+        out,
+        "      (local.get $ptr) (i32.const {}) (i32.add)",
+        f.offset
+    );
     out.push_str("      (call $weak_unregister)\n");
     out.push_str("    ))\n");
 }
@@ -239,10 +247,7 @@ pub(super) fn emit_release_funcs(
             let value_fields: Vec<&crate::hir::FieldLayout> = v
                 .fields
                 .iter()
-                .filter(|f| {
-                    interner.is_value_type(f.ty)
-                        && value_glue.contains(&f.ty)
-                })
+                .filter(|f| interner.is_value_type(f.ty) && value_glue.contains(&f.ty))
                 .collect();
             if value_fields.is_empty() {
                 continue;
@@ -291,9 +296,7 @@ pub(super) fn emit_release_funcs(
             );
         } else if value_glue.contains(&elem) {
             // Drop each inline element (stride = its inline size) via `$__vs_drop_<T>` at its address.
-            let name = mir.layouts.structs[&elem]
-                .name
-                .clone();
+            let name = mir.layouts.structs[&elem].name.clone();
             let (stride, _) = crate::hir::scalar_size(interner, elem);
             out.push_str("    (local.get $ptr) (i32.load) (local.set $len)\n");
             out.push_str("    (i32.const 0) (local.set $i)\n");

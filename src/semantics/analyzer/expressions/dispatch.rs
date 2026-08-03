@@ -270,15 +270,15 @@ impl<'a> Analyzer<'a> {
             ExpressionNode::Parenthesized(expr) => {
                 Ok(self.analyze_expression(expr, parent_function, symbol_table, diagnostics)?)
             }
-            ExpressionNode::Try(inner) => {
-                Ok(self.analyze_try_expression(inner, parent_function, symbol_table, diagnostics)?)
-            }
-            ExpressionNode::Lambda(lambda) => Ok(self.analyze_lambda(
-                lambda,
+            ExpressionNode::Try(inner) => Ok(self.analyze_try_expression(
+                inner,
                 parent_function,
                 symbol_table,
                 diagnostics,
             )?),
+            ExpressionNode::Lambda(lambda) => {
+                Ok(self.analyze_lambda(lambda, parent_function, symbol_table, diagnostics)?)
+            }
             ExpressionNode::Ternary(condition, then_expr, else_expr) => {
                 let cond_type =
                     self.analyze_expression(condition, parent_function, symbol_table, diagnostics)?;

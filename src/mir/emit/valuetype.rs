@@ -274,8 +274,7 @@ pub(super) fn emit_value_glue(
                     .iter()
                     .filter(|f| {
                         interner.is_reference(f.ty)
-                            || (interner.is_value_type(f.ty)
-                                && glue.contains(&f.ty))
+                            || (interner.is_value_type(f.ty) && glue.contains(&f.ty))
                     })
                     .collect();
                 if live.is_empty() {

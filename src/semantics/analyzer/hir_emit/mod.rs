@@ -237,7 +237,11 @@ impl<'a> Analyzer<'a> {
         // `__Cell<T>` its creating scope boxed it into, so `hir_set_var`/`hir_assign_local`'s
         // `self.hir.boxed`-driven redirect (see `hir_declare_local`) applies transparently to it
         // too — reads/writes inside this body go through `.value` exactly like a captured `let`'s.
-        if let Some(captures) = self.closure_captures.get(&lookup_name_for_captures).cloned() {
+        if let Some(captures) = self
+            .closure_captures
+            .get(&lookup_name_for_captures)
+            .cloned()
+        {
             if captures.len() == 1 {
                 let (cap_name, cap_ty) = &captures[0];
                 self.receive_closure_capture(cap_name, cap_ty);
@@ -292,7 +296,9 @@ impl<'a> Analyzer<'a> {
         let cast = HExpr::new(cell_tid, HExprKind::Cast(Box::new(env)));
         let local = LocalId(self.hir.next_local);
         self.hir.next_local += 1;
-        self.hir.locals.insert(cap_name.to_string(), (local, cell_tid));
+        self.hir
+            .locals
+            .insert(cap_name.to_string(), (local, cell_tid));
         self.hir.local_decls.push(HLocal {
             id: local,
             name: cap_name.to_string(),

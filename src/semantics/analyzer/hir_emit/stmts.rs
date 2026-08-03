@@ -151,10 +151,7 @@ impl<'a> Analyzer<'a> {
         // `&mut self` (the `js` box/unbox helpers).
         let (target_k, val_k) = {
             let i = &self.type_ctx.interner;
-            (
-                i.kind(target).clone(),
-                i.kind(value.ty).clone(),
-            )
+            (i.kind(target).clone(), i.kind(value.ty).clone())
         };
         // Boxing a primitive into `object`.
         if matches!(target_k, TyKind::Object) && matches!(val_k, TyKind::Prim(_)) {

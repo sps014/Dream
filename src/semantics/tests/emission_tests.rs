@@ -167,7 +167,10 @@ fn test_hir_emission_coalesce() {
         fun or_default(x: Option<string>): string { return x ?? \"d\"; }
     ";
     let (wat, count) = emit_hir_to_wat(code);
-    assert_eq!(count, 2, "unwrap_or and or_default should be emitted as HIR");
+    assert_eq!(
+        count, 2,
+        "unwrap_or and or_default should be emitted as HIR"
+    );
     assert!(
         wat.contains("(func $or_default"),
         "missing emitted function:\n{}",
@@ -1187,10 +1190,7 @@ fn func_value_argument_is_not_reference_counted() {
             };
             if let Operand::Copy(Place::Local(l)) = op {
                 let ty = main.locals[l.0 as usize].ty;
-                if matches!(
-                    interner.kind(ty),
-                    crate::types::TyKind::Func(_, _)
-                ) {
+                if matches!(interner.kind(ty), crate::types::TyKind::Func(_, _)) {
                     func_value_rc += 1;
                 } else if interner.is_reference(ty) {
                     reference_rc += 1;

@@ -63,9 +63,7 @@ impl<'a> Analyzer<'a> {
             Some(e) => {
                 let int = self.type_ctx.interner.int();
                 let is_string = matches!(
-                    self.type_ctx
-                        .interner
-                        .kind(e.ty),
+                    self.type_ctx.interner.kind(e.ty),
                     TyKind::Prim(PrimTy::String)
                 );
                 let kind = if is_string {

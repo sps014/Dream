@@ -24,8 +24,7 @@ impl Lowerer<'_> {
         {
             self.lower_variant_switch(scrutinee, arms, default);
         } else if matches!(
-            self.interner
-                .kind(scrutinee.ty),
+            self.interner.kind(scrutinee.ty),
             TyKind::Prim(PrimTy::String)
         ) {
             self.lower_string_switch(scrutinee, arms, default);

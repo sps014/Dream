@@ -74,7 +74,10 @@ impl<'a> Analyzer<'a> {
     /// not the value inside it. Used when constructing a capturing lambda's environment (see
     /// `expressions::lambda`), which needs to hand the *cell* (so writes from either side stay
     /// visible to the other) to the closure, not a snapshot of its current value.
-    pub(in crate::semantics::analyzer) fn hir_read_cell_ref(&mut self, name: &str) -> Option<HExpr> {
+    pub(in crate::semantics::analyzer) fn hir_read_cell_ref(
+        &mut self,
+        name: &str,
+    ) -> Option<HExpr> {
         let &(local, ty) = self.hir.locals.get(name)?;
         Some(HExpr::new(ty, HExprKind::Var(Binding::Local(local))))
     }

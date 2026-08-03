@@ -305,14 +305,20 @@ impl Emitter<'_> {
 
         // Register the new box as watching its payload, if it's live.
         self.line("     (local.get $__wsrc) (i32.load)");
-        self.line(&format!("     (i32.const {}) (i32.eq) (if (then", some_disc));
+        self.line(&format!(
+            "     (i32.const {}) (i32.eq) (if (then",
+            some_disc
+        ));
         self.line(&format!(
             "       (local.get $__wsrc) (i32.const {}) (i32.add) (i32.load)",
             payload_off
         ));
         self.line("       (local.get $__wbox)");
         self.line("       (i32.const 0) ;; kind: weak");
-        self.line(&format!("       (i32.const {}) ;; extra: None's discriminant", none_disc));
+        self.line(&format!(
+            "       (i32.const {}) ;; extra: None's discriminant",
+            none_disc
+        ));
         self.line("       (call $weak_register)");
         self.line("     ))");
 
@@ -327,7 +333,10 @@ impl Emitter<'_> {
         self.line("     (local.get $__rel)");
         self.line("     (if (then");
         self.line("       (local.get $__rel) (i32.load)");
-        self.line(&format!("       (i32.const {}) (i32.eq) (if (then", some_disc));
+        self.line(&format!(
+            "       (i32.const {}) (i32.eq) (if (then",
+            some_disc
+        ));
         self.line(&format!(
             "         (local.get $__rel) (i32.const {}) (i32.add) (i32.load)",
             payload_off

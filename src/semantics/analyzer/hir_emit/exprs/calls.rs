@@ -110,9 +110,10 @@ impl<'a> Analyzer<'a> {
     /// ABI (a boxed `[funcidx][env]` heap value); every call site is built directly here rather than
     /// through ordinary name resolution, so the stdlib class is never referenced by user code.
     fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
-        self.type_ctx
-            .defs
-            .lookup(DefKind::Function, &crate::types::method_fn("__Closure", method))
+        self.type_ctx.defs.lookup(
+            DefKind::Function,
+            &crate::types::method_fn("__Closure", method),
+        )
     }
 
     /// Wraps a raw function-table index (`raw`, always `int`-typed) plus an optional environment
@@ -145,7 +146,10 @@ impl<'a> Analyzer<'a> {
     /// — used at boundaries with no env-restoring prologue of their own (a host `@js` bridge; see
     /// `js_interop::box_to_js`), where only the funcidx half of the box is meaningful. `None` if the
     /// `__Closure` intrinsics are unavailable.
-    pub(in crate::semantics::analyzer) fn hir_funcbox_funcidx(&mut self, boxed: HExpr) -> Option<HExpr> {
+    pub(in crate::semantics::analyzer) fn hir_funcbox_funcidx(
+        &mut self,
+        boxed: HExpr,
+    ) -> Option<HExpr> {
         let def = self.closure_intrinsic("funcbox_funcidx")?;
         let int_ty = self.type_ctx.interner.int();
         Some(HExpr::new(

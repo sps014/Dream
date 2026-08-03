@@ -308,7 +308,8 @@ fn test_parse_switch_range_pattern() {
 
 #[test]
 fn test_parse_switch_or_pattern() {
-    let code = "fun f(n: int): string { return switch (n) { 1 | 2 | 3 => \"small\", _ => \"other\" }; }";
+    let code =
+        "fun f(n: int): string { return switch (n) { 1 | 2 | 3 => \"small\", _ => \"other\" }; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
@@ -334,7 +335,10 @@ fn test_parse_try_propagation_before_semicolon() {
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
     let StatementNode::Declaration(_, _, ExpressionNode::Try(inner), _) = &func.body[0] else {
-        panic!("expected a `let` binding of a Try expression, got {:?}", func.body[0]);
+        panic!(
+            "expected a `let` binding of a Try expression, got {:?}",
+            func.body[0]
+        );
     };
     assert!(matches!(**inner, ExpressionNode::FunctionCall(_, _, _)));
 }

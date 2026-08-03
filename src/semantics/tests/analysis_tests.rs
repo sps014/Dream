@@ -489,10 +489,9 @@ fn test_try_propagation_requires_result_or_option_operand() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("requires a Result<T, E> or Option<T> operand")));
+    assert!(diagnostics.diagnostics.iter().any(|d| d
+        .message
+        .contains("requires a Result<T, E> or Option<T> operand")));
 }
 
 #[test]
@@ -511,10 +510,9 @@ fn test_try_propagation_requires_matching_return_type() {
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("requires the enclosing function to return a matching")));
+    assert!(diagnostics.diagnostics.iter().any(|d| d
+        .message
+        .contains("requires the enclosing function to return a matching")));
 }
 
 #[test]
@@ -1407,10 +1405,13 @@ fn test_class_self_reference_is_a_cycle_error() {
     let code = "class Node { public next: Node; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
-    assert!(diagnostics
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("reference cycle detected") && d.message.contains("Node.next")));
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("reference cycle detected")
+                && d.message.contains("Node.next"))
+    );
 }
 
 #[test]

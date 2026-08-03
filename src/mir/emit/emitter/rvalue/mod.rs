@@ -31,10 +31,7 @@ impl Emitter<'_> {
                 let tb = self.operand_ty(b);
                 // String equality compares contents, not pointers, via the runtime `$string_eq`.
                 let str_eq = matches!(op, BinOp::Eq | BinOp::Ne)
-                    && matches!(
-                        self.interner.kind(ta),
-                        TyKind::Prim(PrimTy::String)
-                    );
+                    && matches!(self.interner.kind(ta), TyKind::Prim(PrimTy::String));
                 if str_eq {
                     self.emit_operand(a);
                     self.emit_operand(b);

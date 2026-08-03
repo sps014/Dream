@@ -53,14 +53,8 @@ impl Emitter<'_> {
         }
         let from_prim = prim_of(self.interner, from);
         let to_prim = prim_of(self.interner, to);
-        let to_is_object = matches!(
-            self.interner.kind(to),
-            TyKind::Object
-        );
-        let from_is_object = matches!(
-            self.interner.kind(from),
-            TyKind::Object
-        );
+        let to_is_object = matches!(self.interner.kind(to), TyKind::Object);
+        let from_is_object = matches!(self.interner.kind(from), TyKind::Object);
         // Boxing a primitive into `object` (reference types are already pointers → identity).
         if to_is_object {
             self.emit_operand(o);

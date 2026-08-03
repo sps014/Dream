@@ -51,85 +51,83 @@ impl<'a> Analyzer<'a> {
             }
         };
         let normalized_params: Vec<ExpressionNode<'a>>;
-        let params: &[ExpressionNode<'a>] = if has_named_arg || {
-            callee_signature(self).is_some_and(|(_, _, variadic)| variadic)
-        } {
-            if self.function_table.is_overloaded(&function_name) {
-                return Err(report(
-                    diagnostics,
-                    format!(
+        let params: &[ExpressionNode<'a>] =
+            if has_named_arg || { callee_signature(self).is_some_and(|(_, _, variadic)| variadic) }
+            {
+                if self.function_table.is_overloaded(&function_name) {
+                    return Err(report(
+                        diagnostics,
+                        format!(
                         "named/variadic arguments are not supported for overloaded function '{}'",
                         function_name
                     ),
-                    Some(name.position),
-                ));
-            }
-            let Some((param_names, defaults, is_variadic)) = callee_signature(self) else {
-                return Err(report(
-                    diagnostics,
-                    format!(
-                        "named arguments are not supported for '{}'",
-                        function_name
-                    ),
-                    Some(name.position),
-                ));
-            };
-            if has_named_arg && is_variadic {
-                return Err(report(
-                    diagnostics,
-                    format!(
-                        "named arguments are not supported for variadic function '{}'",
-                        function_name
-                    ),
-                    Some(name.position),
-                ));
-            }
-            normalized_params = if has_named_arg {
-                self.normalize_named_arguments(
-                    &param_names,
-                    &defaults,
-                    params,
-                    name.position,
-                    diagnostics,
-                )?
+                        Some(name.position),
+                    ));
+                }
+                let Some((param_names, defaults, is_variadic)) = callee_signature(self) else {
+                    return Err(report(
+                        diagnostics,
+                        format!("named arguments are not supported for '{}'", function_name),
+                        Some(name.position),
+                    ));
+                };
+                if has_named_arg && is_variadic {
+                    return Err(report(
+                        diagnostics,
+                        format!(
+                            "named arguments are not supported for variadic function '{}'",
+                            function_name
+                        ),
+                        Some(name.position),
+                    ));
+                }
+                normalized_params = if has_named_arg {
+                    self.normalize_named_arguments(
+                        &param_names,
+                        &defaults,
+                        params,
+                        name.position,
+                        diagnostics,
+                    )?
+                } else {
+                    self.collect_variadic_args(param_names.len(), params)
+                };
+                &normalized_params
             } else {
-                self.collect_variadic_args(param_names.len(), params)
+                params.as_slice()
             };
-            &normalized_params
-        } else {
-            params.as_slice()
-        };
         // When the callee is an unambiguous (non-overloaded) free function, publish each parameter's
         // declared type as the expected type while analyzing the matching argument, so untyped
         // literals such as an empty array `[]` infer their element type from the signature. A plain
         // (non-generic) constructor call gets the same treatment via its `constructor`'s parameter
         // types, so e.g. an `Option<T>`-typed field's `None`/`Some(...)` argument can infer `T`
         // without an explicit annotation.
-        let expected_params: Option<Vec<Type>> =
-            if self.function_table.is_overloaded(&function_name) {
-                None
-            } else if let Ok(info) = self.function_table.get_function(&function_name) {
-                Some(
+        let expected_params: Option<Vec<Type>> = if self
+            .function_table
+            .is_overloaded(&function_name)
+        {
+            None
+        } else if let Ok(info) = self.function_table.get_function(&function_name) {
+            Some(
+                info.parameters
+                    .iter()
+                    .map(|p| Self::type_from_name(p))
+                    .collect(),
+            )
+        } else if generic_args.is_none() && self.struct_table.get_struct(&function_name).is_some() {
+            self.function_table
+                .get_function(&constructor_fn(&function_name))
+                .ok()
+                .map(|info| {
                     info.parameters
                         .iter()
+                        .skip(1)
                         .map(|p| Self::type_from_name(p))
-                        .collect(),
-                )
-            } else if generic_args.is_none() && self.struct_table.get_struct(&function_name).is_some()
-            {
-                self.function_table
-                    .get_function(&constructor_fn(&function_name))
-                    .ok()
-                    .map(|info| {
-                        info.parameters
-                            .iter()
-                            .skip(1)
-                            .map(|p| Self::type_from_name(p))
-                            .collect()
-                    })
-            } else {
-                None
-            };
+                        .collect()
+                })
+        } else {
+            None
+        };
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();
             self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
