@@ -48,6 +48,12 @@ pub enum ExpressionNode<'a> {
     Try(&'a ExpressionNode<'a>),
     /// `(params) => expr` / `(params) => { stmts }` — an arrow-lambda literal.
     Lambda(&'a LambdaNode<'a>),
+    /// `name: value` — a named call argument, produced only inside a call's argument list
+    /// (`f(a, name: value)`) by the shared call-argument parser. The analyzer resolves `name`
+    /// against the callee's declared parameter names and reorders it to its positional slot before
+    /// any other analysis sees it; encountering one outside that resolution step is a semantic
+    /// error (reported, not a panic), never a valid standalone expression.
+    NamedArg(SyntaxToken, &'a ExpressionNode<'a>),
 }
 
 /// An arrow-lambda literal: `(x: int, y: int) => x + y` or `(x: int) => { ...; return x; }`.
@@ -116,6 +122,7 @@ impl<'a> ExpressionNode<'a> {
             }
             ExpressionNode::ArrayLiteral(elements) => elements.first().and_then(|e| e.position()),
             ExpressionNode::Lambda(l) => Some(l.open_paren_position),
+            ExpressionNode::NamedArg(name, _) => Some(name.position),
         }
     }
 

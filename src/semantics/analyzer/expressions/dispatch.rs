@@ -379,6 +379,18 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             }
+            // A named argument (`name: value`) is only meaningful inside a call's argument list,
+            // where `normalize_named_arguments` resolves and strips it before any argument reaches
+            // general expression analysis. Reaching this arm means one appeared somewhere else
+            // (e.g. `[a: 1]`) — report it as a diagnostic rather than silently analyzing `value`.
+            ExpressionNode::NamedArg(name, _) => {
+                self.hir_none();
+                Err(report(
+                    diagnostics,
+                    format!("named argument '{}' is not allowed here", name.text),
+                    Some(name.position),
+                ))
+            }
         }
     }
 

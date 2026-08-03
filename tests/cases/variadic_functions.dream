@@ -1,0 +1,42 @@
+// Variadic parameters (`...name: T[]`): zero, one, and several trailing arguments collected into
+// an array, across a free function and an instance method.
+
+fun sum(...nums: int[]): int {
+    let total = 0;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun sum_with_base(base: int, ...nums: int[]): int {
+    let total = base;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+class Counter {
+    public fun count_all(...items: string[]): int {
+        let count = 0;
+        for (let item in items) {
+            System.println(item);
+            count = count + 1;
+        }
+        return count;
+    }
+}
+
+fun main(): void {
+    System.println(sum());              // 0
+    System.println(sum(1));             // 1
+    System.println(sum(1, 2, 3));       // 6
+
+    System.println(sum_with_base(10));           // 10
+    System.println(sum_with_base(10, 1, 2, 3));  // 16
+
+    let c = Counter();
+    System.println(c.count_all());              // 0 (no lines printed)
+    System.println(c.count_all("a", "b"));       // prints "a","b", then 2
+}

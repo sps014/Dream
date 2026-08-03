@@ -66,6 +66,22 @@ impl Emitter<'_> {
                     self.emit_operand(b);
                     self.emit_numeric_conv(tb, common);
                     self.line(&format!("     ({})", self.binop_instr(*op, common)));
+                    // `byte` shares WASM's `i32` register type (see `wasm_types.rs`), so unlike
+                    // every other integer primitive it is *not* naturally kept in range by its own
+                    // arithmetic instruction — `i32.add`/`i32.sub`/`i32.mul`/`i32.shl` can produce a
+                    // result outside `[0, 255]` that would otherwise only get truncated back into
+                    // range on its next store to `byte`-typed memory (`i32.store8`), leaving it
+                    // silently out-of-range in between (e.g. read back by a subsequent comparison).
+                    // Masking immediately after the op — the same wrapping semantics every other
+                    // integer type already gets for free from its native WASM width — keeps a
+                    // `byte` value in range at every step, matching the overflow policy documented
+                    // in `docs/language/primitives.md`.
+                    if matches!(self.interner.kind(common), TyKind::Prim(PrimTy::Byte))
+                        && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl)
+                    {
+                        self.line("     (i32.const 255)");
+                        self.line("     (i32.and)");
+                    }
                 }
             }
             Rvalue::Unary(op, a) => {

@@ -1,0 +1,1 @@
+variadic parameter 'n' must have an array type, e.g. '...n: T[]'

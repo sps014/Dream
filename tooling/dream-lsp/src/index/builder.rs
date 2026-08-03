@@ -496,6 +496,10 @@ impl Builder {
     /// which would be redundant. Extra arguments (more than parameters) are left unannotated.
     fn push_param_hints(&mut self, params: &[String], args: &[ExpressionNode]) {
         for (param, arg) in params.iter().zip(args.iter()) {
+            // An explicit `name: value` argument already shows its parameter name in source.
+            if matches!(arg, ExpressionNode::NamedArg(..)) {
+                continue;
+            }
             if let ExpressionNode::Identifier(tok) = arg {
                 if &tok.text == param {
                     continue;
@@ -604,6 +608,7 @@ impl Builder {
                 LambdaBody::Expr(e) => self.walk_expr(e, scope),
                 LambdaBody::Block(stmts) => self.walk_block(stmts, scope),
             },
+            ExpressionNode::NamedArg(_, e) => self.walk_expr(e, scope),
         }
     }
 

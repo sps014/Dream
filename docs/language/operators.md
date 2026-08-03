@@ -20,6 +20,10 @@ let x = 7 / (float)2;   // 3.5
 
 Prefix `-` negates a number: `let neg = -x;`.
 
+Integer arithmetic (`+`, `-`, `*`, `<<`, and unary `-`) **wraps** on overflow rather than panicking
+or widening — see [Primitives § Integer overflow](primitives.md#integer-overflow) for the full
+policy and per-type wrap widths. `/` and `%` by zero panic instead of wrapping.
+
 ## String concatenation
 
 When either side of `+` is a `string`, the other side is converted through its [`to_string`](../stdlib/builtins.md). A C-style enum renders its variant *name*, not the number:

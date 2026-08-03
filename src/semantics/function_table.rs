@@ -237,6 +237,17 @@ pub struct FunctionTableInfo {
     pub name: String,
     pub return_type: Option<Type>,
     pub parameters: Vec<String>,
+    /// Per-parameter declared names, parallel to `parameters`, used to resolve named arguments
+    /// (`f(name: value)`) at call sites back to a positional index. Empty for entries with no
+    /// source-level parameter names (synthesized/stdlib entries built via
+    /// [`FunctionTableInfo::new`]) — a named-argument call to one of those is rejected with a clear
+    /// diagnostic rather than silently misresolving.
+    pub param_names: Vec<String>,
+    /// True when the last declared parameter is `...name: T[]` (variadic): a call may supply zero
+    /// or more trailing arguments of the array's element type in that slot, which the analyzer
+    /// collects into an array before argument type-checking. `false` for every synthesized/stdlib
+    /// entry and every declaration with no variadic parameter.
+    pub is_variadic: bool,
     /// Per-parameter constant-literal default values, parallel to `parameters`. `None` means the
     /// parameter is required. Defaults are always trailing (enforced by the parser), so a call may
     /// omit the trailing defaulted arguments and the analyzer substitutes these literals.
@@ -266,10 +277,13 @@ impl FunctionTableInfo {
         parameters: Vec<String>,
     ) -> FunctionTableInfo {
         let defaults = vec![None; parameters.len()];
+        let param_names = Vec::new();
         FunctionTableInfo {
             name,
             return_type,
             parameters,
+            param_names,
+            is_variadic: false,
             defaults,
             is_async: false,
             is_static: false,
@@ -282,14 +296,19 @@ impl FunctionTableInfo {
         let name = func.name.clone();
         let return_type = func.return_type.clone();
         let mut parameters: Vec<String> = vec![];
+        let mut param_names: Vec<String> = vec![];
         let mut defaults: Vec<Option<Type>> = vec![];
         for i in func.parameters.iter() {
             let j = i.clone();
             parameters.push(j.type_.get_type());
+            param_names.push(j.name.text);
             defaults.push(j.default);
         }
         let intrinsic_name = crate::intrinsics::intrinsic_key(&func.attributes);
+        let is_variadic = func.parameters.last().map(|p| p.is_variadic).unwrap_or(false);
         let mut info = FunctionTableInfo::new(name.text, return_type, parameters);
+        info.param_names = param_names;
+        info.is_variadic = is_variadic;
         info.defaults = defaults;
         info.is_async = func.is_async;
         info.is_static = func.is_static;

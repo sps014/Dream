@@ -26,6 +26,31 @@ println((-5).abs());                   // 5
 let n = int.parse("42").unwrap_or(0);  // 42
 ```
 
+### Integer overflow
+
+Every integer primitive **wraps** on overflow: two's-complement modulo its own bit width, with no
+trap and no promotion to a wider type. This matches WebAssembly's native `i32`/`i64` arithmetic
+(the compiler's target), so wrapping is the zero-cost default rather than a runtime check.
+
+- `int`/`uint` wrap at 32 bits, `long`/`ulong` at 64 bits, `byte` at 8 bits (`+`, `-`, `*`, `<<`
+  all wrap; `byte` shares WASM's 32-bit `i32` register, so the compiler masks its result back into
+  `[0, 255]` after every op instead of getting the narrower width for free).
+- A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`, it is
+  never promoted to `int` the way C promotes narrow integer types.
+- `/` and `%` by zero panic (a WASM integer division trap, routed through the same diagnosable
+  panic path as other runtime checks) rather than wrapping.
+
+```dream
+let i: int = 2147483647;   // int.max
+let j = i + 1;              // wraps to -2147483648, not a panic or a wider type
+
+let b: byte = 250b;
+let b2 = b + 10b;           // wraps to 4 (260 mod 256), stays byte
+```
+
+There is no `checked`/`saturating` arithmetic mode; use `.min`/`.max`/`.clamp()` above, or check
+operands before an operation, if you need to guard against wraparound explicitly.
+
 ## Floating point
 
 IEEE 754, in two widths:

@@ -1226,6 +1226,93 @@ fn test_parse_string_and_bool_default_parameter_values() {
 }
 
 #[test]
+fn test_parse_named_call_argument() {
+    let code = "fun f(): int { let x = greet(name: \"Ada\"); return x; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::FunctionCall(_, _, args), _) =
+        &func.body[0]
+    else {
+        panic!(
+            "expected a `let` binding of a call expression, got {:?}",
+            func.body[0]
+        );
+    };
+    assert_eq!(args.len(), 1);
+    let ExpressionNode::NamedArg(name, value) = &args[0] else {
+        panic!("expected a named argument, got {:?}", args[0]);
+    };
+    assert_eq!(name.text, "name");
+    assert!(matches!(**value, ExpressionNode::Literal(Type::String(_))));
+}
+
+#[test]
+fn test_parse_named_and_positional_call_arguments_mixed() {
+    let code = "fun f(): int { let x = f(1, y: 2, z: 3); return x; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::FunctionCall(_, _, args), _) =
+        &func.body[0]
+    else {
+        panic!("expected a `let` binding of a call expression");
+    };
+    assert_eq!(args.len(), 3);
+    assert!(matches!(args[0], ExpressionNode::Literal(Type::Integer(_))));
+    let ExpressionNode::NamedArg(y_name, _) = &args[1] else {
+        panic!("expected a named argument for slot 1, got {:?}", args[1]);
+    };
+    assert_eq!(y_name.text, "y");
+    let ExpressionNode::NamedArg(z_name, _) = &args[2] else {
+        panic!("expected a named argument for slot 2, got {:?}", args[2]);
+    };
+    assert_eq!(z_name.text, "z");
+}
+
+#[test]
+fn test_parse_variadic_parameter() {
+    let code = "fun f(base: int, ...nums: int[]): int { return base; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    assert_eq!(func.parameters.len(), 2);
+    assert!(!func.parameters[0].is_variadic);
+    assert!(func.parameters[1].is_variadic);
+    assert!(matches!(func.parameters[1].type_, Type::Array(_)));
+}
+
+#[test]
+fn test_variadic_parameter_must_be_last_is_rejected() {
+    let code = "fun f(...nums: int[], extra: int): void {}";
+    let arena = bumpalo::Bump::new();
+    let (_program, diagnostics) = parse_code(code, &arena);
+
+    assert!(
+        diagnostics.has_errors(),
+        "a parameter after the variadic one should be a parse error"
+    );
+}
+
+#[test]
+fn test_variadic_parameter_must_be_array_is_rejected() {
+    let code = "fun f(...n: int): void {}";
+    let arena = bumpalo::Bump::new();
+    let (_program, diagnostics) = parse_code(code, &arena);
+
+    assert!(
+        diagnostics.has_errors(),
+        "a non-array variadic parameter should be a parse error"
+    );
+}
+
+#[test]
 fn test_required_parameter_after_default_is_rejected() {
     // A required parameter following one with a default must be reported as an error.
     let code = "fun f(x: int = 1, y: int): void {}";

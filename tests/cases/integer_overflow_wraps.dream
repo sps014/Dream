@@ -1,0 +1,24 @@
+// Every integer primitive wraps on overflow (two's-complement modulo its bit width), matching the
+// policy documented in docs/language/primitives.md. `byte` shares WASM's `i32` register width, so
+// it additionally exercises the compiler's explicit post-op masking (see `emit/emitter/rvalue`).
+fun main(): void {
+    let b: byte = 250b;
+    let b2: byte = b + 10b;        // 260 mod 256 = 4
+    System.println(b2);
+
+    let b3: byte = 0b;
+    let b4: byte = b3 - 1b;        // -1 mod 256 = 255
+    System.println(b4);
+
+    let i: int = 2147483647;       // int max
+    let j: int = i + 1;            // wraps to int min
+    System.println(j);
+
+    let u: uint = 4294967295u;     // uint max
+    let v: uint = u + 1u;          // wraps to 0
+    System.println(v);
+
+    let l: long = 9223372036854775807L;  // long max
+    let m: long = l + 1L;                // wraps to long min
+    System.println(m);
+}

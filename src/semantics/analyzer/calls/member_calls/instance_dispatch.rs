@@ -178,6 +178,65 @@ impl<'a> Analyzer<'a> {
 
         let mangled_name = method_fn(&struct_name, &method.text);
 
+        // Reorder named arguments (`obj.method(x, y: 2)`) to positional and collect a variadic
+        // call's trailing arguments into an array, both before anything below analyzes the
+        // argument list by index. Only possible when the method resolves to exactly one known
+        // parameter-name list (not overloaded); an overloaded method's parameter names aren't known
+        // until argument types themselves pick an overload, so named/variadic args are rejected
+        // there.
+        let has_named_arg = params
+            .iter()
+            .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
+        let method_info = self.function_table.get_function(&mangled_name).ok();
+        let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
+        let normalized_params: Vec<ExpressionNode<'a>>;
+        let params: &[ExpressionNode<'a>] = if has_named_arg || is_variadic {
+            if self.function_table.is_overloaded(&mangled_name) {
+                return Err(report(
+                    diagnostics,
+                    format!(
+                        "named/variadic arguments are not supported for overloaded method '{}'",
+                        method.text
+                    ),
+                    Some(method.position),
+                ));
+            }
+            let Some(info) = method_info else {
+                return Err(report(
+                    diagnostics,
+                    format!("Type '{}' has no method '{}'", struct_name, method.text),
+                    Some(method.position),
+                ));
+            };
+            if has_named_arg && is_variadic {
+                return Err(report(
+                    diagnostics,
+                    format!(
+                        "named arguments are not supported for variadic method '{}'",
+                        method.text
+                    ),
+                    Some(method.position),
+                ));
+            }
+            // Skip the implicit `this` at index 0, which never appears in a call's argument list.
+            let param_names: Vec<String> = info.param_names.iter().skip(1).cloned().collect();
+            let defaults: Vec<Option<Type>> = info.defaults.iter().skip(1).cloned().collect();
+            normalized_params = if has_named_arg {
+                self.normalize_named_arguments(
+                    &param_names,
+                    &defaults,
+                    params,
+                    method.position,
+                    diagnostics,
+                )?
+            } else {
+                self.collect_variadic_args(param_names.len(), params)
+            };
+            &normalized_params
+        } else {
+            params.as_slice()
+        };
+
         // When the method is unambiguous (not overloaded), its declared parameter types are known
         // before the arguments are analyzed, so publish them as each argument's expected type (same
         // treatment as an unambiguous free-function call) — this lets an argument lambda without its

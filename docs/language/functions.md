@@ -90,6 +90,100 @@ println(g.scale(4));      // 4 * 2 * 3 = 24
 println(g.scale(4, 5));   // 4 * 5 * 3 = 60
 ```
 
+## Named arguments
+
+A call may label an argument with its parameter's name (`name: value`) instead of relying on
+position:
+
+```dream
+fun greet(name: string, greeting: string = "Hello", punctuation: string = "!"): string {
+    return greeting + ", " + name + punctuation;
+}
+
+greet(name: "Ada");                          // "Hello, Ada!"
+greet(name: "Lin", greeting: "Hi");          // "Hi, Lin!"
+greet(greeting: "Hi", name: "Grace");        // "Hi, Grace!" — order doesn't matter
+greet("Bob", punctuation: "?");              // "Hello, Bob?" — positional + named mixed
+greet(name: "Amy", punctuation: ".");        // "Hello, Amy." — skips `greeting`, its default fills in
+```
+
+Rules:
+
+- **Every positional argument must come before every named one** — `greet(name: "Ada", "Hi")` is
+  an error.
+- A name must match a declared parameter of the callee; each name may be used **at most once** per
+  call.
+- Naming an argument doesn't require naming every argument after it — any parameter left unfilled
+  once positional and named arguments are assigned falls back to its default value (an error if it
+  has none).
+- Named arguments work for **free functions, constructors, and instance methods** whose target is
+  unambiguous. They are **not supported for overloaded functions/methods** (multiple declarations
+  sharing a name) — name-based resolution against a specific overload is deferred; use positional
+  arguments for an overloaded call.
+
+Named arguments and defaults compose: they're the mechanism that lets a call skip a *middle*
+optional parameter while still supplying a later one, which trailing-only default omission alone
+cannot express:
+
+```dream
+class Rect {
+    public width: int;
+    public height: int;
+    constructor(width: int, height: int = 1) { this.width = width; this.height = height; }
+    public fun area(scale: int = 1, offset: int = 0): int {
+        return (this.width * this.height * scale) + offset;
+    }
+}
+
+let r = Rect(width: 3, height: 4);
+println(r.area(offset: 5));   // scale keeps its default (1): 3*4*1 + 5 = 17
+```
+
+## Variadic parameters
+
+A function's **last** parameter can be marked `...name: T[]` to accept zero or more trailing `T`
+arguments, collected into an array bound to `name` inside the body:
+
+```dream
+fun sum(...nums: int[]): int {
+    let total = 0;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+sum();          // total = 0  (nums is an empty array)
+sum(1);         // total = 1
+sum(1, 2, 3);   // total = 6
+```
+
+A variadic parameter can follow ordinary (including defaulted) parameters, as long as it is last:
+
+```dream
+fun sum_with_base(base: int, ...nums: int[]): int {
+    let total = base;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+sum_with_base(10);           // 10
+sum_with_base(10, 1, 2, 3);  // 16
+```
+
+Rules:
+
+- Only the **last** parameter may be variadic; a required or defaulted parameter cannot follow it.
+- Its declared type must be an array type (`T[]`); the caller passes bare `T` values, not an
+  already-built array — there is exactly one calling convention, not two.
+- Variadic parameters work for **free functions, constructors, and instance methods** whose target
+  is unambiguous, mirroring [named arguments](#named-arguments)' scope. They are **not supported
+  for overloaded functions/methods**.
+- Variadic and named arguments don't combine in the same call: a variadic function's arguments are
+  always supplied positionally.
+
 ## Public functions and entry point
 
 Functions are **file-private by default**. Mark one `public` to import it from other files and export it to the WebAssembly host (see [Imports](imports.md#visibility)). A `public` function cannot expose a non-`public` class.

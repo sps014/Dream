@@ -1,0 +1,34 @@
+// Named arguments (`f(name: value)`) across a free function, a constructor, and a method: in
+// declaration order, out of order, mixed with leading positional args, and skipping a middle
+// optional parameter by naming a later one (the gap is filled from its own default).
+
+fun greet(name: string, greeting: string = "Hello", punctuation: string = "!"): string {
+    return greeting + ", " + name + punctuation;
+}
+
+class Rect {
+    public width: int;
+    public height: int;
+
+    constructor(width: int, height: int = 1) {
+        this.width = width;
+        this.height = height;
+    }
+
+    public fun area(scale: int = 1, offset: int = 0): int {
+        return (this.width * this.height * scale) + offset;
+    }
+}
+
+fun main(): void {
+    System.println(greet(name: "Ada"));                          // Hello, Ada!
+    System.println(greet(name: "Lin", greeting: "Hi"));          // Hi, Lin!
+    System.println(greet(greeting: "Hi", name: "Grace"));        // Hi, Grace! (out of order)
+    System.println(greet("Bob", punctuation: "?"));              // Hello, Bob? (positional + named)
+    System.println(greet(name: "Amy", punctuation: "."));        // Hello, Amy. (skips `greeting`)
+
+    let r = Rect(width: 3, height: 4);
+    System.println(r.area());                                   // 3*4*1 + 0 = 12
+    System.println(r.area(offset: 5));                           // 3*4*1 + 5 = 17
+    System.println(r.area(scale: 2));                            // 3*4*2 + 0 = 24
+}

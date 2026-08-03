@@ -416,6 +416,23 @@ impl<'a, 'b> Parser<'a, 'b> {
         )
     }
 
+    /// Parses one call argument: either a plain expression, or a named argument `name: value`
+    /// (recognized by a `identifier ':'` lookahead, which never otherwise starts an expression —
+    /// a bare `?`, not `:`, introduces a ternary's branches). Shared by every call-argument list
+    /// (free/generic function calls, method calls, generic-static-receiver calls) so named-argument
+    /// support only has to be taught once.
+    fn parse_call_argument(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        if self.current_token().kind == IdentifierToken
+            && self.peek_token(1).kind == TokenKind::ColonToken
+        {
+            let name = self.next_token();
+            self.match_token(TokenKind::ColonToken);
+            let value = self.parse_expression(0)?;
+            return Ok(ExpressionNode::NamedArg(name, self.arena.alloc(value)));
+        }
+        self.parse_expression(0)
+    }
+
     /// Parses a single `.member` access step onto `base`, consuming the `.`, an optional method
     /// generic-argument list (`<...>` immediately followed by `(`), and—when a `(` follows—the
     /// call-argument list, producing a [`ExpressionNode::MethodCall`]; otherwise a plain
@@ -445,7 +462,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             self.match_token(TokenKind::OpenParenthesisToken);
             let params = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
-                p.parse_expression(0)
+                p.parse_call_argument()
             })?;
             Ok(ExpressionNode::MethodCall(
                 self.arena.alloc(base),
@@ -474,7 +491,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             self.match_token(TokenKind::OpenParenthesisToken);
             let params = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
-                p.parse_expression(0)
+                p.parse_call_argument()
             })?;
             Ok(ExpressionNode::MethodCall(
                 self.arena.alloc(base),
@@ -505,7 +522,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let iter = self.current_token_index;
             //parse the argument
-            let argument = self.parse_expression(0)?;
+            let argument = self.parse_call_argument()?;
             arguments.push(argument);
             if self.current_token().kind == TokenKind::CommaToken
                 && self.peek_token(1).kind != TokenKind::CloseParenthesisToken

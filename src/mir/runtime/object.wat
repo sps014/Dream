@@ -154,10 +154,10 @@
     (if (then
         i32.const 1
         local.set $neg
-        i32.const 0
-        local.get $v
-        i32.sub
-        local.set $v
+        ;; Deliberately do NOT negate $v here: `0 - int.min` wraps back to `int.min` in i32
+        ;; two's complement (no positive counterpart exists), which would spin the loop below
+        ;; forever. Instead the digit-generation loop runs on the still-negative $v directly and
+        ;; takes the absolute value of each (possibly negative) remainder digit.
     ))
     i32.const 0
     local.set $i
@@ -170,6 +170,15 @@
             i32.const 10
             i32.rem_s
             local.set $digit
+            local.get $digit
+            i32.const 0
+            i32.lt_s
+            (if (then
+                i32.const 0
+                local.get $digit
+                i32.sub
+                local.set $digit
+            ))
             local.get $d
             local.get $i
             i32.add
@@ -402,10 +411,10 @@
     (if (then
         i32.const 1
         local.set $neg
-        i64.const 0
-        local.get $v
-        i64.sub
-        local.set $v
+        ;; Deliberately do NOT negate $v here: `0 - long.min` wraps back to `long.min` in i64
+        ;; two's complement (no positive counterpart exists), which would spin the loop below
+        ;; forever. Instead the digit-generation loop runs on the still-negative $v directly and
+        ;; takes the absolute value of each (possibly negative) remainder digit.
     ))
     i32.const 0
     local.set $i
@@ -419,6 +428,15 @@
             i64.rem_s
             i32.wrap_i64
             local.set $digit
+            local.get $digit
+            i32.const 0
+            i32.lt_s
+            (if (then
+                i32.const 0
+                local.get $digit
+                i32.sub
+                local.set $digit
+            ))
             local.get $d
             local.get $i
             i32.add

@@ -179,6 +179,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
         }
         ExpressionNode::Try(e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::Lambda(l) => out.extend(lambda_free_names(l)),
+        ExpressionNode::NamedArg(_, e) => walk_expr_for_lambdas(e, out),
     }
 }
 
@@ -397,5 +398,6 @@ fn collect_names_expr(
                 LambdaBody::Block(stmts) => collect_names_stmts(stmts, bound, referenced),
             }
         }
+        ExpressionNode::NamedArg(_, e) => collect_names_expr(e, bound, referenced),
     }
 }

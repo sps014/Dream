@@ -98,6 +98,11 @@ pub enum TokenKind {
     DotToken,
     #[token("..")]
     DotDotToken,
+    /// `...` — marks a function's trailing parameter as variadic (`...args: T[]`); never appears
+    /// anywhere else in the grammar, so it needs no precedence/ambiguity handling beyond logos'
+    /// default longest-match-wins tokenizing against `.`/`..`.
+    #[token("...")]
+    DotDotDotToken,
     #[token("?")]
     QuestionMarkToken,
 
@@ -244,6 +249,7 @@ impl TokenKind {
             TokenKind::CommaToken => "','",
             TokenKind::DotToken => "'.'",
             TokenKind::DotDotToken => "'..'",
+            TokenKind::DotDotDotToken => "'...'",
             TokenKind::QuestionMarkToken => "'?'",
             TokenKind::OpenParenthesisToken => "'('",
             TokenKind::CloseParenthesisToken => "')'",

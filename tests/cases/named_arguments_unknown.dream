@@ -1,0 +1,8 @@
+// A named argument that doesn't match any declared parameter -> error.
+fun greet(name: string): string {
+    return "Hello, " + name;
+}
+
+fun main(): void {
+    System.println(greet(nam: "Ada"));
+}

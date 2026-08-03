@@ -35,6 +35,16 @@ impl<'a> Analyzer<'a> {
                     .iter()
                     .map(|p| Self::monomorphize_type(&p.type_, bindings).get_type())
                     .collect(),
+                param_names: template
+                    .parameters
+                    .iter()
+                    .map(|p| p.name.text.clone())
+                    .collect(),
+                is_variadic: template
+                    .parameters
+                    .last()
+                    .map(|p| p.is_variadic)
+                    .unwrap_or(false),
                 defaults: template
                     .parameters
                     .iter()

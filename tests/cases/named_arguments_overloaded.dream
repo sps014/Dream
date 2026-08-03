@@ -1,0 +1,7 @@
+// Named arguments are not supported for overloaded functions -> error.
+fun h(x: int): int { return x; }
+fun h(x: string): int { return 1; }
+
+fun main(): void {
+    System.println(h(x: 5));
+}

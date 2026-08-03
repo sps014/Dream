@@ -12,6 +12,12 @@ pub struct ParameterNode {
     /// `= -1`, `= null`). When present, the parameter may be omitted at a call site and the default
     /// is substituted. `None` for required parameters and all synthesized parameters (e.g. `this`).
     pub default: Option<Type>,
+    /// True for a trailing `...name: T[]` variadic parameter: a call may pass zero or more `T`
+    /// arguments positionally in this parameter's slot (and every slot after it, though there are
+    /// none since the parser only accepts this on the last parameter), which the analyzer collects
+    /// into a `T[]` array bound to `name` inside the body. Always `false` except on that one
+    /// parameter, and mutually exclusive with `default` (enforced by the parser).
+    pub is_variadic: bool,
 }
 
 impl ParameterNode {
@@ -21,6 +27,7 @@ impl ParameterNode {
             name,
             type_,
             default: None,
+            is_variadic: false,
         }
     }
 
@@ -30,6 +37,17 @@ impl ParameterNode {
             name,
             type_,
             default,
+            is_variadic: false,
+        }
+    }
+
+    /// Creates a variadic parameter node (`...name: T[]`).
+    pub fn variadic(name: SyntaxToken, type_: Type) -> ParameterNode {
+        ParameterNode {
+            name,
+            type_,
+            default: None,
+            is_variadic: true,
         }
     }
 }

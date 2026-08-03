@@ -883,10 +883,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::OpenParenthesisToken);
 
         let mut seen_default = false;
+        let mut seen_variadic = false;
         while self.current_token().kind != TokenKind::CloseParenthesisToken
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
             let index_before = self.current_token_index;
+
+            // A trailing variadic parameter: `...name: T[]`. Must be the last parameter and
+            // carries no default (an omitted variadic simply collects zero elements).
+            let is_variadic = self.current_token().kind == TokenKind::DotDotDotToken;
+            if is_variadic {
+                self.match_token(TokenKind::DotDotDotToken);
+            }
+
             //eat the identifier
             let param = self.match_token(TokenKind::IdentifierToken);
             //eat the colon
@@ -894,25 +903,54 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let param_type = self.parse_type()?;
 
-            // Optional default value: `= <literal>`. Restricted to constant literals so no
-            // evaluation is needed at the call site.
-            let default = if self.current_token().kind == TokenKind::EqualToken {
-                self.match_token(TokenKind::EqualToken);
-                seen_default = true;
-                Some(self.parse_literal_pattern()?)
-            } else {
-                if seen_default {
+            if is_variadic {
+                if seen_variadic {
+                    self.diagnostics.report_error(
+                        "a function may have at most one variadic parameter".to_string(),
+                        Some(param.position),
+                    );
+                }
+                if !matches!(param_type, Type::Array(_)) {
                     self.diagnostics.report_error(
                         format!(
-                            "required parameter '{}' cannot follow a parameter with a default value",
+                            "variadic parameter '{}' must have an array type, e.g. '...{}: T[]'",
+                            param.text, param.text
+                        ),
+                        Some(param.position),
+                    );
+                }
+                seen_variadic = true;
+                params.push(ParameterNode::variadic(param, param_type));
+            } else {
+                if seen_variadic {
+                    self.diagnostics.report_error(
+                        format!(
+                            "parameter '{}' cannot follow the variadic parameter; the variadic parameter must be last",
                             param.text
                         ),
                         Some(param.position),
                     );
                 }
-                None
-            };
-            params.push(ParameterNode::with_default(param, param_type, default));
+                // Optional default value: `= <literal>`. Restricted to constant literals so no
+                // evaluation is needed at the call site.
+                let default = if self.current_token().kind == TokenKind::EqualToken {
+                    self.match_token(TokenKind::EqualToken);
+                    seen_default = true;
+                    Some(self.parse_literal_pattern()?)
+                } else {
+                    if seen_default {
+                        self.diagnostics.report_error(
+                            format!(
+                                "required parameter '{}' cannot follow a parameter with a default value",
+                                param.text
+                            ),
+                            Some(param.position),
+                        );
+                    }
+                    None
+                };
+                params.push(ParameterNode::with_default(param, param_type, default));
+            }
 
             // Safety: if a malformed parameter consumed no tokens (e.g. a reserved keyword used
             // as a parameter name), advance one token to avoid an infinite loop.
@@ -921,8 +959,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             //if we have comma and it is not trailing comma
             if self.current_token().kind == TokenKind::CommaToken {
-                //next token of comma is identifier eat comma then
-                if self.peek_token(1).kind == TokenKind::IdentifierToken {
+                //next token of comma is identifier (or `...` starting a variadic parameter) eat comma then
+                if matches!(
+                    self.peek_token(1).kind,
+                    TokenKind::IdentifierToken | TokenKind::DotDotDotToken
+                ) {
                     //eat the comma
                     self.match_token(TokenKind::CommaToken);
                 }

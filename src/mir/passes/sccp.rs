@@ -14,7 +14,7 @@ use super::const_fold::fold as fold_rvalue;
 use super::prop::{subst_stmt_reads, subst_terminator_reads};
 use super::MirPass;
 use crate::mir::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use crate::types::TypeInterner;
+use crate::types::{PrimTy, TyKind, TypeInterner};
 use std::collections::{BTreeMap, HashMap};
 
 pub struct Sccp;
@@ -32,12 +32,12 @@ impl MirPass for Sccp {
         "sccp"
     }
 
-    fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
+    fn run(&self, func: &mut MirFunction, interner: &TypeInterner) -> bool {
         let n = func.blocks.len();
         if n == 0 {
             return false;
         }
-        let (reachable, lat) = solve(func);
+        let (reachable, lat) = solve(func, interner);
 
         // Build the propagatable constant map and rewrite.
         let known: HashMap<crate::mir::Local, Operand> = lat
@@ -75,7 +75,10 @@ impl MirPass for Sccp {
 
 /// Runs the reachability + constant fixpoint, returning which blocks are reachable and each local's
 /// lattice value.
-fn solve(func: &MirFunction) -> (Vec<bool>, BTreeMap<crate::mir::Local, Lat>) {
+fn solve(
+    func: &MirFunction,
+    interner: &TypeInterner,
+) -> (Vec<bool>, BTreeMap<crate::mir::Local, Lat>) {
     let n = func.blocks.len();
     let mut reachable = vec![false; n];
     reachable[func.entry.0 as usize] = true;
@@ -101,7 +104,11 @@ fn solve(func: &MirFunction) -> (Vec<bool>, BTreeMap<crate::mir::Local, Lat>) {
             }
             for stmt in &block.stmts {
                 if let Statement::Assign(Place::Local(l), rv) = stmt {
-                    let v = eval_rvalue(rv, &lat);
+                    let is_byte = matches!(
+                        interner.kind(func.local_ty(*l)),
+                        TyKind::Prim(PrimTy::Byte)
+                    );
+                    let v = eval_rvalue(rv, &lat, is_byte);
                     let merged = meet(next.get(l).cloned().unwrap_or(Lat::Top), v);
                     next.insert(*l, merged);
                 }
@@ -146,8 +153,10 @@ fn eval_operand(op: &Operand, lat: &BTreeMap<crate::mir::Local, Lat>) -> Lat {
 }
 
 /// The lattice value of an rvalue: constant-foldable arithmetic over constant inputs stays constant;
-/// anything touching memory / calls is over-defined.
-fn eval_rvalue(rv: &Rvalue, lat: &BTreeMap<crate::mir::Local, Lat>) -> Lat {
+/// anything touching memory / calls is over-defined. `is_byte` mirrors [`const_fold::fold`]'s
+/// masking requirement for the destination local — see its doc comment for why folding must mask
+/// `byte` results itself rather than leaving it to a later pass.
+fn eval_rvalue(rv: &Rvalue, lat: &BTreeMap<crate::mir::Local, Lat>, is_byte: bool) -> Lat {
     match rv {
         Rvalue::Use(o) => eval_operand(o, lat),
         Rvalue::Binary(op, a, b) => {
@@ -155,7 +164,10 @@ fn eval_rvalue(rv: &Rvalue, lat: &BTreeMap<crate::mir::Local, Lat>) -> Lat {
             match (la, lb) {
                 (Lat::Bottom, _) | (_, Lat::Bottom) => Lat::Bottom,
                 (Lat::Const(x), Lat::Const(y)) => {
-                    match fold_rvalue(&Rvalue::Binary(*op, Operand::Const(x), Operand::Const(y))) {
+                    match fold_rvalue(
+                        &Rvalue::Binary(*op, Operand::Const(x), Operand::Const(y)),
+                        is_byte,
+                    ) {
                         Some(c) => Lat::Const(c),
                         None => Lat::Bottom,
                     }
@@ -165,10 +177,12 @@ fn eval_rvalue(rv: &Rvalue, lat: &BTreeMap<crate::mir::Local, Lat>) -> Lat {
             }
         }
         Rvalue::Unary(op, a) => match eval_operand(a, lat) {
-            Lat::Const(x) => match fold_rvalue(&Rvalue::Unary(*op, Operand::Const(x))) {
-                Some(c) => Lat::Const(c),
-                None => Lat::Bottom,
-            },
+            Lat::Const(x) => {
+                match fold_rvalue(&Rvalue::Unary(*op, Operand::Const(x)), is_byte) {
+                    Some(c) => Lat::Const(c),
+                    None => Lat::Bottom,
+                }
+            }
             Lat::Top => Lat::Top,
             Lat::Bottom => Lat::Bottom,
         },

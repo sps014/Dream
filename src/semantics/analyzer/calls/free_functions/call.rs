@@ -20,6 +20,85 @@ impl<'a> Analyzer<'a> {
         let mut function_name = name.text.clone();
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
+        // A named argument (`f(x, y: 2)`) must be reordered to its positional slot, and a variadic
+        // call's trailing loose arguments collected into an array, *before* any argument is
+        // analyzed below (analysis is index-driven). Both are only possible when the callee
+        // resolves to exactly one known parameter-name list up front: a non-overloaded free
+        // function, or a plain (non-generic-base) constructor call. Overloaded/indirect/
+        // unresolvable callees report a clear diagnostic instead of guessing.
+        let has_named_arg = params
+            .iter()
+            .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
+        let callee_signature = |analyzer: &Self| -> Option<(Vec<String>, Vec<Option<Type>>, bool)> {
+            if let Ok(info) = analyzer.function_table.get_function(&function_name) {
+                Some((info.param_names, info.defaults, info.is_variadic))
+            } else if generic_args.is_none()
+                && analyzer.struct_table.get_struct(&function_name).is_some()
+            {
+                analyzer
+                    .function_table
+                    .get_function(&constructor_fn(&function_name))
+                    .ok()
+                    .map(|info| {
+                        (
+                            info.param_names.iter().skip(1).cloned().collect(),
+                            info.defaults.iter().skip(1).cloned().collect(),
+                            info.is_variadic,
+                        )
+                    })
+            } else {
+                None
+            }
+        };
+        let normalized_params: Vec<ExpressionNode<'a>>;
+        let params: &[ExpressionNode<'a>] = if has_named_arg || {
+            callee_signature(self).is_some_and(|(_, _, variadic)| variadic)
+        } {
+            if self.function_table.is_overloaded(&function_name) {
+                return Err(report(
+                    diagnostics,
+                    format!(
+                        "named/variadic arguments are not supported for overloaded function '{}'",
+                        function_name
+                    ),
+                    Some(name.position),
+                ));
+            }
+            let Some((param_names, defaults, is_variadic)) = callee_signature(self) else {
+                return Err(report(
+                    diagnostics,
+                    format!(
+                        "named arguments are not supported for '{}'",
+                        function_name
+                    ),
+                    Some(name.position),
+                ));
+            };
+            if has_named_arg && is_variadic {
+                return Err(report(
+                    diagnostics,
+                    format!(
+                        "named arguments are not supported for variadic function '{}'",
+                        function_name
+                    ),
+                    Some(name.position),
+                ));
+            }
+            normalized_params = if has_named_arg {
+                self.normalize_named_arguments(
+                    &param_names,
+                    &defaults,
+                    params,
+                    name.position,
+                    diagnostics,
+                )?
+            } else {
+                self.collect_variadic_args(param_names.len(), params)
+            };
+            &normalized_params
+        } else {
+            params.as_slice()
+        };
         // When the callee is an unambiguous (non-overloaded) free function, publish each parameter's
         // declared type as the expected type while analyzing the matching argument, so untyped
         // literals such as an empty array `[]` infer their element type from the signature. A plain
