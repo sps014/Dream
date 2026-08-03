@@ -1,6 +1,6 @@
 use bumpalo::Bump;
 use std::fs;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::diagnostics::{render, DiagnosticBag};
 use crate::driver::abi::emit_wasm_and_abi;
@@ -8,6 +8,7 @@ use crate::driver::error::CompileError;
 use crate::driver::json_derive::generate_json_derives;
 use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
+use crate::driver::wasm_opt::OptLevel;
 use crate::semantics::analyzer::Analyzer;
 use crate::syntax::nodes::ProgramNode;
 use crate::syntax::syntax_tree::SyntaxTree;
@@ -29,6 +30,10 @@ pub struct Compiler {
     /// source-line hooks + a `.dbg.json` source map for the interactive debugger. Off by default;
     /// enabled via the CLI `-g`/`--debug-info` flag or [`Compiler::with_debug_info`].
     debug_info: bool,
+    /// When set, the emitted `.wasm` is post-processed in place with Binaryen's `wasm-opt` at this
+    /// level. Off by default (opt-in only); enabled via the CLI `-O`/`--optimize` flag or
+    /// [`Compiler::with_optimize`].
+    optimize: Option<OptLevel>,
 }
 
 impl Compiler {
@@ -37,6 +42,7 @@ impl Compiler {
             target,
             debug: false,
             debug_info: false,
+            optimize: None,
         }
     }
 
@@ -50,6 +56,13 @@ impl Compiler {
     /// interactive debugger.
     pub fn with_debug_info(mut self, on: bool) -> Self {
         self.debug_info = on;
+        self
+    }
+
+    /// Builder: post-process the emitted `.wasm` with Binaryen's `wasm-opt` at the given level.
+    /// `None` (the default) skips post-processing entirely.
+    pub fn with_optimize(mut self, level: Option<OptLevel>) -> Self {
+        self.optimize = level;
         self
     }
 
@@ -212,6 +225,16 @@ impl Compiler {
         // Also emit a binary `.wasm` (what browsers/Node load) and an `.abi.json` sidecar
         // describing extern imports and exports so the JS runtime can auto-marshal values.
         emit_wasm_and_abi(out_path, &text, ast.get_root())?;
+
+        if let Some(level) = self.optimize {
+            let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
+            // Non-fatal, matching the existing `.wasm` assembly failure handling in
+            // `emit_wasm_and_abi`: the unoptimized `.wasm`/`.wat` are already valid output.
+            match crate::driver::wasm_opt::optimize_wasm_file(&wasm_path, level) {
+                Ok(()) => info!("optimized file with wasm-opt: {}", wasm_path.display()),
+                Err(e) => warn!("could not run wasm-opt on {}: {}", wasm_path.display(), e),
+            }
+        }
 
         Ok(())
     }

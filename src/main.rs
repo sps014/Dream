@@ -1,4 +1,5 @@
 use dream::driver::compiler::{Compiler, Target};
+use dream::driver::wasm_opt::OptLevel;
 use dream::execution::wasm_runner::execute_wasm;
 use std::path::Path;
 use std::process::ExitCode;
@@ -23,6 +24,7 @@ fn main() -> ExitCode {
     let mut debug_adapter = false;
     let mut show_help = false;
     let mut file_name = None;
+    let mut optimize: Option<OptLevel> = None;
 
     for arg in args.iter().skip(1) {
         if arg == "-v" || arg == "--verbose" {
@@ -45,9 +47,38 @@ fn main() -> ExitCode {
             // debug clients such as the VS Code extension). Implies debug-info.
             debug_adapter = true;
             debug_info = true;
+        } else if arg == "-O" || arg == "--optimize" {
+            // No level given: default to `-Os` (optimize for size), matching the "smaller binary"
+            // intent most users reach for this flag with.
+            optimize = Some(OptLevel::Size);
+        } else if let Some(level_str) = arg.strip_prefix("--optimize=") {
+            match level_str.parse::<OptLevel>() {
+                Ok(level) => optimize = Some(level),
+                Err(e) => {
+                    error!("{}", e);
+                    return ExitCode::FAILURE;
+                }
+            }
+        } else if let Some(level_str) = arg.strip_prefix("-O") {
+            let level_str = level_str.strip_prefix('=').unwrap_or(level_str);
+            match level_str.parse::<OptLevel>() {
+                Ok(level) => optimize = Some(level),
+                Err(e) => {
+                    error!("{}", e);
+                    return ExitCode::FAILURE;
+                }
+            }
         } else if !arg.starts_with('-') {
             file_name = Some(arg);
         }
+    }
+
+    if optimize.is_some() && !cfg!(feature = "wasm-opt") {
+        error!(
+            "-O/--optimize requires the compiler to be built with the `wasm-opt` feature \
+             (enabled by default); this build was compiled without it"
+        );
+        return ExitCode::FAILURE;
     }
 
     // Route logs to stderr so they never corrupt stdout — critical in `debug-adapter` mode, where
@@ -80,7 +111,8 @@ fn main() -> ExitCode {
 
     let compiler = Compiler::new(Target::Wasm)
         .with_debug(debug)
-        .with_debug_info(debug_info);
+        .with_debug_info(debug_info)
+        .with_optimize(optimize);
     let out_path = match get_path_from_file_path(file_name) {
         Some(path) => path,
         None => {
@@ -122,16 +154,20 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [-d|--debug] [-g|--debug-info] [run|debug-adapter] <file>",
+        "Usage: {} [-v|--verbose] [-d|--debug] [-g|--debug-info] [-O|--optimize[=LEVEL]] [run|debug-adapter] <file>",
         program
     );
-    error!("  -v, --verbose      Print progress information");
-    error!("  -d, --debug        Enable allocator instrumentation for Debug probes");
-    error!("  -g, --debug-info   Emit source-level debug info (line hooks + .dbg.json source map)");
-    error!("  -h, --help         Show this help message");
-    error!("  run                Execute the compiled module after a successful build");
-    error!("  debug-adapter      Run the Debug Adapter Protocol server over stdio (implies -g)");
+    error!("  -v, --verbose         Print progress information");
+    error!("  -d, --debug           Enable allocator instrumentation for Debug probes");
+    error!("  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)");
+    error!(
+        "  -O, --optimize[=LVL]  Post-process the emitted .wasm with wasm-opt (LVL: 0-4, s, z; default: s)"
+    );
+    error!("  -h, --help            Show this help message");
+    error!("  run                   Execute the compiled module after a successful build");
+    error!("  debug-adapter         Run the Debug Adapter Protocol server over stdio (implies -g)");
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
+    error!(r"Example: {} -O run src/sample/test_arrays.dream", program);
 }
 
 /// Derives the output `.wat` path that sits next to the given source file.

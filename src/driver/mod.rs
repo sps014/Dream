@@ -3,7 +3,8 @@
 //! are the cross-cutting pieces it orchestrates: [`source_loader`]/[`prelude`] (assembling user
 //! sources with the bundled stdlib), [`interface_defaults`] (synthesizing inherited default-method
 //! bodies before analysis), [`json_derive`] (`@json` (de)serialization codegen), [`abi`] (shared
-//! runtime layout constants), and [`error`] (the driver-level error type).
+//! runtime layout constants), [`wasm_opt`] (opt-in Binaryen post-processing), and [`error`] (the
+//! driver-level error type).
 
 pub mod abi;
 pub mod compiler;
@@ -12,3 +13,4 @@ pub mod interface_defaults;
 pub mod json_derive;
 pub mod prelude;
 pub mod source_loader;
+pub mod wasm_opt;
