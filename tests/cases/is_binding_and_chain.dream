@@ -1,0 +1,26 @@
+interface Animal {
+    fun speak(): int;
+}
+
+class Cat : Animal {
+    public fun speak(): int { return 3; }
+}
+
+class Dog : Animal {
+    public fun speak(): int { return 0; }
+}
+
+// Exercises `is`-binding used inside a *later* conjunct of the same `&&` chain, both directly
+// (second conjunct) and past an intermediate plain-bool conjunct (third conjunct).
+fun describe(a: Animal, flag: bool): string {
+    if (a is Cat t && t.speak() >= 0 && flag) {
+        return "flagged cat";
+    }
+    return "other";
+}
+
+fun main(): void {
+    System.println(describe(Cat(), true));
+    System.println(describe(Cat(), false));
+    System.println(describe(Dog(), true));
+}

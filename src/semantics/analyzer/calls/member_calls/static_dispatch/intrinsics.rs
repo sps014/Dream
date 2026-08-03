@@ -7,22 +7,38 @@ use crate::intrinsics;
 use crate::semantics::function_table::FunctionTableInfo;
 use crate::syntax::nodes::types::is_unknown_type_name;
 
+/// Call-site bundle for [`Analyzer::analyze_generic_static_method`]: the parsed pieces of a
+/// `Type.method(args)` call already resolved to a generic static method template, kept together
+/// so the analysis function itself only needs the bundle plus the analyzer context/diagnostics.
+pub(super) struct GenericStaticMethodCall<'a, 'b> {
+    pub(super) template: &'a FunctionNode<'a>,
+    pub(super) base: &'b str,
+    pub(super) type_name: &'b str,
+    pub(super) method: &'b SyntaxToken,
+    pub(super) generic_args: &'b Option<Vec<Type>>,
+    pub(super) params: &'b Vec<ExpressionNode<'a>>,
+}
+
 impl<'a> Analyzer<'a> {
     /// Resolves a `Type.method(args)` call whose `{Type}_{method}` names a generic static method
-    /// (`template`). Handles the recognized intrinsics inline and otherwise registers a
+    /// (`call.template`). Handles the recognized intrinsics inline and otherwise registers a
     /// monomorphized instance. Always resolves to a type (the outer dispatch wraps it in `Some`);
-    /// `base` is the mangled `{Type}_{method}` symbol and `type_name` the receiver type's name.
+    /// `call.base` is the mangled `{Type}_{method}` symbol and `call.type_name` the receiver
+    /// type's name.
     pub(super) fn analyze_generic_static_method(
         &mut self,
-        template: &'a FunctionNode<'a>,
-        base: &str,
-        type_name: &str,
-        method: &SyntaxToken,
-        generic_args: &Option<Vec<Type>>,
-        params: &Vec<ExpressionNode<'a>>,
+        call: GenericStaticMethodCall<'a, '_>,
         ctx: &AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        let GenericStaticMethodCall {
+            template,
+            base,
+            type_name,
+            method,
+            generic_args,
+            params,
+        } = call;
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         for param in params.iter() {

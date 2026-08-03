@@ -211,6 +211,24 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             )?),
             ExpressionNode::Identifier(id) => {
+                // An `is`-binding introduced earlier in the same top-level `&&` chain (see
+                // `analyze_binary_expression`) shadows an ordinary local of the same name, exactly
+                // like the real branch-body binding does.
+                let alias = self
+                    .is_binding_aliases
+                    .iter()
+                    .rev()
+                    .find(|(name, _, _)| name == &id.text)
+                    .map(|(_, ty, operand)| (ty.clone(), *operand));
+                if let Some((target_ty, operand)) = alias {
+                    return self.analyze_cast(
+                        &target_ty,
+                        operand,
+                        parent_function,
+                        symbol_table,
+                        diagnostics,
+                    );
+                }
                 Ok(self.analyze_identifier(id, symbol_table, diagnostics)?)
             }
             ExpressionNode::FunctionCall(name, generic_args, params) => {

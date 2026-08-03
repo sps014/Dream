@@ -60,7 +60,7 @@ impl<'a> Analyzer<'a> {
                         _ => None,
                     };
                     let is_class_option = option_inner
-                        .and_then(|inner| Self::resolve_struct_parts(inner))
+                        .and_then(Self::resolve_struct_parts)
                         .and_then(|(base, _)| self.struct_table.get_struct(&base).map(|i| !i.is_value))
                         .unwrap_or(false);
                     if !is_class_option {

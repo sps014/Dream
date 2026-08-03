@@ -1,0 +1,36 @@
+enum Shape { Circle(radius: float), Square, Triangle, Empty }
+
+fun grade(score: int): string {
+    return switch (score) {
+        90..100 => "A",
+        80..89 => "B",
+        70..79 => "C",
+        _ => "F",
+    };
+}
+
+fun is_vowel(c: char): bool {
+    return switch (c) {
+        'a' | 'e' | 'i' | 'o' | 'u' => true,
+        _ => false,
+    };
+}
+
+// A unit-variant or-pattern alongside a payload variant elsewhere in the same union.
+fun has_straight_edges(s: Shape): bool {
+    return switch (s) {
+        Square | Triangle => true,
+        Circle(_) | Empty => false,
+    };
+}
+
+fun main(): void {
+    System.println(grade(95));
+    System.println(grade(82));
+    System.println(grade(71));
+    System.println(grade(10));
+    System.println(is_vowel('e'));
+    System.println(is_vowel('z'));
+    System.println(has_straight_edges(Shape.Triangle));
+    System.println(has_straight_edges(Shape.Circle(2.0)));
+}

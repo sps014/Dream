@@ -173,7 +173,6 @@ fn needs_glue(
     out: &mut HashSet<TypeId>,
     visiting: &mut HashSet<TypeId>,
 ) -> bool {
-    let ty = ty;
     if out.contains(&ty) {
         return true;
     }

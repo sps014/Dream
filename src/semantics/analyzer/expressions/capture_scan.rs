@@ -199,7 +199,7 @@ pub(in crate::semantics::analyzer) fn lambda_free_names(l: &LambdaNode) -> HashS
 
 fn bind_pattern(pattern: &PatternNode, bound: &mut HashSet<String>) {
     match pattern {
-        PatternNode::Wildcard(_) | PatternNode::Literal(_) => {}
+        PatternNode::Wildcard(_) | PatternNode::Literal(_) | PatternNode::Range(..) => {}
         PatternNode::Binding(tok) => {
             bound.insert(tok.text.clone());
         }
@@ -208,6 +208,9 @@ fn bind_pattern(pattern: &PatternNode, bound: &mut HashSet<String>) {
                 bind_pattern(s, bound);
             }
         }
+        // Or-pattern alternatives are validated binding-free during analysis, so none of them
+        // contribute a bound name.
+        PatternNode::Or(_) => {}
     }
 }
 

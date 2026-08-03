@@ -6,7 +6,7 @@ use crate::semantics::symbol_table::SymbolTable;
 use crate::semantics::union_table::UnionTable;
 use crate::syntax::nodes::types::{mangle_with_suffixes, primitive_type, FUTURE_TYPE};
 use crate::syntax::nodes::{EnumDeclarationNode, ExtendNode};
-use crate::syntax::nodes::{FunctionNode, ProgramNode, Type};
+use crate::syntax::nodes::{ExpressionNode, FunctionNode, ProgramNode, Type};
 use crate::syntax::syntax_tree::SyntaxTree;
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
@@ -295,6 +295,15 @@ pub struct Analyzer<'a> {
     /// `identifiers::resolve_identifier`/`bindings::analyze_assignment`), and by
     /// `expressions::lambda` to build the matching `__Closure_env_<n>` class + construction site.
     closure_captures: HashMap<String, Vec<(String, Type)>>,
+    /// Stack of `is`-with-binding aliases visible while analyzing a later conjunct of the same
+    /// top-level `&&` chain (`if (x is T t && t.ok())`): each entry is `(bound name, target type,
+    /// original operand expression)`. Pushed by `analyze_binary_expression` before analyzing the
+    /// right operand of `&&` when the left operand collects one or more `is`-bindings, popped
+    /// immediately after. Consulted by identifier resolution ahead of the symbol table, so a
+    /// reference to the bound name resolves to a fresh `(T)operand` cast rather than a real local
+    /// — this is analysis-only sugar; the branch body's own binding is still a real local declared
+    /// by `declare_is_bindings`.
+    is_binding_aliases: Vec<(String, Type, &'a ExpressionNode<'a>)>,
     generic_structs:
         HashMap<String, &'a crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
@@ -373,6 +382,7 @@ impl<'a> Analyzer<'a> {
             lambda_counter: 0,
             boxed_locals: std::collections::HashSet::new(),
             closure_captures: HashMap::new(),
+            is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
             struct_methods: Vec::new(),
             enum_table: IndexMap::new(),

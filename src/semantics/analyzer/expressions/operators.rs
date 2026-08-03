@@ -16,9 +16,9 @@ use std::rc::Rc;
 impl<'a> Analyzer<'a> {
     pub(super) fn analyze_binary_expression(
         &mut self,
-        left: &ExpressionNode<'a>,
+        left: &'a ExpressionNode<'a>,
         opr: &SyntaxToken,
-        right: &ExpressionNode<'a>,
+        right: &'a ExpressionNode<'a>,
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
@@ -26,9 +26,24 @@ impl<'a> Analyzer<'a> {
         let left_value =
             self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
         let left_hir = self.hir_take();
+
+        // `x is T t && t.ok()`: every `is`-binding guaranteed by `left` (a bare `is`, or reachable
+        // through a top-level `&&` chain within `left` itself) is visible while analyzing `right`,
+        // since short-circuiting means `right` only ever runs once `left` is true. The alias is
+        // popped again immediately after, so it never leaks past this one conjunct.
+        let alias_mark = self.is_binding_aliases.len();
+        if opr.kind == TokenKind::AmpersandAmpersandToken {
+            let mut bindings = Vec::new();
+            Self::collect_is_bindings(left, &mut bindings);
+            for (name, ty, operand) in bindings {
+                self.is_binding_aliases
+                    .push((name.text.clone(), ty.clone(), operand));
+            }
+        }
         let right_value =
             self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
         let right_hir = self.hir_take();
+        self.is_binding_aliases.truncate(alias_mark);
 
         // `a ?? b`: pure sugar for `a.unwrap_or(b)` on an `Option<T>` left operand — the same
         // method the stdlib already exposes, just spelled as an operator for the common inline

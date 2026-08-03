@@ -288,6 +288,44 @@ fn test_parse_switch_arm_guard() {
 }
 
 #[test]
+fn test_parse_switch_range_pattern() {
+    let code = "fun f(n: int): string { return switch (n) { 1..5 => \"small\", _ => \"other\" }; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Return(Some(ExpressionNode::Switch(_subject, arms))) = &func.body[0] else {
+        panic!("expected a return of a switch expression");
+    };
+    use crate::nodes::PatternNode;
+    let PatternNode::Range(lo, hi) = &arms[0].pattern else {
+        panic!("expected a range pattern, got {:?}", arms[0].pattern);
+    };
+    assert_eq!(lo.get_type(), "int");
+    assert_eq!(hi.get_type(), "int");
+}
+
+#[test]
+fn test_parse_switch_or_pattern() {
+    let code = "fun f(n: int): string { return switch (n) { 1 | 2 | 3 => \"small\", _ => \"other\" }; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Return(Some(ExpressionNode::Switch(_subject, arms))) = &func.body[0] else {
+        panic!("expected a return of a switch expression");
+    };
+    use crate::nodes::PatternNode;
+    let PatternNode::Or(alts) = &arms[0].pattern else {
+        panic!("expected an or-pattern, got {:?}", arms[0].pattern);
+    };
+    assert_eq!(alts.len(), 3);
+    assert!(alts.iter().all(|p| matches!(p, PatternNode::Literal(_))));
+}
+
+#[test]
 fn test_parse_try_propagation_before_semicolon() {
     let code = "fun f(): int { let x = half(4)?; return x; }";
     let arena = bumpalo::Bump::new();

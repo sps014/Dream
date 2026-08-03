@@ -134,6 +134,53 @@ impl<'a> Analyzer<'a> {
                 // (across all arms, including nested sub-patterns) is decided in `check_exhaustiveness`.
                 Ok(PatternInfo { irrefutable: false })
             }
+            PatternNode::Range(lo, hi) => {
+                for bound in [lo, hi] {
+                    if !bound.is_unknown()
+                        && !expected.is_unknown()
+                        && !self.type_str_assignable(&expected_base, &bound.get_type())
+                    {
+                        diagnostics.report_error(
+                            format!(
+                                "Range pattern bound of type '{}' cannot match a value of type '{}'",
+                                bound.get_type(),
+                                expected_base
+                            ),
+                            bound.get_span(),
+                        );
+                    }
+                }
+                const ORDERED_SCALARS: &[&str] = &[
+                    "int", "long", "uint", "ulong", "byte", "char", "float", "double",
+                ];
+                if !expected.is_unknown() && !ORDERED_SCALARS.contains(&expected_base.as_str()) {
+                    diagnostics.report_error(
+                        format!(
+                            "Range pattern requires an ordered numeric or char subject, got '{}'",
+                            expected_base
+                        ),
+                        lo.get_span(),
+                    );
+                }
+                Ok(PatternInfo { irrefutable: false })
+            }
+            PatternNode::Or(alts) => {
+                let mut irrefutable_any = false;
+                for alt in alts {
+                    if Self::pattern_introduces_binding(alt, &union_info) {
+                        diagnostics.report_error(
+                            "an or-pattern alternative cannot bind a variable; use `_`, a literal, a range, or a payload-free variant".to_string(),
+                            alt.position(),
+                        );
+                        continue;
+                    }
+                    let info = self.check_pattern(alt, expected, scope, diagnostics)?;
+                    irrefutable_any = irrefutable_any || info.irrefutable;
+                }
+                Ok(PatternInfo {
+                    irrefutable: irrefutable_any,
+                })
+            }
         }
     }
     pub(in crate::semantics::analyzer) fn validate_variant_payload(
@@ -291,19 +338,45 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// True when `p` would introduce at least one variable binding — recursively, so a variant
+    /// pattern only counts as binding-free when every one of its sub-patterns is too (e.g.
+    /// `Circle(_)` does not bind, but `Circle(r)` does). Used to reject a binding-introducing
+    /// or-pattern alternative, since a name bound by only *some* alternatives would be meaningless
+    /// (which alternative matched is not visible to the arm body).
+    fn pattern_introduces_binding(p: &PatternNode, union_info: &Option<UnionInfo>) -> bool {
+        match p {
+            PatternNode::Wildcard(_) | PatternNode::Literal(_) | PatternNode::Range(..) => false,
+            PatternNode::Binding(name) => !matches!(union_info, Some(info)
+                if info.variant(&name.text).is_some_and(|v| v.fields.is_empty())),
+            PatternNode::Variant(_, _, subs) => subs
+                .iter()
+                .any(|s| Self::pattern_introduces_binding(s, union_info)),
+            PatternNode::Or(alts) => alts
+                .iter()
+                .any(|a| Self::pattern_introduces_binding(a, union_info)),
+        }
+    }
+
     /// True when `p` is a unit-variant pattern for `vname` (`V` as a bare binding, or `V()`).
+    /// Recurses into an or-pattern's alternatives, since a `switch` arm's pattern covers `vname` if
+    /// *any* alternative does — equivalent to that alternative having been its own arm.
     fn matches_unit_variant(p: &PatternNode, vname: &str) -> bool {
         match p {
             PatternNode::Binding(name) => name.text == vname,
             PatternNode::Variant(_, name, subs) => name.text == vname && subs.is_empty(),
+            PatternNode::Or(alts) => alts.iter().any(|a| Self::matches_unit_variant(a, vname)),
             _ => false,
         }
     }
 
-    /// If `p` is a variant pattern for `vname`, returns its `i`-th sub-pattern.
+    /// If `p` is a variant pattern for `vname`, returns its `i`-th sub-pattern. Recurses into an
+    /// or-pattern's alternatives (see [`Self::matches_unit_variant`]); or-pattern alternatives are
+    /// validated binding-free, so a variant alternative here can only appear when `fields` is empty
+    /// (a unit variant, with no `i`-th sub-pattern to return anyway).
     fn variant_sub<'p>(p: &'p PatternNode, vname: &str, i: usize) -> Option<&'p PatternNode> {
         match p {
             PatternNode::Variant(_, name, subs) if name.text == vname => subs.get(i),
+            PatternNode::Or(alts) => alts.iter().find_map(|a| Self::variant_sub(a, vname, i)),
             _ => None,
         }
     }
@@ -323,6 +396,9 @@ impl<'a> Analyzer<'a> {
                     .zip(fields)
                     .all(|(s, f)| self.pattern_is_irrefutable(s, &f.type_))
             }
+            PatternNode::Or(alts) => alts
+                .iter()
+                .any(|a| self.variant_all_irrefutable(a, vname, fields)),
             _ => false,
         }
     }

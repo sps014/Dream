@@ -96,6 +96,8 @@ pub enum TokenKind {
     CommaToken,
     #[token(".")]
     DotToken,
+    #[token("..")]
+    DotDotToken,
     #[token("?")]
     QuestionMarkToken,
 
@@ -241,6 +243,7 @@ impl TokenKind {
             TokenKind::ColonToken => "':'",
             TokenKind::CommaToken => "','",
             TokenKind::DotToken => "'.'",
+            TokenKind::DotDotToken => "'..'",
             TokenKind::QuestionMarkToken => "'?'",
             TokenKind::OpenParenthesisToken => "'('",
             TokenKind::CloseParenthesisToken => "')'",

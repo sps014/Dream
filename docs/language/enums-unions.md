@@ -88,6 +88,37 @@ switch (opt) {
 }
 ```
 
+### Or-patterns and range patterns
+
+An arm's pattern may be several alternatives separated by `|` — the arm runs if the subject matches any of them. Every alternative must be **binding-free** (a literal, a range, `_`, or a payload-free variant); an alternative that would bind a variable (`Circle(r)`, a bare name) is rejected, since which alternative matched isn't visible to pick a binding from:
+
+```dream
+switch (c) {
+    'a' | 'e' | 'i' | 'o' | 'u' => println("vowel"),
+    _                           => println("consonant"),
+}
+
+switch (shape) {
+    Square | Triangle | Empty => println("no curves"),
+    Circle(_)                 => println("curved"),
+}
+```
+
+A literal pattern over an ordered scalar subject (`int`/`long`/`uint`/`ulong`/`byte`/`char`/`float`/`double`) can be an inclusive range, `lo..hi`:
+
+```dream
+fun grade(score: int): string {
+    return switch (score) {
+        90..100 => "A",
+        80..89  => "B",
+        70..79  => "C",
+        _       => "F",
+    };
+}
+```
+
+Both compose with exhaustiveness checking the same way a single pattern does — `Square | Triangle | Empty` together with `Circle(_)` covers every variant with no `_` needed, for example.
+
 ### Generic unions
 
 Unions may be generic; the concrete type is inferred from constructor arguments, or supplied by annotation. Add methods with an `extend` block:

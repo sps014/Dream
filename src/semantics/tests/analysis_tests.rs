@@ -310,6 +310,95 @@ fn test_analyze_union_switch_non_exhaustive() {
 }
 
 #[test]
+fn test_analyze_range_pattern_ok() {
+    let code = "
+        fun grade(score: int): string {
+            return switch (score) {
+                90..100 => \"A\",
+                _ => \"other\",
+            };
+        }
+        fun main(): void { let s: string = grade(95); }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_range_pattern_wrong_bound_type() {
+    let code = "
+        fun grade(score: int): string {
+            return switch (score) {
+                \"a\"..\"z\" => \"letters\",
+                _ => \"other\",
+            };
+        }
+        fun main(): void { let s: string = grade(95); }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("Range pattern bound")));
+}
+
+#[test]
+fn test_analyze_or_pattern_ok() {
+    let code = "
+        fun is_vowel(c: char): bool {
+            return switch (c) {
+                'a' | 'e' | 'i' | 'o' | 'u' => true,
+                _ => false,
+            };
+        }
+        fun main(): void { let b: bool = is_vowel('e'); }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_analyze_or_pattern_exhaustiveness_across_unit_variants() {
+    let code = "
+        enum Shape { Circle(radius: int), Square, Triangle, Empty }
+        fun has_straight_edges(s: Shape): bool {
+            return switch (s) {
+                Square | Triangle => true,
+                Circle(_) | Empty => false,
+            };
+        }
+        fun main(): void { let b: bool = has_straight_edges(Shape.Empty); }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(
+        diagnostics.has_errors(),
+        false,
+        "{:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_analyze_or_pattern_rejects_binding_alternative() {
+    let code = "
+        enum Shape { Circle(radius: int), Empty }
+        fun f(s: Shape): int {
+            return switch (s) {
+                Circle(r) | Empty => r,
+            };
+        }
+        fun main(): void { let i: int = f(Shape.Empty); }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("or-pattern alternative cannot bind")));
+}
+
+#[test]
 fn test_analyze_union_variant_arity_mismatch() {
     let code = "
         enum Shape { Circle(radius: int), Empty }
@@ -936,6 +1025,65 @@ fn test_is_binding_in_and_chain_is_visible_in_branch() {
         !diagnostics.has_errors(),
         "is-binding via && chain should type-check: {:?}",
         diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_is_binding_visible_in_later_and_conjunct() {
+    // `t` bound by the first conjunct's `is` is now also visible in a later conjunct of the same
+    // `&&` chain (previously only the branch body could see it).
+    let code = "
+        interface Animal { fun speak(): int; }
+        class Cat : Animal { public fun speak(): int { return 7; } }
+        fun check(a: Animal): int {
+            if (a is Cat t && t.speak() > 0) { return 1; }
+            return 0;
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(
+        !diagnostics.has_errors(),
+        "is-binding should be visible in a later && conjunct: {:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_is_binding_visible_across_multiple_and_conjuncts() {
+    // A three-way chain: the binding from the first conjunct must survive being threaded through
+    // an intermediate plain-bool conjunct to a third conjunct that uses it.
+    let code = "
+        interface Animal { fun speak(): int; }
+        class Cat : Animal { public fun speak(): int { return 7; } }
+        fun check(a: Animal, flag: bool): int {
+            if (a is Cat t && flag && t.speak() > 0) { return 1; }
+            return 0;
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(
+        !diagnostics.has_errors(),
+        "is-binding should survive an intermediate conjunct: {:?}",
+        diagnostics.diagnostics
+    );
+}
+
+#[test]
+fn test_is_binding_not_visible_across_or() {
+    // `||` does not guarantee the left side held, so a binding from it must stay invisible on the
+    // right — this must keep failing after the `&&` fix.
+    let code = "
+        interface Animal { fun speak(): int; }
+        class Cat : Animal { public fun speak(): int { return 7; } }
+        fun check(a: Animal): int {
+            if (a is Cat t || t.speak() > 0) { return 1; }
+            return 0;
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert!(
+        diagnostics.has_errors(),
+        "is-binding must not cross '||' into the right operand"
     );
 }
 

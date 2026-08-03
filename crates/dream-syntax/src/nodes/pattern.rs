@@ -16,6 +16,13 @@ pub enum PatternNode {
     /// name, and the sub-patterns for its payload fields (positional, in declaration order).
     /// A unit variant has no sub-patterns.
     Variant(Option<SyntaxToken>, SyntaxToken, Vec<PatternNode>),
+    /// An inclusive range literal pattern (`1..5`) - matches when the subject is between the two
+    /// bounds (inclusive), for an ordered scalar subject type (integers, `char`, floats).
+    Range(Type, Type),
+    /// An or-pattern (`A | B | C`) - matches when the subject matches any alternative. Every
+    /// alternative must be binding-free (a literal, range, wildcard, or payload-free variant);
+    /// this is validated during analysis, not here.
+    Or(Vec<PatternNode>),
 }
 
 impl PatternNode {
@@ -25,6 +32,8 @@ impl PatternNode {
             PatternNode::Wildcard(t) | PatternNode::Binding(t) => Some(t.position),
             PatternNode::Literal(ty) => ty.get_span(),
             PatternNode::Variant(_, name, _) => Some(name.position),
+            PatternNode::Range(lo, _) => lo.get_span(),
+            PatternNode::Or(alts) => alts.first().and_then(|p| p.position()),
         }
     }
 }

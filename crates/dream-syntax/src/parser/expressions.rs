@@ -577,10 +577,27 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(ExpressionNode::Switch(self.arena.alloc(subject), arms))
     }
 
-    /// Parses a single match pattern: `_` (wildcard), a literal, a bare identifier (a binding,
-    /// later reinterpreted as a unit variant by the analyzer when it names one), or a variant
-    /// pattern `Variant(sub, ...)` / `Enum.Variant(sub, ...)`.
+    /// Parses a match pattern, including a top-level or-pattern (`pat | pat | ...`): one or more
+    /// [`Self::parse_pattern_atom`]s separated by `|`, collapsing to a single [`PatternNode::Or`]
+    /// only when there is more than one alternative.
     pub(super) fn parse_pattern(&mut self) -> Result<PatternNode, Error> {
+        let first = self.parse_pattern_atom()?;
+        if self.current_token().kind != TokenKind::BitWisePipeToken {
+            return Ok(first);
+        }
+        let mut alts = vec![first];
+        while self.current_token().kind == TokenKind::BitWisePipeToken {
+            self.match_token(TokenKind::BitWisePipeToken);
+            alts.push(self.parse_pattern_atom()?);
+        }
+        Ok(PatternNode::Or(alts))
+    }
+
+    /// Parses a single pattern "atom" (one or-pattern alternative): `_` (wildcard), a literal or
+    /// inclusive range literal (`1..5`), a bare identifier (a binding, later reinterpreted as a
+    /// unit variant by the analyzer when it names one), or a variant pattern `Variant(sub, ...)` /
+    /// `Enum.Variant(sub, ...)`.
+    fn parse_pattern_atom(&mut self) -> Result<PatternNode, Error> {
         let cur = self.current_token();
         match cur.kind {
             TokenKind::IdentifierToken => {
@@ -604,7 +621,15 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // A bare identifier: a binding (or a unit variant, resolved during analysis).
                 Ok(PatternNode::Binding(first))
             }
-            _ => Ok(PatternNode::Literal(self.parse_literal_pattern()?)),
+            _ => {
+                let lo = self.parse_literal_pattern()?;
+                if self.current_token().kind == TokenKind::DotDotToken {
+                    self.match_token(TokenKind::DotDotToken);
+                    let hi = self.parse_literal_pattern()?;
+                    return Ok(PatternNode::Range(lo, hi));
+                }
+                Ok(PatternNode::Literal(lo))
+            }
         }
     }
 

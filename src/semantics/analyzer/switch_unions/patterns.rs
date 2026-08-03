@@ -85,20 +85,31 @@ impl<'a> Analyzer<'a> {
                     bindings,
                 }
             }
+            // Neither is representable as a single `Switch` const/variant arm; routed through the
+            // if-chain path by `pattern_switch_needs_chain` before this function ever sees them.
+            PatternNode::Range(..) | PatternNode::Or(..) => HirArmShape::Unsupported,
         }
     }
 
     /// True when `arms` need the general if-chain lowering rather than a `Switch`: any arm has a
-    /// guard, or a variant pattern has a non-flat sub-pattern (a literal or a nested variant).
+    /// guard, or a pattern isn't representable as a flat const/variant `Switch` arm (a nested
+    /// variant sub-pattern, a range, or an or-pattern).
     pub(super) fn pattern_switch_needs_chain(arms: &[SwitchArm]) -> bool {
         arms.iter()
-            .any(|a| a.guard.is_some() || Self::pattern_is_nested(&a.pattern))
+            .any(|a| a.guard.is_some() || Self::pattern_needs_chain(&a.pattern))
     }
 
-    /// True for a variant pattern with at least one sub-pattern that isn't a flat binding/wildcard.
-    fn pattern_is_nested(p: &PatternNode) -> bool {
-        matches!(p, PatternNode::Variant(_, _, subs)
-            if subs.iter().any(|s| !matches!(s, PatternNode::Binding(_) | PatternNode::Wildcard(_))))
+    /// True for a pattern that the `Switch`/br_table fast path cannot represent: a variant pattern
+    /// with at least one sub-pattern that isn't a flat binding/wildcard, a range pattern, or an
+    /// or-pattern.
+    fn pattern_needs_chain(p: &PatternNode) -> bool {
+        match p {
+            PatternNode::Variant(_, _, subs) => subs
+                .iter()
+                .any(|s| !matches!(s, PatternNode::Binding(_) | PatternNode::Wildcard(_))),
+            PatternNode::Range(..) | PatternNode::Or(..) => true,
+            _ => false,
+        }
     }
 
     /// Recursively compiles `pattern` (matched against value `value` of type `value_type`) into a set
@@ -175,6 +186,33 @@ impl<'a> Analyzer<'a> {
                     binds.append(&mut b);
                 }
                 Some((conds, binds))
+            }
+            PatternNode::Range(lo, hi) => {
+                self.hir_set_literal(lo);
+                let lo_e = self.hir_take()?;
+                self.hir_set_literal(hi);
+                let hi_e = self.hir_take()?;
+                let ge = self.hx_bin(BinOp::Ge, value.clone(), lo_e);
+                let le = self.hx_bin(BinOp::Le, value.clone(), hi_e);
+                Some((vec![self.hx_bin(BinOp::And, ge, le)], vec![]))
+            }
+            PatternNode::Or(alts) => {
+                // Alternatives are validated binding-free in `check_pattern`, so only the boolean
+                // test conditions matter here: each alternative's conditions are ANDed together
+                // (it must fully match), then the alternatives themselves are ORed.
+                let mut combined: Option<HExpr> = None;
+                for alt in alts {
+                    let (conds, _binds) = self.compile_pattern(value, value_type, alt)?;
+                    let alt_cond = conds
+                        .into_iter()
+                        .reduce(|a, b| self.hx_bin(BinOp::And, a, b))
+                        .unwrap_or_else(|| self.hx_bool(true));
+                    combined = Some(match combined {
+                        Some(acc) => self.hx_bin(BinOp::Or, acc, alt_cond),
+                        None => alt_cond,
+                    });
+                }
+                Some((vec![combined?], vec![]))
             }
         }
     }

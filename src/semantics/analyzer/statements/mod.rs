@@ -94,7 +94,7 @@ impl<'a> Analyzer<'a> {
     /// through parentheses). `||`, negation, and other operators are *not* descended into, because a
     /// binding under them is not guaranteed to hold when the whole condition is true. The collected
     /// bindings are declared into the taken branch (or loop body) by [`Self::declare_is_bindings`].
-    fn collect_is_bindings<'e>(
+    pub(in crate::semantics::analyzer) fn collect_is_bindings<'e>(
         cond: &'e ExpressionNode<'a>,
         out: &mut Vec<(&'e SyntaxToken, &'e Type, &'e ExpressionNode<'a>)>,
     ) {

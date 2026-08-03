@@ -7,7 +7,6 @@ use super::*;
 /// `$release_object` since their concrete type is unknown until runtime. Callers guard on
 /// [`TypeInterner::is_reference`] first, so non-reference types never reach here.
 pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: TypeId) -> String {
-    let ty = ty;
     match interner.kind(ty) {
         TyKind::Struct(..) | TyKind::Union(..) => {
             if let Some(l) = layouts.structs.get(&ty) {

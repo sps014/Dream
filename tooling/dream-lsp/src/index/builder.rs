@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use dream::syntax::nodes::struct_node::StructDeclarationNode;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream::syntax::nodes::{
-    ExpressionNode, FunctionNode, PatternNode, ProgramNode, StatementNode, SwitchArmBody, Type,
+    ExpressionNode, FunctionNode, LambdaBody, PatternNode, ProgramNode, StatementNode,
+    SwitchArmBody, Type,
 };
 use dream::syntax::token::syntax_token::SyntaxToken;
 
@@ -599,6 +600,10 @@ impl Builder {
             }
             ExpressionNode::Literal(_) => {}
             ExpressionNode::Try(e) => self.walk_expr(e, scope),
+            ExpressionNode::Lambda(lambda) => match &lambda.body {
+                LambdaBody::Expr(e) => self.walk_expr(e, scope),
+                LambdaBody::Block(stmts) => self.walk_block(stmts, scope),
+            },
         }
     }
 
@@ -607,7 +612,7 @@ impl Builder {
     /// optional `Enum.` qualifier) become references.
     fn walk_pattern(&mut self, pattern: &PatternNode, scope: usize) {
         match pattern {
-            PatternNode::Wildcard(_) | PatternNode::Literal(_) => {}
+            PatternNode::Wildcard(_) | PatternNode::Literal(_) | PatternNode::Range(..) => {}
             PatternNode::Binding(name) => {
                 self.push_decl(name, SymKind::Variable, "binding".to_string(), scope, None);
             }
@@ -618,6 +623,11 @@ impl Builder {
                 self.add_ref(variant, SymKind::EnumMember, scope);
                 for sub in subs {
                     self.walk_pattern(sub, scope);
+                }
+            }
+            PatternNode::Or(alts) => {
+                for alt in alts {
+                    self.walk_pattern(alt, scope);
                 }
             }
         }

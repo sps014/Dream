@@ -283,5 +283,5 @@ fn debug_map_path(wat_path: &str) -> String {
 }
 
 fn io_err(msg: String) -> Box<dyn std::error::Error> {
-    Box::new(io::Error::new(io::ErrorKind::Other, msg))
+    Box::new(io::Error::other(msg))
 }

@@ -103,7 +103,7 @@ if (a is Cat cat) {
 The bound name exists only inside the taken branch.
 
 !!! note
-    `is`-with-binding works in `if (...)` and `while (...)` conditions, and through a top-level `&&` chain (`if (x is T t && cond)` makes `t` available in the branch body). It is not yet visible in *later conjuncts of the same condition* (e.g. `if (x is T t && t.ok())`) — reference it in the branch body instead.
+    `is`-with-binding works in `if (...)` and `while (...)` conditions, and through a top-level `&&` chain (`if (x is T t && cond)` makes `t` available in the branch body). It is also visible in a *later conjunct of the same `&&` chain* — `if (x is T t && t.ok())` type-checks, since `t` is only ever read once `x is T t` has already evaluated true. It is **not** visible across `||` (`if (x is T t || t.ok())` is still rejected — the left side isn't guaranteed to have held).
 
 ## Advanced
 

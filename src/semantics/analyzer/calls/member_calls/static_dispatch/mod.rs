@@ -116,12 +116,14 @@ impl<'a> Analyzer<'a> {
         // Support generic static method calls by monomorphizing them on the fly.
         if let Some(&template) = self.generic_functions.get(&base) {
             let t = self.analyze_generic_static_method(
-                template,
-                &base,
-                &type_name,
-                method,
-                generic_args,
-                params,
+                intrinsics::GenericStaticMethodCall {
+                    template,
+                    base: &base,
+                    type_name: &type_name,
+                    method,
+                    generic_args,
+                    params,
+                },
                 ctx,
                 diagnostics,
             )?;
