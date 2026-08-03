@@ -1,3 +1,4 @@
+use super::function::ParameterNode;
 use super::pattern::PatternNode;
 use super::statement::StatementNode;
 use super::types::Type;
@@ -45,6 +46,27 @@ pub enum ExpressionNode<'a> {
     /// during semantic analysis to a pattern-matching `switch` that binds the success payload and
     /// early-`return`s the failure/absence variant, so no dedicated HIR/MIR node exists for it.
     Try(&'a ExpressionNode<'a>),
+    /// `(params) => expr` / `(params) => { stmts }` — an arrow-lambda literal.
+    Lambda(&'a LambdaNode<'a>),
+}
+
+/// An arrow-lambda literal: `(x: int, y: int) => x + y` or `(x: int) => { ...; return x; }`.
+#[derive(Debug, Clone)]
+pub struct LambdaNode<'a> {
+    /// Span of the lambda's opening `(`, used when no inner token is available for diagnostics
+    /// (e.g. a zero-parameter lambda `() => 0`).
+    pub open_paren_position: TextSpan,
+    pub parameters: Vec<ParameterNode>,
+    pub body: LambdaBody<'a>,
+}
+
+/// The body of an arrow-lambda literal.
+#[derive(Debug, Clone)]
+pub enum LambdaBody<'a> {
+    /// `=> expr`
+    Expr(&'a ExpressionNode<'a>),
+    /// `=> { stmts }`
+    Block(&'a [StatementNode<'a>]),
 }
 
 /// One arm of a pattern-matching `switch`: a pattern, an optional `if` guard, and a body.
@@ -93,6 +115,7 @@ impl<'a> ExpressionNode<'a> {
                 target_type.get_span().or_else(|| expr.position())
             }
             ExpressionNode::ArrayLiteral(elements) => elements.first().and_then(|e| e.position()),
+            ExpressionNode::Lambda(l) => Some(l.open_paren_position),
         }
     }
 
@@ -118,8 +141,8 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::ArrayLiteral(elements) => {
                 elements.first().and_then(|e| e.start_position())
             }
-            // Token-led forms (identifier, call name, unary operator, cast type, literal) already
-            // start at the token `position` returns.
+            // Token-led forms (identifier, call name, unary operator, cast type, literal, lambda)
+            // already start at the token/span `position` returns.
             _ => self.position(),
         }
     }

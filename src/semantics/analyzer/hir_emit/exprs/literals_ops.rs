@@ -40,18 +40,43 @@ impl<'a> Analyzer<'a> {
 
     /// Records the HIR for an identifier read: a local-variable reference if the name resolves to a
     /// slot, otherwise `None` (globals and function values are later slices).
+    ///
+    /// A captured local (`self.hir.boxed`, see `hir_declare_local`) reads through its `__Cell<T>`
+    /// box's `.value` field instead of the plain slot, so a write from any closure sharing the cell
+    /// (or the enclosing function itself) is visible here.
     pub(in crate::semantics::analyzer) fn hir_set_var(&mut self, name: &str) {
         if !self.active() {
             self.hir.last = None;
             return;
         }
         if let Some(&(local, ty)) = self.hir.locals.get(name) {
+            if let Some(&elem_ty) = self.hir.boxed.get(name) {
+                let obj = HExpr::new(ty, HExprKind::Var(Binding::Local(local)));
+                self.hir.last = Some(HExpr::new(
+                    elem_ty,
+                    HExprKind::Field {
+                        obj: Box::new(obj),
+                        field: 0,
+                    },
+                ));
+                return;
+            }
             self.hir.last = Some(HExpr::new(ty, HExprKind::Var(Binding::Local(local))));
         } else if let Some(&(global, ty)) = self.hir.globals.get(name) {
             self.hir.last = Some(HExpr::new(ty, HExprKind::Var(Binding::Global(global))));
         } else {
             self.hir.last = None;
         }
+    }
+
+    /// Reads a boxed local's raw `__Cell<T>` slot directly, bypassing the `.value` redirect
+    /// [`Self::hir_set_var`] applies to a name in `self.hir.boxed` — i.e. the cell pointer itself,
+    /// not the value inside it. Used when constructing a capturing lambda's environment (see
+    /// `expressions::lambda`), which needs to hand the *cell* (so writes from either side stay
+    /// visible to the other) to the closure, not a snapshot of its current value.
+    pub(in crate::semantics::analyzer) fn hir_read_cell_ref(&mut self, name: &str) -> Option<HExpr> {
+        let &(local, ty) = self.hir.locals.get(name)?;
+        Some(HExpr::new(ty, HExprKind::Var(Binding::Local(local))))
     }
 
     /// Sets `last` to a read of an already-allocated local (used by the match-expression desugar to

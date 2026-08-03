@@ -173,6 +173,26 @@ impl<'a> Analyzer<'a> {
                 progressed = true;
             }
 
+            // Non-capturing lambdas lowered to synthesized top-level functions (see
+            // `expressions::lambda`). No generic bindings apply (lambdas are never generic in v1).
+            let pending_lambdas: Vec<String> = self
+                .pending_lambdas
+                .keys()
+                .filter(|k| !processed_generics.contains(*k))
+                .cloned()
+                .collect();
+            for name in pending_lambdas {
+                processed_generics.insert(name.clone());
+                let template = match self.pending_lambdas.get(&name) {
+                    Some(t) => *t,
+                    None => continue,
+                };
+                diagnostics.file_path = file_path_string(&template.file_path);
+                let table = self.analyze_function(template, diagnostics)?;
+                symbol_table_map.insert(name, table);
+                progressed = true;
+            }
+
             // De-sugared struct methods, including those for newly instantiated generic structs.
             while method_index < self.struct_methods.len() {
                 let (method, bindings) = self.struct_methods[method_index].clone();

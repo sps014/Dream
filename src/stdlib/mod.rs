@@ -10,6 +10,12 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
     // defined before the collection classes that construct backing storage.
     ("<std>/core/buffer.dream", include_str!("core/buffer.dream")),
     ("<std>/core/bytes.dream", include_str!("core/bytes.dream")),
+    // The closure ABI (`__Closure.funcbox_*`/`retain`) and the `__Cell<T>` capture box: needed by
+    // any `fun(...)`-typed value or arrow-lambda, so merged early, before anything that uses them.
+    (
+        "<std>/core/closure.dream",
+        include_str!("core/closure.dream"),
+    ),
     // Named tuning constants (hash-table slot states/load factor, sequence growth floor) shared by
     // the collection classes below; no dependencies of its own, so it can merge anywhere before them.
     (

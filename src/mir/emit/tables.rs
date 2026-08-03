@@ -36,15 +36,24 @@ pub(super) fn symbol_table(mir: &crate::mir::Mir) -> HashMap<(DefId, Vec<TypeId>
 
 /// Maps each function's `(DefId, instance args)` to its declared parameter types, so call sites can
 /// apply implicit numeric widening (e.g. an `int`/`float` argument passed to a `double` parameter)
-/// to match the callee's WASM signature. Keyed like [`symbol_table`].
+/// to match the callee's WASM signature, and — for a `fun(...)`-typed parameter — unbox a boxed
+/// closure value to its raw funcidx before the call (see `Emitter::emit_call_args`; host imports
+/// have no env-restoring prologue, so only the funcidx half of the box is meaningful to them).
+/// Keyed like [`symbol_table`]; imports are included (always with an empty instance) since they are
+/// call targets too, just with no MIR body to read parameter types from otherwise.
 pub(super) fn signature_table(mir: &crate::mir::Mir) -> HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> {
-    mir.functions
+    let mut table: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = mir
+        .functions
         .iter()
         .map(|f| {
             let params = f.params.iter().map(|p| f.local_ty(*p)).collect();
             ((f.def, f.instance.clone()), params)
         })
-        .collect()
+        .collect();
+    for imp in &mir.imports {
+        table.insert((imp.def, vec![]), imp.params.clone());
+    }
+    table
 }
 
 /// Maps each function's `(DefId, instance args)` to its slot in the module's function table, in

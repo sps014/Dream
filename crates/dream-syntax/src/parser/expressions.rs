@@ -1,6 +1,9 @@
 use super::Parser;
 use crate::lexer::Lexer;
-use crate::nodes::{ExpressionNode, PatternNode, SwitchArm, SwitchArmBody, Type};
+use crate::nodes::{
+    ExpressionNode, LambdaBody, LambdaNode, ParameterNode, PatternNode, SwitchArm, SwitchArmBody,
+    Type,
+};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use crate::token::token_kind::TokenKind::{EndOfFileToken, IdentifierToken};
@@ -75,8 +78,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::SwitchToken {
             return self.parse_switch_expr();
         }
-        //parse parenthesized expressions or cast
+        //parse parenthesized expressions, casts, or arrow-lambdas
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
+            if self.is_lambda_start() {
+                return self.parse_lambda();
+            }
             return self.parse_paren_or_cast();
         } else if self.current_token().kind == TokenKind::OpenBracketToken {
             // Array literal
@@ -257,6 +263,108 @@ impl<'a, 'b> Parser<'a, 'b> {
         // whose bare form would mis-lex (`7.hash_code()` reads `7.` as a float).
         let parenthesized = ExpressionNode::Parenthesized(self.arena.alloc(expression));
         self.parse_postfix_chain(parenthesized)
+    }
+
+    /// Lookahead for an arrow-lambda literal (`(params) => ...`), assuming the cursor is on the
+    /// leading `(`. Finds the `)` matching this `(` (tracking paren nesting only — a lambda's
+    /// parameter types cannot themselves contain unbalanced parens) and checks whether it's
+    /// immediately followed by `=>`. This is unambiguous and safe to try *before* the cast/paren
+    /// dispatch: `) =>` never validly follows an existing cast (`(Type)expr`) or a parenthesized
+    /// expression's postfix chain (`(expr).member`, `(expr)[i]`, `(expr)?`).
+    fn is_lambda_start(&self) -> bool {
+        let mut depth = 0i32;
+        let mut i = 0usize;
+        loop {
+            match self.peek_token(i).kind {
+                TokenKind::OpenParenthesisToken => depth += 1,
+                TokenKind::CloseParenthesisToken => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self.peek_token(i + 1).kind == TokenKind::FatArrowToken;
+                    }
+                }
+                TokenKind::EndOfFileToken => return false,
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+
+    /// Parses an arrow-lambda literal `(params) => expr` / `(params) => { stmts }`, assuming
+    /// [`is_lambda_start`](Self::is_lambda_start) has already confirmed the shape. Unlike an
+    /// ordinary function's parameters, a lambda parameter's `: Type` annotation is optional (see
+    /// [`parse_lambda_parameters`](Self::parse_lambda_parameters)): an omitted type is filled in by
+    /// the analyzer from the lambda's expected `fun(...)` context (e.g. `nums.sort_by((a, b) => a -
+    /// b)` infers `a`/`b` as `int` from `sort_by`'s declared `cmp: fun(int, int): int` parameter).
+    fn parse_lambda(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        let open_paren_position = self.current_token().position;
+        let parameters = self.parse_lambda_parameters()?;
+        self.match_token(TokenKind::FatArrowToken);
+        let body = if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
+            LambdaBody::Block(self.parse_block()?)
+        } else {
+            let expr = self.parse_expression(0)?;
+            LambdaBody::Expr(self.arena.alloc(expr))
+        };
+        Ok(ExpressionNode::Lambda(self.arena.alloc(LambdaNode {
+            open_paren_position,
+            parameters,
+            body,
+        })))
+    }
+
+    /// Parses a lambda's parameter list, `(name [: Type] [= default], ...)`. Identical to
+    /// [`parse_formal_parameters`](Self::parse_formal_parameters) except the `: Type` annotation is
+    /// optional: an omitted type is recorded as `Type::Unknown`, a sentinel the analyzer resolves
+    /// from the lambda's expected `fun(...)` context (or reports a diagnostic for if none exists).
+    fn parse_lambda_parameters(&mut self) -> Result<Vec<ParameterNode>, Error> {
+        let mut params = vec![];
+        self.match_token(TokenKind::OpenParenthesisToken);
+
+        let mut seen_default = false;
+        while self.current_token().kind != TokenKind::CloseParenthesisToken
+            && self.current_token().kind != TokenKind::EndOfFileToken
+        {
+            let index_before = self.current_token_index;
+            let param = self.match_token(TokenKind::IdentifierToken);
+
+            let param_type = if self.current_token().kind == TokenKind::ColonToken {
+                self.match_token(TokenKind::ColonToken);
+                self.parse_type()?
+            } else {
+                Type::Unknown
+            };
+
+            let default = if self.current_token().kind == TokenKind::EqualToken {
+                self.match_token(TokenKind::EqualToken);
+                seen_default = true;
+                Some(self.parse_literal_pattern()?)
+            } else {
+                if seen_default {
+                    self.diagnostics.report_error(
+                        format!(
+                            "required parameter '{}' cannot follow a parameter with a default value",
+                            param.text
+                        ),
+                        Some(param.position),
+                    );
+                }
+                None
+            };
+            params.push(ParameterNode::with_default(param, param_type, default));
+
+            if self.current_token_index == index_before {
+                self.next_token();
+            }
+            if self.current_token().kind == TokenKind::CommaToken
+                && self.peek_token(1).kind == TokenKind::IdentifierToken
+            {
+                self.match_token(TokenKind::CommaToken);
+            }
+        }
+
+        self.match_token(TokenKind::CloseParenthesisToken);
+        Ok(params)
     }
 
     /// Continues parsing index (`[...]`) and member/method (`.name` / `.name(...)`) accesses onto an

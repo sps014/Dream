@@ -70,6 +70,7 @@ const RUNTIME_FORMAT: &str = include_str!("../runtime/format.wat");
 /// the always-present `$print_string`/`$print_char` imports.
 const RUNTIME_PANIC: &str = include_str!("../runtime/panic.wat");
 const RUNTIME_WEAK: &str = include_str!("../runtime/weak.wat");
+const RUNTIME_CLOSURE: &str = include_str!("../runtime/closure.wat");
 
 /// String constants the `*_to_string` runtime references by address: `bool` renders to `"true"`/
 /// `"false"`; the `double` formatter prepends `"-"`. Interned into every module so the runtime is

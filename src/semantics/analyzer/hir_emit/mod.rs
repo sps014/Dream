@@ -20,6 +20,7 @@ use crate::syntax::token::token_kind::TokenKind;
 use crate::text::text_span::TextSpan;
 use crate::types::{DefId, DefKind, PrimTy, TyKind, TypeId};
 use indexmap::IndexMap;
+use std::collections::HashMap;
 
 mod build;
 mod exprs;
@@ -42,6 +43,13 @@ pub(super) struct HirEmit {
     /// Keyed by name, so a re-declaration (shadowing in a sibling/nested scope) overwrites the entry;
     /// unique slot ids therefore come from `next_local`, not this map's length.
     locals: IndexMap<String, (LocalId, TypeId)>,
+    /// Names (a subset of `locals`' keys) whose slot holds a `__Cell<T>` box rather than a raw
+    /// value — either a `let` captured by a nested lambda, an enclosing function's own captured
+    /// parameter, or (inside a capturing lambda's own lifted function) a captured name received
+    /// from `$__closure_env`. Maps to the *unboxed* element type, so `hir_set_var`/`hir_assign_local`
+    /// can redirect through the cell's `.value` field while reporting the original type. See
+    /// `hir_declare_local`/`Analyzer::boxed_locals`.
+    boxed: HashMap<String, TypeId>,
     /// Monotonic allocator for local slot ids. Incremented for every parameter and `let`, so shadowed
     /// names never collide on a slot (which would merge distinct-typed locals into one).
     next_local: u32,
@@ -173,7 +181,13 @@ impl<'a> Analyzer<'a> {
         self.hir.collecting = true;
         self.hir.ok = true;
         self.hir.last = None;
+        // Pre-pass: which of this function's own `let`s does a lambda in its body capture (and so
+        // must be boxed into a `__Cell<T>` — see `hir_declare_local`/`hir_set_var`/`hir_assign_local`)?
+        // Must run before the body itself is analyzed, since a captured local's very first `let` has
+        // to be boxed from the start (its declaration may come before the lambda that captures it).
+        self.boxed_locals = super::expressions::capture_scan::scan_function_captures(function.body);
         self.hir.locals.clear();
+        self.hir.boxed.clear();
         self.hir.next_local = 0;
         self.hir.local_decls.clear();
         self.hir.params.clear();
@@ -181,6 +195,7 @@ impl<'a> Analyzer<'a> {
         self.hir.blocks.push(Vec::new());
         self.hir.def = def;
         self.hir.instance = instance;
+        let lookup_name_for_captures = lookup_name.clone();
         self.hir.name = lookup_name;
         self.hir.name_span = Some(function.name.position);
         self.hir.is_async = function.is_async;
@@ -203,6 +218,147 @@ impl<'a> Analyzer<'a> {
                 local,
                 name: param.name.text.clone(),
                 ty,
+            });
+        }
+
+        // A parameter captured by a nested lambda (`self.boxed_locals`, from the pre-pass above)
+        // must be boxed into a `__Cell<T>` from the very start of the function, exactly like a
+        // captured `let` (see `hir_declare_local`) — rebind its slot to a freshly-boxed copy of the
+        // raw incoming argument, immediately after every parameter has its ordinary slot (so the
+        // raw argument value is always available to box, regardless of declaration order above).
+        for param in function.parameters.iter() {
+            if self.boxed_locals.contains(&param.name.text) {
+                self.box_captured_param(&param.name.text, &param.type_);
+            }
+        }
+
+        // This function is itself a capturing lambda's lifted body (see `expressions::lambda`):
+        // recover each captured name from `$__closure_env` into a local aliasing the very same
+        // `__Cell<T>` its creating scope boxed it into, so `hir_set_var`/`hir_assign_local`'s
+        // `self.hir.boxed`-driven redirect (see `hir_declare_local`) applies transparently to it
+        // too — reads/writes inside this body go through `.value` exactly like a captured `let`'s.
+        if let Some(captures) = self.closure_captures.get(&lookup_name_for_captures).cloned() {
+            if captures.len() == 1 {
+                let (cap_name, cap_ty) = &captures[0];
+                self.receive_closure_capture(cap_name, cap_ty);
+            } else if captures.len() > 1 {
+                self.receive_closure_captures_array(&captures);
+            }
+        }
+    }
+
+    /// Rebinds parameter `name` (already registered with its ordinary raw slot above) to a fresh
+    /// `__Cell<T>`-boxed copy, and records it in `self.hir.boxed` so subsequent reads/writes inside
+    /// this function redirect through the cell — see the `hir_begin_function` call site.
+    fn box_captured_param(&mut self, name: &str, ty: &Type) {
+        let Some(&(raw_local, raw_ty)) = self.hir.locals.get(name) else {
+            return;
+        };
+        let raw_read = HExpr::new(raw_ty, HExprKind::Var(Binding::Local(raw_local)));
+        let Some(cell) = self.hir_build_cell_new(ty, raw_read) else {
+            self.hir.ok = false;
+            return;
+        };
+        let cell_tid = cell.ty;
+        let elem_tid = self.type_ctx.lower(ty);
+        let local = LocalId(self.hir.next_local);
+        self.hir.next_local += 1;
+        self.hir.locals.insert(name.to_string(), (local, cell_tid));
+        self.hir.local_decls.push(HLocal {
+            id: local,
+            name: name.to_string(),
+            ty: cell_tid,
+        });
+        self.hir.boxed.insert(name.to_string(), elem_tid);
+        self.push_stmt(HStmt::Let {
+            local,
+            ty: cell_tid,
+            value: cell,
+        });
+    }
+
+    /// This function's own prologue for one captured name: unboxes `$__closure_env` back to the
+    /// `__Cell<T>` its creating scope boxed it into (a plain reinterpret — both are `i32` pointers
+    /// at runtime), aliases it into a local under `cap_name`, and records it in `self.hir.boxed` so
+    /// this body's reads/writes of `cap_name` go through the cell like any other captured name.
+    fn receive_closure_capture(&mut self, cap_name: &str, cap_ty: &Type) {
+        let Some(env) = self.hir_read_closure_env() else {
+            self.hir.ok = false;
+            return;
+        };
+        let cell_ty = Self::cell_type(cap_ty);
+        let cell_tid = self.type_ctx.lower(&cell_ty);
+        let elem_tid = self.type_ctx.lower(cap_ty);
+        let cast = HExpr::new(cell_tid, HExprKind::Cast(Box::new(env)));
+        let local = LocalId(self.hir.next_local);
+        self.hir.next_local += 1;
+        self.hir.locals.insert(cap_name.to_string(), (local, cell_tid));
+        self.hir.local_decls.push(HLocal {
+            id: local,
+            name: cap_name.to_string(),
+            ty: cell_tid,
+        });
+        self.hir.boxed.insert(cap_name.to_string(), elem_tid);
+        self.push_stmt(HStmt::Let {
+            local,
+            ty: cell_tid,
+            value: cast,
+        });
+    }
+
+    /// Like [`Self::receive_closure_capture`], but for **two or more** captures: unboxes
+    /// `$__closure_env` to the `object[]` array [`hir_set_multi_capturing_func_value`] built (a
+    /// plain reinterpret, same as the single-capture case), then aliases each `captures[i]` name to
+    /// a fresh local reading `array[i]` cast back to its own `__Cell<T>` — everything past that
+    /// point (the `self.hir.boxed` redirect) is identical to a single capture.
+    fn receive_closure_captures_array(&mut self, captures: &[(String, Type)]) {
+        let Some(env) = self.hir_read_closure_env() else {
+            self.hir.ok = false;
+            return;
+        };
+        let int_ty = self.type_ctx.interner.int();
+        let object_ty = self.type_ctx.interner.object();
+        let array_ty = self.type_ctx.interner.array(object_ty);
+        let cast_array = HExpr::new(array_ty, HExprKind::Cast(Box::new(env)));
+        let array_local = LocalId(self.hir.next_local);
+        self.hir.next_local += 1;
+        self.hir.local_decls.push(HLocal {
+            id: array_local,
+            name: "__closure_env_array".to_string(),
+            ty: array_ty,
+        });
+        self.push_stmt(HStmt::Let {
+            local: array_local,
+            ty: array_ty,
+            value: cast_array,
+        });
+        for (i, (cap_name, cap_ty)) in captures.iter().enumerate() {
+            let array_read = HExpr::new(array_ty, HExprKind::Var(Binding::Local(array_local)));
+            let index = HExpr::new(int_ty, HExprKind::IntLit(i as i64));
+            let elem = HExpr::new(
+                object_ty,
+                HExprKind::Index {
+                    array: Box::new(array_read),
+                    index: Box::new(index),
+                },
+            );
+            let cell_ty = Self::cell_type(cap_ty);
+            let cell_tid = self.type_ctx.lower(&cell_ty);
+            let elem_tid = self.type_ctx.lower(cap_ty);
+            let cast = HExpr::new(cell_tid, HExprKind::Cast(Box::new(elem)));
+            let local = LocalId(self.hir.next_local);
+            self.hir.next_local += 1;
+            self.hir.locals.insert(cap_name.clone(), (local, cell_tid));
+            self.hir.local_decls.push(HLocal {
+                id: local,
+                name: cap_name.clone(),
+                ty: cell_tid,
+            });
+            self.hir.boxed.insert(cap_name.clone(), elem_tid);
+            self.push_stmt(HStmt::Let {
+                local,
+                ty: cell_tid,
+                value: cast,
             });
         }
     }

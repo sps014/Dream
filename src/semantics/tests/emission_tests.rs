@@ -552,8 +552,10 @@ fn test_hir_emission_global_initializer_runs_in_start() {
         "init must run at start:\n{}",
         wat
     );
+    // `$g0` is the synthetic `__closure_env` global (see `register_globals`), registered before any
+    // user global; `counter` is the first user global, so it lands at `$g1`.
     assert!(
-        wat.contains("(global.set $g0)"),
+        wat.contains("(global.set $g1)"),
         "init should store the global:\n{}",
         wat
     );
@@ -1080,6 +1082,7 @@ fn test_hir_emission_first_class_function() {
     // `IndirectCall` — both are now HIR-representable, so `main` stays in coverage.
     let code = format!(
         "{SYSTEM_STUB}
+        {CLOSURE_STUB}
         fun add(a: int, b: int): int {{ return a + b; }}
         fun main(): void {{ let f = add; System.print(f(2, 3)); }}"
     );
@@ -1102,6 +1105,7 @@ fn exec_first_class_function_from_source() {
     // Full pipeline: source with a first-class function -> analyzer HIR -> MIR -> table dispatch.
     let code = format!(
         "{SYSTEM_STUB}
+        {CLOSURE_STUB}
         fun add(a: int, b: int): int {{ return a + b; }}
         fun main(): void {{ let f = add; System.print(f(2, 3)); }}"
     );
@@ -1137,6 +1141,7 @@ fn func_value_argument_is_not_reference_counted() {
     // reference-counting treatment — proving the distinction is real, not that RC is globally off.
     let code = format!(
         "{SYSTEM_STUB}
+        {CLOSURE_STUB}
         fun twice(x: int): int {{ return x * 2; }}
         fun apply(f: fun(int): int, s: string): int {{ return f(3); }}
         fun main(): void {{
@@ -1443,13 +1448,15 @@ fn test_hir_emission_global_read_and_write() {
         "the global-using function should be emitted:\n{}",
         wat
     );
+    // `$g0` is the synthetic `__closure_env` global (see `register_globals`); `counter` is the first
+    // user global, so it lands at `$g1`.
     assert!(
-        wat.contains("global.get $g0"),
+        wat.contains("global.get $g1"),
         "missing global read:\n{}",
         wat
     );
     assert!(
-        wat.contains("global.set $g0"),
+        wat.contains("global.set $g1"),
         "missing global write:\n{}",
         wat
     );

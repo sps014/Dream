@@ -18,9 +18,16 @@ public class WebWorker {
     // Opaque host handle identifying this worker's thread/instance and its message channels.
     id: int;
 
-    // Spawn a worker running `body`; returns the host handle id.
+    // Spawn a worker running the function at table index `funcidx`; returns the host handle id.
     @js("Dream", "workerSpawn")
-    static extern fun __spawn(body: fun(string): string): int;
+    static extern fun __spawn(funcidx: int): int;
+
+    // Unboxes a `fun(string): string` value to its raw function-table index (discarding its
+    // environment word, always 0 for the non-capturing top-level function a worker body must be —
+    // see the class doc comment): the funcidx is portable across the worker's fresh module instance,
+    // but a heap-allocated closure environment pointer would not be.
+    @intrinsic("funcbox_funcidx")
+    static extern fun __funcidx(body: fun(string): string): int;
 
     // Enqueue `msg` to the worker's inbox (does not wait for a reply).
     @js("Dream", "workerPost")
@@ -37,7 +44,7 @@ public class WebWorker {
 
     // Spawn a worker running `body` (a top-level `fun(string): string`).
     constructor(body: fun(string): string) {
-        this.id = WebWorker.__spawn(body);
+        this.id = WebWorker.__spawn(WebWorker.__funcidx(body));
     }
 
     // Post a message to the worker without waiting for its reply. Pair with `receive()` to collect

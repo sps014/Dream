@@ -28,6 +28,14 @@ impl<'a> Analyzer<'a> {
             false,
         );
 
+        // Synthetic module global backing the `fun(...)` closure ABI: holds the environment pointer
+        // (an `object`-shaped `i32`, or 0 for a non-capturing value) a capturing lambda's lifted
+        // function reads from at its own prologue, set by the caller just before an indirect call
+        // through a boxed closure value (see `hir_set_indirect_call`/`hir_read_closure_env`).
+        // Registered here, first, so it exists before any function body can reference it and never
+        // collides with a user global's id (this loop assigns ids by registration order below).
+        self.hir_register_global("__closure_env", "int", false);
+
         for global in node.globals.iter() {
             diagnostics.file_path = file_path_string(&global.file_path);
             self.check_reserved_name(&global.name, "variable", diagnostics);

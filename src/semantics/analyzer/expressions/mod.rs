@@ -11,5 +11,7 @@ use super::*;
 mod casts;
 mod dispatch;
 mod identifiers;
+pub(in crate::semantics::analyzer) mod capture_scan;
+mod lambda;
 mod member_access;
 mod operators;

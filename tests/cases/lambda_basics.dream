@@ -1,0 +1,31 @@
+// Milestone A: non-capturing arrow-lambdas, lowered to synthesized top-level functions reusing the
+// existing `fun(...)` FuncRef ABI unchanged. Covers: expr-bodied and block-bodied lambdas, a lambda
+// assigned to a `let`, a lambda passed to a free-function `fun(...)` parameter, a lambda passed
+// directly as a method-call argument (`List.sort_by`), and parameter-type inference from context
+// (an untyped `(a, b) => ...` infers its parameter types from the expected `fun(...)` signature).
+
+fun apply(f: fun(int): int, v: int): int {
+    return f(v);
+}
+
+fun main(): void {
+    let add: fun(int, int): int = (x: int, y: int) => x + y;
+    System.println(add(2, 3));
+
+    let square: fun(int): int = (x: int) => {
+        let r = x * x;
+        return r;
+    };
+    System.println(square(5));
+
+    System.println(apply((x: int) => x + 100, 1));
+
+    let nums: List<int> = List<int>();
+    nums.push(3);
+    nums.push(1);
+    nums.push(2);
+    nums.sort_by((a, b) => a - b);
+    for (let n in nums) {
+        System.println(n);
+    }
+}

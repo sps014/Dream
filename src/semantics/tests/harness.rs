@@ -273,6 +273,30 @@ pub(super) const JS_STUB: &str = "
     }
 ";
 
+/// The closure ABI intrinsics (mirrors `stdlib/core/closure.dream`), inlined so `fun(...)`-value
+/// tests do not depend on the full prelude being merged by the unit-test harness. Every `fun(...)`
+/// value is boxed through `__Closure.funcbox_new`/`funcbox_funcidx`/`funcbox_env` (see
+/// `hir_set_func_value`/`hir_set_indirect_call`), so any test exercising a function value or an
+/// indirect call needs this merged in alongside its own code.
+pub(super) const CLOSURE_STUB: &str = "
+    class __Closure {
+        @intrinsic(\"funcbox_new\")
+        static extern fun funcbox_new(funcidx: int, env: int): int;
+        @intrinsic(\"funcbox_funcidx\")
+        static extern fun funcbox_funcidx(box: int): int;
+        @intrinsic(\"funcbox_env\")
+        static extern fun funcbox_env(box: int): int;
+        @intrinsic(\"retain\")
+        static extern fun retain(v: object): void;
+    }
+    class __Cell<T> {
+        public value: T;
+        constructor(v: T) {
+            this.value = v;
+        }
+    }
+";
+
 /// `System` + `Time.sleep` for async tests (mirrors `stdlib/system/time.dream` + `system.dream`).
 pub(super) const ASYNC_STUB: &str = "
     class System {

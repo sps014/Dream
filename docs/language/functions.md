@@ -141,7 +141,82 @@ println(g(5));            // 10
 println(apply(twice, 8)); // 16
 ```
 
-Closures (capturing surrounding variables) are not yet supported.
+#### Arrow-lambda literals
+
+An anonymous function can be written inline with arrow syntax, `(params) => expr` or `(params) => { statements }`. A parameter's `: Type` annotation is optional: when omitted, it (and the lambda's return type, always) is inferred from the `fun(...)`-typed context the lambda is used in (a `let` annotation, or a parameter/argument whose declared type is `fun(...)`):
+
+```dream
+let add: fun(int, int): int = (x, y) => x + y;   // x, y inferred as int from the `let` annotation
+println(add(2, 3));   // 5
+
+let square: fun(int): int = (x) => {
+    let r = x * x;
+    return r;
+};
+println(square(5));   // 25
+
+let nums: List<int> = List<int>();
+nums.push(3);
+nums.push(1);
+nums.push(2);
+nums.sort_by((a, b) => a - b);   // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
+```
+
+A lambda written with no surrounding `fun(...)` context (e.g. passed to `println` directly, or with an untyped parameter and no context at all) cannot have its type inferred and is rejected with a diagnostic asking for one.
+
+#### Capturing closures
+
+A lambda's body may also reference variables from an enclosing function; this is a *capture*. A captured name is captured **by reference**, not by value: the closure and the enclosing function share the same storage, so a write from either side is visible to the other, and the closure keeps working after the enclosing function has returned. A lambda may capture more than one name, and capture is transitive: a lambda nested inside another lambda may reach past its immediate parent to a grandparent's (or higher) local — each level forwards what the level below it needs, one hop at a time.
+
+```dream
+fun make_adder(n: int): fun(int): int {
+    return (x) => x + n;   // `x` inferred from the return type; captures the parameter `n`
+}
+
+let add5: fun(int): int = make_adder(5);
+println(add5(10));   // 15
+println(add5(20));   // 25
+
+fun make_counter(): fun(): int {
+    let count: int = 0;
+    return () => {
+        count = count + 1;   // mutates the enclosing `let` — visible next call, and to `count`
+        return count;        // itself if it's still in scope when this returns
+    };
+}
+
+let inc: fun(): int = make_counter();
+println(inc());   // 1
+println(inc());   // 2
+```
+
+Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
+
+Capturing more than one variable, and reaching past an immediate parent lambda to a grandparent's local, both work the same way:
+
+```dream
+let a: int = 1;
+let b: int = 2;
+let f: fun(): int = () => a + b;   // captures both `a` and `b`
+println(f());   // 3
+
+fun make(a: int, b: int): fun(): fun(): int {
+    let c: int = 100;
+    // The outer lambda doesn't reference `a`/`b`/`c` itself, but forwards all three to the inner
+    // one, which does — a multi-level, multi-capture chain.
+    return () => {
+        return () => {
+            c = c + 1;
+            return a + b + c;
+        };
+    };
+}
+
+let l1: fun(): fun(): int = make(1, 2);
+let l2: fun(): int = l1();
+println(l2());   // 104
+println(l2());   // 105
+```
 
 ### Overloading
 

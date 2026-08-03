@@ -1,0 +1,37 @@
+// Milestone B: a lambda may capture two or more variables (env is an `object[]` array of their
+// shared `__Cell<T>`s), and capture is transitive/multi-level — a doubly-nested lambda may reach
+// past its immediate parent to a grandparent's local, forwarded one hop at a time.
+
+fun make(a: int, b: int): fun(): fun(): int {
+    let c: int = 100;
+    // The outer lambda doesn't reference `a`/`b`/`c` itself, but forwards all three to the inner
+    // one, which does — a multi-level, multi-capture chain.
+    return () => {
+        return () => {
+            c = c + 1;
+            return a + b + c;
+        };
+    };
+}
+
+fun main(): void {
+    let a: int = 1;
+    let b: int = 2;
+    let f: fun(): int = () => a + b;
+    System.println(f()); // 3
+
+    let x: int = 10;
+    let y: int = 20;
+    let z: int = 30;
+    let g: fun(): int = () => {
+        x = x + 1; // mutates the enclosing `let` through its shared cell
+        return x + y + z;
+    };
+    System.println(g()); // 61
+    System.println(x);   // 11 (visible to the enclosing scope too)
+
+    let l1: fun(): fun(): int = make(1, 2);
+    let l2: fun(): int = l1();
+    System.println(l2()); // 104
+    System.println(l2()); // 105
+}

@@ -276,6 +276,25 @@ pub struct Analyzer<'a> {
     arena: &'a Bump,
     generic_functions: HashMap<String, &'a FunctionNode<'a>>,
     instantiated_generics: IndexMap<String, (GenericBindings, &'a FunctionNode<'a>)>,
+    /// Non-capturing arrow-lambdas lowered to synthesized top-level functions (`__lambda_0`, ...),
+    /// keyed by their synthesized name. Bodies are analyzed in the same deferred fixpoint pass as
+    /// `instantiated_generics` (see `analyze_pending_instantiations`), since a function's body
+    /// cannot be analyzed while another function's analysis is already in progress.
+    pending_lambdas: IndexMap<String, &'a FunctionNode<'a>>,
+    /// Counter used to name synthesized lambda functions uniquely (`__lambda_<n>`).
+    lambda_counter: usize,
+    /// Names, local to the function currently being analyzed, that a nested lambda captures — and
+    /// so must be boxed into a `__Cell<T>` rather than stored as a plain local (see
+    /// `expressions::capture_scan::scan_function_captures`, run once as a pre-pass before the
+    /// function's body is analyzed). Cleared and repopulated per function in `hir_begin_function`.
+    boxed_locals: std::collections::HashSet<String>,
+    /// For each synthesized capturing-lambda function (keyed by its lifted name, e.g. `__lambda_3`):
+    /// the ordered list of `(captured name, its type in the enclosing scope)` it closes over.
+    /// Consulted by identifier resolution *inside that lifted function's own body* to redirect a
+    /// captured name's reads/writes through `env.<field>.value` instead of a plain local (see
+    /// `identifiers::resolve_identifier`/`bindings::analyze_assignment`), and by
+    /// `expressions::lambda` to build the matching `__Closure_env_<n>` class + construction site.
+    closure_captures: HashMap<String, Vec<(String, Type)>>,
     generic_structs:
         HashMap<String, &'a crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
@@ -350,6 +369,10 @@ impl<'a> Analyzer<'a> {
             arena,
             generic_functions: HashMap::new(),
             instantiated_generics: IndexMap::new(),
+            pending_lambdas: IndexMap::new(),
+            lambda_counter: 0,
+            boxed_locals: std::collections::HashSet::new(),
+            closure_captures: HashMap::new(),
             generic_structs: HashMap::new(),
             struct_methods: Vec::new(),
             enum_table: IndexMap::new(),

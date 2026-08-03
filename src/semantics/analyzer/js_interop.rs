@@ -91,18 +91,23 @@ impl<'a> Analyzer<'a> {
                 }
             },
             TyKind::Func(params, _ret) => {
-                // A Dream function handed to a JS API as a persistent handle. Arity 0/1 use the
+                // A Dream function handed to a JS API as a persistent handle. `e` is a boxed
+                // `fun(...)` value (see `hir_set_func_value`); the host has no env-restoring
+                // prologue of its own, so only the funcidx half is meaningful here — a *capturing*
+                // lambda handed to a JS API would lose its environment (not yet supported; matches
+                // the pre-closures reality, where an env never existed at all). Arity 0/1 use the
                 // documented `func0`/`func` convenience bridges; any higher arity routes through the
                 // generalized `__funcN` bridge, which receives the raw funcref-table index plus the
                 // parameter count and wraps it host-side as `fun(js, …): void`. Each parameter is
                 // marshaled as a `js` handle and the result is discarded.
+                let funcidx = self.hir_funcbox_funcidx(e)?;
                 match params.len() {
-                    0 => self.js_bridge_call("func0", vec![e], js),
-                    1 => self.js_bridge_call("func", vec![e], js),
+                    0 => self.js_bridge_call("func0", vec![funcidx], js),
+                    1 => self.js_bridge_call("func", vec![funcidx], js),
                     n => {
                         let arity =
                             HExpr::new(self.type_ctx.interner.int(), HExprKind::IntLit(n as i64));
-                        self.js_bridge_call("__funcN", vec![e, arity], js)
+                        self.js_bridge_call("__funcN", vec![funcidx, arity], js)
                     }
                 }
             }

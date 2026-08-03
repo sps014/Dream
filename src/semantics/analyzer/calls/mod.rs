@@ -17,7 +17,7 @@ use crate::diagnostics::DiagnosticBag;
 use crate::hir::HExpr;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
-use crate::syntax::nodes::{ExpressionNode, FunctionNode};
+use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -33,10 +33,37 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(Vec<String>, Vec<Option<HExpr>>), SemanticError> {
+        self.analyze_call_arguments_expecting(
+            params,
+            None,
+            parent_function,
+            symbol_table,
+            diagnostics,
+        )
+    }
+
+    /// Like [`analyze_call_arguments`](Self::analyze_call_arguments), but when `expected_params` is
+    /// known (an unambiguous, non-overloaded callee), publishes each parameter's declared type as
+    /// `current_expected_type` while analyzing the matching argument — mirroring the free-function
+    /// call path (see `analyze_function_call`) so untyped literals and lambdas without their own
+    /// annotation (e.g. `nums.sort_by((a: int, b: int) => a - b)`) can infer from a known `fun(...)`
+    /// parameter type. `None` (an overloaded callee, whose parameter types aren't known until the
+    /// arguments themselves are typed) falls back to no expected-type context, same as before.
+    pub(super) fn analyze_call_arguments_expecting(
+        &mut self,
+        params: &[ExpressionNode<'a>],
+        expected_params: Option<&[Type]>,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<(Vec<String>, Vec<Option<HExpr>>), SemanticError> {
         let mut arg_types = Vec::new();
         let mut arg_hirs = Vec::new();
-        for param in params.iter() {
+        for (i, param) in params.iter().enumerate() {
+            let saved_expected = self.current_expected_type.take();
+            self.current_expected_type = expected_params.and_then(|ps| ps.get(i).cloned());
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
+            self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
             arg_types.push(t.get_type());
         }

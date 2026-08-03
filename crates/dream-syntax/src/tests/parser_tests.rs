@@ -355,6 +355,96 @@ fn test_parse_try_propagation_disambiguated_with_parens() {
 }
 
 #[test]
+fn test_parse_lambda_expr_body() {
+    let code = "fun f(): void { let add = (x: int, y: int) => x + y; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+        panic!(
+            "expected a `let` binding of a Lambda expression, got {:?}",
+            func.body[0]
+        );
+    };
+    assert_eq!(lambda.parameters.len(), 2);
+    assert_eq!(lambda.parameters[0].name.text, "x");
+    assert_eq!(lambda.parameters[1].name.text, "y");
+    assert!(matches!(lambda.body, crate::nodes::LambdaBody::Expr(_)));
+}
+
+#[test]
+fn test_parse_lambda_block_body() {
+    let code = "fun f(): void { let sq = (x: int) => { let r = x * x; return r; }; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+        panic!("expected a `let` binding of a Lambda expression");
+    };
+    let crate::nodes::LambdaBody::Block(stmts) = &lambda.body else {
+        panic!("expected a block-bodied lambda");
+    };
+    assert_eq!(stmts.len(), 2);
+}
+
+#[test]
+fn test_parse_lambda_zero_params() {
+    let code = "fun f(): void { let g = () => 0; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+        panic!("expected a `let` binding of a Lambda expression");
+    };
+    assert!(lambda.parameters.is_empty());
+}
+
+#[test]
+fn test_parse_lambda_untyped_params() {
+    // A parameter with no `: Type` annotation parses to `Type::Unknown`, a placeholder the
+    // analyzer resolves from the lambda's expected `fun(...)` context.
+    let code = "fun f(): void { let cmp = (a, b) => a - b; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+        panic!("expected a `let` binding of a Lambda expression");
+    };
+    assert_eq!(lambda.parameters.len(), 2);
+    assert!(matches!(lambda.parameters[0].type_, Type::Unknown));
+    assert!(matches!(lambda.parameters[1].type_, Type::Unknown));
+}
+
+#[test]
+fn test_parse_lambda_disambiguated_from_cast_and_paren() {
+    // `(int)x` (a cast) and `(x)` (a parenthesized expression) must still parse as before — only a
+    // `)` immediately followed by `=>` is a lambda.
+    let code = "fun f(x: int): int { let a = (int)x; let b = (x) + 1; return a + b; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    assert!(matches!(
+        &func.body[0],
+        StatementNode::Declaration(_, _, ExpressionNode::Cast(_, _), _)
+    ));
+    let StatementNode::Declaration(_, _, ExpressionNode::Binary(left, _, _), _) = &func.body[1]
+    else {
+        panic!("expected a `let` binding of a binary expression");
+    };
+    assert!(matches!(**left, ExpressionNode::Parenthesized(_)));
+}
+
+#[test]
 fn test_parse_switch_statement_pattern_arms() {
     // A pattern-arm `switch` used as a statement parses to an `ExpressionStatement` wrapping an
     // `ExpressionNode::Switch` (distinct from the C-style `case`/`default` form).

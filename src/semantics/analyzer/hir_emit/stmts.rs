@@ -76,6 +76,14 @@ impl<'a> Analyzer<'a> {
 
     /// Appends a `let` binding, allocating a fresh local slot. Fails the function if the initializer
     /// was not representable.
+    ///
+    /// If `name` is captured by a lambda elsewhere in this function's body (`self.boxed_locals`,
+    /// computed by the capture-scan pre-pass in `hir_begin_function`), the local is boxed instead:
+    /// the slot holds a `__Cell<T>` object (constructed here around `value`) rather than a raw `T`,
+    /// so a later capturing closure can alias the very same storage (see
+    /// `expressions::lambda`/`hir_read_capture_cell`). `self.hir.boxed` records the unboxed element
+    /// type so subsequent reads/writes of `name` (`hir_set_var`/`hir_assign_local`) know to go
+    /// through the cell's `.value` field transparently — every other analyzer-facing type stays `T`.
     pub(in crate::semantics::analyzer) fn hir_declare_local(
         &mut self,
         name: &str,
@@ -89,17 +97,49 @@ impl<'a> Analyzer<'a> {
             self.hir.ok = false;
             return;
         };
-        let ty = self.type_ctx.lower(ty);
-        let value = self.coerce_to(value, ty);
+        if self.boxed_locals.contains(name) {
+            self.declare_boxed_local(name, ty, value);
+            return;
+        }
+        let ty_id = self.type_ctx.lower(ty);
+        let value = self.coerce_to(value, ty_id);
         let local = LocalId(self.hir.next_local);
         self.hir.next_local += 1;
-        self.hir.locals.insert(name.to_string(), (local, ty));
+        self.hir.locals.insert(name.to_string(), (local, ty_id));
         self.hir.local_decls.push(HLocal {
             id: local,
             name: name.to_string(),
-            ty,
+            ty: ty_id,
         });
-        self.push_stmt(HStmt::Let { local, ty, value });
+        self.push_stmt(HStmt::Let {
+            local,
+            ty: ty_id,
+            value,
+        });
+    }
+
+    fn declare_boxed_local(&mut self, name: &str, ty: &Type, value: HExpr) {
+        let Some(cell) = self.hir_build_cell_new(ty, value) else {
+            self.hir.ok = false;
+            return;
+        };
+        let cell_ty = Self::cell_type(ty);
+        let cell_tid = self.type_ctx.lower(&cell_ty);
+        let elem_tid = self.type_ctx.lower(ty);
+        let local = LocalId(self.hir.next_local);
+        self.hir.next_local += 1;
+        self.hir.locals.insert(name.to_string(), (local, cell_tid));
+        self.hir.local_decls.push(HLocal {
+            id: local,
+            name: name.to_string(),
+            ty: cell_tid,
+        });
+        self.hir.boxed.insert(name.to_string(), elem_tid);
+        self.push_stmt(HStmt::Let {
+            local,
+            ty: cell_tid,
+            value: cell,
+        });
     }
 
     /// Inserts an implicit boxing cast when a primitive `value` is stored into an `object`-typed
@@ -166,6 +206,10 @@ impl<'a> Analyzer<'a> {
 
     /// Appends an assignment to a local or module-global. Fails the function for an unresolved name
     /// or a non-representable value.
+    ///
+    /// A captured local (`self.hir.boxed`, see `hir_declare_local`) writes through its `__Cell<T>`
+    /// box's `.value` field instead of the plain slot, so the write is visible to every closure
+    /// (and the enclosing function itself) sharing that same cell.
     pub(in crate::semantics::analyzer) fn hir_assign_local(
         &mut self,
         name: &str,
@@ -178,9 +222,21 @@ impl<'a> Analyzer<'a> {
             self.hir.ok = false;
             return;
         };
-        if let Some(&(local, _)) = self.hir.locals.get(name) {
+        if let Some(&cell_local) = self.hir.locals.get(name).map(|(l, _)| l) {
+            if self.hir.boxed.contains_key(name) {
+                let cell_tid = self.hir.locals.get(name).map(|(_, t)| *t).unwrap();
+                let obj = HExpr::new(cell_tid, HExprKind::Var(Binding::Local(cell_local)));
+                self.push_stmt(HStmt::Assign {
+                    place: HPlace::Field {
+                        obj: Box::new(obj),
+                        field: 0,
+                    },
+                    value,
+                });
+                return;
+            }
             self.push_stmt(HStmt::Assign {
-                place: HPlace::Local(local),
+                place: HPlace::Local(cell_local),
                 value,
             });
         } else if let Some(&(global, _)) = self.hir.globals.get(name) {

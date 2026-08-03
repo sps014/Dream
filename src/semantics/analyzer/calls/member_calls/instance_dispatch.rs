@@ -178,10 +178,33 @@ impl<'a> Analyzer<'a> {
 
         let mangled_name = method_fn(&struct_name, &method.text);
 
+        // When the method is unambiguous (not overloaded), its declared parameter types are known
+        // before the arguments are analyzed, so publish them as each argument's expected type (same
+        // treatment as an unambiguous free-function call) — this lets an argument lambda without its
+        // own type context (e.g. `nums.sort_by((a: int, b: int) => a - b)`) infer from the `fun(...)`
+        // parameter type. An overloaded method's parameter types aren't known until the arguments
+        // themselves are typed, so it falls back to no expected-type context (unchanged behavior).
+        let expected_params: Option<Vec<Type>> = if self.function_table.is_overloaded(&mangled_name)
+        {
+            None
+        } else {
+            self.function_table
+                .get_function(&mangled_name)
+                .ok()
+                .map(|info| {
+                    info.parameters
+                        .iter()
+                        .skip(1) // implicit `this`
+                        .map(|p| Self::type_from_name(p))
+                        .collect()
+                })
+        };
+
         // Analyze the explicit arguments once, then resolve the method (overloaded methods select
         // by argument types, with the receiver supplied as the implicit `this` argument).
-        let (mut arg_types, mut arg_hirs) = self.analyze_call_arguments(
+        let (mut arg_types, mut arg_hirs) = self.analyze_call_arguments_expecting(
             params,
+            expected_params.as_deref(),
             ctx.parent_function,
             ctx.symbol_table,
             diagnostics,
