@@ -46,13 +46,62 @@ pub struct ProgramAccumulator<'a> {
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
-/// `base_dir`, defaulting the extension to `.dream` when none is given.
+/// `base_dir`, defaulting the extension to `.dream` when none is given. Falls back to a
+/// `dream_packages/<pkg>/src/...` dependency directory — installed by the `dreamer` package
+/// manager (`tooling/dreamer`) from that project's `dream.toml` — when no matching file exists
+/// locally, so `import json_tools.parse;` finds `<project-root>/dream_packages/json_tools/src/
+/// parse.dream` after `dreamer install`. Resolution here only inspects the filesystem layout
+/// `dreamer` produces; it never reads `dream.toml` itself, keeping the compiler's import
+/// resolution independent of the package manager's manifest format.
 pub fn resolve_import_path(base_dir: &Path, module_name: &str) -> std::path::PathBuf {
     let mut import_path = base_dir.join(module_name);
     if import_path.extension().is_none() {
         import_path.set_extension("dream");
     }
-    import_path
+    if import_path.exists() {
+        return import_path;
+    }
+    resolve_package_import(base_dir, module_name).unwrap_or(import_path)
+}
+
+/// Resolves `module_name` (`<pkg>` or `<pkg>/<rest>`) against the nearest ancestor
+/// `dream_packages/` directory. A bare `import pkg;` looks for `dream_packages/pkg/src/pkg.dream`
+/// (a package's self-named entry file, mirroring the top-level convention of a file's logical
+/// entry sharing its own name); `import pkg.rest;` looks for `dream_packages/pkg/src/rest.dream`.
+fn resolve_package_import(base_dir: &Path, module_name: &str) -> Option<std::path::PathBuf> {
+    let mut parts = module_name.splitn(2, '/');
+    let package_name = parts.next().filter(|s| !s.is_empty())?;
+    let rest = parts.next();
+
+    let packages_dir = find_dream_packages_dir(base_dir)?;
+    let package_src = packages_dir.join(package_name).join("src");
+
+    let mut candidate = match rest {
+        Some(rest) => package_src.join(rest),
+        None => package_src.join(package_name),
+    };
+    if candidate.extension().is_none() {
+        candidate.set_extension("dream");
+    }
+    candidate.exists().then_some(candidate)
+}
+
+/// Walks upward from `start_dir` looking for a `dream_packages/` directory, stopping (without a
+/// match) at the first `dream.toml` project root that has none yet — e.g. before the first
+/// `dreamer install` — so resolution never wanders into an unrelated ancestor project's packages.
+fn find_dream_packages_dir(start_dir: &Path) -> Option<std::path::PathBuf> {
+    let mut dir = Some(start_dir.to_path_buf());
+    while let Some(d) = dir {
+        let candidate = d.join("dream_packages");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        if d.join("dream.toml").is_file() {
+            return None;
+        }
+        dir = d.parent().map(Path::to_path_buf);
+    }
+    None
 }
 
 /// Clones every top-level declaration of `program` into the accumulators, tagging each with

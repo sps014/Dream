@@ -64,6 +64,7 @@ members = [
     "crates/dream-diagnostics",
     "crates/dream-syntax",
     "tooling/dream-lsp",
+    "tooling/dreamer",
 ]
 # v2 resolver so the wasm32 analyzer build does not inherit the root crate's default
 # `native` feature (and therefore never tries to compile wasmtime for wasm).

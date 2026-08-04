@@ -1,0 +1,31 @@
+[package]
+name = "dreamer"
+version = "0.1.0"
+authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
+edition = "2021"
+description = "Package manager for the Dream language: dream.toml manifests, dream.lock lockfiles, and dream_packages/ dependency installs."
+
+[lib]
+name = "dreamer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dreamer"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+semver = { version = "1", features = ["serde"] }
+sha2 = "0.10"
+flate2 = "1"
+tar = "0.4"
+ureq = { version = "2", features = ["json"] }
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"

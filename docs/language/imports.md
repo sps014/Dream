@@ -11,6 +11,9 @@ import math_lib;
 - The path is a dotted module path ending in a semicolon.
 - Each `.` maps to a directory separator, and `.dream` is added automatically: `import utils.math_lib;` resolves to `utils/math_lib.dream`, relative to the importing file.
 - Imported declarations are usable directly — there is no namespace prefix.
+- If no matching file exists relative to the importing file, resolution falls back to a
+  `dream_packages/` dependency directory installed by the [`dreamer` package manager](../tooling/package-manager.md) — so `import json_tools;` can resolve to a project dependency
+  once `dreamer install` has run, with no different syntax required.
 
 ```dream
 // math_lib.dream

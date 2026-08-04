@@ -6,6 +6,7 @@ This directory contains developer tooling for the Dream language, focused around
 
 - [`dream-lsp/`](dream-lsp) — A native Rust Language Server Protocol (LSP) server binary powered by `tower-lsp`. It reuses the compiler's frontend (lexer, parser, semantic analyzer) to provide rich IntelliSense features.
 - [`vscode/`](vscode) — A Visual Studio Code extension client written in TypeScript that connects to the `dream-lsp` server.
+- [`dreamer/`](dreamer) — The Dream package manager: reads/writes `dream.toml` manifests and `dream.lock` lockfiles, resolves and installs dependencies into `dream_packages/`, and wraps the `dream` compiler for `build`/`run`. See [`docs/tooling/package-manager.md`](../docs/tooling/package-manager.md) for the full manifest/registry format and a CLI walkthrough.
 
 ## Features Supported
 

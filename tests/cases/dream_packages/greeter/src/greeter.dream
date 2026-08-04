@@ -1,0 +1,7 @@
+// Fixture dependency for the `package_import_basic` golden test: mimics the layout the `dreamer`
+// package manager (`tooling/dreamer`) installs a dependency named `greeter` into, so
+// `import greeter;` resolves via the `dream_packages/` fallback in
+// `src/driver/source_loader.rs::resolve_import_path` without needing `dreamer` itself at test time.
+public fun hello(): string {
+    return "hello from a dream_packages dependency";
+}

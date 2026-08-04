@@ -1,0 +1,5 @@
+// Fixture dependency for the `package_import_subpath` golden test: a dotted `import
+// mathpkg.ops;` resolves to `dream_packages/mathpkg/src/ops.dream`.
+public fun times_two(n: int): int {
+    return n * 2;
+}

@@ -106,3 +106,5 @@ nav:
     - Relooper & Backend: compiler/06-relooper-and-backend.md
     - Adding a Feature: compiler/07-adding-a-language-feature.md
     - Testing & Determinism: compiler/08-testing-and-determinism.md
+  - Tooling:
+    - Package Manager (dreamer): tooling/package-manager.md

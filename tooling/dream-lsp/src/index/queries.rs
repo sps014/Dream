@@ -4,6 +4,26 @@
 use super::{is_ident_byte, keywords, Decl, Index, Located, Ref, SymKind, GLOBAL};
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 
+/// Walks upward from `start_dir` looking for a `dream_packages/` directory (installed by the
+/// `dreamer` package manager), stopping without a match at the first `dream.toml` project root
+/// that has none yet. Mirrors `find_dream_packages_dir` in `src/driver/source_loader.rs` — kept
+/// as a separate copy since it's a few lines of pure filesystem-walking with no shared state, and
+/// duplicating it avoids making the LSP depend on a compiler-internal, non-`pub` helper.
+fn find_dream_packages_dir(start_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut dir = Some(start_dir.to_path_buf());
+    while let Some(d) = dir {
+        let candidate = d.join("dream_packages");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        if d.join("dream.toml").is_file() {
+            return None;
+        }
+        dir = d.parent().map(std::path::Path::to_path_buf);
+    }
+    None
+}
+
 impl Index {
     fn span_at(start: usize, end: usize, offset: usize) -> bool {
         offset >= start && offset <= end
@@ -385,6 +405,31 @@ impl Index {
                                     ));
                                 } else if name.ends_with(".dream") {
                                     out.push((name, SymKind::Variable, "module".to_string(), None));
+                                }
+                            }
+                        }
+                    }
+
+                    // Nothing typed yet (or what's typed so far still looks like a bare package
+                    // name, not a relative path): also offer every `dreamer`-installed dependency
+                    // under the nearest `dream_packages/` directory, so `import <name>` suggests
+                    // installed packages the same way it suggests local files/directories, not
+                    // just literal relative filesystem paths into `dream_packages/`.
+                    if offset == i || !text[i..offset].contains('/') {
+                        if let Some(packages_dir) = find_dream_packages_dir(parent_dir) {
+                            if let Ok(entries) = std::fs::read_dir(&packages_dir) {
+                                for entry in entries.flatten() {
+                                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                                        let name = entry.file_name().to_string_lossy().to_string();
+                                        if !out.iter().any(|(n, ..)| n == &name) {
+                                            out.push((
+                                                name,
+                                                SymKind::Variable,
+                                                "package".to_string(),
+                                                None,
+                                            ));
+                                        }
+                                    }
                                 }
                             }
                         }
