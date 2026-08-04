@@ -99,6 +99,15 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
         &mut acc.all_extends,
     );
 
+    dream::attributes::validate_program_attributes(
+        &acc.all_structs,
+        &acc.all_interfaces,
+        &acc.all_functions,
+        &acc.all_enums,
+        &acc.all_extends,
+        &mut diagnostics,
+    );
+
     // Unlike the batch compiler (which stops at the first phase with errors), the editor keeps
     // semantic diagnostics flowing even while the user is mid-edit: the parser recovers and always
     // yields a `ProgramNode`, and the analyzer's poison/`Unknown` type stops a few broken spans

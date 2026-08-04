@@ -159,17 +159,14 @@ pub(crate) fn generate_json_derives<'a>(
         }
     }
 
-    for enum_decl in all_enums.iter().filter(|e| has_json_attr(&e.attributes)) {
-        if !enum_decl.is_data_enum() {
-            diagnostics.report_error(
-                format!(
-                    "@json is only supported on discriminated unions, not the plain enum '{}'",
-                    enum_decl.name.text
-                ),
-                Some(enum_decl.name.position),
-            );
-            continue;
-        }
+    // `@json` on a plain (non-discriminated) enum is rejected generically by
+    // `attributes::validate_program_attributes` (it only targets `Union`, not `PlainEnum`), which
+    // runs before this derive pass — so every enum reaching here that carries `@json` is already
+    // known to be a discriminated union.
+    for enum_decl in all_enums
+        .iter()
+        .filter(|e| has_json_attr(&e.attributes) && e.is_data_enum())
+    {
         if let Some(block) = generate_json_union(enum_decl, &json_names, &jsonable, diagnostics) {
             source.push_str(&block);
             source.push('\n');

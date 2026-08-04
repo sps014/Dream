@@ -89,6 +89,22 @@ impl Compiler {
             &mut acc.file_contents,
         )?;
 
+        // Validate every attribute in the merged program (unknown names, disallowed placements,
+        // wrong argument shapes, duplicates) before anything downstream (the `@json` derive below,
+        // then semantic analysis) reads attributes assuming they are well-formed.
+        crate::attributes::validate_program_attributes(
+            &acc.all_structs,
+            &acc.all_interfaces,
+            &acc.all_functions,
+            &acc.all_enums,
+            &acc.all_extends,
+            &mut diagnostics,
+        );
+        if diagnostics.has_errors() {
+            render(&diagnostics, &acc.file_contents);
+            return Err(CompileError::Syntax);
+        }
+
         // Auto-derive `to_json`/`from_json` converters for every `@json` class (must run after
         // all classes are collected so `@json` field cross-references resolve). The prelude merge
         // above always contributes stdlib structs (List/Map/...), so an empty struct set here means

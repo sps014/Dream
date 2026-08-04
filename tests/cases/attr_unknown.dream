@@ -1,0 +1,13 @@
+// An attribute name the compiler doesn't recognize must be rejected, not silently ignored.
+@bogus
+class Foo {
+    public x: int;
+    constructor(x: int) {
+        this.x = x;
+    }
+}
+
+fun main() {
+    let f = Foo(1);
+    System.print(f.x);
+}

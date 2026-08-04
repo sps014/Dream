@@ -1,0 +1,9 @@
+// `@js` requires exactly two string arguments: the import module and field name.
+class Bridge {
+    @js("only_module")
+    static extern fun read(): string;
+}
+
+fun main() {
+    System.print(Bridge.read());
+}

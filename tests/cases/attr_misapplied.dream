@@ -1,0 +1,9 @@
+// `@json` only applies to classes, structs, and discriminated unions, not free functions.
+@json
+fun greet(): string {
+    return "hi";
+}
+
+fun main() {
+    System.print(greet());
+}

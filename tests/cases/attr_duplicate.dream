@@ -1,0 +1,15 @@
+// A non-repeatable attribute may not be written twice on the same declaration.
+class Foo {
+    x: int;
+
+    @override
+    @override
+    public fun to_string(): string {
+        return "foo";
+    }
+}
+
+fun main() {
+    let f = Foo(1);
+    System.print(f);
+}

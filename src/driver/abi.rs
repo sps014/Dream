@@ -66,16 +66,13 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         if !func.is_extern || crate::intrinsics::has_intrinsic_attr(&func.attributes) {
             return None;
         }
-        let mut import_module = crate::mir::abi::ENV_MODULE.to_string();
-        let mut import_name = func.name.text.clone();
-        if let Some(js_attr) = func.attributes.iter().find(|a| a.name.text == "js") {
-            if let Some(arg) = js_attr.args.first() {
-                import_module = arg.text.trim_matches('"').to_string();
-            }
-            if let Some(arg) = js_attr.args.get(1) {
-                import_name = arg.text.trim_matches('"').to_string();
-            }
-        }
+        let (import_module, import_name) = crate::attributes::js_import_target(&func.attributes)
+            .unwrap_or_else(|| {
+                (
+                    crate::mir::abi::ENV_MODULE.to_string(),
+                    func.name.text.clone(),
+                )
+            });
         let params: Vec<String> = func
             .parameters
             .iter()

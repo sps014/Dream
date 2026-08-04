@@ -644,17 +644,12 @@ impl<'a> Analyzer<'a> {
 }
 
 fn extern_import_target(func: &FunctionNode) -> (String, String) {
-    let mut module = crate::mir::abi::ENV_MODULE.to_string();
-    let mut field = func.name.text.clone();
-    if let Some(js) = func.attributes.iter().find(|a| a.name.text == "js") {
-        if let Some(arg) = js.args.first() {
-            module = arg.text.trim_matches('"').to_string();
-        }
-        if let Some(arg) = js.args.get(1) {
-            field = arg.text.trim_matches('"').to_string();
-        }
-    }
-    (module, field)
+    crate::attributes::js_import_target(&func.attributes).unwrap_or_else(|| {
+        (
+            crate::mir::abi::ENV_MODULE.to_string(),
+            func.name.text.clone(),
+        )
+    })
 }
 
 /// Expands the backslash escapes a string/char literal body may contain (`\n`, `\t`, `\r`, `\0`,
