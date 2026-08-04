@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::diagnostics::DiagnosticBag;
+use crate::hir::HExpr;
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::types::is_numeric_primitive;
@@ -30,6 +31,15 @@ impl<'a> Analyzer<'a> {
 
         let target_type_str = target_type.get_type();
         let expr_type_str = expr_type.get_type();
+
+        // User-defined explicit conversion: `@cast("explicit")` (or `@cast("implicit")`, since an
+        // explicit cast may always invoke an implicit one) on `expr`'s type converting to
+        // `target_type`. Checked before the built-in conversion rules below so a struct's overload
+        // always wins over (what would otherwise be) a "cannot cast" error.
+        if let Some(cast) = self.operator_cast_fn(&expr_type, target_type, false) {
+            self.hir_set_method_call(inner_hir, &cast.mangled_name, vec![], target_type);
+            return Ok(target_type.clone());
+        }
 
         // If the target (after peeling array wrappers) is a generic struct, instantiate it.
         let mut core_target = target_type;
@@ -131,5 +141,27 @@ impl<'a> Analyzer<'a> {
             Some(*position),
         );
         Ok(())
+    }
+
+    /// If `value` (of static type `from`) has a registered `@cast("implicit")` method converting
+    /// `from` to `to`, rewrites the HIR into a call to it and returns `to`; otherwise returns
+    /// `from`/`value` unchanged. Meant to run just before a [`Self::compare_data_type`] check at a
+    /// binding site (`let x: T = expr;`), so a user-defined implicit conversion is accepted there
+    /// exactly like the built-in ones (numeric widening, boxing) instead of being rejected as a type
+    /// mismatch.
+    pub(in crate::semantics::analyzer) fn apply_implicit_cast(
+        &mut self,
+        from: &Type,
+        to: &Type,
+        value: Option<HExpr>,
+    ) -> (Type, Option<HExpr>) {
+        if from.get_type() == to.get_type() {
+            return (from.clone(), value);
+        }
+        let Some(cast) = self.operator_cast_fn(from, to, true) else {
+            return (from.clone(), value);
+        };
+        self.hir_set_method_call(value, &cast.mangled_name, vec![], to);
+        (to.clone(), self.hir_take())
     }
 }

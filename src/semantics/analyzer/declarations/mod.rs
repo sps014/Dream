@@ -25,6 +25,7 @@ mod enums;
 mod functions;
 mod globals;
 mod imports;
+pub(in crate::semantics::analyzer) mod operator_overloads;
 mod reference_cycles;
 mod register_interfaces;
 mod register_methods;

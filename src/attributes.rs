@@ -135,6 +135,24 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         args: ArgShape::None,
         repeatable: false,
     },
+    AttributeSpec {
+        name: "operator",
+        targets: &[AttributeTarget::Method],
+        args: ArgShape::Strings { min: 1, max: 1 },
+        // Not repeatable *on one method* (`@operator("+") @operator("-")` on the same method makes
+        // no sense — a method implements exactly one operator). A struct declaring many distinct
+        // `@operator`-tagged *methods* is fine: `validate_attributes` runs once per method, so this
+        // only rejects stacking the same attribute twice on a single declaration.
+        // `validate_and_register_operator` (`declarations::operator_overloads`) separately enforces
+        // that no two methods on the same type claim the same operator symbol/arity.
+        repeatable: false,
+    },
+    AttributeSpec {
+        name: "cast",
+        targets: &[AttributeTarget::Method],
+        args: ArgShape::Strings { min: 1, max: 1 },
+        repeatable: false,
+    },
 ];
 
 fn find_spec(name: &str) -> Option<&'static AttributeSpec> {

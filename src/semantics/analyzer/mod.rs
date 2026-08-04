@@ -334,6 +334,12 @@ pub struct Analyzer<'a> {
     /// implements clause is validated. Names are mangled for generic instances (e.g. `Box_int` ->
     /// `Container_int`). Drives interface-typed assignability and itable emission.
     implements: HashMap<String, Vec<String>>,
+    /// Type name (mangled for generic instances, matching `implements`'s keys) -> its
+    /// `@operator`/`@cast`-tagged methods, populated by
+    /// [`declarations::operator_overloads::Analyzer::validate_and_register_operator`] and consulted
+    /// by `expressions::operators`/`expressions::dispatch`/`expressions::casts` to dispatch
+    /// operators and user-defined conversions to the right method.
+    operator_overloads: HashMap<String, declarations::operator_overloads::OperatorOverloads>,
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target
     /// any of these; compiler-synthesized extends (interface defaults) are exempt.
     sealed_types: std::collections::HashSet<String>,
@@ -413,6 +419,7 @@ impl<'a> Analyzer<'a> {
             sealed_types: std::collections::HashSet::new(),
             type_visibility: HashMap::new(),
             implements: HashMap::new(),
+            operator_overloads: HashMap::new(),
             current_expected_type: None,
             current_generic_bindings: GenericBindings::new(),
             loop_labels: Vec::new(),

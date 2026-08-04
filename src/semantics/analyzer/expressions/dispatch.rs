@@ -261,6 +261,14 @@ impl<'a> Analyzer<'a> {
                 let right_type =
                     self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
                 let operand = self.hir_take();
+                // User-defined unary operator overload: `@operator("-")`/`@operator("!")`/
+                // `@operator("~")` on the operand's type, checked before the built-in
+                // bool/numeric/integer rules below so a struct's overload always wins.
+                if let Some(op_method) = self.operator_unary_fn(&right_type, opr.kind) {
+                    let return_type = op_method.return_type;
+                    self.hir_set_method_call(operand, &op_method.mangled_name, vec![], &return_type);
+                    return Ok(return_type);
+                }
                 match opr.kind {
                     TokenKind::BangToken => {
                         if !right_type.is_unknown() && !right_type.is_bool() {

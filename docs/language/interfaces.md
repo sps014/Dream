@@ -195,7 +195,8 @@ A type implements them against itself (`class Money : Comparable<Money>, Equatab
 
 Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude `extend` blocks), so `List<int>().sort()`, `binary_search`, and comparisons in generic code work with no extra code.
 
-- **`==` / `!=` route to `equals`** when both operands are the same user type implementing `Equatable<Self>`. Primitives and strings keep built-in equality. The ordering operators (`<`, `>`, `<=`, `>=`) are *not* overloaded — use `compare` for custom ordering.
+- **`==` / `!=` route to `equals`** when both operands are the same user type implementing `Equatable<Self>`. Primitives and strings keep built-in equality.
+- **`<` / `<=` / `>` / `>=` route to `compare`** when the left operand's type implements `Comparable<Self>`: `a < b` lowers to `a.compare(b) < 0`, and likewise for the other three. A type with a more specific [`@operator("...")`](operators.md#operator-overloading) overload for a *different* symbol is unaffected — ordering has no separate attribute, it always goes through `compare`.
 - **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../stdlib/collections.md#sorting).
 
 Both interfaces work with [value structs](classes-structs.md): when the concrete type is known (a direct call or a generic constraint), dispatch is static with no boxing. Assigning a value struct to a bare interface variable boxes it into a tagged heap object, after which it dispatches dynamically:

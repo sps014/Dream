@@ -1,0 +1,24 @@
+// Two methods on the same type cannot both claim the binary `+` operator.
+class Vector2 {
+    public x: int;
+
+    constructor(x: int) {
+        this.x = x;
+    }
+
+    @operator("+")
+    fun add(other: Vector2): Vector2 {
+        return Vector2(this.x + other.x);
+    }
+
+    @operator("+")
+    fun plus(other: Vector2): Vector2 {
+        return Vector2(this.x + other.x);
+    }
+}
+
+fun main() {
+    let a = Vector2(1);
+    let b = a + Vector2(2);
+    System.println(b.x);
+}

@@ -1,0 +1,87 @@
+// Exercises `@operator`/`@cast`-driven overloading: binary/unary arithmetic, user `==`/`!=`,
+// `Comparable`-backed ordering, and explicit/implicit user-defined casts.
+
+class Vector2 {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    @operator("+")
+    fun add(other: Vector2): Vector2 {
+        return Vector2(this.x + other.x, this.y + other.y);
+    }
+
+    @operator("-")
+    fun sub(other: Vector2): Vector2 {
+        return Vector2(this.x - other.x, this.y - other.y);
+    }
+
+    // Same symbol as `sub` above; zero parameters selects the unary form instead.
+    @operator("-")
+    fun negate(): Vector2 {
+        return Vector2(-this.x, -this.y);
+    }
+
+    @operator("==")
+    fun equalsVec(other: Vector2): bool {
+        return this.x == other.x && this.y == other.y;
+    }
+
+    @cast("explicit")
+    fun toDisplay(): string {
+        return "(" + this.x + ", " + this.y + ")";
+    }
+}
+
+class Money : Comparable<Money> {
+    public cents: int;
+
+    constructor(cents: int) {
+        this.cents = cents;
+    }
+
+    fun compare(other: Money): int {
+        return this.cents - other.cents;
+    }
+
+    @cast("implicit")
+    fun toCents(): int {
+        return this.cents;
+    }
+}
+
+fun main(): void {
+    let a = Vector2(1, 2);
+    let b = Vector2(3, 4);
+
+    let sum = a + b;
+    System.println(sum.x);
+    System.println(sum.y);
+
+    let diff = a - b;
+    System.println(diff.x);
+    System.println(diff.y);
+
+    let neg = -a;
+    System.println(neg.x);
+    System.println(neg.y);
+
+    System.println(a == b);
+    System.println(a == Vector2(1, 2));
+    System.println(a != b);
+
+    System.println((string)a);
+
+    let cheap = Money(10);
+    let pricey = Money(20);
+    System.println(cheap < pricey);
+    System.println(cheap > pricey);
+    System.println(cheap <= Money(10));
+
+    let cents: int = cheap;
+    System.println(cents);
+}

@@ -108,6 +108,41 @@ impl<'a> Analyzer<'a> {
             }
         }
 
+        // User-defined operator overload: `@operator("+")`/`@operator("==")`/etc. on the left
+        // operand's type. Checked before the built-in numeric/string rules below so a struct's
+        // overload always wins over (what would otherwise be) a type error. `!=` is handled
+        // separately below (as the negation of a registered `@operator("==")`), since there is no
+        // standalone `!=` symbol to register.
+        if let Some(op_method) = self.operator_binary_fn(&left_value, opr.kind) {
+            let param_type = op_method.param_type;
+            let return_type = op_method.return_type;
+            let mangled_name = op_method.mangled_name;
+            if let Some(param_type) = &param_type {
+                self.compare_data_type(param_type, &right_value, &opr.position, diagnostics)?;
+            }
+            self.hir_set_method_call(left_hir, &mangled_name, vec![right_hir], &return_type);
+            return Ok(return_type);
+        }
+
+        // User-defined ordering: `@operator`-free structs implementing `Comparable<Self>` get
+        // `<`/`<=`/`>`/`>=` for free, lowered to `a.compare(b) <op> 0`.
+        if matches!(
+            opr.kind,
+            TokenKind::GreaterThanToken
+                | TokenKind::GreaterThanEqualToken
+                | TokenKind::SmallerThanToken
+                | TokenKind::SmallerThanEqualToken
+        ) {
+            if let Some(compare_fn) = self.comparable_compare_fn(&left_value) {
+                self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
+                let bool_ty = Type::Boolean(opr.clone());
+                let int_ty = Type::Integer(opr.clone());
+                self.hir_set_method_call(left_hir, &compare_fn, vec![right_hir], &int_ty);
+                self.hir_compare_last_to_zero(opr.kind);
+                return Ok(bool_ty);
+            }
+        }
+
         self.compare_data_type(&left_value, &right_value, &opr.position, diagnostics)?;
 
         // Bitwise ops (`&`/`|`/`^`/`<<`/`>>`) are only meaningful on integer operands
@@ -156,6 +191,22 @@ impl<'a> Analyzer<'a> {
                 }
                 return Ok(bool_ty);
             }
+            // `!=` has no standalone registered symbol; a `@operator("==")` overload also powers it
+            // (negated). `==` itself is already handled by the generic operator-overload dispatch
+            // above, since `EqualEqualToken` maps directly to `OperatorSymbol::Eq`.
+            if opr.kind == TokenKind::NotEqualToken {
+                if let Some(op_method) =
+                    self.operator_binary_fn(&left_value, TokenKind::EqualEqualToken)
+                {
+                    if let Some(param_type) = &op_method.param_type {
+                        self.compare_data_type(param_type, &right_value, &opr.position, diagnostics)?;
+                    }
+                    let bool_ty = Type::Boolean(opr.clone());
+                    self.hir_set_method_call(left_hir, &op_method.mangled_name, vec![right_hir], &bool_ty);
+                    self.hir_negate_last();
+                    return Ok(bool_ty);
+                }
+            }
         }
 
         let is_bool_result = matches!(
@@ -190,6 +241,20 @@ impl<'a> Analyzer<'a> {
         let iface = mangle_generic("Equatable", std::slice::from_ref(left));
         if self.class_implements(&recv, &iface) {
             return Some(method_fn(&recv, "equals"));
+        }
+        None
+    }
+
+    /// If `<`/`<=`/`>`/`>=` on a value of type `left` should dispatch to a user-defined `compare`,
+    /// returns the mangled method symbol (e.g. `Money_compare`). Applies when `left`'s concrete type
+    /// implements `Comparable<Self>` (and has no more specific `@operator`-tagged overload, checked
+    /// by the caller first).
+    fn comparable_compare_fn(&self, left: &Type) -> Option<String> {
+        let (base, args) = Self::resolve_struct_parts(left)?;
+        let recv = mangle_generic(&base, &args);
+        let iface = mangle_generic("Comparable", std::slice::from_ref(left));
+        if self.class_implements(&recv, &iface) {
+            return Some(method_fn(&recv, "compare"));
         }
         None
     }

@@ -57,11 +57,15 @@ impl<'a> Analyzer<'a> {
         let right_type = self
             .analyze_expression(right, ctx.parent_function, ctx.symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
-        let value = self.hir_take();
+        let mut value = self.hir_take();
         self.current_expected_type = saved_expected;
 
         let var_type = if let Some(t) = type_annotation {
-            self.compare_data_type(t, &right_type, &left.position, diagnostics)?;
+            // A user-defined `@cast("implicit")` conversion is tried before the built-in
+            // assignability check, so `let x: T = expr;` accepts it exactly like numeric widening.
+            let converted_type;
+            (converted_type, value) = self.apply_implicit_cast(&right_type, t, value);
+            self.compare_data_type(t, &converted_type, &left.position, diagnostics)?;
             t.clone()
         } else {
             right_type.clone()

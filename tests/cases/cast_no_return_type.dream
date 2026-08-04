@@ -1,0 +1,18 @@
+// `@cast` requires a declared return type (the cast's target type).
+class Wrapper {
+    public value: int;
+
+    constructor(value: int) {
+        this.value = value;
+    }
+
+    @cast("implicit")
+    fun unwrap() {
+        this.value = this.value;
+    }
+}
+
+fun main() {
+    let w = Wrapper(1);
+    System.println(w.value);
+}

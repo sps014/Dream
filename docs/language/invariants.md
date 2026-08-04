@@ -29,6 +29,15 @@ Their calling convention is fixed, so their shape is fixed.
 - `@override` applies only to the protocol methods `to_string` and `hash_code`. It must be `public`, take no parameters, and use the fixed return type.
 - Any method that overrides a protocol method must be marked `@override`.
 
+## Operator overloading
+
+- `@operator("...")` only applies to a method; the tagged method's own parameter count (0 or 1)
+  fixes whether it overloads the unary or binary form of that symbol.
+- `@cast("implicit"|"explicit")` only applies to a no-parameter method; its return type is the
+  cast's target type.
+- A type may declare at most one `@operator` overload per (symbol, arity) and at most one `@cast`
+  per target type. See [Operators § Operator overloading](operators.md#operator-overloading).
+
 ## Linkage modifiers are exclusive
 
 `public` and `static` express opposite linkage and cannot combine:

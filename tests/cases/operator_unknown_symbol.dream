@@ -1,0 +1,18 @@
+// `@operator` requires a symbol recognized for the tagged method's arity — `&&` is not overloadable.
+class Flag {
+    public value: bool;
+
+    constructor(value: bool) {
+        this.value = value;
+    }
+
+    @operator("&&")
+    fun and(other: Flag): Flag {
+        return Flag(this.value && other.value);
+    }
+}
+
+fun main() {
+    let a = Flag(true);
+    System.println(a.value);
+}

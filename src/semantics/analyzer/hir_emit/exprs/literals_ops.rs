@@ -124,6 +124,31 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Rewrites the last-emitted expression (an `int`-returning method call, e.g. `a.compare(b)`)
+    /// into a comparison against the literal `0` using `opr`'s ordering. Used to lower user-defined
+    /// `Comparable<T>`-style ordering operators: the language surfaces ordering as a single integer
+    /// `compare` method (negative/zero/positive), so `a < b` lowers to `a.compare(b) < 0`.
+    pub(in crate::semantics::analyzer) fn hir_compare_last_to_zero(&mut self, opr: TokenKind) {
+        let Some(op) = token_to_binop(opr) else {
+            self.hir.last = None;
+            return;
+        };
+        let Some(expr) = self.hir.last.take() else {
+            return;
+        };
+        let int_ty = self.type_ctx.interner.int();
+        let bool_ty = self.type_ctx.interner.bool();
+        let zero = HExpr::new(int_ty, HExprKind::IntLit(0));
+        self.hir.last = Some(HExpr::new(
+            bool_ty,
+            HExprKind::Binary {
+                op,
+                lhs: Box::new(expr),
+                rhs: Box::new(zero),
+            },
+        ));
+    }
+
     /// Records the HIR for a unary expression. Unary `+` is the identity (passes the operand
     /// through); `-`, `!`, and `~` map to [`UnOp::Neg`]/[`UnOp::Not`]/[`UnOp::BitNot`].
     pub(in crate::semantics::analyzer) fn hir_set_unary(
