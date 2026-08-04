@@ -282,6 +282,10 @@ impl Emitter<'_> {
         // occupant is torn down; `$__wbox` holds the freshly allocated private weak-box pointer.
         self.line("  (local $__wsrc i32)");
         self.line("  (local $__wbox i32)");
+        // Scratch holding the source array/buffer pointer across a `T[]` `ToBytes`/`FromBytes`
+        // dynamic-length raw copy (see `Rvalue::ToBytes`/`FromBytes` in `rvalue/mod.rs`), needed
+        // once the destination allocation starts overwriting `$__obj`.
+        self.line("  (local $__src i32)");
 
         self.emit_value_frame_prologue();
         // Debug-info: announce entry into this function so the debugger can push a call-stack frame.

@@ -362,6 +362,43 @@ impl Emitter<'_> {
                 self.line("     (i32.load) ;; array length is the first word");
             }
             Rvalue::ToBytes { value, ty } => {
+                // `T[]` (a blittable-element array) has no static byte size — its length is a
+                // runtime value — so it gets its own dynamic-length raw copy instead of falling
+                // into the fixed-size scalar/value-struct paths below: allocate a `byte[]` sized to
+                // `len * elem_size` and `memory.copy` the source array's payload (everything after
+                // its own length word) straight across. This is a deep copy of the element bytes,
+                // never the array pointer, so the two sides never alias the same heap block (the
+                // `@shared class` wire-sharing approach was reverted for exactly that aliasing risk;
+                // arrays instead get fresh, independent storage on each end, like value structs do).
+                if let TyKind::Array(elem_ty) = self.interner.kind(*ty) {
+                    let (esize, _) = scalar_size(self.interner, *elem_ty);
+                    self.emit_operand(value);
+                    self.line("     (local.set $__src) ;; source array");
+                    self.line("     (local.get $__src)");
+                    self.line("     (i32.load) ;; element count");
+                    self.line(&format!("     (i32.const {})", esize));
+                    self.line("     (i32.mul) ;; byte length");
+                    self.line("     (local.set $__len)");
+                    self.line("     (local.get $__len)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
+                    self.line("     (call $malloc)");
+                    self.line("     (local.set $__obj)");
+                    self.line("     (local.get $__obj)");
+                    self.line("     (local.get $__len)");
+                    self.line("     (i32.store) ;; byte length");
+                    self.line("     (local.get $__obj)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line("     (local.get $__src)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line("     (local.get $__len)");
+                    self.line("     (memory.copy)");
+                    self.line("     (local.get $__obj)");
+                    return;
+                }
                 // Allocate a `byte[]` of `[len: i32][size bytes]`. `byte` elements are one byte, so
                 // the length word is the byte count. A value-struct `T` is already addressed (never
                 // loaded), so its bytes are `memory.copy`'d from that address; a scalar `T` (int,
@@ -393,6 +430,39 @@ impl Emitter<'_> {
                 self.line("     (local.get $__obj)");
             }
             Rvalue::FromBytes { bytes, ty } => {
+                // The `T[]` counterpart of the dynamic-length `ToBytes` array path above: the wire
+                // buffer's byte length divides evenly by the element size (it was produced by that
+                // same `ToBytes` path), so the element count is recovered from it, a fresh array
+                // block is allocated, and the payload is `memory.copy`'d straight across.
+                if let TyKind::Array(elem_ty) = self.interner.kind(*ty) {
+                    let (esize, _) = scalar_size(self.interner, *elem_ty);
+                    self.emit_operand(bytes);
+                    self.line("     (local.set $__src) ;; wire byte[]");
+                    self.line("     (local.get $__src)");
+                    self.line("     (i32.load) ;; byte length");
+                    self.line("     (local.set $__len)");
+                    self.line("     (local.get $__len)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
+                    self.line("     (call $malloc)");
+                    self.line("     (local.set $__obj)");
+                    self.line("     (local.get $__obj)");
+                    self.line("     (local.get $__len)");
+                    self.line(&format!("     (i32.const {})", esize));
+                    self.line("     (i32.div_u) ;; element count");
+                    self.line("     (i32.store) ;; length");
+                    self.line("     (local.get $__obj)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line("     (local.get $__src)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line("     (local.get $__len)");
+                    self.line("     (memory.copy)");
+                    self.line("     (local.get $__obj)");
+                    return;
+                }
                 // A scalar `T` (int, double, bool, ...) is reconstructed by loading it straight out
                 // of the buffer's payload (which starts after the 4-byte length prefix) - no
                 // allocation needed, since the result is a raw WASM value, not a heap reference. A

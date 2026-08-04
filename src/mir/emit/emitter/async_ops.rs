@@ -81,19 +81,31 @@ impl Emitter<'_> {
             }
         }
         // Scratch locals shared with the normal emitter (`$__obj`/`$__len`/`$__rel` back array &
-        // reassignment scratch, `$__jsp` a saved `$__sp` across a dynamic `js` call); `$__pc` drives
-        // the block dispatch, `$__scratch` holds the awaited future at a suspend.
+        // reassignment scratch, `$__jsp` a saved `$__sp` across a dynamic `js` call, `$__src` the
+        // source array/buffer pointer across a `T[]` `ToBytes`/`FromBytes` dynamic-length raw copy);
+        // `$__pc` drives the block dispatch, `$__scratch` holds the awaited future at a suspend.
         self.line(" (local $__obj i32)");
         self.line(" (local $__scratch i32)");
         self.line(" (local $__len i32)");
         self.line(" (local $__rel i32)");
         self.line(" (local $__pc i32)");
         self.line(" (local $__jsp i32)");
+        self.line(" (local $__src i32)");
 
         // Restore every frame-resident local; reference slots are zeroed after the move so ownership
-        // lives in the WASM local (and is not double-freed from the frame) until the next suspend.
+        // lives in the WASM local (and is not double-freed from the frame) until the next suspend. A
+        // value(`struct`) local's bytes live directly at its own fixed frame offset (see
+        // `AsyncSlots::value_locals`), so its "value" is just that address, recomputed every poll —
+        // never loaded/saved like a plain scalar (its inline storage persists in the frame on its own).
         for (idx, _, wt) in &slots.entries {
             let off = slots.offsets[idx];
+            if slots.value_locals.contains_key(idx) {
+                self.line(" local.get $self");
+                self.line(&format!(" i32.const {}", off));
+                self.line(" i32.add");
+                self.line(&format!(" local.set ${}", idx));
+                continue;
+            }
             self.line(" local.get $self");
             self.line(&format!(" {} offset={}", slot_load(wt), off));
             self.line(&format!(" local.set ${}", idx));
@@ -202,6 +214,11 @@ impl Emitter<'_> {
                 self.line(&format!("     (i32.const {})", resume.0));
                 self.line(&format!("     (i32.store offset={})", F_STATE));
                 for (idx, _, wt) in &slots.entries {
+                    // A value(`struct`) local's bytes already live at their fixed frame offset (the
+                    // local is just `self + offset`, recomputed on restore) — nothing to save.
+                    if slots.value_locals.contains_key(idx) {
+                        continue;
+                    }
                     let off = slots.offsets[idx];
                     self.line("     (local.get $self)");
                     self.line(&format!("     (local.get ${})", idx));

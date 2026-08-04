@@ -1,0 +1,27 @@
+// Regression test: value(`struct`) locals inside an `async fun` body each need their own inline
+// storage in the coroutine's `Future` frame. They previously all aliased frame offset zero (never
+// assigned a real address, unlike a normal function's shadow-stack locals), so any two or more
+// value-struct temporaries in the same async body - including every element past the first in a
+// value-struct array literal - silently collapsed onto the last one written.
+
+struct Point {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+async fun main(): void {
+    let a = Point(1, 2);
+    let b = Point(3, 4);
+    System.println("" + a.x + "," + a.y);
+    System.println("" + b.x + "," + b.y);
+
+    let pts = [Point(5, 6), Point(7, 8), Point(9, 10)];
+    for (let i = 0; i < pts.size(); i = i + 1) {
+        System.println("" + pts[i].x + "," + pts[i].y);
+    }
+}

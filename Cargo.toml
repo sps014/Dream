@@ -57,6 +57,11 @@ wasm-opt = ["dep:wasm-opt"]
 pretty_assertions = "1.4.1"
 rayon = "1"
 
+[profile.test]
+opt-level = 3
+debug-assertions = true
+overflow-checks = true
+
 [workspace]
 members = [
     ".",

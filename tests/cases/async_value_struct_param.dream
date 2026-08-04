@@ -1,0 +1,25 @@
+// Regression test: an `async fun` parameter of a value(`struct`) type must be copied by value into
+// the coroutine's own `Future` frame, not aliased to the caller's (possibly transient) storage -
+// same by-value contract `emit_value_frame_prologue` gives an ordinary function's value params.
+
+struct Point {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+async fun shift(p: Point): Point {
+    await Time.sleep(1);
+    return Point(p.x + 1, p.y + 1);
+}
+
+async fun main(): void {
+    let a = await shift(Point(1, 2));
+    let b = await shift(Point(3, 4));
+    System.println("" + a.x + "," + a.y);
+    System.println("" + b.x + "," + b.y);
+}

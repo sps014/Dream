@@ -191,7 +191,7 @@ impl<'a> Analyzer<'a> {
                     .map(|s| named(s))
                     .unwrap_or(Type::Unknown),
             };
-            self.require_unmanaged(&payload, "Bytes.of", &method.position, diagnostics);
+            self.require_unmanaged_or_array(&payload, "Bytes.of", &method.position, diagnostics);
             self.hir_set_to_bytes(arg_hirs.into_iter().next().flatten());
             return Ok(Type::Array(Box::new(named("byte"))));
         }
@@ -207,7 +207,7 @@ impl<'a> Analyzer<'a> {
                     Type::Void
                 }
             };
-            self.require_unmanaged(&target, "Bytes.to", &method.position, diagnostics);
+            self.require_unmanaged_or_array(&target, "Bytes.to", &method.position, diagnostics);
             self.hir_set_from_bytes(&target, arg_hirs.into_iter().next().flatten());
             return Ok(target);
         }
@@ -240,7 +240,7 @@ impl<'a> Analyzer<'a> {
             if self.is_unresolved_generic_type(&payload) || payload.get_type() == "string" {
                 self.hir_set_last(value);
             } else {
-                self.require_unmanaged(&payload, "Bytes.toWire", &method.position, diagnostics);
+                self.require_unmanaged_or_array(&payload, "Bytes.toWire", &method.position, diagnostics);
                 self.hir_set_to_bytes(value);
                 let bytes = self.hir_take();
                 self.hir_set_call("Bytes_toWireString", vec![bytes], &named("string"));
@@ -265,7 +265,7 @@ impl<'a> Analyzer<'a> {
             if self.is_unresolved_generic_type(&target) || target.get_type() == "string" {
                 self.hir_set_last(text);
             } else {
-                self.require_unmanaged(&target, "Bytes.fromWire", &method.position, diagnostics);
+                self.require_unmanaged_or_array(&target, "Bytes.fromWire", &method.position, diagnostics);
                 let named = |name: &str| -> Type {
                     let mut t = method.clone();
                     t.text = name.to_string();

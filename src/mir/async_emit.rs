@@ -7,6 +7,7 @@
 use super::emit::{emit_async_poll, func_symbol, poll_symbol, wasm_ty_of};
 use super::lower::lower_async_poll_body;
 use super::MirFunction;
+use crate::hir::scalar_size;
 use crate::types::{TypeId, TypeInterner};
 use indexmap::IndexMap;
 use std::collections::HashMap;
@@ -89,9 +90,16 @@ pub(crate) struct AsyncSlots {
     pub(crate) offsets: HashMap<usize, i32>,
     /// Indices of reference-typed locals (retained across a suspend, released on completion).
     pub(crate) ref_locals: Vec<usize>,
+    /// Value(`struct`)-typed locals get their own inline byte region in the frame (sized to the
+    /// type's actual layout, not the uniform scalar `SLOT_SIZE`) rather than a saved/restored `i32`
+    /// value: unlike a normal function's transient `$__sp` shadow stack (reused by unrelated calls
+    /// between polls, so it cannot survive a suspend), the frame persists for the task's whole
+    /// lifetime, so the local's WASM value is always just `self + offset` — recomputed fresh on
+    /// every poll, never itself saved or restored (its bytes already live at that fixed address).
+    pub(crate) value_locals: HashMap<usize, u32>,
 }
 
-fn async_slots(func: &MirFunction, interner: &TypeInterner) -> AsyncSlots {
+fn async_slots(func: &MirFunction, interner: &TypeInterner) -> (AsyncSlots, i32) {
     let mut entries: Vec<(usize, String, String)> = func
         .locals
         .iter()
@@ -104,17 +112,31 @@ fn async_slots(func: &MirFunction, interner: &TypeInterner) -> AsyncSlots {
     entries.sort_by(|a, b| a.1.cmp(&b.1));
     let mut offsets = HashMap::new();
     let mut ref_locals = Vec::new();
-    for (slot, (local_idx, _, _)) in entries.iter().enumerate() {
-        offsets.insert(*local_idx, F_SLOTS + (slot as i32) * SLOT_SIZE);
-        if interner.is_reference(func.locals[*local_idx].ty) {
-            ref_locals.push(*local_idx);
+    let mut value_locals = HashMap::new();
+    let mut cursor = F_SLOTS;
+    for (local_idx, _, _) in &entries {
+        let ty = func.locals[*local_idx].ty;
+        offsets.insert(*local_idx, cursor);
+        if interner.is_value_type(ty) {
+            let size = scalar_size(interner, ty).0.max(SLOT_SIZE as u32);
+            value_locals.insert(*local_idx, size);
+            cursor += size as i32;
+        } else {
+            cursor += SLOT_SIZE;
+            if interner.is_reference(ty) {
+                ref_locals.push(*local_idx);
+            }
         }
     }
-    AsyncSlots {
-        entries,
-        offsets,
-        ref_locals,
-    }
+    (
+        AsyncSlots {
+            entries,
+            offsets,
+            ref_locals,
+            value_locals,
+        },
+        cursor,
+    )
 }
 
 pub(crate) fn slot_store(wt: &str) -> &'static str {
@@ -160,8 +182,7 @@ pub fn emit_async_function(
     });
     // The coroutine body carries all frame-resident locals (user locals + await/scratch temps).
     let body = lower_async_poll_body(hir, interner);
-    let slots = async_slots(&body, interner);
-    let frame_size = F_SLOTS + (slots.entries.len() as i32) * SLOT_SIZE;
+    let (slots, frame_size) = async_slots(&body, interner);
     let sym = func_symbol(func);
     let mut out = String::new();
 
@@ -199,6 +220,20 @@ pub fn emit_async_function(
     for p in &body.params {
         let idx = p.0 as usize;
         let off = slots.offsets[&idx];
+        if let Some(&size) = slots.value_locals.get(&idx) {
+            // A value(`struct`) param arrives as a pointer to the caller's value: copy its bytes
+            // into the frame's private inline region (never alias the caller's storage, matching
+            // the by-value copy semantics `emit_value_frame_prologue` gives ordinary functions). A
+            // plain raw copy, unlike `emit_value_copy`'s retain glue for reference-typed fields —
+            // an async function taking a value struct that itself embeds reference fields as a
+            // parameter is not yet handled correctly (a narrower gap than the plain-data case this
+            // fixes; `emit_value_copy` is the template for closing it).
+            let _ = writeln!(
+                out,
+                " local.get $self\n i32.const {off}\n i32.add\n local.get ${idx}\n i32.const {size}\n memory.copy"
+            );
+            continue;
+        }
         let wt = wasm_ty_of(interner, body.locals[idx].ty);
         if interner.is_reference(body.locals[idx].ty) {
             let _ = writeln!(out, " local.get ${idx}");

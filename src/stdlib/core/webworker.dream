@@ -6,10 +6,11 @@
 // memory - `@shared class` objects, `Lock`/`Semaphore`, and anything else already on the heap are
 // visible to every worker, not just the thread that allocated them.
 //
-// `TIn`/`TOut` each must be `string` or an `unmanaged` (blittable) value type: every message is
-// copied across the wire (`Bytes.toWire`/`fromWire` under the hood - a `string` crosses as-is, an
-// unmanaged value as a raw byte-blit), never a live pointer into memory the other thread might
-// mutate. `body` may additionally be a capturing lambda, as long as everything it captures is
+// `TIn`/`TOut` each must be `string`, an `unmanaged` (blittable) value type, or a `T[]` of one:
+// every message is copied across the wire (`Bytes.toWire`/`fromWire` under the hood - a `string`
+// crosses as-is, an unmanaged value as a raw byte-blit, an array as a dynamic-length raw byte-blit
+// of its elements), never a live pointer into memory the other thread might mutate. `body` may
+// additionally be a capturing lambda, as long as everything it captures is
 // either an `@shared class` instance or an unmanaged/value type — capturing an ordinary
 // (non-`@shared`) managed object reference is a compile error, since handing a worker a live
 // pointer into memory the creating thread may keep mutating non-atomically is exactly the bug
