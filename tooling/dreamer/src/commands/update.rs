@@ -9,7 +9,10 @@ use std::path::Path;
 pub fn run(start_dir: &Path, name: Option<String>) -> Result<()> {
     let workspace = Workspace::discover(start_dir)?;
 
-    let preferred: BTreeMap<String, String> = match (&name, crate::lockfile::Lockfile::load_if_exists(&workspace.lockfile_path())?) {
+    let preferred: BTreeMap<String, String> = match (
+        &name,
+        crate::lockfile::Lockfile::load_if_exists(&workspace.lockfile_path())?,
+    ) {
         (Some(keep_others_pinned), Some(lock)) => lock
             .packages
             .into_iter()

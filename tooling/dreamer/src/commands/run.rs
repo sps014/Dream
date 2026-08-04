@@ -15,7 +15,10 @@ pub fn run(start_dir: &Path, extra_args: &[String]) -> Result<()> {
         .status()
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;
     if !status.success() {
-        bail!("program exited with a failure (exit code {:?})", status.code());
+        bail!(
+            "program exited with a failure (exit code {:?})",
+            status.code()
+        );
     }
     Ok(())
 }

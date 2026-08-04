@@ -44,7 +44,13 @@ impl ResolvedSource {
         match self {
             ResolvedSource::Registry { url, .. } => format!("registry+{}", url),
             ResolvedSource::Path { path } => format!("path+{}", path.display()),
-            ResolvedSource::Git { url, rev, tag, branch, .. } => {
+            ResolvedSource::Git {
+                url,
+                rev,
+                tag,
+                branch,
+                ..
+            } => {
                 let checkout = rev.as_deref().or(tag.as_deref()).or(branch.as_deref());
                 match checkout {
                     Some(c) => format!("git+{}#{}", url, c),
@@ -105,10 +111,9 @@ impl Resolver {
         manifest: &Manifest,
     ) -> Result<()> {
         if let Some(rel_path) = dep.path() {
-            let dep_dir = base_dir
-                .join(rel_path)
-                .canonicalize()
-                .with_context(|| format!("resolving path dependency '{}' at '{}'", name, rel_path))?;
+            let dep_dir = base_dir.join(rel_path).canonicalize().with_context(|| {
+                format!("resolving path dependency '{}' at '{}'", name, rel_path)
+            })?;
             self.queue_local_project(dep_dir, ResolvedKind::Path)?;
             return Ok(());
         }
@@ -152,12 +157,18 @@ impl Resolver {
             return Ok(());
         }
         let manifest_path = dir.join(MANIFEST_FILE_NAME);
-        let dep_manifest = Manifest::load(&manifest_path)
-            .with_context(|| format!("loading manifest for local dependency at {}", dir.display()))?;
+        let dep_manifest = Manifest::load(&manifest_path).with_context(|| {
+            format!("loading manifest for local dependency at {}", dir.display())
+        })?;
 
         let source = match kind {
             ResolvedKind::Path => ResolvedSource::Path { path: dir.clone() },
-            ResolvedKind::Git { url, rev, tag, branch } => ResolvedSource::Git {
+            ResolvedKind::Git {
+                url,
+                rev,
+                tag,
+                branch,
+            } => ResolvedSource::Git {
                 url,
                 checkout_dir: dir.clone(),
                 rev,
@@ -195,7 +206,9 @@ impl Resolver {
                 }
 
                 let reqs = self.requirements.get(&name).cloned().unwrap_or_default();
-                let Some((_, url)) = reqs.first() else { continue };
+                let Some((_, url)) = reqs.first() else {
+                    continue;
+                };
                 let url = url.clone();
 
                 let cache_key = (url.clone(), name.clone());
@@ -203,9 +216,9 @@ impl Resolver {
                     Some(e) => e.clone(),
                     None => {
                         let client = open_registry(&url);
-                        let entries = client
-                            .fetch_index(&name)
-                            .with_context(|| format!("fetching index for '{}' from {}", name, url))?;
+                        let entries = client.fetch_index(&name).with_context(|| {
+                            format!("fetching index for '{}' from {}", name, url)
+                        })?;
                         self.index_cache.insert(cache_key, entries.clone());
                         entries
                     }
@@ -304,7 +317,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn publish(registry_dir: &Path, name: &str, vers: &str, deps: &[(&str, &str)]) {
-        let registry = crate::registry::open_registry(&format!("file://{}", registry_dir.display()));
+        let registry =
+            crate::registry::open_registry(&format!("file://{}", registry_dir.display()));
         let tarball_src = registry_dir.join(format!("staging-{}-{}.tar.gz", name, vers));
         std::fs::write(&tarball_src, b"unused in resolver tests").unwrap();
         let entry = IndexEntry {
@@ -334,9 +348,10 @@ mod tests {
             .registries
             .insert("default".to_string(), registry_url.to_string());
         for (name, req) in deps {
-            manifest
-                .dependencies
-                .insert(name.to_string(), crate::manifest::Dependency::Version(req.to_string()));
+            manifest.dependencies.insert(
+                name.to_string(),
+                crate::manifest::Dependency::Version(req.to_string()),
+            );
         }
         manifest
     }
@@ -404,7 +419,9 @@ mod tests {
             "0.2.0".to_string(),
             "src/local-lib.dream".to_string(),
         );
-        lib_manifest.save(&lib_dir.join(MANIFEST_FILE_NAME)).unwrap();
+        lib_manifest
+            .save(&lib_dir.join(MANIFEST_FILE_NAME))
+            .unwrap();
 
         let app_dir = tmp.path().join("app");
         std::fs::create_dir_all(&app_dir).unwrap();

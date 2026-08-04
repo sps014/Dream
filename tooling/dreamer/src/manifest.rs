@@ -276,9 +276,10 @@ mod tests {
             "0.1.0".to_string(),
             "src/main.dream".to_string(),
         );
-        manifest
-            .dependencies
-            .insert("json-tools".to_string(), Dependency::Version("^0.3".to_string()));
+        manifest.dependencies.insert(
+            "json-tools".to_string(),
+            Dependency::Version("^0.3".to_string()),
+        );
         manifest.dependencies.insert(
             "local-lib".to_string(),
             Dependency::Detailed(DetailedDependency {

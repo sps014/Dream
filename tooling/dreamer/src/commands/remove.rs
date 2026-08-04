@@ -8,7 +8,11 @@ pub fn run(start_dir: &Path, name: &str) -> Result<()> {
     let removed_dep = workspace.manifest.dependencies.remove(name).is_some();
     let removed_dev = workspace.manifest.dev_dependencies.remove(name).is_some();
     if !removed_dep && !removed_dev {
-        bail!("'{}' is not a dependency of {}", name, workspace.manifest.package.name);
+        bail!(
+            "'{}' is not a dependency of {}",
+            name,
+            workspace.manifest.package.name
+        );
     }
     workspace.save_manifest()?;
 

@@ -3,7 +3,7 @@
 //! resolution (`src/driver/source_loader.rs`) expects to find it.
 
 use crate::fetch;
-use crate::lockfile::{Lockfile, LockedPackage, LOCKFILE_FILE_NAME};
+use crate::lockfile::{LockedPackage, Lockfile, LOCKFILE_FILE_NAME};
 use crate::manifest::{import_segment, Manifest, MANIFEST_FILE_NAME};
 use crate::registry::open_registry;
 use crate::resolver::{ResolvedPackage, ResolvedSource};
@@ -68,7 +68,11 @@ impl Workspace {
             let source_dir = match &pkg.source {
                 ResolvedSource::Path { path } => path.clone(),
                 ResolvedSource::Git { checkout_dir, .. } => checkout_dir.clone(),
-                ResolvedSource::Registry { url, tarball, checksum } => {
+                ResolvedSource::Registry {
+                    url,
+                    tarball,
+                    checksum,
+                } => {
                     let entry = crate::registry::IndexEntry {
                         name: pkg.name.clone(),
                         vers: pkg.version.clone(),
@@ -83,13 +87,8 @@ impl Workspace {
             };
 
             let dest = packages_dir.join(import_segment(&pkg.name));
-            link_or_copy_dir(&source_dir, &dest).with_context(|| {
-                format!(
-                    "installing '{}' into {}",
-                    pkg.name,
-                    dest.display()
-                )
-            })?;
+            link_or_copy_dir(&source_dir, &dest)
+                .with_context(|| format!("installing '{}' into {}", pkg.name, dest.display()))?;
 
             let dependencies = pkg
                 .dependencies

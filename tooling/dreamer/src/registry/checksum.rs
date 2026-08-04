@@ -14,11 +14,7 @@ pub fn sha256_of(bytes: &[u8]) -> String {
 pub fn verify(bytes: &[u8], expected: &str) -> Result<()> {
     let actual = sha256_of(bytes);
     if actual != expected {
-        bail!(
-            "checksum mismatch: expected {}, got {}",
-            expected,
-            actual
-        );
+        bail!("checksum mismatch: expected {}, got {}", expected, actual);
     }
     Ok(())
 }

@@ -9,12 +9,22 @@ use dreamer::registry::{checksum, open_registry, IndexEntry};
 use std::path::Path;
 
 fn publish_fixture_package(registry_dir: &Path, name: &str, version: &str, body_fun_src: &str) {
-    let pkg_dir = registry_dir.join("staging").join(format!("{}-{}", name, version));
+    let pkg_dir = registry_dir
+        .join("staging")
+        .join(format!("{}-{}", name, version));
     std::fs::create_dir_all(pkg_dir.join("src")).unwrap();
-    Manifest::new(name.to_string(), version.to_string(), format!("src/{}.dream", name))
-        .save(&pkg_dir.join("dream.toml"))
-        .unwrap();
-    std::fs::write(pkg_dir.join("src").join(format!("{}.dream", name)), body_fun_src).unwrap();
+    Manifest::new(
+        name.to_string(),
+        version.to_string(),
+        format!("src/{}.dream", name),
+    )
+    .save(&pkg_dir.join("dream.toml"))
+    .unwrap();
+    std::fs::write(
+        pkg_dir.join("src").join(format!("{}.dream", name)),
+        body_fun_src,
+    )
+    .unwrap();
 
     let tarball_path = registry_dir
         .join("staging")
@@ -108,7 +118,11 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
         .join("greeter")
         .join("src")
         .join("greeter.dream");
-    assert!(greeter_file.is_file(), "{} should exist", greeter_file.display());
+    assert!(
+        greeter_file.is_file(),
+        "{} should exist",
+        greeter_file.display()
+    );
 
     let local_lib_file = project_dir
         .join("dream_packages")

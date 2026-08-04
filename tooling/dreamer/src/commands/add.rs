@@ -49,7 +49,11 @@ pub fn run(
     println!(
         "Added '{}' to [{}]",
         name,
-        if dev { "dev-dependencies" } else { "dependencies" }
+        if dev {
+            "dev-dependencies"
+        } else {
+            "dependencies"
+        }
     );
 
     super::install::run(start_dir)

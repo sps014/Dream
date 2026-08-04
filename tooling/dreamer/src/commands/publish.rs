@@ -28,11 +28,10 @@ pub fn run(start_dir: &Path, registry_url: Option<String>) -> Result<()> {
         .dependencies
         .iter()
         .filter_map(|(name, dep)| {
-            dep.version_req()
-                .map(|req| IndexDependency {
-                    name: name.clone(),
-                    req: req.to_string(),
-                })
+            dep.version_req().map(|req| IndexDependency {
+                name: name.clone(),
+                req: req.to_string(),
+            })
         })
         .collect();
 

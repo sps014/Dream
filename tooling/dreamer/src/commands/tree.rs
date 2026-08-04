@@ -6,9 +6,8 @@ use std::path::Path;
 
 pub fn run(start_dir: &Path) -> Result<()> {
     let workspace = Workspace::discover(start_dir)?;
-    let lockfile = Lockfile::load_if_exists(&workspace.lockfile_path())?.context(
-        "no dream.lock found; run `dreamer install` first",
-    )?;
+    let lockfile = Lockfile::load_if_exists(&workspace.lockfile_path())?
+        .context("no dream.lock found; run `dreamer install` first")?;
 
     let by_name: HashMap<&str, &crate::lockfile::LockedPackage> = lockfile
         .packages
@@ -16,7 +15,10 @@ pub fn run(start_dir: &Path) -> Result<()> {
         .map(|p| (p.name.as_str(), p))
         .collect();
 
-    println!("{} {}", workspace.manifest.package.name, workspace.manifest.package.version);
+    println!(
+        "{} {}",
+        workspace.manifest.package.name, workspace.manifest.package.version
+    );
 
     let all_deps = workspace.manifest.all_dependencies(true);
     let mut top_level: Vec<&str> = all_deps.keys().map(String::as_str).collect();

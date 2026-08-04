@@ -50,8 +50,8 @@ impl RegistryClient for FileRegistry {
 
     fn fetch_tarball(&self, entry: &IndexEntry, dest_file: &Path) -> Result<()> {
         let src = self.tarball_path(&entry.tarball);
-        let bytes = std::fs::read(&src)
-            .with_context(|| format!("reading tarball at {}", src.display()))?;
+        let bytes =
+            std::fs::read(&src).with_context(|| format!("reading tarball at {}", src.display()))?;
         checksum::verify(&bytes, &entry.cksum)
             .with_context(|| format!("verifying tarball for {} {}", entry.name, entry.vers))?;
         if let Some(parent) = dest_file.parent() {
