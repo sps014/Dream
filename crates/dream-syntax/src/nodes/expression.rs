@@ -138,9 +138,7 @@ impl<'a> ExpressionNode<'a> {
             }
             ExpressionNode::ArrayLiteral(elements) => elements.first().and_then(|e| e.position()),
             ExpressionNode::SetLiteral(elements) => elements.first().and_then(|e| e.position()),
-            ExpressionNode::MapLiteral(entries) => {
-                entries.first().and_then(|(k, _)| k.position())
-            }
+            ExpressionNode::MapLiteral(entries) => entries.first().and_then(|(k, _)| k.position()),
             ExpressionNode::Lambda(l) => Some(l.open_paren_position),
             ExpressionNode::NamedArg(name, _) => Some(name.position),
             ExpressionNode::RefArgument(inner) => inner.position(),

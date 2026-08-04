@@ -159,7 +159,9 @@ fn print_usage(program: &str) {
     );
     error!("  -v, --verbose         Print progress information");
     error!("  -d, --debug           Enable allocator instrumentation for Debug probes");
-    error!("  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)");
+    error!(
+        "  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)"
+    );
     error!(
         "  -O, --optimize[=LVL]  Post-process the emitted .wasm with wasm-opt (LVL: 0-4, s, z; default: s)"
     );

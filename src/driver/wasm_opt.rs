@@ -93,9 +93,11 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
 /// fails with a clear, actionable message instead of silently doing nothing or not compiling.
 #[cfg(not(feature = "wasm-opt"))]
 pub fn optimize_wasm_file(_path: &Path, _level: OptLevel) -> Result<(), String> {
-    Err("this build of the compiler was built without the `wasm-opt` feature; rebuild with \
+    Err(
+        "this build of the compiler was built without the `wasm-opt` feature; rebuild with \
          `--features wasm-opt` (enabled by default) to use -O/--optimize"
-        .to_string())
+            .to_string(),
+    )
 }
 
 #[cfg(test)]

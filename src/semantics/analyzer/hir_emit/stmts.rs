@@ -139,7 +139,10 @@ impl<'a> Analyzer<'a> {
     fn declare_boxed_local(&mut self, name: &str, ty: &Type, value: HExpr, kind: BoxKind) {
         let (cell, cell_ty) = match kind {
             BoxKind::Cell => (self.hir_build_cell_new(ty, value), Self::cell_type(ty)),
-            BoxKind::RefBox => (self.hir_build_ref_box_new(ty, value), Self::ref_box_type(ty)),
+            BoxKind::RefBox => (
+                self.hir_build_ref_box_new(ty, value),
+                Self::ref_box_type(ty),
+            ),
         };
         let Some(cell) = cell else {
             self.hir.ok = false;

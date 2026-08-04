@@ -124,6 +124,25 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
         "<std>/text/string_builder.dream",
         include_str!("text/string_builder.dream"),
     ),
+    // Regex engine: AST, then the compiler and parser (both depend only on the AST), then the VM
+    // (needs the AST's `RegexEmptyKind` and the compiler's `RegexInst`/`RegexOp`), then the public
+    // `Regex` class (needs all four).
+    (
+        "<std>/text/regex_ast.dream",
+        include_str!("text/regex_ast.dream"),
+    ),
+    (
+        "<std>/text/regex_program.dream",
+        include_str!("text/regex_program.dream"),
+    ),
+    (
+        "<std>/text/regex_parser.dream",
+        include_str!("text/regex_parser.dream"),
+    ),
+    (
+        "<std>/text/regex_vm.dream",
+        include_str!("text/regex_vm.dream"),
+    ),
     ("<std>/text/regex.dream", include_str!("text/regex.dream")),
     // JSON: value tree, parser, and the public `JSON` API (one class per file).
     (

@@ -1,0 +1,478 @@
+// Recursive-descent regex parser: alternation -> concatenation -> repetition -> atom, the same
+// grammar shape as RE2's own parser (re2/parse.cc) and, before it, the yacc grammar in Russ Cox's
+// `re1` — but hand-written, since RE2's real parser is full Unicode/POSIX and far too large to
+// port, and Dream has no parser-generator tooling. Scoped to the ASCII subset the `Regex` stdlib
+// class documents: literals, `.`, anchors (`^` `$` `\b` `\B`), `* + ? {m,n}` (with lazy `?`
+// variants), alternation, capturing/non-capturing groups, character classes, and the `\d \D \w \W
+// \s \S` shorthand classes. No lookaround, backreferences, named groups, or Unicode property
+// classes.
+//
+// Never panics on a malformed pattern: every cursor read is bounds-checked, and unrecognized or
+// truncated constructs fall back to the most literal reasonable interpretation (e.g. an
+// unterminated `[...]` class just stops at the end of the pattern) rather than crashing — the
+// same recover-and-continue spirit as the compiler's own parser, applied to a runtime string
+// instead of source code.
+
+public class RegexParser {
+    pattern: string;
+    pos: int;
+    n: int;
+    group_count: int;
+
+    constructor(pattern: string) {
+        this.pattern = pattern;
+        this.pos = 0;
+        this.n = pattern.size();
+        this.group_count = 0;
+    }
+
+    // Number of capturing groups seen (not counting the implicit whole-match group 0).
+    public fun groups(): int {
+        return this.group_count;
+    }
+
+    // Parses the whole pattern, wrapping it in an implicit capturing group 0 (the overall match)
+    // preceded by a non-greedy `.*` so the compiled program can be run unanchored from position 0
+    // and still find the leftmost match anywhere in the input — the same trick `re1`'s `parse()`
+    // uses. This synthetic prefix must match a newline unconditionally regardless of the `s`
+    // (dotall) flag, since it exists purely to skip past unanchored leading text, not to implement
+    // the user-facing `.`; an empty, negated character class (`char_class([], true)`) always
+    // matches any character without depending on `AnyChar`'s dotall-sensitive compilation.
+    public fun parse(): RegexNode {
+        let body = this.parse_alt();
+        let wrapped = RegexNode.paren(body, 0);
+        let skip_any = RegexNode.char_class(List<char>(), true);
+        let prefix = RegexNode.star(skip_any, false);
+        return RegexNode.cat(prefix, wrapped);
+    }
+
+    fun at_end(): bool {
+        return this.pos >= this.n;
+    }
+
+    fun current(): char {
+        return this.pattern.char_at(this.pos);
+    }
+
+    fun peek_at(offset: int): Option<char> {
+        let idx = this.pos + offset;
+        if ((idx < 0) || (idx >= this.n)) {
+            return Option.None;
+        }
+        return Option.Some(this.pattern.char_at(idx));
+    }
+
+    // alt := concat ('|' concat)*
+    fun parse_alt(): RegexNode {
+        let left = this.parse_concat();
+        let going = true;
+        while (going) {
+            if ((this.at_end() == false) && (this.current() == '|')) {
+                this.pos = this.pos + 1;
+                let right = this.parse_concat();
+                left = RegexNode.alt(left, right);
+            } else {
+                going = false;
+            }
+        }
+        return left;
+    }
+
+    fun at_concat_end(): bool {
+        if (this.at_end()) {
+            return true;
+        }
+        let c = this.current();
+        return (c == '|') || (c == ')');
+    }
+
+    // concat := repeat*  (empty concat is `Nothing`, matching the empty string)
+    fun parse_concat(): RegexNode {
+        if (this.at_concat_end()) {
+            return RegexNode.nothing();
+        }
+        let left = this.parse_repeat();
+        while (this.at_concat_end() == false) {
+            let right = this.parse_repeat();
+            left = RegexNode.cat(left, right);
+        }
+        return left;
+    }
+
+    // repeat := atom ('*' | '+' | '?' | '{' m (',' n?)? '}')? '?'?
+    fun parse_repeat(): RegexNode {
+        let atom = this.parse_atom();
+        return this.parse_quantifier(atom);
+    }
+
+    fun consume_lazy_marker(): bool {
+        if ((this.at_end() == false) && (this.current() == '?')) {
+            this.pos = this.pos + 1;
+            return false;
+        }
+        return true;
+    }
+
+    fun parse_quantifier(atom: RegexNode): RegexNode {
+        if (this.at_end()) {
+            return atom;
+        }
+        let c = this.current();
+        if (c == '*') {
+            this.pos = this.pos + 1;
+            let greedy = this.consume_lazy_marker();
+            return RegexNode.star(atom, greedy);
+        }
+        if (c == '+') {
+            this.pos = this.pos + 1;
+            let greedy = this.consume_lazy_marker();
+            return RegexNode.plus(atom, greedy);
+        }
+        if (c == '?') {
+            this.pos = this.pos + 1;
+            let greedy = this.consume_lazy_marker();
+            return RegexNode.quest(atom, greedy);
+        }
+        if (c == '{') {
+            return this.try_parse_braces(atom);
+        }
+        return atom;
+    }
+
+    // Attempts to parse a `{m}` / `{m,}` / `{m,n}` bound starting at the current `{`. On success,
+    // expands it into repeated concatenation/`?` nodes and consumes the input. On failure (not a
+    // well-formed bound), leaves the cursor untouched and returns `atom` unchanged — the `{` will
+    // then be parsed as a literal character by the next `parse_atom` call, matching how most regex
+    // flavors treat a `{` that isn't a valid counted-repeat.
+    fun try_parse_braces(atom: RegexNode): RegexNode {
+        let saved = this.pos;
+        this.pos = this.pos + 1; // '{'
+        let min_opt = this.parse_digits();
+        if (min_opt.is_none()) {
+            this.pos = saved;
+            return atom;
+        }
+        let min = min_opt.unwrap_or(0);
+        let max = min;
+        if ((this.at_end() == false) && (this.current() == ',')) {
+            this.pos = this.pos + 1;
+            let max_opt = this.parse_digits();
+            if (max_opt.is_some()) {
+                max = max_opt.unwrap_or(min);
+            } else {
+                max = 0 - 1; // unbounded
+            }
+        }
+        if ((this.at_end()) || (this.current() != '}')) {
+            this.pos = saved;
+            return atom;
+        }
+        this.pos = this.pos + 1; // '}'
+        let greedy = this.consume_lazy_marker();
+        return this.expand_counted(atom, min, max, greedy);
+    }
+
+    fun parse_digits(): Option<int> {
+        let start = this.pos;
+        let value = 0;
+        let any = false;
+        let zero = '0';
+        while ((this.at_end() == false) && (this.current().is_digit())) {
+            value = (value * 10) + (this.current().to_int() - zero.to_int());
+            this.pos = this.pos + 1;
+            any = true;
+        }
+        if (any == false) {
+            this.pos = start;
+            return Option.None;
+        }
+        return Option.Some(value);
+    }
+
+    // Expands `atom{min,max}` (`max == -1` means unbounded) into `min` mandatory copies followed
+    // by either one non-greedy-or-greedy `Star` (unbounded) or `max - min` nested optional copies
+    // `(atom(atom(...)?)?)?`. Reusing the same `atom` node in every copy (rather than deep-cloning
+    // it) is safe: the compiler emits fresh instructions on every visit, and capturing groups
+    // inside a repeated atom writing the same slot on each iteration is exactly the "last iteration
+    // wins" semantics real regex engines already give repeated capture groups.
+    fun expand_counted(atom: RegexNode, min: int, max: int, greedy: bool): RegexNode {
+        let result = RegexNode.nothing();
+        let have_result = false;
+        let i = 0;
+        while (i < min) {
+            if (have_result) {
+                result = RegexNode.cat(result, atom);
+            } else {
+                result = atom;
+                have_result = true;
+            }
+            i = i + 1;
+        }
+        if (max < 0) {
+            let star = RegexNode.star(atom, greedy);
+            if (have_result) {
+                result = RegexNode.cat(result, star);
+            } else {
+                result = star;
+            }
+            return result;
+        }
+        let extra = max - min;
+        if (extra <= 0) {
+            if (have_result) {
+                return result;
+            }
+            return RegexNode.nothing();
+        }
+        let inner = RegexNode.nothing();
+        let have_inner = false;
+        let j = 0;
+        while (j < extra) {
+            if (have_inner) {
+                inner = RegexNode.quest(RegexNode.cat(atom, inner), greedy);
+            } else {
+                inner = RegexNode.quest(atom, greedy);
+                have_inner = true;
+            }
+            j = j + 1;
+        }
+        if (have_result) {
+            return RegexNode.cat(result, inner);
+        }
+        return inner;
+    }
+
+    // atom := '(' alt ')' | '(?:' alt ')' | '.' | '^' | '$' | '[' class ']' | '\' escape | char
+    fun parse_atom(): RegexNode {
+        if (this.at_end()) {
+            return RegexNode.nothing();
+        }
+        let c = this.current();
+        if (c == '(') {
+            return this.parse_group();
+        }
+        if (c == '.') {
+            this.pos = this.pos + 1;
+            return RegexNode.any_char();
+        }
+        if (c == '^') {
+            this.pos = this.pos + 1;
+            return RegexNode.assertion(RegexEmptyKind.BeginLine);
+        }
+        if (c == '$') {
+            this.pos = this.pos + 1;
+            return RegexNode.assertion(RegexEmptyKind.EndLine);
+        }
+        if (c == '[') {
+            return this.parse_class();
+        }
+        if (c == '\\') {
+            return this.parse_escape();
+        }
+        // Any other character, including a bare quantifier char with nothing before it (a
+        // malformed pattern) — treated as a literal rather than rejected, to stay panic-free.
+        this.pos = this.pos + 1;
+        return RegexNode.lit(c);
+    }
+
+    fun parse_group(): RegexNode {
+        this.pos = this.pos + 1; // '('
+        let non_capturing = false;
+        if ((this.at_end() == false) && (this.current() == '?')) {
+            let next = this.peek_at(1);
+            if (next.unwrap_or(' ') == ':') {
+                non_capturing = true;
+                this.pos = this.pos + 2;
+            } else {
+                // Any other `(?...)` form (lookaround, named groups, inline flags) is out of
+                // scope; best-effort fallback so we never crash on it: skip the `?` and treat the
+                // rest as a non-capturing group.
+                non_capturing = true;
+                this.pos = this.pos + 1;
+            }
+        }
+        let cap = 0 - 1;
+        if (non_capturing == false) {
+            this.group_count = this.group_count + 1;
+            cap = this.group_count;
+        }
+        let inner = this.parse_alt();
+        if ((this.at_end() == false) && (this.current() == ')')) {
+            this.pos = this.pos + 1;
+        }
+        return RegexNode.paren(inner, cap);
+    }
+
+    fun digit_ranges(): List<char> {
+        let r = List<char>();
+        r.push('0');
+        r.push('9');
+        return r;
+    }
+
+    fun word_ranges(): List<char> {
+        let r = List<char>();
+        r.push('a');
+        r.push('z');
+        r.push('A');
+        r.push('Z');
+        r.push('0');
+        r.push('9');
+        r.push('_');
+        r.push('_');
+        return r;
+    }
+
+    fun space_ranges(): List<char> {
+        let r = List<char>();
+        r.push(' ');
+        r.push(' ');
+        r.push('\t');
+        r.push('\t');
+        r.push('\n');
+        r.push('\n');
+        r.push('\r');
+        r.push('\r');
+        return r;
+    }
+
+    // The shorthand ranges for `\d \D \w \W \s \S` at the atom level (outside a class). The
+    // negated forms (`\D \W \S`) are handled by the caller via `Class`'s `negate` flag.
+    fun shorthand_ranges(e: char): Option<List<char>> {
+        if ((e == 'd') || (e == 'D')) {
+            return Option.Some(this.digit_ranges());
+        }
+        if ((e == 'w') || (e == 'W')) {
+            return Option.Some(this.word_ranges());
+        }
+        if ((e == 's') || (e == 'S')) {
+            return Option.Some(this.space_ranges());
+        }
+        return Option.None;
+    }
+
+    fun is_negated_shorthand(e: char): bool {
+        return (e == 'D') || (e == 'W') || (e == 'S');
+    }
+
+    // escape := 'd' | 'D' | 'w' | 'W' | 's' | 'S' | 'b' | 'B' | 'n' | 't' | 'r' | any
+    fun parse_escape(): RegexNode {
+        this.pos = this.pos + 1; // '\'
+        if (this.at_end()) {
+            return RegexNode.lit('\\');
+        }
+        let e = this.current();
+        this.pos = this.pos + 1;
+        let shorthand = this.shorthand_ranges(e);
+        if (shorthand.is_some()) {
+            let ranges = shorthand.unwrap_or(List<char>());
+            return RegexNode.char_class(ranges, this.is_negated_shorthand(e));
+        }
+        if (e == 'b') {
+            return RegexNode.assertion(RegexEmptyKind.WordBoundary);
+        }
+        if (e == 'B') {
+            return RegexNode.assertion(RegexEmptyKind.NonWordBoundary);
+        }
+        if (e == 'n') {
+            return RegexNode.lit('\n');
+        }
+        if (e == 't') {
+            return RegexNode.lit('\t');
+        }
+        if (e == 'r') {
+            return RegexNode.lit('\r');
+        }
+        // Covers escaped metacharacters (`\. \\ \( \) \[ \] \{ \} \| \+ \* \? \^ \$ \/`) and any
+        // other escaped character: taken literally.
+        return RegexNode.lit(e);
+    }
+
+    // class := '[' '^'? class_item+ ']'
+    fun parse_class(): RegexNode {
+        this.pos = this.pos + 1; // '['
+        let negate = false;
+        if ((this.at_end() == false) && (this.current() == '^')) {
+            negate = true;
+            this.pos = this.pos + 1;
+        }
+        let ranges = List<char>();
+        let first = true;
+        let going = true;
+        while (going) {
+            if (this.at_end()) {
+                going = false; // unterminated class: stop gracefully, no panic
+            } else if ((this.current() == ']') && (first == false)) {
+                this.pos = this.pos + 1;
+                going = false;
+            } else {
+                first = false;
+                this.parse_class_item(ranges);
+            }
+        }
+        return RegexNode.char_class(ranges, negate);
+    }
+
+    // Reads one class item at the cursor, appending to `ranges` directly: either a shorthand
+    // class's ranges, or a single character (which may start a `lo-hi` range).
+    fun parse_class_item(ranges: List<char>): void {
+        let lo_opt = this.parse_class_char(ranges);
+        if (lo_opt.is_none()) {
+            return; // a shorthand class already appended its ranges
+        }
+        let lo = lo_opt.unwrap_or(' ');
+        let hi = lo;
+        if ((this.at_end() == false) && (this.current() == '-')) {
+            let after_dash = this.peek_at(1);
+            if ((after_dash.is_some()) && (after_dash.unwrap_or(']') != ']')) {
+                this.pos = this.pos + 1; // '-'
+                let hi_opt = this.parse_class_char(ranges);
+                hi = hi_opt.unwrap_or(lo);
+            }
+        }
+        ranges.push(lo);
+        ranges.push(hi);
+    }
+
+    // Reads a single class character at the cursor (plain or escaped). Returns `None` when the
+    // item was a shorthand class (`\d`/`\w`/`\s`, or their negated forms treated the same way — an
+    // approximation, since a class can't represent "negate just this sub-item") whose ranges were
+    // appended to `ranges` directly instead of returning one character.
+    fun parse_class_char(ranges: List<char>): Option<char> {
+        let c = this.current();
+        if (c == '\\') {
+            this.pos = this.pos + 1;
+            if (this.at_end()) {
+                return Option.Some('\\');
+            }
+            let e = this.current();
+            this.pos = this.pos + 1;
+            let shorthand = this.shorthand_ranges(e);
+            if (shorthand.is_some()) {
+                let rs = shorthand.unwrap_or(List<char>());
+                this.append_ranges(ranges, rs);
+                return Option.None;
+            }
+            if (e == 'n') {
+                return Option.Some('\n');
+            }
+            if (e == 't') {
+                return Option.Some('\t');
+            }
+            if (e == 'r') {
+                return Option.Some('\r');
+            }
+            return Option.Some(e);
+        }
+        this.pos = this.pos + 1;
+        return Option.Some(c);
+    }
+
+    fun append_ranges(dst: List<char>, src: List<char>): void {
+        let i = 0;
+        while (i < src.size()) {
+            dst.push(src.get(i).unwrap_or(' '));
+            i = i + 1;
+        }
+    }
+}

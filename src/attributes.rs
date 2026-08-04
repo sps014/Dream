@@ -181,11 +181,7 @@ pub fn validate_attributes(
 
         if !spec.targets.contains(&target) {
             diagnostics.report_error(
-                format!(
-                    "'@{}' cannot be applied to {}",
-                    name,
-                    target.display_name()
-                ),
+                format!("'@{}' cannot be applied to {}", name, target.display_name()),
                 Some(attr.name.position),
             );
         }
@@ -353,10 +349,10 @@ pub fn validate_program_attributes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::line_text::LineText;
-    use crate::text::text_span::TextSpan;
     use crate::syntax::token::syntax_token::SyntaxToken;
     use crate::syntax::token::token_kind::TokenKind;
+    use crate::text::line_text::LineText;
+    use crate::text::text_span::TextSpan;
 
     fn ident(text: &str) -> SyntaxToken {
         let span = TextSpan::new((0, 0), &LineText::new(String::new()));
@@ -373,14 +369,22 @@ mod tests {
     #[test]
     fn unknown_attribute_is_reported() {
         let mut diagnostics = DiagnosticBag::new(None);
-        validate_attributes(&[attr("bogus", &[])], AttributeTarget::Method, &mut diagnostics);
+        validate_attributes(
+            &[attr("bogus", &[])],
+            AttributeTarget::Method,
+            &mut diagnostics,
+        );
         assert!(diagnostics.has_errors());
     }
 
     #[test]
     fn misapplied_attribute_is_reported() {
         let mut diagnostics = DiagnosticBag::new(None);
-        validate_attributes(&[attr("json", &[])], AttributeTarget::Function, &mut diagnostics);
+        validate_attributes(
+            &[attr("json", &[])],
+            AttributeTarget::Function,
+            &mut diagnostics,
+        );
         assert!(diagnostics.has_errors());
     }
 

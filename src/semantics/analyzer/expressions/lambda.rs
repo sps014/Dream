@@ -133,10 +133,12 @@ impl<'a> Analyzer<'a> {
         // call. A lambda that captures it could escape past that call's return (e.g. returned as a
         // `fun(...)` value), leaving a dangling address — the same hazard C# guards against by
         // rejecting `ref`/`out` parameter captures in an anonymous method/lambda. Reject it here too.
-        if let Some((bad, _)) = captures
-            .iter()
-            .find(|(name, _)| parent_function.parameters.iter().any(|p| p.is_ref && p.name.text == *name))
-        {
+        if let Some((bad, _)) = captures.iter().find(|(name, _)| {
+            parent_function
+                .parameters
+                .iter()
+                .any(|p| p.is_ref && p.name.text == *name)
+        }) {
             self.hir_none();
             return Err(report(
                 diagnostics,

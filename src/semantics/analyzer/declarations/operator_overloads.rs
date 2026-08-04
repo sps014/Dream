@@ -58,7 +58,10 @@ impl OperatorSymbol {
     /// True for the unary-only symbols (`Neg`/`Not`/`BitNot`) — the ones registered in the
     /// `unary` table rather than `binary`.
     fn is_unary(self) -> bool {
-        matches!(self, OperatorSymbol::Neg | OperatorSymbol::Not | OperatorSymbol::BitNot)
+        matches!(
+            self,
+            OperatorSymbol::Neg | OperatorSymbol::Not | OperatorSymbol::BitNot
+        )
     }
 
     /// The token that spells this operator at a *use* site (`a + b`), for the binary dispatch
@@ -263,7 +266,11 @@ impl<'a> Analyzer<'a> {
                 .operator_overloads
                 .entry(target_type_str.to_string())
                 .or_default();
-            if overloads.casts.iter().any(|c| c.target.get_type() == target_str) {
+            if overloads
+                .casts
+                .iter()
+                .any(|c| c.target.get_type() == target_str)
+            {
                 diagnostics.report_error(
                     format!(
                         "'{}' already declares a cast to '{}'",
@@ -293,7 +300,11 @@ impl<'a> Analyzer<'a> {
         let (base, args) = Self::resolve_struct_parts(left)?;
         let recv = crate::syntax::nodes::types::mangle_generic(&base, &args);
         let symbol = OperatorSymbol::from_binary_token(opr_kind)?;
-        self.operator_overloads.get(&recv)?.binary.get(&symbol).cloned()
+        self.operator_overloads
+            .get(&recv)?
+            .binary
+            .get(&symbol)
+            .cloned()
     }
 
     /// The registered unary-operator method for `opr_kind` on `operand`'s type, if `operand` is a
@@ -307,7 +318,11 @@ impl<'a> Analyzer<'a> {
         let (base, args) = Self::resolve_struct_parts(operand)?;
         let recv = crate::syntax::nodes::types::mangle_generic(&base, &args);
         let symbol = OperatorSymbol::from_unary_token(opr_kind)?;
-        self.operator_overloads.get(&recv)?.unary.get(&symbol).cloned()
+        self.operator_overloads
+            .get(&recv)?
+            .unary
+            .get(&symbol)
+            .cloned()
     }
 
     /// The registered cast method converting `from` to `to`, if any. `only_implicit` restricts the
@@ -328,7 +343,10 @@ impl<'a> Analyzer<'a> {
             .get(&recv)?
             .casts
             .iter()
-            .find(|c| c.target.get_type() == target_str && (!only_implicit || c.kind == CastKind::Implicit))
+            .find(|c| {
+                c.target.get_type() == target_str
+                    && (!only_implicit || c.kind == CastKind::Implicit)
+            })
             .cloned()
     }
 }

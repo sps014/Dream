@@ -1,0 +1,37 @@
+fun main(): void {
+    let digits = Regex("\\d+", "g");
+    System.println(digits.test("abc123"));
+    System.println(digits.test("no digits here"));
+
+    let parts = digits.match("a1b22c333");
+    System.println(parts.size());
+    System.println(parts[0]);
+    System.println(parts[1]);
+    System.println(parts[2]);
+
+    let lazy = Regex("<.+?>", "");
+    System.println(lazy.match("<a><b>")[0]);
+
+    let greedy = Regex("<.+>", "");
+    System.println(greedy.match("<a><b>")[0]);
+
+    let counted = Regex("a{2,3}", "");
+    System.println(counted.match("aaaa")[0]);
+
+    let unbounded = Regex("a{2,}", "");
+    System.println(unbounded.match("aaaaa")[0]);
+
+    let exact = Regex("a{3}", "");
+    System.println(exact.test("aa"));
+    System.println(exact.test("aaa"));
+
+    let dot_default = Regex("a.b", "");
+    System.println(dot_default.test("a\nb"));
+    System.println(dot_default.test("axb"));
+
+    let dot_all = Regex("a.b", "s");
+    System.println(dot_all.test("a\nb"));
+
+    let empty = Regex("", "");
+    System.println(empty.test("anything"));
+}

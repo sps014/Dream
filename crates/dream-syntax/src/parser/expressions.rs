@@ -397,7 +397,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             if is_ref {
                 if self.current_token().kind == TokenKind::EqualToken {
                     self.diagnostics.report_error(
-                        format!("'ref' parameter '{}' cannot have a default value", param.text),
+                        format!(
+                            "'ref' parameter '{}' cannot have a default value",
+                            param.text
+                        ),
                         Some(param.position),
                     );
                 }

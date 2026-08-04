@@ -97,7 +97,10 @@ impl<'a> Analyzer<'a> {
                 // there is no bare-element fallback type to infer). An empty `{}` is ambiguous with
                 // an empty map, so it is reinterpreted as one here when the context calls for it.
                 match self.current_expected_type.clone() {
-                    Some(t) if elements.is_empty() && Self::collection_generic_arg2(&t, "Map").is_some() => {
+                    Some(t)
+                        if elements.is_empty()
+                            && Self::collection_generic_arg2(&t, "Map").is_some() =>
+                    {
                         self.analyze_expression(
                             &ExpressionNode::MapLiteral(vec![]),
                             parent_function,
@@ -266,7 +269,12 @@ impl<'a> Analyzer<'a> {
                 // bool/numeric/integer rules below so a struct's overload always wins.
                 if let Some(op_method) = self.operator_unary_fn(&right_type, opr.kind) {
                     let return_type = op_method.return_type;
-                    self.hir_set_method_call(operand, &op_method.mangled_name, vec![], &return_type);
+                    self.hir_set_method_call(
+                        operand,
+                        &op_method.mangled_name,
+                        vec![],
+                        &return_type,
+                    );
                     return Ok(return_type);
                 }
                 match opr.kind {
@@ -586,7 +594,10 @@ impl<'a> Analyzer<'a> {
     /// If `t` is `{name}<A>` (a one-generic-argument struct named `name`, e.g. `List<int>`),
     /// returns `A`. Used to recognize an expected `List<T>`/`Set<T>` target type for collection
     /// literal lowering.
-    pub(in crate::semantics::analyzer) fn collection_generic_arg(t: &Type, name: &str) -> Option<Type> {
+    pub(in crate::semantics::analyzer) fn collection_generic_arg(
+        t: &Type,
+        name: &str,
+    ) -> Option<Type> {
         match t {
             Type::Struct(tok, Some(args)) if tok.text == name && args.len() == 1 => {
                 Some(args[0].clone())
@@ -622,12 +633,10 @@ impl<'a> Analyzer<'a> {
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let receiver = self
-            .arena
-            .alloc(ExpressionNode::Identifier(synthetic_token(
-                TokenKind::IdentifierToken,
-                base,
-            )));
+        let receiver = self.arena.alloc(ExpressionNode::Identifier(synthetic_token(
+            TokenKind::IdentifierToken,
+            base,
+        )));
         let call = ExpressionNode::MethodCall(
             receiver,
             synthetic_token(TokenKind::IdentifierToken, method),

@@ -53,7 +53,12 @@ impl<'a> Analyzer<'a> {
             // runs for every monomorphization (not gated on `bindings.is_empty()`): a generic
             // type's overload table is keyed by the concrete `target_type_str` (e.g. `Box_int` vs.
             // `Box_string`), so each instance needs its own entry.
-            self.validate_and_register_operator(target_type_str, method, &mangled_name, diagnostics);
+            self.validate_and_register_operator(
+                target_type_str,
+                method,
+                &mangled_name,
+                diagnostics,
+            );
             self.type_ctx.register(
                 DefKind::Function,
                 &mangled_name,

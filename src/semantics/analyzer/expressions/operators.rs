@@ -199,10 +199,20 @@ impl<'a> Analyzer<'a> {
                     self.operator_binary_fn(&left_value, TokenKind::EqualEqualToken)
                 {
                     if let Some(param_type) = &op_method.param_type {
-                        self.compare_data_type(param_type, &right_value, &opr.position, diagnostics)?;
+                        self.compare_data_type(
+                            param_type,
+                            &right_value,
+                            &opr.position,
+                            diagnostics,
+                        )?;
                     }
                     let bool_ty = Type::Boolean(opr.clone());
-                    self.hir_set_method_call(left_hir, &op_method.mangled_name, vec![right_hir], &bool_ty);
+                    self.hir_set_method_call(
+                        left_hir,
+                        &op_method.mangled_name,
+                        vec![right_hir],
+                        &bool_ty,
+                    );
                     self.hir_negate_last();
                     return Ok(bool_ty);
                 }

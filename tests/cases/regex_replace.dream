@@ -1,0 +1,20 @@
+fun main(): void {
+    let swap = Regex("(\\w+)\\s+(\\w+)", "");
+    System.println(swap.replace("hello world", "$2 $1"));
+    System.println(swap.replace("hello world", "[$&]"));
+    System.println(swap.replace("hello world", "$$1"));
+
+    let digits = Regex("\\d+", "g");
+    System.println(digits.replace("a1b22c333", "#"));
+
+    let first_only = Regex("\\d+", "");
+    System.println(first_only.replace("a1b22c333", "#"));
+
+    // Global replace of a pattern that can match the empty string must terminate and still make
+    // forward progress.
+    let maybe_a = Regex("a*", "g");
+    System.println(maybe_a.replace("bab", "-"));
+
+    let no_match = Regex("zzz", "g");
+    System.println(no_match.replace("hello", "#"));
+}

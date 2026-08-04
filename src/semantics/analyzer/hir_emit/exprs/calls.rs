@@ -101,7 +101,12 @@ impl<'a> Analyzer<'a> {
             line_no: 0,
             col_no: 0,
         };
-        self.ensure_struct_instantiated(base, std::slice::from_ref(elem_ty), &no_span, &mut throwaway);
+        self.ensure_struct_instantiated(
+            base,
+            std::slice::from_ref(elem_ty),
+            &no_span,
+            &mut throwaway,
+        );
         let mangled = mangle_generic(base, std::slice::from_ref(elem_ty));
         let def = self.type_ctx.defs.lookup(DefKind::Struct, base)?;
         let ctor = self

@@ -117,10 +117,9 @@ impl FunctionTable {
         // schemes is not supported.
         let is_plain_overload_set = self.overloads.get(base).map(|v| v.len()).unwrap_or(0) > 1;
         if info.declaring_module.is_some() && !is_plain_overload_set {
-            let existing_module_differs = self
-                .functions
-                .get(base)
-                .is_some_and(|e| e.declaring_module.is_some() && e.declaring_module != info.declaring_module);
+            let existing_module_differs = self.functions.get(base).is_some_and(|e| {
+                e.declaring_module.is_some() && e.declaring_module != info.declaring_module
+            });
             let other_module_already_claimed_it = self
                 .by_module
                 .keys()

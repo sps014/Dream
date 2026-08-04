@@ -518,7 +518,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             // top-level parsing can never spin forever.
             self.ensure_progress(loop_start);
         }
-        let mut program = ProgramNode::new(imports, structs, interfaces, functions, enums, extends, globals);
+        let mut program = ProgramNode::new(
+            imports, structs, interfaces, functions, enums, extends, globals,
+        );
         program.module = module;
         Ok(program)
     }

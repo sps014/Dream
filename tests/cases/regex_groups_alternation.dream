@@ -1,0 +1,36 @@
+fun main(): void {
+    let date = Regex("(\\d{4})-(\\d{2})-(\\d{2})", "");
+    let caps = date.match("2026-08-04");
+    System.println(caps.size());
+    System.println(caps[0]);
+    System.println(caps[1]);
+    System.println(caps[2]);
+    System.println(caps[3]);
+
+    let alt = Regex("(?:cat|dog)s?", "");
+    System.println(alt.test("I have dogs"));
+    System.println(alt.test("I have a cat"));
+    System.println(alt.test("I have a fish"));
+
+    let nested = Regex("((a)(b))c", "");
+    let ncaps = nested.match("abc");
+    System.println(ncaps.size());
+    System.println(ncaps[0]);
+    System.println(ncaps[1]);
+    System.println(ncaps[2]);
+    System.println(ncaps[3]);
+
+    // An alternative that isn't taken leaves its group unset ("").
+    let optional_branch = Regex("(a)|(b)", "");
+    let ob = optional_branch.match("b");
+    System.println(ob.size());
+    System.println(ob[0]);
+    System.println(ob[1]);
+    System.println(ob[2]);
+
+    // Malformed patterns (unterminated group/class) never crash.
+    let unterminated_group = Regex("(abc", "");
+    System.println(unterminated_group.test("abc"));
+    let unterminated_class = Regex("[abc", "");
+    System.println(unterminated_class.test("b"));
+}

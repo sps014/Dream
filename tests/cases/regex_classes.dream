@@ -1,0 +1,30 @@
+fun main(): void {
+    let vowels = Regex("[aeiou]+", "g");
+    System.println(vowels.replace("hello world", "_"));
+
+    let range = Regex("[a-f]+", "");
+    System.println(range.test("cafe"));
+    System.println(range.test("xyz"));
+
+    let negated = Regex("[^aeiou\\s]+", "g");
+    let m = negated.match("hi there");
+    System.println(m.size());
+    System.println(m[0]);
+    System.println(m[1]);
+
+    let digit_class = Regex("[\\d]+", "");
+    System.println(digit_class.test("42"));
+
+    let word_shorthand = Regex("\\w+", "");
+    System.println(word_shorthand.match("hello_world!")[0]);
+
+    let non_word = Regex("\\W+", "");
+    System.println(non_word.match("a, b")[0]);
+
+    let space_shorthand = Regex("\\s+", "");
+    System.println(space_shorthand.test("a b"));
+    System.println(space_shorthand.test("ab"));
+
+    let non_digit = Regex("\\D+", "");
+    System.println(non_digit.match("abc123")[0]);
+}

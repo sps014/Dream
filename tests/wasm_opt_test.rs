@@ -89,7 +89,11 @@ fn optimized_wasm_runs_and_is_not_larger_at_every_level() {
         let opt_bytes = fs::read(&opt_wasm)
             .unwrap_or_else(|_| panic!("optimized .wasm at {:?} should exist", level));
 
-        assert!(!opt_bytes.is_empty(), "optimized .wasm at {:?} is empty", level);
+        assert!(
+            !opt_bytes.is_empty(),
+            "optimized .wasm at {:?} is empty",
+            level
+        );
         assert!(
             opt_bytes.len() <= plain_bytes.len(),
             "wasm-opt at {:?} grew the module: {} -> {} bytes",

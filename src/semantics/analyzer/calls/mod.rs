@@ -33,11 +33,16 @@ impl<'a> Analyzer<'a> {
     /// reconstructing from the mangled `sig.parameters` strings for synthesized/stdlib entries
     /// that never populate `parameter_types` (only ever primitives there, so the round-trip is
     /// lossless).
-    pub(super) fn expected_param_types(sig: &crate::semantics::function_table::FunctionTableInfo) -> Vec<Type> {
+    pub(super) fn expected_param_types(
+        sig: &crate::semantics::function_table::FunctionTableInfo,
+    ) -> Vec<Type> {
         if sig.parameter_types.len() == sig.parameters.len() {
             sig.parameter_types.clone()
         } else {
-            sig.parameters.iter().map(|p| Self::type_from_name(p)).collect()
+            sig.parameters
+                .iter()
+                .map(|p| Self::type_from_name(p))
+                .collect()
         }
     }
 

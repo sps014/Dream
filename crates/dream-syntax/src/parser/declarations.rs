@@ -768,7 +768,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             let ctor_name = self.match_token(TokenKind::IdentifierToken);
             if visibility != Visibility::Private {
                 self.diagnostics.report_error(
-                    format!("'{}' cannot be marked 'public' or 'internal'", ctor_name.text),
+                    format!(
+                        "'{}' cannot be marked 'public' or 'internal'",
+                        ctor_name.text
+                    ),
                     Some(ctor_name.position),
                 );
             }
@@ -1017,7 +1020,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if is_ref {
                     if self.current_token().kind == TokenKind::EqualToken {
                         self.diagnostics.report_error(
-                            format!("'ref' parameter '{}' cannot have a default value", param.text),
+                            format!(
+                                "'ref' parameter '{}' cannot have a default value",
+                                param.text
+                            ),
                             Some(param.position),
                         );
                     }

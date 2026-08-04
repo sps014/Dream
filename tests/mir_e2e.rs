@@ -11,8 +11,7 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
     link_console_functions, link_datetime_functions, link_file_functions, link_http_functions,
-    link_math_functions, link_regex_functions, link_worker_functions, read_string_from_memory,
-    set_worker_module,
+    link_math_functions, link_worker_functions, read_string_from_memory, set_worker_module,
 };
 use rayon::prelude::*;
 use std::collections::BTreeSet;
@@ -109,7 +108,6 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     link_math_functions(&mut linker).unwrap();
     link_file_functions(&mut linker).unwrap();
     link_http_functions(&mut linker).unwrap();
-    link_regex_functions(&mut linker).unwrap();
     link_console_functions(&mut linker).unwrap();
     link_datetime_functions(&mut linker).unwrap();
     link_worker_functions(&mut linker).unwrap();

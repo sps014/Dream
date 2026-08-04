@@ -1,0 +1,31 @@
+fun main(): void {
+    let anchored = Regex("^abc$", "");
+    System.println(anchored.test("abc"));
+    System.println(anchored.test("xabc"));
+    System.println(anchored.test("abcx"));
+
+    let multiline = Regex("^b", "mg");
+    System.println(multiline.match("a\nb\nc").size());
+
+    let single_line = Regex("^b", "g");
+    System.println(single_line.match("a\nb\nc").size());
+
+    let word_boundary = Regex("\\bcat\\b", "");
+    System.println(word_boundary.test("a cat sat"));
+    System.println(word_boundary.test("category"));
+
+    let non_word_boundary = Regex("\\Bcat", "");
+    System.println(non_word_boundary.test("concatenate"));
+    System.println(non_word_boundary.test("a cat"));
+
+    let case_insensitive = Regex("hello", "i");
+    System.println(case_insensitive.test("HELLO world"));
+    System.println(case_insensitive.test("goodbye"));
+
+    let case_sensitive = Regex("hello", "");
+    System.println(case_sensitive.test("HELLO world"));
+
+    let combined = Regex("[a-z]+", "gi");
+    System.println(combined.match("ABC def")[0]);
+    System.println(combined.match("ABC def")[1]);
+}

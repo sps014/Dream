@@ -1,0 +1,258 @@
+// Compiled instruction set and compiler, ported from RE2's `Prog`/`Inst` (re2/prog.h) and its
+// `Compiler` (re2/compile.cc). RE2 operates byte-at-a-time (its strings are UTF-8), so it has a
+// separate `kInstByteRange` per byte range plus a Unicode-aware char-class-to-byte-range
+// expansion. Dream's `string`/`char` already operate one Unicode code point at a time (see
+// `char_at`), so this port collapses literal/class/dot matching into a single `CharClass`
+// instruction that carries its own `ranges` + `negate` (and RE2's per-instruction `foldcase` bit
+// for case-insensitive matching) — no byte-range expansion needed. The rest of the opcode set is
+// RE2's: `Capture` (`kInstCapture`), `EmptyWidth` (`kInstEmptyWidth`), `Alt` (`kInstAlt`), `Nop`
+// (an unconditional jump — RE2 also reuses `kInstNop` this way), and `Match` (`kInstMatch`).
+//
+// Every instruction has an explicit `out` (and `Alt` also has `out1`), matching RE2's Prog: no
+// instruction relies on an implicit "falls through to the next slot" successor.
+//
+// Compilation itself uses the simpler two-pass count-then-emit strategy from the `re1`/`pike.c`
+// lineage RE2 itself grew out of (`count(node)` sizes the instruction array exactly once, `emit`
+// walks the tree filling it in with direct index backpatching) rather than RE2's
+// fragment/patch-list builder — the two produce equivalent programs, and the two-pass approach
+// needs no dynamically-growing patch-list bookkeeping.
+
+public enum RegexOp {
+    CharClass,
+    Capture,
+    EmptyWidth,
+    Alt,
+    Match,
+    Nop,
+}
+
+public class RegexInst {
+    public opcode: RegexOp;
+    public ranges: List<char>;
+    public negate: bool;
+    public foldcase: bool;
+    public cap: int;
+    public empty_kind: RegexEmptyKind;
+    public out: int;
+    public out1: int;
+
+    constructor(opcode: RegexOp, ranges: List<char>, negate: bool, foldcase: bool, cap: int, empty_kind: RegexEmptyKind, out: int, out1: int) {
+        this.opcode = opcode;
+        this.ranges = ranges;
+        this.negate = negate;
+        this.foldcase = foldcase;
+        this.cap = cap;
+        this.empty_kind = empty_kind;
+        this.out = out;
+        this.out1 = out1;
+    }
+
+    public static fun char_class(ranges: List<char>, negate: bool, foldcase: bool): RegexInst {
+        return RegexInst(RegexOp.CharClass, ranges, negate, foldcase, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+    }
+
+    public static fun capture(cap: int): RegexInst {
+        return RegexInst(RegexOp.Capture, List<char>(), false, false, cap, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+    }
+
+    public static fun empty_width(kind: RegexEmptyKind): RegexInst {
+        return RegexInst(RegexOp.EmptyWidth, List<char>(), false, false, 0, kind, 0 - 1, 0 - 1);
+    }
+
+    public static fun alt(out: int, out1: int): RegexInst {
+        return RegexInst(RegexOp.Alt, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, out1);
+    }
+
+    public static fun nop(out: int): RegexInst {
+        return RegexInst(RegexOp.Nop, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, 0 - 1);
+    }
+
+    public static fun match_inst(): RegexInst {
+        return RegexInst(RegexOp.Match, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+    }
+}
+
+public class RegexCompiler {
+    prog: RegexInst[];
+    pc: int;
+    ignore_case: bool;
+    dot_all: bool;
+
+    constructor(ignore_case: bool, dot_all: bool) {
+        this.prog = Buffer.alloc<RegexInst>(0);
+        this.pc = 0;
+        this.ignore_case = ignore_case;
+        this.dot_all = dot_all;
+    }
+
+    // How many instructions `node` needs, mirroring `compile.c`'s `count`.
+    static fun count_instructions(node: RegexNode): int {
+        if (node.kind == RegexNodeKind.Alt) {
+            return 2 + RegexCompiler.count_instructions(node.left_child()) + RegexCompiler.count_instructions(node.right_child());
+        }
+        if (node.kind == RegexNodeKind.Cat) {
+            return RegexCompiler.count_instructions(node.left_child()) + RegexCompiler.count_instructions(node.right_child());
+        }
+        if (node.kind == RegexNodeKind.Lit) {
+            return 1;
+        }
+        if (node.kind == RegexNodeKind.Class) {
+            return 1;
+        }
+        if (node.kind == RegexNodeKind.AnyChar) {
+            return 1;
+        }
+        if (node.kind == RegexNodeKind.Paren) {
+            if (node.cap >= 0) {
+                return 2 + RegexCompiler.count_instructions(node.left_child());
+            }
+            return RegexCompiler.count_instructions(node.left_child());
+        }
+        if (node.kind == RegexNodeKind.Star) {
+            return 2 + RegexCompiler.count_instructions(node.left_child());
+        }
+        if (node.kind == RegexNodeKind.Plus) {
+            return 1 + RegexCompiler.count_instructions(node.left_child());
+        }
+        if (node.kind == RegexNodeKind.Quest) {
+            return 1 + RegexCompiler.count_instructions(node.left_child());
+        }
+        if (node.kind == RegexNodeKind.Assert) {
+            return 1;
+        }
+        return 0; // Nothing
+    }
+
+    // Compiles `root` into a flat instruction array, terminated by a `Match` instruction.
+    public fun compile(root: RegexNode): RegexInst[] {
+        let total = RegexCompiler.count_instructions(root) + 1;
+        this.prog = Buffer.alloc<RegexInst>(total);
+        let i = 0;
+        while (i < total) {
+            this.prog[i] = RegexInst.nop(0 - 1);
+            i = i + 1;
+        }
+        this.pc = 0;
+        this.emit(root);
+        this.prog[this.pc] = RegexInst.match_inst();
+        this.pc = this.pc + 1;
+        return this.prog;
+    }
+
+    // Allocates the next slot for a non-branching leaf instruction (`CharClass`/`Capture`/
+    // `EmptyWidth`): it always falls through to the instruction right after it.
+    fun alloc_leaf(inst: RegexInst): void {
+        let idx = this.pc;
+        inst.out = idx + 1;
+        this.prog[idx] = inst;
+        this.pc = this.pc + 1;
+    }
+
+    fun emit(node: RegexNode): void {
+        if (node.kind == RegexNodeKind.Alt) {
+            let idx_alt = this.pc;
+            this.prog[idx_alt] = RegexInst.alt(0 - 1, 0 - 1);
+            this.pc = this.pc + 1;
+            this.prog[idx_alt].out = this.pc;
+            this.emit(node.left_child());
+            let idx_nop = this.pc;
+            this.prog[idx_nop] = RegexInst.nop(0 - 1);
+            this.pc = this.pc + 1;
+            this.prog[idx_alt].out1 = this.pc;
+            this.emit(node.right_child());
+            this.prog[idx_nop].out = this.pc;
+            return;
+        }
+        if (node.kind == RegexNodeKind.Cat) {
+            this.emit(node.left_child());
+            this.emit(node.right_child());
+            return;
+        }
+        if (node.kind == RegexNodeKind.Lit) {
+            let ranges = List<char>();
+            ranges.push(node.ch);
+            ranges.push(node.ch);
+            this.alloc_leaf(RegexInst.char_class(ranges, false, this.ignore_case));
+            return;
+        }
+        if (node.kind == RegexNodeKind.Class) {
+            this.alloc_leaf(RegexInst.char_class(node.ranges, node.negate, this.ignore_case));
+            return;
+        }
+        if (node.kind == RegexNodeKind.AnyChar) {
+            let ranges = List<char>();
+            if (this.dot_all == false) {
+                ranges.push('\n');
+                ranges.push('\n');
+            }
+            this.alloc_leaf(RegexInst.char_class(ranges, true, false));
+            return;
+        }
+        if (node.kind == RegexNodeKind.Paren) {
+            if (node.cap >= 0) {
+                this.alloc_leaf(RegexInst.capture(2 * node.cap));
+            }
+            this.emit(node.left_child());
+            if (node.cap >= 0) {
+                this.alloc_leaf(RegexInst.capture(2 * node.cap + 1));
+            }
+            return;
+        }
+        if (node.kind == RegexNodeKind.Quest) {
+            let idx_alt = this.pc;
+            this.prog[idx_alt] = RegexInst.alt(0 - 1, 0 - 1);
+            this.pc = this.pc + 1;
+            let target_body = this.pc;
+            this.emit(node.left_child());
+            let target_end = this.pc;
+            if (node.greedy) {
+                this.prog[idx_alt].out = target_body;
+                this.prog[idx_alt].out1 = target_end;
+            } else {
+                this.prog[idx_alt].out = target_end;
+                this.prog[idx_alt].out1 = target_body;
+            }
+            return;
+        }
+        if (node.kind == RegexNodeKind.Star) {
+            let idx_alt = this.pc;
+            this.prog[idx_alt] = RegexInst.alt(0 - 1, 0 - 1);
+            this.pc = this.pc + 1;
+            let target_body = this.pc;
+            this.emit(node.left_child());
+            let idx_nop = this.pc;
+            this.prog[idx_nop] = RegexInst.nop(idx_alt);
+            this.pc = this.pc + 1;
+            let target_end = this.pc;
+            if (node.greedy) {
+                this.prog[idx_alt].out = target_body;
+                this.prog[idx_alt].out1 = target_end;
+            } else {
+                this.prog[idx_alt].out = target_end;
+                this.prog[idx_alt].out1 = target_body;
+            }
+            return;
+        }
+        if (node.kind == RegexNodeKind.Plus) {
+            let target_body = this.pc;
+            this.emit(node.left_child());
+            let idx_alt = this.pc;
+            this.prog[idx_alt] = RegexInst.alt(0 - 1, 0 - 1);
+            this.pc = this.pc + 1;
+            let target_end = this.pc;
+            if (node.greedy) {
+                this.prog[idx_alt].out = target_body;
+                this.prog[idx_alt].out1 = target_end;
+            } else {
+                this.prog[idx_alt].out = target_end;
+                this.prog[idx_alt].out1 = target_body;
+            }
+            return;
+        }
+        if (node.kind == RegexNodeKind.Assert) {
+            this.alloc_leaf(RegexInst.empty_width(node.empty_kind));
+            return;
+        }
+        // Nothing: emits no instructions, falls straight through.
+    }
+}

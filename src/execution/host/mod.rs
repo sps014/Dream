@@ -5,7 +5,6 @@
 //! The pieces are split by concern so each capability lives next to the stdlib module it backs:
 //!   * [`memory`]   - shared string/`char[]` marshaling across the WASM boundary.
 //!   * [`file`]     - `src/stdlib/io/file.dream` (synchronous `std::fs`).
-//!   * [`regex`]    - `src/stdlib/text/regex.dream` (the `regex` crate).
 //!   * [`http`]     - `src/stdlib/net/http_client.dream` (blocking `reqwest` + the async future bridge).
 //!   * [`math`]     - the `Math.*` `env` builtins.
 //!   * [`console`]  - `src/stdlib/system/system.dream`'s `readLine`/`readKey`/`exit` (the `crossterm` crate).
@@ -17,7 +16,6 @@ mod file;
 mod http;
 mod math;
 mod memory;
-mod regex;
 mod worker;
 
 pub use console::{enable_ansi_support, link_console_functions};
@@ -26,7 +24,6 @@ pub use file::link_file_functions;
 pub use http::link_http_functions;
 pub use math::link_math_functions;
 pub use memory::{read_string_from_memory, write_bytes_to_memory, write_string_to_memory};
-pub use regex::link_regex_functions;
 pub use worker::{link_worker_functions, set_worker_debug, set_worker_module, WorkerDebug};
 
 #[cfg(test)]
@@ -48,7 +45,6 @@ mod contract_tests {
         include_str!("datetime.rs"),
         include_str!("file.rs"),
         include_str!("http.rs"),
-        include_str!("regex.rs"),
         include_str!("worker.rs"),
     ];
 

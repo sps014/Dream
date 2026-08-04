@@ -1,7 +1,7 @@
 use super::host::{
     enable_ansi_support, link_console_functions, link_datetime_functions, link_file_functions,
-    link_http_functions, link_math_functions, link_regex_functions, link_worker_functions,
-    read_string_from_memory, set_worker_module,
+    link_http_functions, link_math_functions, link_worker_functions, read_string_from_memory,
+    set_worker_module,
 };
 use std::fs;
 use wasmtime::*;
@@ -122,13 +122,12 @@ pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
 }
 
 /// Wires every host binding *except* the `print_*` builtins: the [`super::host`] function modules
-/// (math/file/http/regex/console/datetime/worker) plus the `strlen`/`debug_get_free_list_head`
+/// (math/file/http/console/datetime/worker) plus the `strlen`/`debug_get_free_list_head`
 /// stubs. The debugger reuses this and supplies its own print bindings.
 pub fn link_runtime_host_functions(linker: &mut Linker<()>) -> Result<()> {
     link_math_functions(linker)?;
     link_file_functions(linker)?;
     link_http_functions(linker)?;
-    link_regex_functions(linker)?;
     link_console_functions(linker)?;
     link_datetime_functions(linker)?;
     link_worker_functions(linker)?;
