@@ -293,12 +293,17 @@ impl<'a> Analyzer<'a> {
         };
 
         // Private methods (the default) may only be called from within the declaring type's own
-        // methods; `public` exposes them to outside code.
-        if !store_sig.is_public {
+        // methods; `internal` from anywhere in the same module; `public` exposes them everywhere.
+        if !store_sig.visibility.is_public() {
             let base_name = Self::resolve_struct_parts(obj_type)
                 .map(|(b, _)| b)
                 .unwrap_or_else(|| obj_type.get_type());
-            if !self.in_methods_of(ctx.parent_function, &base_name) {
+            if !self.member_accessible(
+                store_sig.visibility,
+                &store_sig.declaring_file,
+                ctx.parent_function.file_path.as_ref(),
+                self.in_methods_of(ctx.parent_function, &base_name),
+            ) {
                 diagnostics.report_error(
                     format!("'{}' is private to '{}'", method.text, base_name),
                     Some(method.position),

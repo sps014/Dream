@@ -55,17 +55,17 @@ impl<'a> Analyzer<'a> {
         if let Some(info) = self.struct_table.get_struct(&type_name) {
             if !self.visible_across_files(
                 &info.file_path,
-                info.is_public,
+                info.visibility,
                 ctx.parent_function.file_path.as_ref(),
             ) {
                 let decl_file = info.file_path.clone();
                 self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
             }
         } else if let Some(template) = self.generic_structs.get(&type_name) {
-            let (decl_file, is_public) = (template.file_path.clone(), template.is_public);
+            let (decl_file, visibility) = (template.file_path.clone(), template.visibility);
             if !self.visible_across_files(
                 &decl_file,
-                is_public,
+                visibility,
                 ctx.parent_function.file_path.as_ref(),
             ) {
                 self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);

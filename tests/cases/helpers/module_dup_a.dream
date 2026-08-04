@@ -1,0 +1,7 @@
+// Declares the same module and same-signature `add` as helpers/module_dup_b.dream — a genuine
+// same-module collision, unlike the different-module case in module_alias_no_collision.dream.
+module dup.pkg;
+
+public fun add(a: int, b: int): int {
+    return a + b;
+}

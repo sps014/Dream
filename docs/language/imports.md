@@ -30,45 +30,125 @@ fun main() {
 
 Imports resolve recursively (an imported file may import others), and each file is processed only once even if imported from several places.
 
-## Visibility
+## Modules
 
-Dream uses one keyword, `public`, for two independent axes.
-
-### File / module visibility
-
-A top-level declaration (function, class, interface, enum, or global) is **file-private by default** — usable anywhere in its own file but invisible to any other file, even one that imports it. Mark it `public` to export it (and, for functions, to expose it to the host):
+A file can opt into a named **module** by declaring it at the very top, before any `import`:
 
 ```dream
-// lib.dream
-public fun public_add(a: int, b: int): int { return a + b; }
-fun helper(): int { return 99; }   // file-private
+// utils/math_lib.dream
+module utils.math;
+
+public fun add(a: int, b: int): int {
+    return a + b;
+}
+```
+
+- At most one `module` declaration per file, and it must be the first thing in the file (before `import` and before any other declaration).
+- A module path is purely a name — `module utils.math;` does **not** need to live in a `utils/math` directory. File resolution for plain `import`s is still directory-based, exactly as before; `module` only tags a file's declarations with a logical namespace, independent of where the file sits on disk.
+- Files that don't declare a `module` stay in the implicit, unnamed **root module** — today's flat, unqualified behavior is unchanged for any file that never writes `module`.
+- Two files in **different** modules may declare the same name (e.g. two `public fun add(...)`) without colliding. Two declarations in the **same** module (or both in the unnamed root module) with the same name still collide exactly as before — a module is still one namespace.
+
+## Aliased imports (resolving duplicate names)
+
+Because two modules can legally define the same name, `import` has a second form — with a trailing `as` clause — that pulls in one specific item from a *module* (not a file) under a chosen local alias:
+
+```dream
+import <dotted-module-path>.<item> as <alias>;
+```
+
+```dream
+// vendor/math_lib.dream
+module vendor.math;
+
+public fun add(a: float, b: float): float {
+    return a + b;
+}
 ```
 
 ```dream
 // main.dream
+import utils.math_lib;               // file import, unchanged: loads utils/math_lib.dream
+import vendor.math_lib;              // loads vendor/math_lib.dream
+
+import utils.math.add as add_int;    // aliases the `add` declared in module `utils.math`
+import vendor.math.add as add_float; // aliases the `add` declared in module `vendor.math`
+
+fun main() {
+    println(add_int(1, 2));           // 3
+    println(add_float(1.5, 2.5));     // 4.0
+}
+```
+
+The two `import` forms are told apart by the trailing `as` clause, not by a different keyword:
+
+- `import <dotted-file-path>;` (no `as`) — resolves against the filesystem, exactly as in [Importing a file](#importing-a-file). The declaring file must still be pulled into the program this way (directly or transitively) before an aliased import from its module can see it.
+- `import <module-path>.<item> as <alias>;` (with `as`) — resolves `<item>` against the *declared module* `<module-path>`, not the filesystem, and binds it into the current file's top-level scope as `<alias>`.
+
+The aliased item must be `public` or `internal`; importing a `private` declaration this way is always an error, regardless of which module the importing file belongs to. If `<alias>` collides with another name already in scope in the importing file, that's a normal "already defined" diagnostic — pick a different alias.
+
+There is no wildcard `import pkg.*;` in this version — only single-item aliased imports. This affects convenience, not reachability: it just means one `import ... as` line per name you want to consume unqualified from another module (mirroring Rust/Go's general avoidance of star-imports).
+
+## Visibility
+
+Dream has three visibility levels — `private` (the default, no keyword), `internal`, and `public` — applied consistently across two independent axes.
+
+### File / module visibility
+
+A top-level declaration (function, class, interface, enum, or global) is **private by default** — usable anywhere in its own file but invisible to any other file, even one that imports it.
+
+- `internal` — visible from any file that shares the same declaring `module` (or, for undeclared files, the shared unnamed root module), but not from a file in a different module.
+- `public` — visible everywhere the file is reachable from (and, for functions, exposed to the host).
+
+```dream
+// lib.dream
+module utils.math;
+
+public fun public_add(a: int, b: int): int { return a + b; }
+internal fun shared_helper(): int { return 99; }  // visible anywhere in module utils.math
+fun private_helper(): int { return 1; }           // file-private
+```
+
+```dream
+// other_file_same_module.dream
+module utils.math;   // same module as lib.dream
+
+fun uses_helper(): int {
+    return shared_helper();  // ok: same module
+}
+```
+
+```dream
+// main.dream (unnamed root module)
 import lib;
 
 fun main() {
-    System.println(public_add(2, 3));  // ok: public
-    System.println(helper());          // error: 'helper' is not 'public'
+    System.println(public_add(2, 3));   // ok: public
+    System.println(shared_helper());    // error: 'shared_helper' is internal to module utils.math
+    System.println(private_helper());   // error: 'private_helper' is not 'public'
 }
 ```
 
 ### Class member visibility
 
-A class member (field, method, static method, or accessor) is **class-private by default** — reachable only from that class's own methods, regardless of file. Mark it `public` to expose it. `static` never implies visibility; a `static` member must still be `public` to be called from outside the class:
+A class member (field, method, static method, or accessor) is **class-private by default** — reachable only from that class's own methods, regardless of file. `static` never implies visibility; a `static` member must still be `internal`/`public` to be called from outside the class.
+
+- `internal` — reachable from anywhere in the declaring class's module (not just the class's own methods), but not outside the module.
+- `public` — reachable from anywhere the type itself is reachable.
 
 ```dream
-public class Counter {
-    count: int;                                     // class-private field
-    public fun value(): int { return this.count; }  // public method
-    static fun make(): Counter { return Counter(); } // class-private static
+module utils.math;
+
+public class Vector {
+    internal x: int;                          // visible anywhere in module utils.math
+    public fun length_sq(): int {
+        return helper_square(this.x);
+    }
 }
 ```
 
 ### How they compose
 
-To use a member from another file you need **both**: the type must be `public` (so its name is reachable), and the member must be `public` (so it is accessible outside the class). A `public` function may not expose a non-`public` class.
+To use a member from another file you need **both**: the type must be reachable from the caller (its axis-1 visibility, evaluated against the caller's module), and the member must be reachable too (its axis-2 visibility, evaluated the same way). Effective accessibility from a given caller is the **minimum** of the two — an `internal class` only exposes its `public` members within the declaring module; even a `public` member is invisible outside it, because the type itself isn't reachable there.
 
 ```dream
 public class Point {
@@ -81,14 +161,9 @@ public fun origin(): Point {
 }
 ```
 
-### Why no `protected`/`internal`
+### Why no `protected`
 
-Dream deliberately has only two visibility levels — file-private/public (Axis 1) and class-private/public (Axis 2) — and no `protected` or `internal`-style middle ground. Both of those modifiers exist in other languages to solve problems Dream's design doesn't have:
-
-- **`protected`** (accessible to subclasses) has no reason to exist because Dream [has no class inheritance](classes-structs.md) — classes cannot extend one another, only implement interfaces (which contribute no member implementations to override or share). With no derived-class hierarchy, there is nothing for "accessible to this class and its subclasses" to mean.
-- **`internal`** (accessible package/assembly-wide but not beyond it) has no reason to exist because Dream has no package/assembly grouping above the individual file: a program is just a set of `.dream` files linked by `import`, with no intermediate module boundary for "internal" to scope to. File-private (the default) already gives the tightest useful grouping, and `public` already gives the widest; there is no third granularity in between for `internal` to occupy.
-
-If a future version of Dream gains class inheritance or a package system, revisiting this is reasonable — but retrofitting either keyword today would add surface area with no corresponding semantics to back it.
+Dream still has no `protected` modifier: it exists in other languages to grant access to subclasses, but Dream [has no class inheritance](classes-structs.md) — classes cannot extend one another, only implement interfaces (which contribute no member implementations to override or share). With no derived-class hierarchy, there is nothing for "accessible to this class and its subclasses" to mean. If a future version of Dream gains class inheritance, revisiting this is reasonable.
 
 ## Importing from JavaScript
 

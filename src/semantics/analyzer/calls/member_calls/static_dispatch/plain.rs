@@ -65,7 +65,12 @@ impl<'a> Analyzer<'a> {
             }
         };
 
-        if !store_sig.is_public && !self.in_methods_of(parent_function, type_name) {
+        if !self.member_accessible(
+            store_sig.visibility,
+            &store_sig.declaring_file,
+            parent_function.file_path.as_ref(),
+            self.in_methods_of(parent_function, type_name),
+        ) {
             diagnostics.report_error(
                 format!("'{}' is private to '{}'", method.text, type_name),
                 Some(method.position),

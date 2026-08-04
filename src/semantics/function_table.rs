@@ -1,7 +1,8 @@
 use crate::semantics::errors::SymbolError;
 use crate::stdlib::StdlibFunction;
-use crate::syntax::nodes::{FunctionNode, Type};
+use crate::syntax::nodes::{FunctionNode, Type, Visibility};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub struct FunctionTable {
@@ -10,6 +11,24 @@ pub struct FunctionTable {
     /// order. A base with a single entry keeps its bare name; a base with 2+ entries has each
     /// overload stored under a signature-mangled key (see [`overload_key`]).
     pub overloads: HashMap<String, Vec<String>>,
+    /// (declaring module, base name) -> the emitted key actually holding that module's
+    /// declaration, once a same-name collision across two *different* declared modules has
+    /// promoted both to module-qualified keys (see [`Self::add_overload`]/[`module_key`]). Absent
+    /// entries mean "no cross-module collision for this name": look it up by its bare name instead,
+    /// exactly as before `module` existed. Never populated for the unnamed root module (`None`),
+    /// so unmoded code keeps today's flat "same bare name always collides" behavior untouched.
+    by_module: HashMap<(Option<Rc<str>>, String), String>,
+}
+
+/// Builds the emitted key for a declaration named `base` once a same-name collision with a
+/// *different* declared module has forced both onto module-qualified keys, e.g. base `add` in
+/// module `utils.math` becomes `utils.math::add`. `::` is a valid WAT identifier character
+/// disjoint from the `.` [`overload_key`] uses, so the two mangling schemes never collide.
+fn module_key(base: &str, module: Option<&str>) -> String {
+    match module {
+        Some(m) => format!("{m}::{base}"),
+        None => base.to_string(),
+    }
 }
 
 /// Result of resolving an overloaded call against the argument types present at a call site.
@@ -49,6 +68,7 @@ impl FunctionTable {
         let mut table = FunctionTable {
             functions: HashMap::new(),
             overloads: HashMap::new(),
+            by_module: HashMap::new(),
         };
 
         for std_func in StdlibFunction::get_all() {
@@ -86,9 +106,30 @@ impl FunctionTable {
     pub fn add_overload(
         &mut self,
         base: &str,
-        mut info: FunctionTableInfo,
+        info: FunctionTableInfo,
         type_ctx: &mut crate::types::TypeCtx,
     ) -> Result<String, SymbolError> {
+        // A same-named declaration from a *different* declared module is not an overload conflict
+        // (overloading is same-name-different-signature within one namespace) — it is two
+        // independent symbols that happen to share a bare name, resolved by module-qualifying both
+        // instead of erroring. Left alone (falls through to the ordinary error path below) once the
+        // name is already a genuine multi-signature overload set, since combining the two mangling
+        // schemes is not supported.
+        let is_plain_overload_set = self.overloads.get(base).map(|v| v.len()).unwrap_or(0) > 1;
+        if info.declaring_module.is_some() && !is_plain_overload_set {
+            let existing_module_differs = self
+                .functions
+                .get(base)
+                .is_some_and(|e| e.declaring_module.is_some() && e.declaring_module != info.declaring_module);
+            let other_module_already_claimed_it = self
+                .by_module
+                .keys()
+                .any(|(m, n)| n == base && *m != info.declaring_module);
+            if existing_module_differs || other_module_already_claimed_it {
+                return self.register_cross_module(base, info);
+            }
+        }
+        let mut info = info;
         let existing = self.overloads.entry(base.to_string()).or_default();
         if existing.is_empty() {
             if self.functions.contains_key(base) {
@@ -128,6 +169,53 @@ impl FunctionTable {
         Ok(key)
     }
 
+    /// Resolves a same-bare-name collision between declarations in two different declared
+    /// modules by promoting both to module-qualified keys (see [`module_key`]): if `base` is
+    /// currently registered under its bare name, that entry is renamed to its own module-qualified
+    /// key first, then `info` is registered under its. Returns the emitted key chosen for `info`,
+    /// or an error if that exact module already registered `base` (a real same-module collision).
+    fn register_cross_module(
+        &mut self,
+        base: &str,
+        mut info: FunctionTableInfo,
+    ) -> Result<String, SymbolError> {
+        if let Some(mut existing) = self.functions.remove(base) {
+            let existing_key = module_key(base, existing.declaring_module.as_deref());
+            existing.name = existing_key.clone();
+            self.by_module.insert(
+                (existing.declaring_module.clone(), base.to_string()),
+                existing_key.clone(),
+            );
+            self.functions.insert(existing_key, existing);
+            self.overloads.remove(base);
+        }
+        let new_key = module_key(base, info.declaring_module.as_deref());
+        if self.functions.contains_key(&new_key) {
+            return Err(SymbolError::new(format!(
+                "Function '{}' is already defined in module '{}'",
+                base,
+                info.declaring_module.as_deref().unwrap_or("")
+            )));
+        }
+        info.name = new_key.clone();
+        self.by_module.insert(
+            (info.declaring_module.clone(), base.to_string()),
+            new_key.clone(),
+        );
+        self.functions.insert(new_key.clone(), info);
+        Ok(new_key)
+    }
+
+    /// The emitted key registered for `base` as declared in `module`, if a cross-module collision
+    /// ever forced it onto a module-qualified key (see [`Self::register_cross_module`]). Returns
+    /// `None` when no such collision occurred for this name (the common case): callers should then
+    /// fall back to looking `base` up by its bare name, unchanged from before `module` existed.
+    pub fn resolve_in_module(&self, module: Option<&Rc<str>>, base: &str) -> Option<&str> {
+        self.by_module
+            .get(&(module.cloned(), base.to_string()))
+            .map(|s| s.as_str())
+    }
+
     /// Whether `base` has more than one overload (i.e. its declarations are signature-mangled).
     pub fn is_overloaded(&self, base: &str) -> bool {
         self.overloads
@@ -149,6 +237,23 @@ impl FunctionTable {
         } else {
             base.to_string()
         }
+    }
+
+    /// The emitted name of the declaration of `base` as declared in `module`: the module-qualified
+    /// key when a cross-module collision promoted it (see [`Self::resolve_in_module`]), otherwise
+    /// [`Self::resolve_emitted_name`]'s ordinary bare-name/overload-mangled result, unchanged from
+    /// before `module` existed.
+    pub fn resolve_emitted_name_scoped(
+        &self,
+        base: &str,
+        module: Option<&Rc<str>>,
+        parameters: &[String],
+        type_ctx: &mut crate::types::TypeCtx,
+    ) -> String {
+        if let Some(key) = self.resolve_in_module(module, base) {
+            return key.to_string();
+        }
+        self.resolve_emitted_name(base, parameters, type_ctx)
     }
 
     /// Selects the overload of `base` that best matches `args`. Exact type matches are preferred;
@@ -274,14 +379,20 @@ pub struct FunctionTableInfo {
     /// `[]`/`for..in` hooks. Always `false` for free functions and synthesized/stdlib entries.
     pub is_static: bool,
     pub intrinsic_name: Option<String>,
-    /// True when the declaration is marked `public`. For methods this gates external calls
-    /// (private methods may only be called from within their declaring type). Defaults to `true`
-    /// for synthesized/stdlib entries so they are callable everywhere.
-    pub is_public: bool,
+    /// Accessibility of the declaration. For methods this gates external calls (private methods
+    /// may only be called from within their declaring type; `internal` ones from anywhere in the
+    /// same module). Defaults to `Public` for synthesized/stdlib entries so they are callable
+    /// everywhere.
+    pub visibility: Visibility,
     /// Source file the declaration came from, used for file/module-level visibility: a non-public
     /// declaration is only reachable from its own file. `None` for synthesized/stdlib entries,
     /// which are always visible.
     pub declaring_file: Option<std::rc::Rc<str>>,
+    /// The declaring file's `module a.b.c;` path, if any — `None` for a file with no `module`
+    /// declaration (the implicit root module) as well as for synthesized/stdlib entries. Set by
+    /// the analyzer's registration pass (`FunctionTableInfo::from` cannot see the file/module map
+    /// on its own); drives the cross-module duplicate-name resolution in [`FunctionTable::add_overload`].
+    pub declaring_module: Option<std::rc::Rc<str>>,
 }
 
 impl FunctionTableInfo {
@@ -305,8 +416,9 @@ impl FunctionTableInfo {
             is_async: false,
             is_static: false,
             intrinsic_name: None,
-            is_public: true,
+            visibility: Visibility::Public,
             declaring_file: None,
+            declaring_module: None,
         }
     }
     pub fn from(func: &FunctionNode) -> Self {
@@ -342,7 +454,11 @@ impl FunctionTableInfo {
         info.intrinsic_name = intrinsic_name;
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.
-        info.is_public = func.is_public || func.is_extern;
+        info.visibility = if func.is_extern {
+            Visibility::Public
+        } else {
+            func.visibility
+        };
         info.declaring_file = func.file_path.clone();
         info
     }

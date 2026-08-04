@@ -151,8 +151,10 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|p| p.type_.get_type())
             .collect();
-        let lookup_name = self.function_table.resolve_emitted_name(
+        let module = self.module_of(function.file_path.as_ref());
+        let lookup_name = self.function_table.resolve_emitted_name_scoped(
             &function.name.text,
+            module.as_ref(),
             &param_types,
             &mut self.type_ctx,
         );

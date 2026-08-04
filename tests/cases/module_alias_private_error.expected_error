@@ -1,0 +1,1 @@
+'private_only' in module 'priv.mod' is private; only 'public'/'internal' items can be imported with 'as'

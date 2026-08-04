@@ -51,7 +51,7 @@ impl<'a> Analyzer<'a> {
         if let Some(global) = self.globals.iter().find(|g| g.name == id.text) {
             if !self.visible_across_files(
                 &global.file_path,
-                global.is_public,
+                global.visibility,
                 self.current_file.as_ref(),
             ) {
                 let decl_file = global.file_path.clone();

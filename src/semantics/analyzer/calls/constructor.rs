@@ -49,7 +49,7 @@ impl<'a> Analyzer<'a> {
         if let Some(info) = self.struct_table.get_struct(&struct_name) {
             if !self.visible_across_files(
                 &info.file_path,
-                info.is_public,
+                info.visibility,
                 parent_function.file_path.as_ref(),
             ) {
                 let decl_file = info.file_path.clone();

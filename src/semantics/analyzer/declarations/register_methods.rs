@@ -252,7 +252,7 @@ impl<'a> Analyzer<'a> {
         }
 
         if is_override && is_protocol {
-            if !method.is_public {
+            if !method.visibility.is_public() {
                 diagnostics.report_error(
                     format!(
                         "overridden object-protocol method '{}' must be declared 'public'",

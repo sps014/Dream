@@ -1,0 +1,18 @@
+// Support file for internal class-member (axis 2) visibility tests.
+module member.mod;
+
+public class Vector {
+    internal x: int;
+
+    constructor(x: int) {
+        this.x = x;
+    }
+
+    public fun length_sq(): int {
+        return this.x * this.x;
+    }
+}
+
+public fun make_vector(x: int): Vector {
+    return Vector(x);
+}

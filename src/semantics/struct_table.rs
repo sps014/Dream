@@ -1,5 +1,5 @@
 use crate::syntax::nodes::struct_node::StructDeclarationNode;
-use crate::syntax::nodes::Type;
+use crate::syntax::nodes::{Type, Visibility};
 use crate::types::value_size_align;
 use indexmap::IndexMap;
 
@@ -7,9 +7,9 @@ use indexmap::IndexMap;
 pub struct StructFieldInfo {
     pub type_: Type,
     pub offset: usize,
-    /// True when the field is declared `public`. Private (default) fields may only be accessed
-    /// from within the declaring type's own methods.
-    pub is_public: bool,
+    /// Accessibility of the field. Private (default) fields may only be accessed from within the
+    /// declaring type's own methods; `internal` fields from anywhere in the same module.
+    pub visibility: Visibility,
     /// True when declared `weak`: an `Option<T>` field that does not hold a strong reference to
     /// its referent and is excluded from the reference-cycle graph.
     pub is_weak: bool,
@@ -33,7 +33,7 @@ pub struct StructInfo {
     /// emission that must follow byte-offset order sorts these by their recorded `offset`.
     pub fields: IndexMap<String, StructFieldInfo>,
     pub size: usize,
-    pub is_public: bool,
+    pub visibility: Visibility,
     /// True for `struct` (value) types: stored inline with copy semantics, not heap-allocated and
     /// reference-counted. Unions are always reference types (`false`).
     pub is_value: bool,
@@ -96,7 +96,7 @@ impl StructTable {
                 StructFieldInfo {
                     type_: field_type,
                     offset: current_offset,
-                    is_public: field.is_public,
+                    visibility: field.visibility,
                     is_weak: field.is_weak,
                     is_unowned: field.is_unowned,
                 },
@@ -122,7 +122,7 @@ impl StructTable {
                 name,
                 fields,
                 size: current_offset,
-                is_public: struct_decl.is_public,
+                visibility: struct_decl.visibility,
                 is_value: struct_decl.is_value,
                 file_path: struct_decl.file_path.clone(),
             },
@@ -139,7 +139,7 @@ impl StructTable {
         &mut self,
         name: &str,
         size: usize,
-        is_public: bool,
+        visibility: Visibility,
         file_path: Option<std::rc::Rc<str>>,
     ) -> Result<(), String> {
         if self.structs.contains_key(name) {
@@ -151,7 +151,7 @@ impl StructTable {
                 name: name.to_string(),
                 fields: IndexMap::new(),
                 size,
-                is_public,
+                visibility,
                 is_value: false,
                 file_path,
             },

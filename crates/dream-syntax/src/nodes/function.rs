@@ -1,5 +1,6 @@
 use super::statement::StatementNode;
 use super::types::Type;
+use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
 use std::rc::Rc;
 
@@ -118,10 +119,10 @@ pub struct FunctionNode<'a> {
     pub return_type: Option<Type>,
     pub parameters: Vec<ParameterNode>,
     pub body: &'a [StatementNode<'a>],
-    /// True when the declaration is marked `public`: it is visible to other modules and (for
-    /// top-level functions) emitted as a WebAssembly export. Private (the default) symbols are
-    /// module-internal.
-    pub is_public: bool,
+    /// Accessibility of the declaration: `public` is visible to other modules and (for top-level
+    /// functions) emitted as a WebAssembly export; `internal` is visible anywhere in the same
+    /// declaring module; private (the default) is file/class-scoped.
+    pub visibility: Visibility,
     /// True for `extern fun` declarations: the function has no body and is lowered to a WASM
     /// import instead of a defined function. Used for JS interop.
     pub is_extern: bool,
@@ -152,7 +153,7 @@ impl<'a> FunctionNode<'a> {
         return_type: Option<Type>,
         parameters: Vec<ParameterNode>,
         body: &'a [StatementNode<'a>],
-        is_public: bool,
+        visibility: Visibility,
     ) -> FunctionNode<'a> {
         FunctionNode {
             attributes,
@@ -162,7 +163,7 @@ impl<'a> FunctionNode<'a> {
             return_type,
             parameters,
             body,
-            is_public,
+            visibility,
             is_extern: false,
             is_static: false,
             is_async: false,

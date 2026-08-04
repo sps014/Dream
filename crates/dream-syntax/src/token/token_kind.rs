@@ -152,8 +152,14 @@ pub enum TokenKind {
     StaticToken,
     #[token("import")]
     ImportToken,
+    #[token("as")]
+    AsToken,
+    #[token("module")]
+    ModuleToken,
     #[token("public")]
     PublicToken,
+    #[token("internal")]
+    InternalToken,
     #[token("extern")]
     ExternToken,
     #[token("class")]
@@ -278,7 +284,10 @@ impl TokenKind {
             TokenKind::AwaitToken => "'await'",
             TokenKind::StaticToken => "'static'",
             TokenKind::ImportToken => "'import'",
+            TokenKind::AsToken => "'as'",
+            TokenKind::ModuleToken => "'module'",
             TokenKind::PublicToken => "'public'",
+            TokenKind::InternalToken => "'internal'",
             TokenKind::ExternToken => "'extern'",
             TokenKind::ClassToken => "'class'",
             TokenKind::StructToken => "'struct'",
@@ -330,7 +339,10 @@ pub const KEYWORDS: &[&str] = &[
     "await",
     "static",
     "import",
+    "as",
+    "module",
     "public",
+    "internal",
     "extern",
     "class",
     "struct",
@@ -417,7 +429,10 @@ mod tests {
             "await",
             "static",
             "import",
+            "as",
+            "module",
             "public",
+            "internal",
             "extern",
             "class",
             "struct",
@@ -452,7 +467,7 @@ mod tests {
         }
         assert_eq!(
             KEYWORDS.len(),
-            43,
+            46,
             "a keyword token was added/removed; update both this list and KEYWORDS"
         );
     }

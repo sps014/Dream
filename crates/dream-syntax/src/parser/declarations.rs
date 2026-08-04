@@ -1,16 +1,19 @@
 use super::Parser;
-use crate::nodes::{AttributeNode, FunctionNode, ImportNode, ParameterNode, StatementNode, Type};
+use crate::nodes::{
+    AttributeNode, FunctionNode, ImportNode, ModuleDeclNode, ParameterNode, StatementNode, Type,
+    Visibility,
+};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::syntax_trivia::SyntaxTrivia;
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
-/// The four boolean modifiers a `fun`/`constructor`/`del` declaration may carry, parsed from the
-/// flexible `async`/`public`/`static`/`extern` prefix (which may appear in several orders).
+/// The four modifiers a `fun`/`constructor`/`del` declaration may carry, parsed from the flexible
+/// `async`/`public`/`internal`/`static`/`extern` prefix (which may appear in several orders).
 #[derive(Default)]
 struct FunctionModifiers {
     is_async: bool,
-    is_public: bool,
+    visibility: Visibility,
     is_static: bool,
     is_extern: bool,
 }
@@ -40,6 +43,28 @@ impl<'a, 'b> Parser<'a, 'b> {
         if !trivia.is_empty() {
             name.leading_trivia.splice(0..0, trivia);
         }
+    }
+
+    /// Consumes a leading `public`/`internal` modifier token if present, folding it into
+    /// `visibility` and reporting a diagnostic if the declaration already carries the other one.
+    /// Returns `true` iff a token was consumed, so modifier-parsing loops can detect "no visibility
+    /// modifier here" and fall through to their other modifiers/terminator.
+    fn try_consume_visibility(&mut self, visibility: &mut Visibility) -> bool {
+        let new_vis = match self.current_token().kind {
+            TokenKind::PublicToken => Visibility::Public,
+            TokenKind::InternalToken => Visibility::Internal,
+            _ => return false,
+        };
+        let position = self.current_token().position;
+        self.next_token();
+        if *visibility != Visibility::Private && *visibility != new_vis {
+            self.diagnostics.report_error(
+                "a declaration cannot be both 'public' and 'internal'".to_string(),
+                Some(position),
+            );
+        }
+        *visibility = new_vis;
+        true
     }
 
     /// Parses a type alias: `type Name = ExistingType;`. The alias is recorded and resolved
@@ -76,15 +101,14 @@ impl<'a, 'b> Parser<'a, 'b> {
         // attribute. Recover it so the comment still reaches the enum name token for hover/LSP.
         let doc_trivia = Self::recover_doc_trivia(first_trivia, &attributes);
 
-        // Optional `public` / `sealed` modifiers (any order) before the `enum` keyword.
+        // Optional `public`/`internal` / `sealed` modifiers (any order) before the `enum` keyword.
         let mut is_sealed = false;
-        let mut is_public = false;
+        let mut visibility = Visibility::Private;
         loop {
+            if self.try_consume_visibility(&mut visibility) {
+                continue;
+            }
             match self.current_token().kind {
-                TokenKind::PublicToken => {
-                    self.match_token(TokenKind::PublicToken);
-                    is_public = true;
-                }
                 TokenKind::SealedToken => {
                     self.match_token(TokenKind::SealedToken);
                     is_sealed = true;
@@ -146,7 +170,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut decl =
             crate::nodes::EnumDeclarationNode::new(attributes, name, generic_parameters, variants);
         decl.is_sealed = is_sealed;
-        decl.is_public = is_public;
+        decl.visibility = visibility;
         Ok(decl)
     }
 
@@ -164,7 +188,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(crate::nodes::struct_node::StructFieldNode {
             attributes: Vec::new(),
             name: field_name,
-            is_public: true,
+            visibility: Visibility::Public,
             is_weak: false,
             is_unowned: false,
             type_token: field_type_token,
@@ -180,16 +204,15 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let attributes = self.parse_attributes();
 
-        // `public` and `sealed` are modifiers that may appear in either order before the
+        // `public`/`internal` and `sealed` are modifiers that may appear in either order before the
         // `class`/`struct` keyword.
-        let mut is_public = false;
+        let mut visibility = Visibility::Private;
         let mut is_sealed = false;
         loop {
+            if self.try_consume_visibility(&mut visibility) {
+                continue;
+            }
             match self.current_token().kind {
-                TokenKind::PublicToken => {
-                    self.match_token(TokenKind::PublicToken);
-                    is_public = true;
-                }
                 TokenKind::SealedToken => {
                     self.match_token(TokenKind::SealedToken);
                     is_sealed = true;
@@ -245,7 +268,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             let mut m = 0;
             while matches!(
                 self.peek_token(m).kind,
-                TokenKind::PublicToken | TokenKind::StaticToken | TokenKind::AsyncToken
+                TokenKind::PublicToken
+                    | TokenKind::InternalToken
+                    | TokenKind::StaticToken
+                    | TokenKind::AsyncToken
             ) {
                 m += 1;
             }
@@ -268,19 +294,18 @@ impl<'a, 'b> Parser<'a, 'b> {
             {
                 methods.push(self.parse_function(Some(field_attributes))?);
             } else {
-                // Fields are private by default; an explicit `public` exposes them. `weak`/
-                // `unowned` are storage qualifiers that break ARC reference cycles (see
-                // `docs/language/memory.md`); any order/combination with `public` is accepted here,
-                // with `weak`+`unowned` together rejected during semantic analysis.
-                let mut field_public = false;
+                // Fields are private by default; an explicit `public`/`internal` exposes them.
+                // `weak`/`unowned` are storage qualifiers that break ARC reference cycles (see
+                // `docs/language/memory.md`); any order/combination with the visibility modifier is
+                // accepted here, with `weak`+`unowned` together rejected during semantic analysis.
+                let mut field_visibility = Visibility::Private;
                 let mut field_weak = false;
                 let mut field_unowned = false;
                 loop {
+                    if self.try_consume_visibility(&mut field_visibility) {
+                        continue;
+                    }
                     match self.current_token().kind {
-                        TokenKind::PublicToken => {
-                            self.match_token(TokenKind::PublicToken);
-                            field_public = true;
-                        }
                         TokenKind::WeakToken => {
                             self.match_token(TokenKind::WeakToken);
                             field_weak = true;
@@ -309,7 +334,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 fields.push(crate::nodes::struct_node::StructFieldNode {
                     attributes: field_attributes,
                     name: field_name,
-                    is_public: field_public,
+                    visibility: field_visibility,
                     is_weak: field_weak,
                     is_unowned: field_unowned,
                     type_token: field_type_token,
@@ -326,7 +351,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             generic_parameters,
             fields,
             methods,
-            is_public,
+            visibility,
         );
         decl.implements = implements;
         decl.is_value = is_value;
@@ -345,11 +370,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         let attributes = self.parse_attributes();
         let doc_trivia = Self::recover_doc_trivia(first_trivia, &attributes);
 
-        let mut is_public = false;
-        if self.current_token().kind == TokenKind::PublicToken {
-            self.match_token(TokenKind::PublicToken);
-            is_public = true;
-        }
+        let mut visibility = Visibility::Private;
+        self.try_consume_visibility(&mut visibility);
 
         self.match_token(TokenKind::InterfaceToken);
         let mut name = self.match_token(TokenKind::IdentifierToken);
@@ -375,7 +397,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             name,
             generic_parameters,
             methods,
-            is_public,
+            visibility,
         );
         decl.generic_constraints = generic_constraints;
         Ok(decl)
@@ -390,7 +412,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> Result<FunctionNode<'a>, Error> {
         let FunctionModifiers {
             is_async,
-            is_public,
+            visibility,
             is_static,
             is_extern: _,
         } = self.parse_function_modifiers();
@@ -422,7 +444,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             return_type,
             params,
             body,
-            is_public,
+            visibility,
         );
         node.is_static = is_static;
         node.is_async = is_async;
@@ -476,6 +498,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let field_attributes = self.parse_attributes();
             if self.current_token().kind == TokenKind::FunToken
                 || self.current_token().kind == TokenKind::PublicToken
+                || self.current_token().kind == TokenKind::InternalToken
                 || self.current_token().kind == TokenKind::StaticToken
                 || self.current_token().kind == TokenKind::AsyncToken
             {
@@ -501,10 +524,50 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(node)
     }
 
-    /// Parses an import statement of the form `import a.b.c;`, mapping each dotted segment to a
-    /// directory separator (`a/b/c`) so resolution can append the `.dream` extension later.
+    /// Parses an import statement. Two forms, told apart by a trailing `as` clause:
+    /// - `import a.b.c;` — maps each dotted segment to a directory separator (`a/b/c`) so file
+    ///   resolution can append the `.dream` extension later, exactly as before `as` existed.
+    /// - `import a.b.c as x;` — keeps the path dot-joined (`a.b.c`): it names an item inside a
+    ///   *declared* `module` namespace, not a file path, resolved separately after all files load.
     pub(super) fn parse_import(&mut self) -> Result<ImportNode, Error> {
         self.match_token(TokenKind::ImportToken);
+
+        let first = self.match_token(TokenKind::IdentifierToken);
+        let mut position = first.position;
+        let mut slash_path = first.text.clone();
+        let mut dot_path = first.text.clone();
+
+        while self.current_token().kind == TokenKind::DotToken {
+            self.match_token(TokenKind::DotToken);
+            let segment = self.match_token(TokenKind::IdentifierToken);
+            position.end = segment.position.end;
+            slash_path.push('/');
+            slash_path.push_str(&segment.text);
+            dot_path.push('.');
+            dot_path.push_str(&segment.text);
+        }
+
+        if self.current_token().kind == TokenKind::AsToken {
+            self.match_token(TokenKind::AsToken);
+            let alias = self.match_token(TokenKind::IdentifierToken);
+            self.match_token(TokenKind::SemicolonToken);
+            let module_path = SyntaxToken::new(TokenKind::IdentifierToken, position, dot_path);
+            return Ok(ImportNode::with_alias(module_path, alias));
+        }
+
+        self.match_token(TokenKind::SemicolonToken);
+
+        let module_name = SyntaxToken::new(TokenKind::IdentifierToken, position, slash_path);
+        Ok(ImportNode::new(module_name))
+    }
+
+    /// Parses a file-scoped `module a.b.c;` declaration. Must be the first item in the file
+    /// (checked by the caller, `parse_program`); at most one per file (checked by the caller too,
+    /// since a second occurrence would otherwise just parse as an ordinary statement-position
+    /// error). The path is kept dot-joined, mirroring the `module` namespaces it names (never a
+    /// filesystem path, unlike a plain `import`).
+    pub(super) fn parse_module_decl(&mut self) -> Result<ModuleDeclNode, Error> {
+        self.match_token(TokenKind::ModuleToken);
 
         let first = self.match_token(TokenKind::IdentifierToken);
         let mut position = first.position;
@@ -514,14 +577,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::DotToken);
             let segment = self.match_token(TokenKind::IdentifierToken);
             position.end = segment.position.end;
-            path.push('/');
+            path.push('.');
             path.push_str(&segment.text);
         }
 
         self.match_token(TokenKind::SemicolonToken);
 
-        let module_name = SyntaxToken::new(TokenKind::IdentifierToken, position, path);
-        Ok(ImportNode::new(module_name))
+        let path = SyntaxToken::new(TokenKind::IdentifierToken, position, path);
+        Ok(ModuleDeclNode { path })
     }
     /// Parses a Type from the token stream, including array types
     pub(super) fn parse_type(&mut self) -> Result<Type, Error> {
@@ -620,23 +683,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         attributes
     }
 
-    /// Parses the flexible function-modifier prefix (`async`/`public`/`static`/`extern`, which may
-    /// appear in several orders) and reports the `public`+`extern` conflict. Consumes exactly the
-    /// modifier tokens, leaving the cursor on the `fun`/constructor/`del` token.
+    /// Parses the flexible function-modifier prefix (`async`/`public`/`internal`/`static`/`extern`,
+    /// which may appear in several orders) and reports the `public`+`extern` conflict. Consumes
+    /// exactly the modifier tokens, leaving the cursor on the `fun`/constructor/`del` token.
     fn parse_function_modifiers(&mut self) -> FunctionModifiers {
         let mut m = FunctionModifiers::default();
 
-        // `async` may appear before or after `public` (e.g. `async fun`, `public async fun`,
-        // `async public fun`). Calling such a function eagerly starts a task and yields `Future<T>`.
+        // `async` may appear before or after `public`/`internal` (e.g. `async fun`, `public async
+        // fun`, `async public fun`). Calling such a function eagerly starts a task and yields
+        // `Future<T>`.
         if self.current_token().kind == TokenKind::AsyncToken {
             self.match_token(TokenKind::AsyncToken);
             m.is_async = true;
         }
 
-        if self.current_token().kind == TokenKind::PublicToken {
-            self.match_token(TokenKind::PublicToken);
-            m.is_public = true;
-        }
+        self.try_consume_visibility(&mut m.visibility);
 
         if self.current_token().kind == TokenKind::AsyncToken {
             self.match_token(TokenKind::AsyncToken);
@@ -652,7 +713,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::ExternToken {
             self.match_token(TokenKind::ExternToken);
             m.is_extern = true;
-            if m.is_public {
+            if m.visibility.is_public() {
                 self.diagnostics.report_error(
                     "A function cannot be both 'public' and 'extern': 'extern' declares an imported host symbol, while 'public' exports a defined one".to_string(),
                     Some(self.current_token().position),
@@ -692,7 +753,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let FunctionModifiers {
             is_async,
-            is_public,
+            visibility,
             is_static,
             is_extern,
         } = self.parse_function_modifiers();
@@ -700,21 +761,27 @@ impl<'a, 'b> Parser<'a, 'b> {
         // Constructor (`constructor`) / destructor (`del`) declarations omit the `fun` keyword and
         // the return type; they are lowered to ordinary methods named `constructor`/`del` and
         // dispatched specially (constructor calls, scope-exit destructor calls). They cannot be
-        // marked `public`.
+        // marked `public`/`internal`.
         if self.current_token().kind == TokenKind::IdentifierToken
             && crate::nodes::types::is_special_member_name(&self.current_token().text)
         {
             let ctor_name = self.match_token(TokenKind::IdentifierToken);
-            if is_public {
+            if visibility != Visibility::Private {
                 self.diagnostics.report_error(
-                    format!("'{}' cannot be marked 'public'", ctor_name.text),
+                    format!("'{}' cannot be marked 'public' or 'internal'", ctor_name.text),
                     Some(ctor_name.position),
                 );
             }
             let params = self.parse_formal_parameters()?;
             let block = self.parse_block()?;
             return Ok(FunctionNode::new(
-                attributes, ctor_name, None, None, params, block, false,
+                attributes,
+                ctor_name,
+                None,
+                None,
+                params,
+                block,
+                Visibility::Private,
             ));
         }
 
@@ -747,7 +814,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 return_type,
                 params,
                 block,
-                is_public,
+                visibility,
             );
             node.is_static = is_static;
             node.is_async = is_async;
@@ -792,7 +859,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 return_type,
                 params,
                 empty,
-                false,
+                Visibility::Private,
             );
             node.is_extern = true;
             node.is_static = is_static;
@@ -809,7 +876,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             return_type,
             params,
             block,
-            is_public,
+            visibility,
         );
         node.is_static = is_static;
         node.is_async = is_async;
@@ -825,15 +892,14 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> Result<crate::nodes::GlobalVariableNode<'a>, Error> {
         let first_trivia = self.current_token().leading_trivia.clone();
 
-        // `public` and `static` may appear in either order before `let`/`const`.
-        let mut is_public = false;
+        // `public`/`internal` and `static` may appear in either order before `let`/`const`.
+        let mut visibility = Visibility::Private;
         let mut is_static = false;
         loop {
+            if self.try_consume_visibility(&mut visibility) {
+                continue;
+            }
             match self.current_token().kind {
-                TokenKind::PublicToken => {
-                    self.match_token(TokenKind::PublicToken);
-                    is_public = true;
-                }
                 TokenKind::StaticToken => {
                     self.match_token(TokenKind::StaticToken);
                     is_static = true;
@@ -868,7 +934,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             declared_type,
             initializer,
             is_const,
-            is_public,
+            visibility,
             is_static,
             file_path: None,
         })

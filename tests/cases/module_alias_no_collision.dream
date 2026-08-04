@@ -1,0 +1,12 @@
+// Two different modules can declare the same name (`add`); aliased imports resolve the
+// duplicate-name collision without either declaration being renamed.
+import helpers.module_utils_math;
+import helpers.module_vendor_math;
+
+import utils.math.add as add_sum;
+import vendor.math.add as add_product;
+
+fun main(): void {
+    System.println(add_sum(2, 3));
+    System.println(add_product(2, 3));
+}

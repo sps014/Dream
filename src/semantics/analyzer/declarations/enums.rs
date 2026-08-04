@@ -30,7 +30,7 @@ impl<'a> Analyzer<'a> {
             }
             self.type_visibility.insert(
                 name.clone(),
-                (enum_decl.file_path.clone(), enum_decl.is_public),
+                (enum_decl.file_path.clone(), enum_decl.visibility),
             );
             if self.enum_table.contains_key(name)
                 || self.union_table.contains_key(name)
@@ -157,7 +157,12 @@ impl<'a> Analyzer<'a> {
         self.type_ctx.register(DefKind::Union, union_name, vec![]);
         // Data-enum unions are treated as always visible here; C-style enum visibility is tracked
         // separately in `enum_visibility` and checked at type-reference sites.
-        if let Err(e) = self.struct_table.add_union(union_name, size, true, None) {
+        if let Err(e) = self.struct_table.add_union(
+            union_name,
+            size,
+            crate::syntax::nodes::Visibility::Public,
+            None,
+        ) {
             diagnostics.report_error(e, None);
             return;
         }

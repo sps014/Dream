@@ -134,7 +134,14 @@ impl Compiler {
         info!("finished parsing");
         info!("starting semantic analysis");
 
-        let mut analyzer = Analyzer::new(&ast, &arena);
+        let file_modules: std::collections::HashMap<std::rc::Rc<str>, std::rc::Rc<str>> = acc
+            .file_modules
+            .iter()
+            .map(|(file, module)| (std::rc::Rc::from(file.as_str()), module.clone()))
+            .collect();
+        let mut analyzer = Analyzer::new(&ast, &arena)
+            .with_file_modules(file_modules)
+            .with_aliased_imports(acc.aliased_imports);
         analyzer.set_debug_info(self.debug_info);
         // `analyze` reports each error into the bag and returns a typed failure once any error was
         // recorded, short-circuiting before code generation runs on a poisoned program.

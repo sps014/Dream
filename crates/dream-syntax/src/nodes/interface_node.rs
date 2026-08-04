@@ -1,3 +1,4 @@
+use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
 use std::rc::Rc;
 
@@ -17,8 +18,8 @@ pub struct InterfaceDeclarationNode<'a> {
     /// The interface's method signatures. Each is a body-less [`FunctionNode`] (parsed like an
     /// `extern fun ...;`); only the name/params/return type are meaningful.
     pub methods: Vec<crate::nodes::function::FunctionNode<'a>>,
-    /// True when the interface is marked `public`.
-    pub is_public: bool,
+    /// Accessibility of the interface (`public`/`internal`/private, the default).
+    pub visibility: Visibility,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
     pub file_path: Option<Rc<str>>,
@@ -30,7 +31,7 @@ impl<'a> InterfaceDeclarationNode<'a> {
         name: SyntaxToken,
         generic_parameters: Option<Vec<SyntaxToken>>,
         methods: Vec<crate::nodes::function::FunctionNode<'a>>,
-        is_public: bool,
+        visibility: Visibility,
     ) -> Self {
         Self {
             attributes,
@@ -38,7 +39,7 @@ impl<'a> InterfaceDeclarationNode<'a> {
             generic_parameters,
             generic_constraints: Vec::new(),
             methods,
-            is_public,
+            visibility,
             file_path: None,
         }
     }

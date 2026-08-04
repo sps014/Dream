@@ -14,6 +14,8 @@
 //!   override validation.
 //! - [`reference_cycles`]: `weak`/`unowned` field validation and the compile-time class
 //!   reference-cycle check.
+//! - [`imports`]: resolves every aliased `import a.b.c as x;` against the function table once
+//!   registration completes.
 //!
 //! All are `impl Analyzer` blocks split to keep each focused.
 
@@ -22,6 +24,7 @@ use super::*;
 mod enums;
 mod functions;
 mod globals;
+mod imports;
 mod reference_cycles;
 mod register_interfaces;
 mod register_methods;

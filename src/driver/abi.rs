@@ -113,7 +113,7 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         if func.is_extern || func.generic_parameters.is_some() {
             continue;
         }
-        if func.is_public || func.name.text == crate::mir::abi::ENTRY_FN {
+        if func.visibility.is_public() || func.name.text == crate::mir::abi::ENTRY_FN {
             exports.push(format!("\"{}\"", json_escape(&func.name.text)));
         }
     }

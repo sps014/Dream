@@ -219,7 +219,7 @@ pub struct GlobalSymbol {
     /// The resolved (non-generic) type name, e.g. `int`, `string`, `Point`.
     pub type_str: String,
     pub is_const: bool,
-    pub is_public: bool,
+    pub visibility: crate::syntax::nodes::Visibility,
     pub is_static: bool,
     /// Source file this global was declared in, for file/module-level visibility. `None` for
     /// synthesized globals (always visible).
@@ -338,9 +338,9 @@ pub struct Analyzer<'a> {
     /// any of these; compiler-synthesized extends (interface defaults) are exempt.
     sealed_types: std::collections::HashSet<String>,
     /// File/module-level visibility for enums and interfaces (types not tracked in the struct
-    /// table): type name -> (declaring file, is_public). A non-public entry is only referenceable
-    /// from its declaring file. Absent or `None` file means always visible.
-    type_visibility: HashMap<String, (Option<Rc<str>>, bool)>,
+    /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
+    /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
+    type_visibility: HashMap<String, (Option<Rc<str>>, crate::syntax::nodes::Visibility)>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
     /// annotation or `return` type). Used to resolve the type arguments of a generic union's
     /// nullary variant (`let o: Option<int> = Option.None;`), where they cannot be inferred from
@@ -362,6 +362,18 @@ pub struct Analyzer<'a> {
     /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
     /// bare-identifier global reads). `None` outside any function body.
     current_file: Option<Rc<str>>,
+    /// Maps each source file that declared a `module a.b.c;` to its dot-joined module path.
+    /// Files absent from this map (the overwhelming majority: anyone who never writes `module`)
+    /// belong to the implicit, unnamed root module. Populated once, before [`Self::analyze`] runs,
+    /// via [`Self::with_file_modules`] — built from every parsed file's own `ProgramNode::module`
+    /// before `compiler.rs`/the LSP flatten all files into one merged [`ProgramNode`].
+    file_modules: HashMap<Rc<str>, Rc<str>>,
+    /// Every aliased `import a.b.c as x;` collected across all files (module path, item name,
+    /// alias token, importing file path), populated once via [`Self::with_aliased_imports`] before
+    /// [`Self::analyze`] runs. Drained by `register_import_aliases` (see `declarations::imports`)
+    /// right after function registration, so aliases resolve against the fully-registered function
+    /// table but are still available to every function body analyzed afterward.
+    aliased_imports: Vec<(String, String, SyntaxToken, String)>,
     /// Resolved top-level variables, in declaration order. Surfaced to codegen via [`SemanticInfo`].
     globals: Vec<GlobalSymbol>,
     /// The module-level symbol scope holding every top-level variable. It is the root parent of
@@ -407,6 +419,8 @@ impl<'a> Analyzer<'a> {
             pending_loop_label: None,
             current_function_is_async: false,
             current_file: None,
+            file_modules: HashMap::new(),
+            aliased_imports: Vec::new(),
             globals: Vec::new(),
             global_symbol_table: Rc::new(RefCell::new(SymbolTable::new(None))),
             type_ctx: TypeCtx::new(),
@@ -426,22 +440,86 @@ impl<'a> Analyzer<'a> {
         self.hir_set_debug_info(on);
     }
 
-    /// File/module-level visibility test (Axis 2). A `public` declaration is visible everywhere; a
-    /// non-public one is only visible from the file it was declared in. Synthesized declarations
-    /// (no declaring file) and use sites with no known file are always treated as visible.
+    /// Records the file -> declared-module-path map built from every parsed file's own `module`
+    /// declaration, before `compiler.rs`/the LSP flatten everything into one merged `ProgramNode`
+    /// (which erases per-file structure). Call before [`Self::analyze`].
+    pub fn with_file_modules(mut self, file_modules: HashMap<Rc<str>, Rc<str>>) -> Self {
+        self.file_modules = file_modules;
+        self
+    }
+
+    /// Records every aliased `import a.b.c as x;` collected across all files, resolved once
+    /// function registration completes (see `declarations::imports::register_import_aliases`).
+    /// Call before [`Self::analyze`].
+    pub fn with_aliased_imports(
+        mut self,
+        aliased_imports: Vec<(String, String, SyntaxToken, String)>,
+    ) -> Self {
+        self.aliased_imports = aliased_imports;
+        self
+    }
+
+    /// The declared module path of `file`, or `None` for a file with no `module` declaration (the
+    /// implicit root module). Two `None`s are *not* automatically "the same module" by identity —
+    /// callers compare `(file, module_of(file))` pairs (see [`Self::same_module`]) so unmoded files
+    /// keep today's plain "same file" rule instead of becoming one giant shared "root module".
+    fn module_of(&self, file: Option<&Rc<str>>) -> Option<Rc<str>> {
+        file.and_then(|f| self.file_modules.get(f).cloned())
+    }
+
+    /// True when `decl_file` and `caller_file` share a *declared* module (both files wrote the same
+    /// `module a.b.c;`). Deliberately `false` whenever either side has no declared module — an
+    /// `internal` declaration in an unmoded file is only visible from its own file, exactly like
+    /// today's file-private default, rather than being implicitly shared by every other unmoded
+    /// file in the program.
+    fn same_module(&self, decl_file: Option<&Rc<str>>, caller_file: Option<&Rc<str>>) -> bool {
+        match (self.module_of(decl_file), self.module_of(caller_file)) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    /// File/module-level visibility test (Axis 1). `Public` is visible everywhere. `Internal` is
+    /// visible from the declaring file itself, or from any other file that declares the *same*
+    /// `module` path. Private (the default) is only visible from the declaring file. Synthesized
+    /// declarations (no declaring file) and use sites with no known file are always treated as
+    /// visible.
     pub(crate) fn visible_across_files(
         &self,
         decl_file: &Option<Rc<str>>,
-        is_public: bool,
+        visibility: crate::syntax::nodes::Visibility,
         caller_file: Option<&Rc<str>>,
     ) -> bool {
-        if is_public {
+        use crate::syntax::nodes::Visibility;
+        if visibility == Visibility::Public {
             return true;
         }
         match (decl_file, caller_file) {
-            (Some(decl), Some(caller)) => decl.as_ref() == caller.as_ref(),
+            (Some(decl), Some(caller)) => {
+                decl.as_ref() == caller.as_ref()
+                    || (visibility == Visibility::Internal
+                        && self.same_module(Some(decl), Some(caller)))
+            }
             _ => true,
         }
+    }
+
+    /// Class-member visibility test (Axis 2). Always visible from the declaring type's own methods
+    /// (`in_declaring_type`) or when `Public`. Otherwise `Internal` is visible from any file that
+    /// declares the same `module` as the member's declaring file; private (the default) is not
+    /// visible outside the declaring type at all, regardless of file/module.
+    pub(crate) fn member_accessible(
+        &self,
+        visibility: crate::syntax::nodes::Visibility,
+        decl_file: &Option<Rc<str>>,
+        caller_file: Option<&Rc<str>>,
+        in_declaring_type: bool,
+    ) -> bool {
+        use crate::syntax::nodes::Visibility;
+        if in_declaring_type || visibility == Visibility::Public {
+            return true;
+        }
+        visibility == Visibility::Internal && self.same_module(decl_file.as_ref(), caller_file)
     }
 
     /// Reports a cross-file visibility violation for a top-level declaration referenced from
@@ -477,8 +555,8 @@ impl<'a> Analyzer<'a> {
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
-        if let Some((decl_file, is_public)) = self.type_visibility.get(type_name) {
-            if !self.visible_across_files(decl_file, *is_public, caller_file) {
+        if let Some((decl_file, visibility)) = self.type_visibility.get(type_name) {
+            if !self.visible_across_files(decl_file, *visibility, caller_file) {
                 self.report_not_public("Type", type_name, decl_file, position, diagnostics);
             }
         }
@@ -616,6 +694,10 @@ impl<'a> Analyzer<'a> {
         self.register_structs(node, diagnostics);
         self.register_extensions(node, diagnostics);
         self.register_functions(node, diagnostics);
+        // Aliased `import a.b.c as x;` resolve against the now-fully-registered function table
+        // (cross-module collisions have already been promoted to their module-qualified keys), but
+        // must land before body analysis so every call site can see the alias.
+        self.register_import_aliases(diagnostics);
         // Globals are analyzed after functions/types are known (so initializers can call them) but
         // before function bodies, so those bodies can resolve global identifiers.
         // HIR global slots are assigned incrementally inside `register_globals` (in declaration

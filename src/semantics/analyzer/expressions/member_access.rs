@@ -35,22 +35,31 @@ impl<'a> Analyzer<'a> {
         self.ensure_struct_instantiated(&base_name, &generic_args, &member.position, diagnostics);
         let struct_name = mangle_generic(&base_name, &generic_args);
 
+        let struct_file = self
+            .struct_table
+            .get_struct(&struct_name)
+            .and_then(|info| info.file_path.clone());
         let field = match self.struct_table.get_struct(&struct_name) {
             Some(info) => info
                 .fields
                 .get(&member.text)
-                .map(|f| (f.type_.clone(), f.is_public)),
+                .map(|f| (f.type_.clone(), f.visibility)),
             None => return MemberField::StructNotFound { struct_name },
         };
 
-        let (field_type, field_is_public) = match field {
+        let (field_type, field_visibility) = match field {
             Some(f) => f,
             None => return MemberField::NotAField { struct_name },
         };
 
         // Private fields (the default) may only be accessed from within the declaring type's own
-        // methods; `public` exposes them to outside code.
-        if !field_is_public && !self.in_methods_of(parent_function, &base_name) {
+        // methods; `internal` from anywhere in the same module; `public` exposes them everywhere.
+        if !self.member_accessible(
+            field_visibility,
+            &struct_file,
+            parent_function.file_path.as_ref(),
+            self.in_methods_of(parent_function, &base_name),
+        ) {
             diagnostics.report_error(
                 format!("'{}' is private to '{}'", member.text, base_name),
                 Some(member.position),

@@ -1,0 +1,5 @@
+module dup.pkg;
+
+public fun add(a: int, b: int): int {
+    return a - b;
+}

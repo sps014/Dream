@@ -25,7 +25,7 @@ impl<'a> Analyzer<'a> {
             None,
             Vec::new(),
             empty_body,
-            false,
+            crate::syntax::nodes::Visibility::Private,
         );
 
         // Synthetic module global backing the `fun(...)` closure ABI: holds the environment pointer
@@ -40,7 +40,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = file_path_string(&global.file_path);
             self.check_reserved_name(&global.name, "variable", diagnostics);
 
-            if global.is_public && global.is_static {
+            if global.visibility.is_public() && global.is_static {
                 diagnostics.report_error(
                     format!(
                         "Top-level variable '{}' cannot be both 'public' and 'static': they request opposite linkage ('public' exposes it to other modules, 'static' pins it to module-internal linkage)",
@@ -100,7 +100,7 @@ impl<'a> Analyzer<'a> {
                 name: global.name.text.clone(),
                 type_str: resolved.get_type(),
                 is_const: global.is_const,
-                is_public: global.is_public,
+                visibility: global.visibility,
                 is_static: global.is_static,
                 file_path: global.file_path.clone(),
             });

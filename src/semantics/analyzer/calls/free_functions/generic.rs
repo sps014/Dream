@@ -59,9 +59,10 @@ impl<'a> Analyzer<'a> {
                     .map(|ret| Self::monomorphize_type(ret, bindings)),
                 is_async: template.is_async,
                 is_static: template.is_static,
-                is_public: template.is_public,
+                visibility: template.visibility,
                 intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
                 declaring_file: template.file_path.clone(),
+                declaring_module: self.module_of(template.file_path.as_ref()),
             };
 
             let _ = self.function_table.add_function(mangled_name.clone(), info);

@@ -1,0 +1,7 @@
+// Support file for module golden tests: declares `vendor.math` with a same-named `add` as
+// helpers/module_utils_math.dream (different module -> no collision).
+module vendor.math;
+
+public fun add(a: int, b: int): int {
+    return a * b;
+}

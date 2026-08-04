@@ -240,7 +240,12 @@ impl<'a> Analyzer<'a> {
         // Class-level privacy (Axis 1): a non-public generic static method is private to its
         // declaring type, exactly like the non-generic path in `analyze_static_call`. Without
         // this the generic branch below would return early and skip the check entirely.
-        if !template.is_public && !self.in_methods_of(ctx.parent_function, type_name) {
+        if !self.member_accessible(
+            template.visibility,
+            &template.file_path,
+            ctx.parent_function.file_path.as_ref(),
+            self.in_methods_of(ctx.parent_function, type_name),
+        ) {
             diagnostics.report_error(
                 format!("'{}' is private to '{}'", method.text, type_name),
                 Some(method.position),

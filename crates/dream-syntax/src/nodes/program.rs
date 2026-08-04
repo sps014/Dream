@@ -3,6 +3,7 @@ use super::function::FunctionNode;
 use super::interface_node::InterfaceDeclarationNode;
 use super::struct_node::{StructDeclarationNode, StructFieldNode};
 use super::types::Type;
+use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
 use std::rc::Rc;
 
@@ -18,8 +19,8 @@ pub struct GlobalVariableNode<'a> {
     pub initializer: ExpressionNode<'a>,
     /// `const` declarations may not be reassigned after initialization.
     pub is_const: bool,
-    /// `public` exposes the variable to other modules; private (the default) is module-internal.
-    pub is_public: bool,
+    /// Accessibility of the variable (`public`/`internal`/private, the default).
+    pub visibility: Visibility,
     /// `static` pins the variable to file/module-internal linkage (it can never be `public`).
     pub is_static: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
@@ -27,17 +28,45 @@ pub struct GlobalVariableNode<'a> {
     pub file_path: Option<Rc<str>>,
 }
 
-/// Represents an import declaration in the AST
+/// Represents an import declaration in the AST. Two forms share this node, told apart by
+/// `alias`:
+/// - `import a.b.c;` (`alias: None`) — resolves `module_name` (`a/b/c`) against the filesystem and
+///   pulls in the whole file's public declarations, exactly as before `module`/`as` existed.
+/// - `import a.b.c as x;` (`alias: Some(x)`) — resolves `module_name` (`a.b.c`, dot-separated, not
+///   slash-separated: this form names a *declared* `module` namespace, not a file path) against
+///   already-loaded modules, binding just the item `c` into the importing file's scope as `x`.
 #[derive(Debug, Clone)]
 pub struct ImportNode {
     pub module_name: SyntaxToken,
+    pub alias: Option<SyntaxToken>,
 }
 
 impl ImportNode {
-    /// Creates a new import node
+    /// Creates a new plain (whole-file) import node.
     pub fn new(module_name: SyntaxToken) -> ImportNode {
-        ImportNode { module_name }
+        ImportNode {
+            module_name,
+            alias: None,
+        }
     }
+
+    /// Creates an aliased, module-qualified-item import node (`import a.b.c as x;`).
+    pub fn with_alias(module_name: SyntaxToken, alias: SyntaxToken) -> ImportNode {
+        ImportNode {
+            module_name,
+            alias: Some(alias),
+        }
+    }
+}
+
+/// A file-scoped `module a.b.c;` declaration: names the current file's own module, independent of
+/// its directory location. At most one per file, and it must be the first item in the file
+/// (enforced by the parser). Files that declare none belong to the implicit, unnamed root module.
+#[derive(Debug, Clone)]
+pub struct ModuleDeclNode {
+    /// The dot-joined module path (e.g. `"utils.math"`), stored verbatim (not slash-joined like
+    /// [`ImportNode::module_name`], since this never touches the filesystem).
+    pub path: SyntaxToken,
 }
 
 /// A single variant of an `enum`. A variant with no `fields` is either a plain C-style member
@@ -68,9 +97,8 @@ pub struct EnumDeclarationNode {
     pub variants: Vec<EnumVariantNode>,
     /// True when declared `sealed`: no `extend` block may target this enum (enforced in analysis).
     pub is_sealed: bool,
-    /// True when the enum is marked `public`: visible to other modules. Private (the default)
-    /// enums are file-internal.
-    pub is_public: bool,
+    /// Accessibility of the enum (`public`/`internal`/private, the default).
+    pub visibility: Visibility,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics and cross-file visibility checks can identify the declaring module. `None`
     /// for synthesized nodes.
@@ -90,7 +118,7 @@ impl EnumDeclarationNode {
             generic_parameters,
             variants,
             is_sealed: false,
-            is_public: false,
+            visibility: Visibility::Private,
             file_path: None,
         }
     }
@@ -150,6 +178,9 @@ impl<'a> ExtendNode<'a> {
 /// Represents the root program node in the AST
 #[derive(Debug, Clone)]
 pub struct ProgramNode<'a> {
+    /// This file's own `module a.b.c;` declaration, if any. `None` places the file in the
+    /// implicit, unnamed root module.
+    pub module: Option<ModuleDeclNode>,
     pub imports: Vec<ImportNode>,
     pub structs: Vec<StructDeclarationNode<'a>>,
     pub interfaces: Vec<InterfaceDeclarationNode<'a>>,
@@ -162,6 +193,7 @@ pub struct ProgramNode<'a> {
 
 impl<'a> ProgramNode<'a> {
     /// Creates a new program node
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         imports: Vec<ImportNode>,
         structs: Vec<StructDeclarationNode<'a>>,
@@ -172,6 +204,7 @@ impl<'a> ProgramNode<'a> {
         globals: Vec<GlobalVariableNode<'a>>,
     ) -> ProgramNode<'a> {
         ProgramNode {
+            module: None,
             imports,
             structs,
             interfaces,

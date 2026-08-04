@@ -24,7 +24,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = file_path_string(&iface.file_path);
             self.type_visibility.insert(
                 iface.name.text.clone(),
-                (iface.file_path.clone(), iface.is_public),
+                (iface.file_path.clone(), iface.visibility),
             );
             self.type_ctx.register(
                 DefKind::Interface,

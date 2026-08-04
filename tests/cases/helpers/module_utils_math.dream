@@ -1,0 +1,11 @@
+// Support file for module golden tests: declares `utils.math` and a same-named `add` as
+// helpers/module_vendor_math.dream, to prove two different modules don't collide.
+module utils.math;
+
+public fun add(a: int, b: int): int {
+    return a + b;
+}
+
+internal fun shared_helper(): int {
+    return 41;
+}

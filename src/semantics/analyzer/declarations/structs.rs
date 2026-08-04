@@ -180,7 +180,7 @@ impl<'a> Analyzer<'a> {
             .map(|field| StructFieldNode {
                 attributes: field.attributes.clone(),
                 name: field.name.clone(),
-                is_public: field.is_public,
+                visibility: field.visibility,
                 is_weak: field.is_weak,
                 is_unowned: field.is_unowned,
                 type_token: substitute_generic_token(&field.type_token, &bindings),
@@ -196,7 +196,7 @@ impl<'a> Analyzer<'a> {
             None,
             new_fields,
             template.methods.clone(),
-            template.is_public,
+            template.visibility,
         );
         new_decl.is_value = template.is_value;
         new_decl.file_path = template.file_path.clone();

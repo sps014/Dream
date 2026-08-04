@@ -25,10 +25,11 @@ impl<'a> Analyzer<'a> {
                     .insert(function.name.text.clone(), function);
                 continue;
             }
-            if function.is_public {
+            if function.visibility.is_public() {
                 self.check_public_visibility(function, diagnostics);
             }
-            let info = FunctionTableInfo::from(function);
+            let mut info = FunctionTableInfo::from(function);
+            info.declaring_module = self.module_of(function.file_path.as_ref());
             if let Err(e) =
                 self.function_table
                     .add_overload(&function.name.text, info, &mut self.type_ctx)
@@ -48,8 +49,10 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|p| p.type_.get_type())
                 .collect();
-            let emitted = self.function_table.resolve_emitted_name(
+            let module = self.module_of(function.file_path.as_ref());
+            let emitted = self.function_table.resolve_emitted_name_scoped(
                 &function.name.text,
+                module.as_ref(),
                 &param_types,
                 &mut self.type_ctx,
             );
@@ -85,7 +88,7 @@ impl<'a> Analyzer<'a> {
         for type_to_check in signature_types {
             let base_type_str = strip_array(&type_to_check.get_type()).to_string();
             if let Some(struct_info) = self.struct_table.get_struct(&base_type_str) {
-                if !struct_info.is_public {
+                if !struct_info.visibility.is_public() {
                     diagnostics.report_error(
                         format!(
                             "Public function '{}' exposes private class '{}'",
@@ -123,8 +126,10 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|p| p.type_.get_type())
                 .collect();
-            let key = self.function_table.resolve_emitted_name(
+            let module = self.module_of(function.file_path.as_ref());
+            let key = self.function_table.resolve_emitted_name_scoped(
                 &function.name.text,
+                module.as_ref(),
                 &param_types,
                 &mut self.type_ctx,
             );

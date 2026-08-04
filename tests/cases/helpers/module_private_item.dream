@@ -1,0 +1,6 @@
+// Support file for the "aliasing a private item" error test.
+module priv.mod;
+
+fun private_only(): int {
+    return 1;
+}

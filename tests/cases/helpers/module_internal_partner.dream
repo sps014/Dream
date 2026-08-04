@@ -1,0 +1,7 @@
+// Same module as helpers/module_utils_math.dream: proves `internal` is visible module-wide,
+// not just from the declaring file.
+module utils.math;
+
+public fun combine(): int {
+    return shared_helper() + 1;
+}

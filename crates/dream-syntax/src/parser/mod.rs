@@ -360,6 +360,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         loop {
             match self.peek_token(i).kind {
                 TokenKind::PublicToken
+                | TokenKind::InternalToken
                 | TokenKind::StaticToken
                 | TokenKind::AsyncToken
                 | TokenKind::SealedToken => i += 1,
@@ -376,6 +377,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         loop {
             match self.peek_token(i).kind {
                 TokenKind::PublicToken
+                | TokenKind::InternalToken
                 | TokenKind::StaticToken
                 | TokenKind::AsyncToken
                 | TokenKind::SealedToken => i += 1,
@@ -411,6 +413,22 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut enums = vec![];
         let mut extends = vec![];
         let mut globals = vec![];
+
+        // A `module a.b.c;` declaration, if present, must be the very first item in the file —
+        // enforced simply by only ever looking for it here, before the `import`/declaration loops:
+        // a second occurrence anywhere else in the file falls through to the "expected a
+        // declaration" error below instead of being treated as a module decl.
+        let module = if self.current_token().kind == TokenKind::ModuleToken {
+            match self.parse_module_decl() {
+                Ok(module_decl) => Some(module_decl),
+                Err(_) => {
+                    self.recover_to_next_declaration();
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         while self.current_token().kind == TokenKind::ImportToken {
             if let Ok(import_node) = self.parse_import() {
@@ -500,9 +518,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             // top-level parsing can never spin forever.
             self.ensure_progress(loop_start);
         }
-        Ok(ProgramNode::new(
-            imports, structs, interfaces, functions, enums, extends, globals,
-        ))
+        let mut program = ProgramNode::new(imports, structs, interfaces, functions, enums, extends, globals);
+        program.module = module;
+        Ok(program)
     }
 
     /// Skips tokens until a recognized top-level declaration keyword is found,
@@ -520,11 +538,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                     | TokenKind::ExtendToken
                     | TokenKind::FunToken
                     | TokenKind::PublicToken
+                    | TokenKind::InternalToken
                     | TokenKind::ExternToken
                     | TokenKind::AsyncToken
                     | TokenKind::TypeToken
                     | TokenKind::LetToken
                     | TokenKind::ConstToken
+                    | TokenKind::ImportToken
             ) {
                 break;
             }

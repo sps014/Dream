@@ -1,0 +1,7 @@
+// Same module as helpers/module_internal_member.dream: proves `internal` fields are reachable
+// module-wide, not just from the declaring class's own methods.
+module member.mod;
+
+public fun combine(v: Vector): int {
+    return v.x + v.length_sq();
+}

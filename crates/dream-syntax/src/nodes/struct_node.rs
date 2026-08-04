@@ -1,4 +1,5 @@
 use crate::nodes::Type;
+use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
 use std::rc::Rc;
 
@@ -6,9 +7,9 @@ use std::rc::Rc;
 pub struct StructFieldNode {
     pub attributes: Vec<crate::nodes::AttributeNode>,
     pub name: SyntaxToken,
-    /// True when the field is marked `public`. Private (the default) fields may only be read or
-    /// written from within the declaring type's own methods.
-    pub is_public: bool,
+    /// Accessibility of the field: `public` may be read/written anywhere, `internal` anywhere in
+    /// the same declaring module, private (the default) only from the declaring type's own methods.
+    pub visibility: Visibility,
     /// True when the field is marked `weak`: it must be `Option<T>` for some reference type `T`,
     /// does not contribute to `T`'s strong reference count, and is automatically reset to `None`
     /// once the referent's strong count reaches zero. Breaks ARC reference cycles without keeping
@@ -42,9 +43,10 @@ pub struct StructDeclarationNode<'a> {
     /// for every method of each listed interface (validated during semantic analysis). Empty when
     /// no `:` clause is present.
     pub implements: Vec<Type>,
-    /// True when the class is marked `public`: visible to other modules and emitted as a
-    /// WebAssembly export. Private (the default) classes are module-internal.
-    pub is_public: bool,
+    /// Accessibility of the type: `public` is visible everywhere and emitted as a WebAssembly
+    /// export; `internal` is visible anywhere in the same declaring module; private (the default)
+    /// is file-scoped.
+    pub visibility: Visibility,
     /// True when declared with the `struct` keyword (a value type): stored inline with copy
     /// semantics rather than as a heap-allocated, reference-counted `class`.
     pub is_value: bool,
@@ -63,7 +65,7 @@ impl<'a> StructDeclarationNode<'a> {
         generic_parameters: Option<Vec<SyntaxToken>>,
         fields: Vec<StructFieldNode>,
         methods: Vec<crate::nodes::function::FunctionNode<'a>>,
-        is_public: bool,
+        visibility: Visibility,
     ) -> Self {
         Self {
             attributes,
@@ -73,7 +75,7 @@ impl<'a> StructDeclarationNode<'a> {
             fields,
             methods,
             implements: Vec::new(),
-            is_public,
+            visibility,
             is_value: false,
             is_sealed: false,
             file_path: None,

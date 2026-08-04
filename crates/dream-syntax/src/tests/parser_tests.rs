@@ -814,19 +814,19 @@ fn test_parse_weak_and_unowned_field_modifiers() {
     };
 
     let next = field("next");
-    assert!(next.is_public && !next.is_weak && !next.is_unowned);
+    assert!(next.visibility.is_public() && !next.is_weak && !next.is_unowned);
 
     let parent = field("parent");
-    assert!(!parent.is_public && parent.is_weak && !parent.is_unowned);
+    assert!(!parent.visibility.is_public() && parent.is_weak && !parent.is_unowned);
 
     let owner = field("owner");
-    assert!(!owner.is_public && !owner.is_weak && owner.is_unowned);
+    assert!(!owner.visibility.is_public() && !owner.is_weak && owner.is_unowned);
 
     let alias = field("alias");
-    assert!(alias.is_public && alias.is_weak && !alias.is_unowned);
+    assert!(alias.visibility.is_public() && alias.is_weak && !alias.is_unowned);
 
     let other = field("other");
-    assert!(other.is_public && !other.is_weak && other.is_unowned);
+    assert!(other.visibility.is_public() && !other.is_weak && other.is_unowned);
 }
 
 #[test]
@@ -855,7 +855,7 @@ fn test_parse_sealed_modifier() {
         .find(|s| s.name.text == "Frozen")
         .expect("Frozen declaration");
     assert!(
-        frozen.is_sealed && frozen.is_value && frozen.is_public,
+        frozen.is_sealed && frozen.is_value && frozen.visibility.is_public(),
         "`public sealed struct` must set is_sealed, is_value, and is_public"
     );
 

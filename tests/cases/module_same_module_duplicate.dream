@@ -1,0 +1,8 @@
+// Two files declaring the same `module` path with the same function name+signature still
+// collide — a module is still one namespace, unlike two different modules.
+import helpers.module_dup_a;
+import helpers.module_dup_b;
+
+fun main(): void {
+    System.println(add(1, 2));
+}

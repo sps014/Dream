@@ -17,6 +17,7 @@ use crate::syntax::nodes::{
     ProgramNode,
 };
 use crate::syntax::parser::Parser;
+use crate::syntax::token::syntax_token::SyntaxToken;
 
 /// Collects every top-level declaration from all parsed files (user code + imports + prelude +
 /// `@json` derives), tagged with its originating file so semantic diagnostics attribute errors
@@ -31,6 +32,17 @@ pub struct ProgramAccumulator<'a> {
     pub all_extends: Vec<ExtendNode<'a>>,
     pub all_globals: Vec<GlobalVariableNode<'a>>,
     pub file_contents: HashMap<String, String>,
+    /// Every file that declared a `module a.b.c;`, mapped to its dot-joined module path. Files
+    /// absent from this map belong to the implicit, unnamed root module. Handed to the analyzer
+    /// (see `Analyzer::with_file_modules`) so module-scoped `internal` visibility and aliased
+    /// `import ... as` resolution can compare/resolve modules after every file's individual
+    /// `ProgramNode` has been flattened into one merged program.
+    pub file_modules: HashMap<String, Rc<str>>,
+    /// Every aliased `import a.b.c as x;` encountered across all files, as
+    /// `(module path "a.b", item name "c", alias token "x")`. Resolved by the analyzer in a second
+    /// pass, after every file (and its `module` declaration) is loaded, since the referenced module
+    /// may be declared by a file loaded later in the recursive walk.
+    pub aliased_imports: Vec<(String, String, SyntaxToken, String)>,
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
@@ -152,9 +164,39 @@ pub fn parse_file_recursive<'a>(
     diagnostics.extend(&file_diagnostics);
 
     let program = ast.get_root();
+    if let Some(module_decl) = &program.module {
+        acc.file_modules
+            .insert(path_str.clone(), Rc::from(module_decl.path.text.as_str()));
+    }
     let parent_dir = path.parent().unwrap_or_else(|| Path::new(""));
 
     for import in &program.imports {
+        if let Some(alias) = &import.alias {
+            // `import a.b.c as x;` names an item `c` inside a *declared* module `a.b`, not a file
+            // path — resolved separately (`resolve_aliased_imports`) once every file, and its own
+            // `module` declaration, has been loaded.
+            let dotted = import.module_name.text.as_str();
+            match dotted.rsplit_once('.') {
+                Some((module_path, item)) => {
+                    acc.aliased_imports.push((
+                        module_path.to_string(),
+                        item.to_string(),
+                        alias.clone(),
+                        path_str.clone(),
+                    ));
+                }
+                None => {
+                    diagnostics.report_error(
+                        format!(
+                            "'import {} as {}': expected a module-qualified path like 'a.b.item'",
+                            dotted, alias.text
+                        ),
+                        Some(import.module_name.position),
+                    );
+                }
+            }
+            continue;
+        }
         let module_name = import.module_name.text.as_str();
         let import_path = resolve_import_path(parent_dir, module_name);
 

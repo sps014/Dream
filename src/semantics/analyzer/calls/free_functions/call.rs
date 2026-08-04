@@ -17,7 +17,19 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let mut function_name = name.text.clone();
+        // An unqualified call resolves within the caller's own declaring module first: if a
+        // cross-module name collision ever promoted this base name to module-qualified keys (see
+        // `FunctionTable::add_overload`), a bare reference from inside that same module must still
+        // resolve to its own module's declaration rather than ambiguously landing on whichever
+        // other module's declaration happens to still hold the bare key (or erroring outright).
+        // A no-op (returns the name unchanged) for the overwhelming majority of names, which were
+        // never involved in such a collision.
+        let caller_module = self.module_of(parent_function.file_path.as_ref());
+        let mut function_name = self
+            .function_table
+            .resolve_in_module(caller_module.as_ref(), &name.text)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| name.text.clone());
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         // A named argument (`f(x, y: 2)`) must be reordered to its positional slot, and a variadic
@@ -318,7 +330,7 @@ impl<'a> Analyzer<'a> {
         // class-level check in `analyze_static_call`.
         if !self.visible_across_files(
             &store_sig.declaring_file,
-            store_sig.is_public,
+            store_sig.visibility,
             parent_function.file_path.as_ref(),
         ) {
             self.report_not_public(

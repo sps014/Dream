@@ -164,7 +164,7 @@ impl<'a> Analyzer<'a> {
             return_type: Some(ret_type.clone()),
             parameters,
             body,
-            is_public: false,
+            visibility: crate::syntax::nodes::Visibility::Private,
             is_extern: false,
             is_static: false,
             is_async: false,
