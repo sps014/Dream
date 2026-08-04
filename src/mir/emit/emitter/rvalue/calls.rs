@@ -23,6 +23,30 @@ impl Emitter<'_> {
         }
     }
 
+    /// Emits an indirect call through a boxed `fun(...)` value's raw function-table index `target`
+    /// (already unboxed by the caller — see `Analyzer::hir_set_indirect_call_expr`): pushes `args`
+    /// then `target`, then dispatches through `$__ft` with the signature derived from `target`'s own
+    /// interned type (a `fun(...)` shape, not `int`, despite the funcidx being a plain `i32` at
+    /// runtime — see that HIR builder's comment for why). Returns the callee's WASM result type name
+    /// (`None` for `void`/an unrecognized target type), so callers know whether the trampoline left a
+    /// value on the stack to consume or discard. Shared by [`Rvalue::IndirectCall`] (leaves the result
+    /// on the stack) and [`Statement::IndirectCall`] (drops it — see `emit_stmt`).
+    pub(in crate::mir::emit::emitter) fn emit_indirect_call(
+        &mut self,
+        target: &Operand,
+        args: &[Operand],
+    ) -> Option<&'static str> {
+        for a in args {
+            self.emit_operand(a);
+        }
+        self.emit_operand(target);
+        let (sig_name, ret) = func_sig(self.interner, self.operand_ty(target))
+            .map(|(name, _, ret)| (name, ret))
+            .unwrap_or_else(|| ("$sig___v".to_string(), None));
+        self.line(&format!("     (call_indirect $__ft (type {}))", sig_name));
+        ret
+    }
+
     /// Emits a dynamic interface method call. The receiver is pushed as argument 0, then the real
     /// arguments (widened to the interface method's declared parameter types), then control transfers
     /// to the per-`(interface, method)` dispatch trampoline which looks the concrete implementation up

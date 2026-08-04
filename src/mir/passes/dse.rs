@@ -57,6 +57,7 @@ impl MirPass for Dse {
                     // Anything that can observe memory forgets all pending stores.
                     Statement::Call { .. }
                     | Statement::InterfaceCall { .. }
+                    | Statement::IndirectCall { .. }
                     | Statement::Print { .. }
                     | Statement::Retain(_)
                     | Statement::Release(_)

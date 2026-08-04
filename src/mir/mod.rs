@@ -162,6 +162,14 @@ pub enum Statement {
         sig: TypeId,
         args: Vec<Operand>,
     },
+    /// An indirect call through a function-pointer operand, evaluated for effect only (result
+    /// dropped if any — see [`Rvalue::IndirectCall`]). Exists as its own statement (rather than
+    /// always materializing `Rvalue::IndirectCall` into a temp) for the same reason
+    /// [`Statement::Call`] does: a `void`-returning boxed `fun(...)` value called at statement
+    /// position (e.g. a capturing closure passed to `WebWorker`/a method-group value) has no
+    /// result to assign, and materializing one anyway would emit a `local.set`/`drop` with nothing
+    /// on the stack.
+    IndirectCall { target: Operand, args: Vec<Operand> },
     /// The `print`/`println` builtins, lowered to the host `print_*` imports. `ty` is the argument's
     /// interned type (selecting `$print_int`/`$print_char`/`$print_string`); `newline` appends `\n`.
     Print {

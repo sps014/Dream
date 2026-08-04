@@ -208,6 +208,10 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(receiver, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
         }
+        Statement::IndirectCall { target, args } => {
+            strings_in_operand(target, out);
+            args.iter().for_each(|a| strings_in_operand(a, out));
+        }
         Statement::Print { arg, .. } => strings_in_operand(arg, out),
         Statement::ForceFree(o) => strings_in_operand(o, out),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
@@ -320,6 +324,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::Panic(_)
         | Statement::Call { .. }
         | Statement::InterfaceCall { .. }
+        | Statement::IndirectCall { .. }
         | Statement::Print { .. }
         | Statement::ForceFree(_)
         | Statement::Nop

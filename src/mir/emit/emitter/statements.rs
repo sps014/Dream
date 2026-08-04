@@ -87,6 +87,11 @@ impl Emitter<'_> {
                     self.line("     (drop)");
                 }
             }
+            Statement::IndirectCall { target, args } => {
+                if self.emit_indirect_call(target, args).is_some() {
+                    self.line("     (drop)");
+                }
+            }
             Statement::Print { arg, ty, newline } => {
                 // Push the value, then print it. `int`/`char`/`string` go straight to a host import;
                 // every other scalar is first rendered with its in-wasm `*_to_string` and printed as a

@@ -47,6 +47,9 @@ fn stmt(s: &Statement) -> String {
                 ops(args)
             )
         }
+        Statement::IndirectCall { target, args } => {
+            format!("indirect_call {}({})", operand(target), ops(args))
+        }
         Statement::Print { arg, newline, .. } => {
             let f = if *newline { "println" } else { "print" };
             format!("{}({})", f, operand(arg))

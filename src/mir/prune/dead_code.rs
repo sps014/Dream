@@ -255,6 +255,11 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
             args.iter()
                 .for_each(|a| collect_global_reads_operand(a, out));
         }
+        Statement::IndirectCall { target, args } => {
+            collect_global_reads_operand(target, out);
+            args.iter()
+                .for_each(|a| collect_global_reads_operand(a, out));
+        }
         Statement::Print { arg, .. } => collect_global_reads_operand(arg, out),
         Statement::ForceFree(o) => collect_global_reads_operand(o, out),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}

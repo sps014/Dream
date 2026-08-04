@@ -1,0 +1,46 @@
+class Counter {
+    public value: int;
+
+    constructor(start: int) {
+        this.value = start;
+    }
+
+    public fun increment(): void {
+        this.value = this.value + 1;
+    }
+
+    public fun addTo(n: int): int {
+        return this.value + n;
+    }
+}
+
+fun apply(f: fun(int): int, v: int): int {
+    return f(v);
+}
+
+fun run(f: fun(): void): void {
+    f();
+}
+
+fun main(): void {
+    let counter = Counter(10);
+
+    // Instance method group used directly where a `fun(int): int` value is expected.
+    System.println(apply(counter.addTo, 5));
+
+    // Instance method group with no args/return, called through a `fun(): void` parameter.
+    let inc: fun(): void = counter.increment;
+    run(inc);
+    run(inc);
+    System.println(counter.value.to_string());
+
+    // Static method group.
+    let sq: fun(int): int = Counter.square;
+    System.println(sq(6));
+}
+
+extend Counter {
+    public static fun square(x: int): int {
+        return x * x;
+    }
+}

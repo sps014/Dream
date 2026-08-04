@@ -76,6 +76,13 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             }
             c
         }
+        Statement::IndirectCall { target, args } => {
+            let mut c = subst_operand(target, known);
+            for a in args {
+                c |= subst_operand(a, known);
+            }
+            c
+        }
         Statement::Print { arg, .. } => subst_operand(arg, known),
         Statement::ForceFree(o) => subst_operand(o, known),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => false,

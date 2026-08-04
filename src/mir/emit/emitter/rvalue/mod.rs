@@ -130,16 +130,7 @@ impl Emitter<'_> {
                 }
             }
             Rvalue::IndirectCall { target, args } => {
-                for a in args {
-                    self.emit_operand(a);
-                }
-                self.emit_operand(target);
-                // The table index (target) is on top of the stack; dispatch through `$__ft` with the
-                // signature derived from the target's function type.
-                let sig = func_sig(self.interner, self.operand_ty(target))
-                    .map(|(name, _, _)| name)
-                    .unwrap_or_else(|| "$sig___v".to_string());
-                self.line(&format!("     (call_indirect $__ft (type {}))", sig));
+                self.emit_indirect_call(target, args);
             }
             Rvalue::InterfaceCall {
                 receiver,

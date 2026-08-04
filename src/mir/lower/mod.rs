@@ -325,6 +325,14 @@ impl Lowerer<'_> {
                         args: lowered,
                     });
                 }
+                HExprKind::IndirectCall { target, args } if !self.interner.is_reference(e.ty) => {
+                    let t = self.lower_operand(target);
+                    let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
+                    self.b.push(Statement::IndirectCall {
+                        target: t,
+                        args: lowered,
+                    });
+                }
                 // `Buffer.free<T>(arr)` (`@unsafe`) lowers to a dedicated void statement (no result
                 // to materialize, unlike the `Rvalue::ArrayRealloc` expression form).
                 HExprKind::ForceFree(array) => {

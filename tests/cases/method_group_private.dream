@@ -1,0 +1,22 @@
+class Box {
+    value: int;
+
+    constructor(v: int) {
+        this.value = v;
+    }
+
+    fun reveal(): int {
+        return this.value;
+    }
+}
+
+fun apply(f: fun(): int): int {
+    return f();
+}
+
+fun main(): void {
+    let b = Box(42);
+    // A private method is not accessible as a method-group value from outside its class, exactly
+    // like a private field.
+    System.println(apply(b.reveal));
+}

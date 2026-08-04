@@ -1,0 +1,30 @@
+// Regression: a capturing `fun(): void` closure called through its boxed value (either directly,
+// as here, or inlined from inside another function that just forwards the call) must not try to
+// materialize a "result" for the call — there is none. See `Statement::IndirectCall` in
+// `src/mir/mod.rs`.
+
+class Counter {
+    public value: int;
+
+    constructor(start: int) {
+        this.value = start;
+    }
+}
+
+fun run(f: fun(): void): void {
+    f();
+}
+
+fun main(): void {
+    let counter = Counter(10);
+    let inc: fun(): void = () => {
+        counter.value = counter.value + 1;
+    };
+
+    inc();
+    inc();
+    System.println(counter.value.to_string());
+
+    run(inc);
+    System.println(counter.value.to_string());
+}

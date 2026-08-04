@@ -121,6 +121,10 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             read_operand(receiver, read);
             args.iter().for_each(|a| read_operand(a, read));
         }
+        Statement::IndirectCall { target, args } => {
+            read_operand(target, read);
+            args.iter().for_each(|a| read_operand(a, read));
+        }
         Statement::Print { arg, .. } => read_operand(arg, read),
         Statement::ForceFree(o) => read_operand(o, read),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}

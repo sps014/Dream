@@ -188,6 +188,12 @@ fn remap_stmt(s: &mut Statement, base: u32) {
                 remap_operand(a, base);
             }
         }
+        Statement::IndirectCall { target, args } => {
+            remap_operand(target, base);
+            for a in args {
+                remap_operand(a, base);
+            }
+        }
         Statement::Print { arg, .. } => remap_operand(arg, base),
         Statement::ForceFree(o) => remap_operand(o, base),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}

@@ -3,13 +3,15 @@
 
 use super::*;
 use crate::diagnostics::DiagnosticBag;
+use crate::hir::HExpr;
 use crate::semantics::errors::SemanticError;
+use crate::semantics::function_table::FunctionTableInfo;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::types::mangle_generic;
-use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
+use crate::syntax::nodes::{ExpressionNode, FunctionNode, ParameterNode, StatementNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
-use crate::types::method_fn;
+use crate::types::{method_fn, DefKind};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -144,6 +146,13 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                     );
                 }
+                // Static method group `Type.method` (no call): a bound reference to a static
+                // method, with no receiver to capture — identical in shape to a bare function
+                // value (see `Analyzer::hir_set_func_value`), just looked up under its mangled
+                // `{Type}_{method}` name instead of its own bare source name.
+                if let Some(func_ty) = self.resolve_static_method_group_value(&id.text, member) {
+                    return Ok(func_ty);
+                }
             }
         }
 
@@ -203,6 +212,14 @@ impl<'a> Analyzer<'a> {
                     );
                     let call = ExpressionNode::MethodCall(obj, get_tok, None, vec![]);
                     self.analyze_expression(&call, parent_function, symbol_table, diagnostics)
+                } else if let Some(func_ty) = self.resolve_method_group_value(
+                    &struct_name,
+                    member,
+                    &obj_type,
+                    obj_hir,
+                    parent_function,
+                ) {
+                    Ok(func_ty)
                 } else {
                     self.hir_none();
                     Err(report(
@@ -216,6 +233,129 @@ impl<'a> Analyzer<'a> {
                 }
             }
         }
+    }
+
+    /// Resolves `Type.method` (no call) as a static "method group" value: a bound reference to a
+    /// static method, with no receiver to capture — the exact same runtime shape as a bare
+    /// function value (see [`Analyzer::hir_set_func_value`]), just looked up under the method's
+    /// mangled `{Type}_{method}` name rather than a free function's own bare source name. Returns
+    /// `None` (leaving the caller to fall through to its usual diagnostic) when there is no such
+    /// static method or it is part of an overload set (ambiguous without a call's argument types).
+    fn resolve_static_method_group_value(&mut self, type_name: &str, member: &SyntaxToken) -> Option<Type> {
+        let mangled = method_fn(type_name, &member.text);
+        if self.function_table.overloads.get(&mangled).map(Vec::len).unwrap_or(0) > 1 {
+            return None;
+        }
+        let sig = self.function_table.get_function(&mangled).ok()?;
+        if !sig.is_static {
+            return None;
+        }
+        let ret = sig.return_type.clone().unwrap_or(Type::Void);
+        let func_ty = Type::Function(sig.parameter_types.clone(), Box::new(ret.clone()));
+        self.hir_set_func_value(&mangled, &func_ty, &ret);
+        Some(func_ty)
+    }
+
+    /// Resolves `receiver.method` (no call) as an instance "method group" value: a bound
+    /// reference to `struct_name`'s instance method `member.text`, usable as a first-class
+    /// `fun(...)` value (e.g. `WebWorker(counter.increment)`) exactly like `() =>
+    /// counter.increment()` today. Lowers to the same `[funcidx, env]` closure-box shape a
+    /// capturing lambda produces (see `expressions::lambda`): `receiver_hir`'s already-analyzed
+    /// value is snapshotted into a fresh `__Cell<T>` (permanently retained, mirroring a real
+    /// capture) and a synthesized lifted function `__method_group_<n>` — whose body is the
+    /// ordinary call `<captured receiver>.method(args)` — reads it back apart at its own prologue
+    /// (`Analyzer::hir_begin_function`), by way of the same `closure_captures`/`pending_lambdas`
+    /// bookkeeping a real lambda literal uses. Returns `None` (falling through to the caller's
+    /// existing "not a field" diagnostic) when there is no such method, it is static or part of an
+    /// overload set (ambiguous without a call's argument types), or the receiver could not be
+    /// analyzed.
+    fn resolve_method_group_value(
+        &mut self,
+        struct_name: &str,
+        member: &SyntaxToken,
+        receiver_ty: &Type,
+        receiver_hir: Option<HExpr>,
+        parent_function: &FunctionNode<'a>,
+    ) -> Option<Type> {
+        let mangled = method_fn(struct_name, &member.text);
+        if self.function_table.overloads.get(&mangled).map(Vec::len).unwrap_or(0) > 1 {
+            return None;
+        }
+        let sig = self.function_table.get_function(&mangled).ok()?;
+        if sig.is_static {
+            return None;
+        }
+        // Privacy is enforced naturally below: the synthesized lifted function's own body calls
+        // `<captured receiver>.member(args)` exactly like ordinary user source would, through the
+        // same method-call resolution every other call site goes through (see
+        // `calls::member_calls`), so an inaccessible method is rejected there — at `member`'s own
+        // (real, user-source) position, since `member_tok` below is built from `member.clone()`
+        // rather than a synthetic token.
+        let receiver_hir = receiver_hir?;
+
+        // `parameter_types[0]` is the implicit `this` (see `register_methods_for`); the value's
+        // own `fun(...)` signature is everything declared after it.
+        let param_types: Vec<Type> = sig.parameter_types.iter().skip(1).cloned().collect();
+        let ret_type = sig.return_type.clone().unwrap_or(Type::Void);
+        let func_ty = Type::Function(param_types.clone(), Box::new(ret_type.clone()));
+
+        let name = format!("__method_group_{}", self.lambda_counter);
+        self.lambda_counter += 1;
+
+        let recv_name = "__mg_recv".to_string();
+        let recv_tok = synthetic_token(TokenKind::IdentifierToken, &recv_name);
+        let recv_expr: &'a ExpressionNode<'a> =
+            self.arena.alloc(ExpressionNode::Identifier(recv_tok));
+
+        let mut parameters: Vec<ParameterNode> = Vec::with_capacity(param_types.len());
+        let mut arg_exprs: Vec<ExpressionNode<'a>> = Vec::with_capacity(param_types.len());
+        for (i, ty) in param_types.iter().enumerate() {
+            let ptok = synthetic_token(TokenKind::IdentifierToken, &format!("__mg_arg{i}"));
+            parameters.push(ParameterNode::new(ptok.clone(), ty.clone()));
+            arg_exprs.push(ExpressionNode::Identifier(ptok));
+        }
+
+        let member_tok = member.clone();
+        let call_stmt = if matches!(ret_type, Type::Void) {
+            StatementNode::MethodInvocation(recv_expr, member_tok, None, arg_exprs)
+        } else {
+            StatementNode::Return(Some(ExpressionNode::MethodCall(
+                recv_expr, member_tok, None, arg_exprs,
+            )))
+        };
+        let body: &'a [StatementNode<'a>] = self.arena.alloc_slice_clone(&[call_stmt]);
+
+        let func_node = FunctionNode {
+            attributes: Vec::new(),
+            name: synthetic_token(TokenKind::IdentifierToken, &name),
+            generic_parameters: None,
+            generic_constraints: Vec::new(),
+            return_type: Some(ret_type.clone()),
+            parameters,
+            body,
+            visibility: crate::syntax::nodes::Visibility::Private,
+            is_extern: false,
+            is_static: false,
+            is_async: false,
+            file_path: parent_function.file_path.clone(),
+            accessor: None,
+            is_default_impl: false,
+        };
+        let func_ref: &'a FunctionNode<'a> = self.arena.alloc(func_node);
+
+        let info = FunctionTableInfo::from(func_ref);
+        // Synthesized names are always fresh (a monotonically increasing counter, shared with
+        // `expressions::lambda`'s own `__lambda_<n>` names), so this cannot collide.
+        let _ = self.function_table.add_function(name.clone(), info);
+        self.type_ctx.register(DefKind::Function, &name, vec![]);
+        self.pending_lambdas.insert(name.clone(), func_ref);
+        self.closure_captures
+            .insert(name.clone(), vec![(recv_name, receiver_ty.clone())]);
+
+        let cell = self.hir_build_cell_new(receiver_ty, receiver_hir)?;
+        self.hir_retain_env(cell.clone());
+        self.hir_set_capturing_func_value(&name, cell, &func_ty, &ret_type);
+        Some(func_ty)
     }
 
     /// Resolves a field's position in a struct's layout (offset order, matching the
