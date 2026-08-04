@@ -128,12 +128,19 @@ impl Emitter<'_> {
                 base + js_abi::SLOT_AUX_OFFSET,
                 &format!("(i32.const {})", aux),
             );
-            // Payload: the argument value, stored at its natural width.
+            // Payload: the argument value, stored at its natural width. A `fun(...)` value is
+            // always the 2-word `[funcidx][env]` box described in `runtime/closure.wat` (see
+            // `funcbox_new`/`funcbox_funcidx`) - never a bare table index - so a `FUNC` slot must
+            // dereference it to the funcidx word the host's `decodeJsSlots`/`callback()` expects;
+            // storing the box pointer itself would hand the host a heap address, not a table index.
             self.line(&format!(
                 "     (global.get $__sp) (i32.const {}) (i32.add)",
                 base + js_abi::SLOT_PAYLOAD_OFFSET
             ));
             self.emit_operand(op);
+            if tag == js_abi::tag::FUNC {
+                self.line("     (i32.load)");
+            }
             self.line(&format!("     ({})", store));
         }
         // Bridge args: target, [namePtr,] argsPtr (= current $__sp), argc.

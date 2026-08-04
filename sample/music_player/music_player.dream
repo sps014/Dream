@@ -1,0 +1,208 @@
+// Browser music player, built entirely with Dream's dynamic `js` interop type.
+//
+// Every DOM query, `<audio>` element, event listener, and property get/set below is ordinary
+// Dream code compiled straight to WebAssembly - there is no hand-written JavaScript logic behind
+// this player, only the shared generic loader in `runtime/dream.js` (see music_player.html).
+//
+//   cargo run -- sample/music_player/music_player.dream
+//
+// See README.md in this folder for how to run it in a browser.
+
+class Track {
+    public title: string;
+    public artist: string;
+    public url: string;
+
+    constructor(title: string, artist: string, url: string) {
+        this.title = title;
+        this.artist = artist;
+        this.url = url;
+    }
+}
+
+// --- Playlist -----------------------------------------------------------------------------
+
+let tracks: Track[] = [
+    Track("SoundHelix Song 1", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
+    Track("SoundHelix Song 2", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"),
+    Track("SoundHelix Song 3", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"),
+    Track("SoundHelix Song 4", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"),
+    Track("SoundHelix Song 5", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3"),
+];
+
+// --- Module-level state --------------------------------------------------------------------
+//
+// Dream functions handed to `addEventListener` are captureless (see docs/language/callbacks.md),
+// so every handler below reaches the player's state through these top-level `let`s rather than a
+// closure. Only plain values live here — a top-level `js` handle can't be initialized this way,
+// since its initializer would call into the JS host before the module finishes instantiating.
+// DOM nodes are instead looked up by id on demand via the `el(...)` helper below.
+
+let current_index: int = 0;
+let is_playing: bool = false;
+
+// --- DOM helpers ------------------------------------------------------------------------------
+
+fun el(id: string): js {
+    return js.global.document.getElementById(id);
+}
+
+// --- Helpers --------------------------------------------------------------------------------
+
+fun pad2(n: int): string {
+    if (n < 10) {
+        return "0" + n.to_string();
+    }
+    return n.to_string();
+}
+
+fun format_time(total_seconds: int): string {
+    let safe_seconds = total_seconds < 0 ? 0 : total_seconds;
+    let minutes = safe_seconds / 60;
+    let seconds = safe_seconds % 60;
+    return minutes.to_string() + ":" + pad2(seconds);
+}
+
+// Rebuilds the playlist rows from scratch and highlights the currently loaded track. Each row
+// stores its track index as a `data-index` attribute so the shared `on_track_click` handler
+// (which cannot capture a per-row index) can read it back off the clicked element.
+fun render_playlist(): void {
+    let doc = js.global.document;
+    let playlist_el = el("playlist");
+    playlist_el.innerHTML = "";
+
+    let i = 0;
+    while (i < tracks.size()) {
+        let track = tracks[i];
+
+        let row = doc.createElement("li");
+        row.className = i == current_index ? "track active" : "track";
+        row.setAttribute("data-index", i.to_string());
+
+        let title_span = doc.createElement("span");
+        title_span.className = "track-title";
+        title_span.textContent = track.title;
+
+        let artist_span = doc.createElement("span");
+        artist_span.className = "track-artist";
+        artist_span.textContent = track.artist;
+
+        row.appendChild(title_span);
+        row.appendChild(artist_span);
+        row.addEventListener("click", on_track_click);
+
+        playlist_el.appendChild(row);
+        i = i + 1;
+    }
+}
+
+// Loads `index` (wrapping around the playlist) into the `<audio>` element and refreshes the UI.
+fun load_track(index: int): void {
+    let count = tracks.size();
+    let wrapped = ((index % count) + count) % count;
+    current_index = wrapped;
+
+    let track = tracks[current_index];
+    el("audio-player").src = track.url;
+    el("track-title").textContent = track.title;
+    el("track-artist").textContent = track.artist;
+    el("seek").value = 0;
+    el("time-display").textContent = "0:00 / 0:00";
+
+    render_playlist();
+}
+
+fun update_play_button(): void {
+    let play_button = el("play-button");
+    play_button.textContent = is_playing ? "⏸" : "▶";
+    play_button.setAttribute("aria-label", is_playing ? "Pause" : "Play");
+}
+
+// --- Event handlers --------------------------------------------------------------------------
+
+fun on_play_pause_click(ev: js): void {
+    let audio = el("audio-player");
+    if (is_playing) {
+        audio.pause();
+        is_playing = false;
+    } else {
+        audio.play();
+        is_playing = true;
+    }
+    update_play_button();
+}
+
+fun on_prev_click(ev: js): void {
+    load_track(current_index - 1);
+    if (is_playing) {
+        el("audio-player").play();
+    }
+}
+
+fun on_next_click(ev: js): void {
+    load_track(current_index + 1);
+    if (is_playing) {
+        el("audio-player").play();
+    }
+}
+
+fun on_track_click(ev: js): void {
+    let index: int = ev.currentTarget.getAttribute("data-index");
+    load_track(index);
+    el("audio-player").play();
+    is_playing = true;
+    update_play_button();
+}
+
+fun on_seek_input(ev: js): void {
+    let percent: double = el("seek").value;
+    let audio = el("audio-player");
+    let duration: double = audio.duration;
+    if (duration > 0.0) {
+        audio.currentTime = (percent / 100.0) * duration;
+    }
+}
+
+fun on_volume_input(ev: js): void {
+    let percent: double = el("volume").value;
+    el("audio-player").volume = percent / 100.0;
+}
+
+fun on_time_update(ev: js): void {
+    let audio = el("audio-player");
+    let current: double = audio.currentTime;
+    let duration: double = audio.duration;
+
+    if (duration > 0.0) {
+        el("seek").value = (current / duration) * 100.0;
+    }
+
+    el("time-display").textContent = format_time((int)current) + " / " + format_time((int)duration);
+}
+
+fun on_ended(ev: js): void {
+    load_track(current_index + 1);
+    el("audio-player").play();
+    is_playing = true;
+    update_play_button();
+}
+
+// --- Entry point ----------------------------------------------------------------------------
+
+fun main(): void {
+    let audio = el("audio-player");
+
+    el("play-button").addEventListener("click", on_play_pause_click);
+    el("prev-button").addEventListener("click", on_prev_click);
+    el("next-button").addEventListener("click", on_next_click);
+    el("seek").addEventListener("input", on_seek_input);
+    el("volume").addEventListener("input", on_volume_input);
+    audio.addEventListener("timeupdate", on_time_update);
+    audio.addEventListener("ended", on_ended);
+
+    el("volume").value = 80;
+    audio.volume = 0.8;
+
+    load_track(0);
+    update_play_button();
+}
