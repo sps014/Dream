@@ -6,13 +6,14 @@
     <title>Dream Music Player</title>
     <style>
       :root {
-        --bg: #0e0e14;
-        --card: #17171f;
-        --card-border: #2a2a36;
+        --bg: #0b0b12;
+        --card: rgba(24, 24, 34, 0.72);
+        --card-border: rgba(255, 255, 255, 0.08);
         --accent: #7c5cff;
+        --accent-2: #ff6bd6;
         --accent-soft: #7c5cff33;
-        --text: #eceaf6;
-        --muted: #8d8aa3;
+        --text: #f3f1fb;
+        --muted: #9793ad;
       }
 
       * {
@@ -21,71 +22,92 @@
 
       body {
         font-family: "Inter", system-ui, -apple-system, sans-serif;
-        background: radial-gradient(circle at top, #1c1c2b 0%, var(--bg) 60%);
+        background:
+          radial-gradient(circle at 15% 10%, #3a2a6b55 0%, transparent 45%),
+          radial-gradient(circle at 85% 90%, #ff6bd633 0%, transparent 45%),
+          var(--bg);
         color: var(--text);
-        min-height: 100vh;
+        height: 100vh;
         margin: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 2rem 1rem;
+        padding: 1rem;
+        overflow: hidden;
       }
 
       .player {
         width: 100%;
-        max-width: 420px;
+        max-width: 460px;
+        max-height: 100%;
         background: var(--card);
         border: 1px solid var(--card-border);
-        border-radius: 20px;
-        padding: 1.75rem;
-        box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.6);
+        border-radius: 22px;
+        padding: 1.2rem 1.35rem;
+        box-shadow: 0 30px 70px -25px rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(18px);
+        display: flex;
+        flex-direction: column;
       }
 
-      .eyebrow {
-        font-size: 0.72rem;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--muted);
-        margin: 0 0 1.1rem;
-        text-align: center;
+      .header-row {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        margin-bottom: 0.9rem;
       }
 
       .art {
-        width: 100%;
-        aspect-ratio: 1 / 1;
-        border-radius: 16px;
-        background: linear-gradient(135deg, #7c5cff 0%, #ff6bd6 100%);
+        width: 3.3rem;
+        height: 3.3rem;
+        flex-shrink: 0;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 4rem;
-        margin-bottom: 1.25rem;
-        box-shadow: 0 20px 40px -18px var(--accent-soft);
+        font-size: 1.5rem;
+        box-shadow: 0 12px 26px -12px var(--accent-soft);
       }
 
       .now-playing {
-        text-align: center;
-        margin-bottom: 1.25rem;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .eyebrow {
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 0 0 0.15rem;
       }
 
       #track-title {
         display: block;
-        font-size: 1.15rem;
+        font-size: 1.05rem;
         font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       #track-artist {
         display: block;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: var(--muted);
-        margin-top: 0.2rem;
+        margin-top: 0.1rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .seek-row {
         display: flex;
         align-items: center;
         gap: 0.6rem;
-        margin-bottom: 1.1rem;
+        margin-bottom: 0.65rem;
       }
 
       input[type="range"] {
@@ -94,7 +116,7 @@
         flex: 1;
         height: 5px;
         border-radius: 3px;
-        background: #2a2a36;
+        background: #2f2f40;
         outline: none;
       }
 
@@ -104,7 +126,7 @@
         width: 13px;
         height: 13px;
         border-radius: 50%;
-        background: var(--accent);
+        background: #fff;
         cursor: pointer;
         box-shadow: 0 0 0 4px var(--accent-soft);
       }
@@ -114,12 +136,12 @@
         height: 13px;
         border: none;
         border-radius: 50%;
-        background: var(--accent);
+        background: #fff;
         cursor: pointer;
       }
 
       #time-display {
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         color: var(--muted);
         min-width: 4.5rem;
         text-align: right;
@@ -130,23 +152,26 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 1.1rem;
-        margin-bottom: 1.4rem;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
       }
 
       .transport button {
         border: none;
         background: transparent;
         color: var(--text);
-        font-size: 1.3rem;
+        font-size: 1.25rem;
         cursor: pointer;
         padding: 0.4rem;
         border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         transition: background 0.15s ease, transform 0.1s ease;
       }
 
       .transport button:hover {
-        background: #24243266;
+        background: rgba(255, 255, 255, 0.08);
       }
 
       .transport button:active {
@@ -154,22 +179,23 @@
       }
 
       #play-button {
-        width: 3.2rem;
-        height: 3.2rem;
-        font-size: 1.4rem;
-        background: var(--accent);
-        box-shadow: 0 10px 24px -8px var(--accent-soft);
+        width: 3.1rem;
+        height: 3.1rem;
+        font-size: 1.3rem;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        box-shadow: 0 10px 26px -8px var(--accent-soft);
       }
 
       #play-button:hover {
-        background: #8c6dff;
+        filter: brightness(1.12);
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
       }
 
       .volume-row {
         display: flex;
         align-items: center;
         gap: 0.6rem;
-        margin-bottom: 1.4rem;
+        margin-bottom: 0.75rem;
         color: var(--muted);
         font-size: 0.85rem;
       }
@@ -179,56 +205,112 @@
       }
 
       .playlist-heading {
-        font-size: 0.72rem;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        font-size: 0.65rem;
         letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--muted);
-        margin: 0 0 0.6rem;
+        margin: 0 0 0.4rem;
+        flex-shrink: 0;
+      }
+
+      .playlist-heading span.count {
+        text-transform: none;
+        letter-spacing: normal;
+        font-size: 0.72rem;
       }
 
       #playlist {
         list-style: none;
         margin: 0;
         padding: 0;
-        max-height: 220px;
+        flex: 1;
+        min-height: 60px;
+        max-height: 230px;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        gap: 0.3rem;
+        gap: 0.15rem;
+      }
+
+      #playlist::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      #playlist::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 3px;
       }
 
       #playlist .track {
         display: flex;
-        flex-direction: column;
-        padding: 0.55rem 0.7rem;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.45rem 0.6rem;
         border-radius: 10px;
         cursor: pointer;
-        transition: background 0.15s ease;
+        border: 1px solid transparent;
+        transition: background 0.15s ease, border-color 0.15s ease;
       }
 
       #playlist .track:hover {
-        background: #22222f;
+        background: rgba(255, 255, 255, 0.05);
       }
 
       #playlist .track.active {
         background: var(--accent-soft);
+        border-color: rgba(124, 92, 255, 0.4);
+      }
+
+      .track-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .track-title-row {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        min-width: 0;
       }
 
       #playlist .track-title {
-        font-size: 0.88rem;
+        font-size: 0.85rem;
         font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       #playlist .track-artist {
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .ncs-badge {
+        flex-shrink: 0;
+        font-size: 0.58rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: #0b0b12;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        padding: 0.08rem 0.4rem;
+        border-radius: 999px;
       }
 
       .footnote {
         text-align: center;
-        font-size: 0.7rem;
+        font-size: 0.63rem;
         color: var(--muted);
-        margin-top: 1.4rem;
+        margin-top: 0.6rem;
+        flex-shrink: 0;
       }
 
       .footnote code {
@@ -238,13 +320,13 @@
   </head>
   <body>
     <main class="player">
-      <p class="eyebrow">Dream &middot; compiled to WebAssembly</p>
-
-      <div class="art">&#127925;</div>
-
-      <div class="now-playing">
-        <span id="track-title">Loading&hellip;</span>
-        <span id="track-artist"></span>
+      <div class="header-row">
+        <div class="art">&#127925;</div>
+        <div class="now-playing">
+          <p class="eyebrow">Dream &middot; compiled to WebAssembly</p>
+          <span id="track-title">Loading&hellip;</span>
+          <span id="track-artist"></span>
+        </div>
       </div>
 
       <div class="seek-row">
@@ -263,15 +345,17 @@
         <input id="volume" type="range" min="0" max="100" value="80" />
       </div>
 
-      <p class="playlist-heading">Playlist</p>
+      <p class="playlist-heading">
+        <span>Playlist</span>
+        <span class="count">NCS &middot; SoundHelix</span>
+      </p>
       <ul id="playlist"></ul>
 
       <!-- Dream drives this element entirely via the dynamic `js` type: no inline JS here. -->
       <audio id="audio-player" preload="metadata"></audio>
 
       <p class="footnote">
-        All playback logic lives in <code>music_player.dream</code> &mdash; this page only loads
-        the shared <code>runtime/dream.js</code> WASM bootstrap.
+        Logic lives in <code>music_player.dream</code>, compiled to WebAssembly.
       </p>
     </main>
 

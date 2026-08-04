@@ -12,17 +12,23 @@ class Track {
     public title: string;
     public artist: string;
     public url: string;
+    public is_ncs: bool;
 
     constructor(title: string, artist: string, url: string) {
         this.title = title;
         this.artist = artist;
         this.url = url;
+        this.is_ncs = artist.contains("NCS");
     }
 }
 
 // --- Playlist -----------------------------------------------------------------------------
 
 let tracks: Track[] = [
+    Track("Mortals (feat. Laura Brehm)", "Warriyo [NCS Release]", "https://archive.org/download/soundcloud-300693179/Warriyo_-_Mortals_feat._Laura_Brehm_NCS_Release-300693179.mp3"),
+    Track("Force", "Alan Walker [NCS Release]", "https://archive.org/download/soundcloud-198928615/Alan_Walker_-_Force_NCS_Release-198928615.mp3"),
+    Track("Heart Afire (feat. Strix)", "Defqwop [NCS Release]", "https://archive.org/download/soundcloud-265534576/Defqwop_-_Heart_Afire_feat._Strix_NCS_Release-265534576.mp3"),
+    Track("Cloud 9", "Itro & Tobu [NCS Release]", "https://archive.org/download/soundcloud-168727023/Itro_Tobu_-_Cloud_9_NCS_Release-168727023.mp3"),
     Track("SoundHelix Song 1", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
     Track("SoundHelix Song 2", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"),
     Track("SoundHelix Song 3", "SoundHelix", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"),
@@ -79,16 +85,32 @@ fun render_playlist(): void {
         row.className = i == current_index ? "track active" : "track";
         row.setAttribute("data-index", i.to_string());
 
+        let info = doc.createElement("div");
+        info.className = "track-info";
+
+        let title_row = doc.createElement("div");
+        title_row.className = "track-title-row";
+
         let title_span = doc.createElement("span");
         title_span.className = "track-title";
         title_span.textContent = track.title;
+
+        title_row.appendChild(title_span);
+
+        if (track.is_ncs) {
+            let badge = doc.createElement("span");
+            badge.className = "ncs-badge";
+            badge.textContent = "NCS";
+            title_row.appendChild(badge);
+        }
 
         let artist_span = doc.createElement("span");
         artist_span.className = "track-artist";
         artist_span.textContent = track.artist;
 
-        row.appendChild(title_span);
-        row.appendChild(artist_span);
+        info.appendChild(title_row);
+        info.appendChild(artist_span);
+        row.appendChild(info);
         row.addEventListener("click", on_track_click);
 
         playlist_el.appendChild(row);

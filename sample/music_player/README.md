@@ -44,4 +44,6 @@ and the page would 404 on the runtime.
 - Because those callbacks can't capture a closure, the playlist, current track index, and every
   DOM handle live in top-level `let`s (see [Variables](../../docs/language/variables.md#top-level-variables)),
   shared across all handlers in the file.
-- The demo tracks are the freely-streamable [SoundHelix](https://www.soundhelix.com/) sample MP3s.
+- The playlist opens with four freely-licensed [NoCopyrightSounds](https://ncs.io/) (NCS) releases
+  mirrored on the Internet Archive, followed by the [SoundHelix](https://www.soundhelix.com/)
+  sample MP3s.
