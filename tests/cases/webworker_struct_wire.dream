@@ -1,0 +1,24 @@
+// `WebWorker<TIn, TOut>` already supports an arbitrary `unmanaged` (blittable) value `struct` for
+// `TIn`/`TOut`, not just `string`/scalar primitives: it crosses the wire as a raw byte-blit
+// (`Bytes.of`/`Bytes.to` under the hood), reconstructed on the other side with the same layout.
+
+struct Point {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+fun shift(p: Point): Point {
+    return Point(p.x + 1, p.y + 1);
+}
+
+async fun main(): void {
+    let w = WebWorker<Point, Point>(shift);
+    let r = await w.send(Point(1, 2));
+    System.println("" + r.x + "," + r.y);
+    w.terminate();
+}
