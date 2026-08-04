@@ -25,6 +25,36 @@ println(p1.x);  // 10
 
 Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
 
+### Overloaded constructors
+
+A class or struct may declare more than one `constructor`, resolved by argument count/types exactly like an overloaded function or method (see [Language Invariants](invariants.md#overloading)):
+
+```dream
+class Point {
+    public x: int;
+    public y: int;
+
+    constructor() {
+        this.x = 0;
+        this.y = 0;
+    }
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    constructor(both: int) {
+        this.x = both;
+        this.y = both;
+    }
+}
+
+let a = Point();      // (0, 0)
+let b = Point(3, 4);  // (3, 4)
+let c = Point(5);     // (5, 5)
+```
+
 ## Structs are value types
 
 A `struct` is stored inline (on the stack, inside an array, or inside another object), and every assignment or argument pass makes an independent **copy**:

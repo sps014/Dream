@@ -55,6 +55,7 @@ public static let x = 1;   // error: cannot be both 'public' and 'static'
 
 - Overloads must differ in their parameters; two with identical parameter types are rejected as duplicates.
 - Overloads may use default values. An exact-arity match wins over one that fills defaults, and a genuinely ambiguous call is reported at the call site.
+- A class/struct's `constructor` may be overloaded exactly like any other method: `Point()`, `Point(x: int, y: int)`, and `Point(both: int)` may all coexist, resolved by the same arity/type rules.
 
 ## The entry point
 
