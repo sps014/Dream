@@ -1,0 +1,34 @@
+// A class may declare more than one `constructor` overload; the matching one is selected by
+// argument count/types exactly like an overloaded free function or method call.
+class Point {
+    public x: int;
+    public y: int;
+
+    constructor() {
+        this.x = 0;
+        this.y = 0;
+    }
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    constructor(both: int) {
+        this.x = both;
+        this.y = both;
+    }
+
+    public fun describe(): string {
+        return "(" + this.x + ", " + this.y + ")";
+    }
+}
+
+fun main(): void {
+    let a = Point();
+    let b = Point(3, 4);
+    let c = Point(5);
+    System.println(a.describe());
+    System.println(b.describe());
+    System.println(c.describe());
+}

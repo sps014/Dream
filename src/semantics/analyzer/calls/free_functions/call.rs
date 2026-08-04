@@ -121,7 +121,10 @@ impl<'a> Analyzer<'a> {
             None
         } else if let Ok(info) = self.function_table.get_function(&function_name) {
             Some(Self::expected_param_types(&info))
-        } else if generic_args.is_none() && self.struct_table.get_struct(&function_name).is_some() {
+        } else if generic_args.is_none()
+            && self.struct_table.get_struct(&function_name).is_some()
+            && !self.function_table.is_overloaded(&constructor_fn(&function_name))
+        {
             self.function_table
                 .get_function(&constructor_fn(&function_name))
                 .ok()
@@ -148,9 +151,29 @@ impl<'a> Analyzer<'a> {
                 if type_params.len() != concrete_generic_args.len() {
                     return None;
                 }
-                let ctor = template.methods.iter().find(|m| {
-                    m.name.text == crate::syntax::nodes::types::CONSTRUCTOR_NAME
-                })?;
+                // If the template declares more than one `constructor` overload, only use this
+                // (soft, best-effort) expected-type hint when exactly one of them matches the call's
+                // own argument count — otherwise leave the hint off rather than guessing which
+                // overload's parameter types to publish.
+                let ctors: Vec<_> = template
+                    .methods
+                    .iter()
+                    .filter(|m| m.name.text == crate::syntax::nodes::types::CONSTRUCTOR_NAME)
+                    .collect();
+                let ctor = match ctors.len() {
+                    0 => return None,
+                    1 => ctors[0],
+                    _ => {
+                        let mut matching = ctors
+                            .into_iter()
+                            .filter(|c| c.parameters.len() == params.len());
+                        let first = matching.next()?;
+                        if matching.next().is_some() {
+                            return None;
+                        }
+                        first
+                    }
+                };
                 let bindings = generic_bindings(type_params, &concrete_generic_args);
                 Some(
                     ctor.parameters
@@ -262,7 +285,7 @@ impl<'a> Analyzer<'a> {
                     .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
                     .collect()
             });
-            let t = self.analyze_constructor_call(
+            let (t, resolved_ctor_name) = self.analyze_constructor_call(
                 name,
                 &concrete_generic_args,
                 &mut params_types,
@@ -287,10 +310,16 @@ impl<'a> Analyzer<'a> {
             };
             if let Some(concrete_name) = concrete_name {
                 if self.struct_table.get_struct(&concrete_name).is_some() {
-                    let ctor = self.type_ctx.defs.lookup(
-                        crate::types::DefKind::Function,
-                        &constructor_fn(&concrete_name),
-                    );
+                    // A struct with more than one `constructor` overload registers a distinct
+                    // `DefId` per overload under its signature-mangled emitted name (see
+                    // `register_methods_for`); `analyze_constructor_call` already picked which one
+                    // this call resolved to, so look that emitted name up directly instead of
+                    // re-deriving the (now ambiguous) bare `{concrete_name}_constructor` name.
+                    let ctor_def_name = resolved_ctor_name.unwrap_or_else(|| constructor_fn(&concrete_name));
+                    let ctor = self
+                        .type_ctx
+                        .defs
+                        .lookup(crate::types::DefKind::Function, &ctor_def_name);
                     self.hir_set_new(&name.text, ctor, arg_hirs, &t);
                 }
             }

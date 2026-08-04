@@ -1,0 +1,21 @@
+// Calling an overloaded constructor with an argument list that matches none of its overloads is a
+// compile-time error, not a runtime one.
+class Point {
+    x: int;
+    y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    constructor(both: int) {
+        this.x = both;
+        this.y = both;
+    }
+}
+
+fun main(): void {
+    let p = Point("hello");
+    System.println(p.x.toString());
+}
