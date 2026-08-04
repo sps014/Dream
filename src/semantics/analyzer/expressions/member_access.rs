@@ -241,9 +241,20 @@ impl<'a> Analyzer<'a> {
     /// mangled `{Type}_{method}` name rather than a free function's own bare source name. Returns
     /// `None` (leaving the caller to fall through to its usual diagnostic) when there is no such
     /// static method or it is part of an overload set (ambiguous without a call's argument types).
-    fn resolve_static_method_group_value(&mut self, type_name: &str, member: &SyntaxToken) -> Option<Type> {
+    fn resolve_static_method_group_value(
+        &mut self,
+        type_name: &str,
+        member: &SyntaxToken,
+    ) -> Option<Type> {
         let mangled = method_fn(type_name, &member.text);
-        if self.function_table.overloads.get(&mangled).map(Vec::len).unwrap_or(0) > 1 {
+        if self
+            .function_table
+            .overloads
+            .get(&mangled)
+            .map(Vec::len)
+            .unwrap_or(0)
+            > 1
+        {
             return None;
         }
         let sig = self.function_table.get_function(&mangled).ok()?;
@@ -278,7 +289,14 @@ impl<'a> Analyzer<'a> {
         parent_function: &FunctionNode<'a>,
     ) -> Option<Type> {
         let mangled = method_fn(struct_name, &member.text);
-        if self.function_table.overloads.get(&mangled).map(Vec::len).unwrap_or(0) > 1 {
+        if self
+            .function_table
+            .overloads
+            .get(&mangled)
+            .map(Vec::len)
+            .unwrap_or(0)
+            > 1
+        {
             return None;
         }
         let sig = self.function_table.get_function(&mangled).ok()?;
