@@ -71,6 +71,21 @@ cargo run -- path/to/your/file.dream       # compile to .wat only
 cargo test
 ```
 
+## Development
+
+Before pushing, run the same checks CI's lint job runs:
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets
+```
+
+To have these run automatically on every commit, opt into the repo's git hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## License
 
 MIT

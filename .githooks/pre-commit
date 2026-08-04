@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Mirrors the "lint" job in .github/workflows/ci.yml so formatting/clippy
+# problems are caught locally before they show up as a red CI check.
+#
+# Installed via `git config core.hooksPath .githooks` (see CONTRIBUTING or
+# README setup steps) — not auto-enabled, since core.hooksPath is a per-clone
+# opt-in setting.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "[pre-commit] cargo fmt --all --check"
+if ! cargo fmt --all --check; then
+    echo
+    echo "[pre-commit] Formatting issues found. Run 'cargo fmt --all' and re-stage." >&2
+    exit 1
+fi
+
+echo "[pre-commit] cargo clippy --workspace --all-targets"
+if ! cargo clippy --workspace --all-targets; then
+    echo
+    echo "[pre-commit] Clippy found issues. Fix them (or re-run to see details) before committing." >&2
+    exit 1
+fi
+
+echo "[pre-commit] OK"
