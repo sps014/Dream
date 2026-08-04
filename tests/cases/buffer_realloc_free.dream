@@ -1,0 +1,37 @@
+// `Buffer.realloc<T>`/`Buffer.free<T>` (`@unsafe`): manual, non-ARC control over an array's backing
+// block via the allocator's `$realloc`/`$free`.
+
+@unsafe
+fun grow_and_shrink(): void {
+    let xs = Buffer.alloc<int>(3);
+    xs[0] = 10;
+    xs[1] = 20;
+    xs[2] = 30;
+
+    // Grow: the overlapping prefix survives, the new tail is zero-initialized.
+    xs = Buffer.realloc<int>(xs, 5);
+    System.println(xs.size());   // 5
+    System.println(xs[0]);       // 10
+    System.println(xs[1]);       // 20
+    System.println(xs[2]);       // 30
+    System.println(xs[3]);       // 0
+    System.println(xs[4]);       // 0
+
+    xs[3] = 40;
+    xs[4] = 50;
+
+    // Shrink: the surviving prefix is unchanged.
+    xs = Buffer.realloc<int>(xs, 2);
+    System.println(xs.size());   // 2
+    System.println(xs[0]);       // 10
+    System.println(xs[1]);       // 20
+
+    // Manual free: bypasses reference counting entirely.
+    Buffer.free<int>(xs);
+    System.println("done");
+}
+
+@unsafe
+fun main(): void {
+    grow_and_shrink();
+}

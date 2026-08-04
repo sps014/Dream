@@ -153,6 +153,31 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         args: ArgShape::Strings { min: 1, max: 1 },
         repeatable: false,
     },
+    AttributeSpec {
+        name: "unsafe",
+        // Gates manual-memory-management operations (raw `Pointer<T>`): calling an `@unsafe`
+        // function/method is only permitted from another `@unsafe` function/method — checked at
+        // every call site, not just here at the declaration (see
+        // `FunctionTableInfo::is_unsafe`/`Analyzer::check_unsafe_call`).
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+            AttributeTarget::ExternFunction,
+        ],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    AttributeSpec {
+        name: "stack",
+        // A checked contract, not a request: every monomorphized instance of a `@stack` union
+        // must already qualify as a value union (all payloads value/primitive, or a single
+        // reference-typed payload) or registration reports an error. See
+        // `Analyzer::register_union` in `src/semantics/analyzer/declarations/enums.rs`.
+        targets: &[AttributeTarget::Union],
+        args: ArgShape::None,
+        repeatable: false,
+    },
 ];
 
 fn find_spec(name: &str) -> Option<&'static AttributeSpec> {

@@ -1,0 +1,1 @@
+async function 'sum' cannot take 'ref struct' parameter 'p' of type 'Pair'

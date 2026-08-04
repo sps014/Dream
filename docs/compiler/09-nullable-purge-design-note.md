@@ -56,32 +56,34 @@ No new MIR node; the analyzer just picks a different desugaring target.
 
 ## 3. How is `Option<StructType>` boxing cost handled?
 
-**Decision: accept the cost. `Option<T>` keeps its one existing representation (heap tag +
-payload, discriminated union) for every `T`, including value structs. No nullable-style
-null-pointer fast path is re-derived for `Option`.**
+**Original decision (superseded below): accept the cost, with a flagged follow-up.** `Option<T>`
+kept its one representation (heap tag + payload, discriminated union) for every `T`, including
+value structs, on the theory that re-deriving `is_nullable_boxed_value`'s null-pointer-as-boxed
+trick for `Option<StructType>` would reintroduce exactly the two-representations bifurcation this
+purge exists to remove. `Option<Node>` where `Node` is a `class` was unaffected (a class instance
+is already a heap pointer, so the tag+pointer payload is no pricier than a nullable pointer). The
+cost was isolated to `Option<S>` for value-type `S`: a zero-allocation nullable slot became a
+heap-allocated union.
 
-The alternative — re-deriving `is_nullable_boxed_value`'s null-pointer-as-boxed-value trick for
-`Option<StructType>` — would mean maintaining *two* representations for the same generic type
-(`Option<ClassType>` as a discriminated union, `Option<StructType>` as a null-checkable boxed
-pointer), which is precisely the kind of hidden bifurcation this purge is trying to eliminate from
-the type system, just moved one level down (from surface syntax into `Option<T>`'s own codegen).
-It would also expand scope substantially: the boxing logic lives in `hir_emit/stmts.rs`,
-`emitter/value_struct.rs`, and `release.rs`, all keyed on `TyKind::Nullable` today, and would need
-a parallel `TyKind::Option`-aware path added rather than deleted.
+**Superseding decision: value unions close this gap without reopening the purge.** Every
+discriminated union whose payloads are *all* value types (primitives or other value structs/unions
+— never a class/interface/array/string reference) is stored inline as a tag + widest-payload slot,
+not heap-boxed; `Option<T>` for value-type `T` falls out of this rule for free, since it is exactly
+such a union. This was the general mechanism the note above deferred to "a self-contained
+follow-up," but it landed as a property of unions generally rather than an `Option`-specific
+codegen path — no `TyKind::Nullable`-shaped bifurcation was reintroduced, because the rule is keyed
+on payload-type shape (`is_value_type`), not on `Option` being a special case.
 
-Concrete implication: `Option<Node>` where `Node` is a `class` (the common linked-list case flagged
-in the audit) costs the same as `Node?` did — a class instance is already a heap pointer, so the
-union's tag+pointer payload is no more expensive than a nullable pointer was. The cost increase is
-isolated to `Option<S>` where `S` is a `struct` (value type): what was a zero-allocation nullable
-value (a null-checkable inline slot) becomes a heap-allocated union, matching how every other
-`Option<T>` already behaves. This is a real, deliberate regression for that one case, scoped
-narrowly, and it is the trade-off the audit already called out as the one to make explicitly rather
-than solve.
+One reference-typed field is also permitted inline when the union is explicitly annotated
+`@stack` (see [`docs/language/enums-unions.md`](../language/enums-unions.md)): this exists for
+payload shapes like a `Span<T>`/array-backed variant that need one non-self-referential reference
+alongside value fields, without forcing a fully boxed union. `Option<T>` itself never needs this —
+`None` carries no payload and `Some(T)` carries exactly one value-typed field — so the ordinary
+(non-`@stack`) value-union rule already covers it.
 
-This is flagged as revisitable: if `Option<ValueStruct>` boxing cost shows up as a real hot path
-later, a targeted "small `Option<T>` inline representation for value-type `T`" optimization pass is
-a self-contained follow-up (an MIR/codegen change local to `Option`'s own lowering), not something
-that needs to reopen this purge.
+Net effect: `Option<StructType>` now costs the same as `StructType?` did before the purge — a
+null-checkable inline slot, zero heap allocation — closing the one deliberate regression this note
+originally accepted.
 
 ## Net effect on migration
 

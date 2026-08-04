@@ -50,6 +50,11 @@ pub struct StructDeclarationNode<'a> {
     /// True when declared with the `struct` keyword (a value type): stored inline with copy
     /// semantics rather than as a heap-allocated, reference-counted `class`.
     pub is_value: bool,
+    /// True when declared `ref struct`: a stack-only value type. Implies `is_value`; additionally,
+    /// the analyzer rejects any use that would let an instance escape the current stack frame
+    /// (stored in a heap object, used as a generic type argument, closure-captured, or crossing an
+    /// `async` boundary) — see `Analyzer::check_ref_struct_escapes`.
+    pub is_ref_struct: bool,
     /// True when declared `sealed`: no `extend` block may target this type. Guards the type's method
     /// surface against outside extension (enforced during semantic analysis).
     pub is_sealed: bool,
@@ -77,6 +82,7 @@ impl<'a> StructDeclarationNode<'a> {
             implements: Vec::new(),
             visibility,
             is_value: false,
+            is_ref_struct: false,
             is_sealed: false,
             file_path: None,
         }

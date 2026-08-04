@@ -150,6 +150,26 @@ impl<'a> Analyzer<'a> {
             ));
         }
 
+        // A `ref struct` is stack-only: a capturing lambda's environment is a heap-allocated
+        // `__Cell<T>`/`object[]` (so it can outlive this call), which would force the captured
+        // value onto the heap. Reject it here, mirroring the `ref`-parameter-capture rejection above.
+        if let Some((bad, bad_ty)) = captures.iter().find(|(_, ty)| {
+            let tid = self.type_ctx.lower(ty);
+            self.type_ctx.interner.is_ref_struct_type(tid)
+        }) {
+            self.hir_none();
+            return Err(report(
+                diagnostics,
+                format!(
+                    "cannot capture '{}' of type '{}' in a lambda expression: '{}' is a 'ref struct' (stack-only) and cannot be stored in the lambda's heap-allocated closure environment",
+                    bad,
+                    bad_ty.get_type(),
+                    bad_ty.get_type()
+                ),
+                Some(lambda.open_paren_position),
+            ));
+        }
+
         let body: &'a [StatementNode<'a>] = match &lambda.body {
             LambdaBody::Block(stmts) => stmts,
             LambdaBody::Expr(expr) => {

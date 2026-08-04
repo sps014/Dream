@@ -1,0 +1,22 @@
+// A `ref struct` cannot be a parameter of an `async` function: a suspend point (`await`) spills the
+// coroutine's live locals into a heap-allocated state object so they survive across it, which would
+// force the stack-only value onto the heap.
+
+ref struct Pair {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+async fun sum(p: Pair): int {
+    return p.a + p.b;
+}
+
+fun main(): void {
+    let p = Pair(1, 2);
+    let r = sum(p);
+}

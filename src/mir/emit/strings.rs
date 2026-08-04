@@ -152,6 +152,10 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             strings_in_operand(o, out)
         }
+        Rvalue::ArrayRealloc { array, new_len, .. } => {
+            strings_in_operand(array, out);
+            strings_in_operand(new_len, out);
+        }
         Rvalue::HashCode(o) | Rvalue::ToString(o) => strings_in_operand(o, out),
         Rvalue::EnumName { value, arms } => {
             strings_in_operand(value, out);
@@ -205,6 +209,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             args.iter().for_each(|a| strings_in_operand(a, out));
         }
         Statement::Print { arg, .. } => strings_in_operand(arg, out),
+        Statement::ForceFree(o) => strings_in_operand(o, out),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -280,6 +285,10 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
             Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
                 in_operand(o, out)
             }
+            Rvalue::ArrayRealloc { array, new_len, .. } => {
+                in_operand(array, out);
+                in_operand(new_len, out);
+            }
             Rvalue::HashCode(o) | Rvalue::ToString(o) => in_operand(o, out),
             Rvalue::EnumName { value, .. } => in_operand(value, out),
             Rvalue::Call { args, .. }
@@ -312,6 +321,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::Call { .. }
         | Statement::InterfaceCall { .. }
         | Statement::Print { .. }
+        | Statement::ForceFree(_)
         | Statement::Nop
         | Statement::DebugLine(_)
         | Statement::SourceLine(_) => {}

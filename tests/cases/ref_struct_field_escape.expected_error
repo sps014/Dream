@@ -1,0 +1,1 @@
+field 'pair' of 'Holder' cannot have type 'Pair': a 'ref struct' cannot be stored as a field

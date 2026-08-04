@@ -400,6 +400,56 @@ impl Emitter<'_> {
                 self.line("     (memory.copy)");
                 self.line("     (local.get $__obj)");
             }
+            Rvalue::ArrayRealloc {
+                elem_ty,
+                array,
+                new_len,
+            } => {
+                // `$realloc(ptr, new_total, tag)` preserves the overlapping prefix but never zeroes
+                // a grown tail (unlike `$malloc`'s caller-side `memory.fill` in `ArrayNew` above), so
+                // that fill is done here explicitly, guarded so a shrink/no-grow never runs it with
+                // a wrapped-negative (huge unsigned) size.
+                let (esize, _) = scalar_size(self.interner, *elem_ty);
+                self.emit_operand(array);
+                self.line("     (local.set $__obj) ;; old ptr");
+                self.line("     (local.get $__obj)");
+                self.line("     (i32.load) ;; old length");
+                self.line("     (local.set $__old_len)");
+                self.emit_operand(new_len);
+                self.line("     (local.set $__len)");
+                self.line("     (local.get $__obj)");
+                self.line("     (i32.const 4)");
+                self.line("     (local.get $__len)");
+                self.line(&format!("     (i32.const {})", esize));
+                self.line("     (i32.mul)");
+                self.line("     (i32.add)");
+                self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
+                self.line("     (call $realloc)");
+                self.line("     (local.set $__obj) ;; new (possibly moved) ptr");
+                self.line("     (local.get $__obj)");
+                self.line("     (local.get $__len)");
+                self.line("     (i32.store) ;; length");
+                self.line("     (local.get $__len)");
+                self.line("     (local.get $__old_len)");
+                self.line("     (i32.gt_s)");
+                self.line("     (if (then");
+                self.line("      (local.get $__obj)");
+                self.line("      (i32.const 4)");
+                self.line("      (i32.add)");
+                self.line("      (local.get $__old_len)");
+                self.line(&format!("      (i32.const {})", esize));
+                self.line("      (i32.mul)");
+                self.line("      (i32.add) ;; dst = obj + 4 + old_len*esize");
+                self.line("      (i32.const 0)");
+                self.line("      (local.get $__len)");
+                self.line("      (local.get $__old_len)");
+                self.line("      (i32.sub)");
+                self.line(&format!("      (i32.const {})", esize));
+                self.line("      (i32.mul)");
+                self.line("      (memory.fill)");
+                self.line("     ))");
+                self.line("     (local.get $__obj)");
+            }
             Rvalue::CharAt(s, i) => self.emit_char_at(s, i),
             Rvalue::Concat(a, b) => {
                 self.emit_operand(a);

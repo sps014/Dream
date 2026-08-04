@@ -1,0 +1,1 @@
+call to '@unsafe' function 'Pointer_int_alloc' is only allowed from another '@unsafe' function or method

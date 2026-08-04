@@ -199,6 +199,69 @@ impl<'a> Analyzer<'a> {
         result.push(ExpressionNode::ArrayLiteral(tail));
         result
     }
+    /// True while analyzing a function/method declared in the embedded stdlib prelude (its
+    /// `current_file` starts with the `<std>/` marker `driver::prelude` gives every prelude file —
+    /// see `PRELUDE_FILES` in `src/stdlib/mod.rs`). The prelude is compiler-authored and reviewed
+    /// like the compiler itself, so it may call `@unsafe` primitives internally (e.g. `List<T>.grow`
+    /// using `Buffer.realloc`) without forcing its own public, ordinarily-safe API to become
+    /// `@unsafe` too — mirroring how `unsafe` blocks inside `std`/`core` don't make `Vec::push`
+    /// unsafe to call. User code gets no such exemption: only `current_function_is_unsafe` (an
+    /// explicit `@unsafe` on *that* function) can satisfy the gate there.
+    fn current_function_is_trusted_prelude(&self) -> bool {
+        self.current_file
+            .as_deref()
+            .is_some_and(|f| f.starts_with("<std>/"))
+    }
+
+    /// Rejects a call to an `@unsafe` function/method/constructor unless the calling function is
+    /// itself `@unsafe` (`current_function_is_unsafe`) or is part of the trusted stdlib prelude
+    /// (`current_function_is_trusted_prelude`). Called at every direct-call resolution site (free
+    /// function, static method, instance method) once the callee's `FunctionTableInfo` is resolved.
+    pub(super) fn check_unsafe_call(
+        &self,
+        callee: &crate::semantics::function_table::FunctionTableInfo,
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if callee.is_unsafe
+            && !self.current_function_is_unsafe
+            && !self.current_function_is_trusted_prelude()
+        {
+            diagnostics.report_error(
+                format!(
+                    "call to '@unsafe' function '{}' is only allowed from another '@unsafe' function or method",
+                    callee.name
+                ),
+                Some(position),
+            );
+        }
+    }
+
+    /// Like [`Self::check_unsafe_call`], but for a `@intrinsic`-tagged template resolved inline
+    /// (before a `FunctionTableInfo` exists for it), e.g. `Buffer.realloc`/`Buffer.free`. Checks the
+    /// template's own attribute list directly rather than a looked-up callee.
+    pub(super) fn check_unsafe_intrinsic_call(
+        &self,
+        name: &str,
+        template: &crate::syntax::nodes::FunctionNode<'_>,
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let is_unsafe = template.attributes.iter().any(|a| a.name.text == "unsafe");
+        if is_unsafe
+            && !self.current_function_is_unsafe
+            && !self.current_function_is_trusted_prelude()
+        {
+            diagnostics.report_error(
+                format!(
+                    "call to '@unsafe' function '{}' is only allowed from another '@unsafe' function or method",
+                    name
+                ),
+                Some(position),
+            );
+        }
+    }
+
     /// Analyzes each explicit call argument in source order, returning the argument type strings
     /// alongside the HIR emitted for each. Shared by the static, instance, and interface call paths,
     /// which all analyze their arguments identically before resolving the callee. (The free-function

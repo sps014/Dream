@@ -77,6 +77,8 @@ impl<'a> Analyzer<'a> {
             );
         }
 
+        self.check_unsafe_call(&store_sig, method.position, diagnostics);
+
         self.validate_ref_arguments(
             &format!("static method '{}'", base),
             &store_sig.is_ref,

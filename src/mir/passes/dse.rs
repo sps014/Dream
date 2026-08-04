@@ -60,6 +60,7 @@ impl MirPass for Dse {
                     | Statement::Print { .. }
                     | Statement::Retain(_)
                     | Statement::Release(_)
+                    | Statement::ForceFree(_)
                     | Statement::Panic(_) => pending.clear(),
                     // A debug line-hook is an observable host call: it must see every prior store, so
                     // it forgets all pending (still-eliminable) stores.

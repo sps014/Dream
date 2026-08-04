@@ -133,7 +133,23 @@ let n: Option<int> = Option.None; // annotation needed for the unit variant
 
 ### Value unions
 
-Unions are heap-allocated and reference-counted by default. But if **every** variant's payload is a value type or primitive (`int`, `bool`, `float`, a value `struct`, ...), the union automatically becomes a **stack (value) union**: stored inline, copied by value, with zero heap allocation.
+Unions are heap-allocated and reference-counted by default. But if **every** variant's payload is a value type or primitive (`int`, `bool`, `float`, a value `struct`, ...), the union automatically becomes a **stack (value) union**: stored inline, copied by value, with zero heap allocation. This is decided per concrete instantiation, so `Option<int>` is a value union while `Option<string>` stays a heap union, even though they share one generic declaration.
+
+#### `@stack`: a checked contract, plus one relaxation
+
+`@stack` on a union declaration turns "should be a value union" from a best-effort inference into a checked contract: the compiler reports an error if the union doesn't qualify, instead of silently falling back to the heap. This catches a regression (e.g. someone later adds a second `string` payload) at the declaration site rather than as a silent performance cliff.
+
+`@stack` also unlocks one relaxation the automatic inference doesn't apply on its own: a union may still go inline even with **one** reference-typed payload field (a `string`, a `class`, an array, ...) across all of its variants — that field is stored inline as a retained pointer, exactly like a reference field embedded in a value `struct` already is. A union with *two or more* reference-typed payload fields, or one that refers to itself, still cannot be stored inline (`@stack` reports an error explaining which field forces it onto the heap):
+
+```dream
+@stack
+enum Outcome {
+    Success(code: int),
+    Failure(code: int, reason: string), // one reference field: string
+}
+```
+
+This relaxation is opt-in via `@stack` rather than automatic, because some existing patterns (a `weak` field typed `Option<SomeClass>`, for instance) depend on `Option<T>` staying a heap reference whenever `T` itself is a reference type — see [Memory](memory.md).
 
 ### JSON with `@json`
 

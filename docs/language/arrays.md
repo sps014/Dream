@@ -64,6 +64,46 @@ let buf = Buffer.alloc<int>(4);   // int[] of length 4, all zero
 buf[0] = 10;
 ```
 
+`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](memory.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Most code should reach for [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) instead of calling these directly.
+
+## `Span<T>`: a bounds-checked view without copying
+
+`Span<T>` is a [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type) that views a contiguous run of an existing array's elements — no copy, no heap allocation of its own, and its own logical range is enforced independently of the backing array's actual size. Because it is a `ref struct`, the compiler rejects any use that would let one escape the stack frame that created it (a field, a generic type argument, a lambda capture, or an `async` parameter):
+
+```dream
+let xs = [1, 2, 3, 4, 5];
+let whole = Span<int>.of(xs);      // a span over all of xs
+let mid = whole.slice(1, 3);       // [2, 3, 4] — still a view, no copy
+
+println(mid.get(0));               // 2
+mid.set(0, 20);                    // writes through to xs[1]
+println(xs[1]);                    // 20
+
+let owned = mid.to_array();        // copies into a fresh, independently-owned array
+```
+
+`Span<T>` keeps its backing array strongly referenced (unlike `Pointer<T>` below), so the memory it views can never be freed out from under it. Prefer `Span<T>` over a raw index range whenever a function only needs to read/write a *slice* of an array without owning or resizing it.
+
+## `Pointer<T>`: manual allocation (`@unsafe`)
+
+`Pointer<T>` is a manually-managed handle to a `T[]` block, allocated, resized, and released through the allocator directly (`Buffer.alloc`/`Buffer.realloc`/`Buffer.free`) rather than through [automatic reference counting](memory.md). Every operation that touches the block's lifetime is [`@unsafe`](memory.md#unsafe-manual-memory-management): the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or that no access happens after a `free()`.
+
+```dream
+@unsafe
+fun scratch(): void {
+    let p = Pointer<int>.alloc(4);   // zero-initialized, 4 elements
+    p.set(0, 10);
+    println(p.get(0));               // 10
+
+    p.realloc(8);                    // grow in place; [0..4) preserved, [4..8) zeroed
+    println(p.len());                // 8
+
+    p.free();                        // returns the block to the allocator immediately
+}
+```
+
+Prefer `Span<T>` unless a value specifically needs to outlive the callee's stack frame, or the workload needs C-style manual alloc/realloc/free (e.g. a long-lived off-heap buffer). See [Memory Management](memory.md) for the full `@unsafe` contract.
+
 ## Advanced: growable arrays
 
 ### `List<T>`

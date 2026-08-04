@@ -1,0 +1,15 @@
+// `@stack` is a checked contract: a union with two reference-typed payload fields cannot be stored
+// inline (each variant only stores one active payload, but the union type as a whole would need to
+// support either reference independently, and the current inline representation only allows a
+// single reference-typed payload total across the union) - this must be a compile-time error, not
+// a silent fallback to the heap.
+
+@stack
+enum Either {
+    Left(value: string),
+    Right(value: string),
+}
+
+fun main(): void {
+    let e: Either = Either.Left("hi");
+}

@@ -277,6 +277,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
             args.iter().for_each(|a| operand_reads(a, f));
         }
         Statement::Print { arg, .. } => operand_reads(arg, f),
+        Statement::ForceFree(o) => operand_reads(o, f),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -320,6 +321,10 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         Rvalue::ArrayNew { len, .. } => operand_reads(len, f),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             operand_reads(o, f)
+        }
+        Rvalue::ArrayRealloc { array, new_len, .. } => {
+            operand_reads(array, f);
+            operand_reads(new_len, f);
         }
         Rvalue::Unary(_, a) => operand_reads(a, f),
         Rvalue::Call { args, .. }

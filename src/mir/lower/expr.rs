@@ -180,6 +180,18 @@ impl Lowerer<'_> {
                 bytes: self.lower_operand(bytes),
                 ty: e.ty,
             },
+            HExprKind::ArrayRealloc {
+                elem_ty,
+                array,
+                new_len,
+            } => Rvalue::ArrayRealloc {
+                elem_ty: *elem_ty,
+                array: self.lower_operand(array),
+                new_len: self.lower_operand(new_len),
+            },
+            HExprKind::ForceFree(_) => {
+                unreachable!("HExprKind::ForceFree is void-typed and only ever lowered as a bare statement in lower_stmt")
+            }
             HExprKind::HashCode(e) => Rvalue::HashCode(self.lower_operand(e)),
             HExprKind::ToString(e) => Rvalue::ToString(self.lower_operand(e)),
             HExprKind::Concat(a, b) => Rvalue::Concat(self.lower_operand(a), self.lower_operand(b)),
@@ -222,7 +234,7 @@ impl Lowerer<'_> {
         }
     }
 
-    fn operand_into_local(&mut self, e: &HExpr) -> Local {
+    pub(super) fn operand_into_local(&mut self, e: &HExpr) -> Local {
         match self.lower_operand(e) {
             Operand::Copy(Place::Local(l)) => l,
             other => {

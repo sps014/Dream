@@ -77,6 +77,7 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
             c
         }
         Statement::Print { arg, .. } => subst_operand(arg, known),
+        Statement::ForceFree(o) => subst_operand(o, known),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => false,
     }
 }
@@ -108,6 +109,9 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         Rvalue::ArrayNew { len, .. } => subst_operand(len, known),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             subst_operand(o, known)
+        }
+        Rvalue::ArrayRealloc { array, new_len, .. } => {
+            subst_operand(array, known) | subst_operand(new_len, known)
         }
         Rvalue::Unary(_, a) => subst_operand(a, known),
         Rvalue::Call { args, .. }

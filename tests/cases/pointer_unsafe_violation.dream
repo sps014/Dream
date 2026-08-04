@@ -1,0 +1,6 @@
+// `Pointer<T>.alloc` is `@unsafe`: calling it from a non-`@unsafe` function is a compile-time error.
+
+fun main(): void {
+    let p = Pointer<int>.alloc(3);
+    System.println(p.len());
+}

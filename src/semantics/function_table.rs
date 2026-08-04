@@ -377,6 +377,11 @@ pub struct FunctionTableInfo {
     /// `Type.method(...)`). Used by the indexer/enumerator sugar sites to reject static methods as
     /// `[]`/`for..in` hooks. Always `false` for free functions and synthesized/stdlib entries.
     pub is_static: bool,
+    /// True when the declaration carries `@unsafe`: it performs a manual-memory-management
+    /// operation (raw `Pointer<T>` alloc/free/realloc/read/write) with no compiler-enforced safety
+    /// net. Calling it is only permitted from another `@unsafe` function/method — checked at every
+    /// call site (see `Analyzer::check_unsafe_call`, `src/semantics/analyzer/calls/mod.rs`).
+    pub is_unsafe: bool,
     pub intrinsic_name: Option<String>,
     /// Accessibility of the declaration. For methods this gates external calls (private methods
     /// may only be called from within their declaring type; `internal` ones from anywhere in the
@@ -414,6 +419,7 @@ impl FunctionTableInfo {
             defaults,
             is_async: false,
             is_static: false,
+            is_unsafe: false,
             intrinsic_name: None,
             visibility: Visibility::Public,
             declaring_file: None,
@@ -450,6 +456,7 @@ impl FunctionTableInfo {
         info.defaults = defaults;
         info.is_async = func.is_async;
         info.is_static = func.is_static;
+        info.is_unsafe = func.attributes.iter().any(|a| a.name.text == "unsafe");
         info.intrinsic_name = intrinsic_name;
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.

@@ -6,4 +6,22 @@ public class Buffer {
     // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
     @intrinsic("array_new")
     static extern fun alloc<T>(len: int): T[];
+
+    // Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len`
+    // elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized.
+    // `arr` must have exactly one owner: after this call the old value must
+    // never be read again (a surviving alias would observe a stale, possibly-freed block) — the
+    // same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single
+    // ownership; callers (e.g. `List<T>`, `Pointer<T>`) must uphold it themselves.
+    @intrinsic("array_realloc")
+    @unsafe
+    static extern fun realloc<T>(arr: T[], new_len: int): T[];
+
+    // Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference
+    // counting entirely. Any other live reference to the same block (including `arr` itself, if
+    // read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot
+    // verify `arr` has no other owners.
+    @intrinsic("force_free")
+    @unsafe
+    static extern fun free<T>(arr: T[]): void;
 }

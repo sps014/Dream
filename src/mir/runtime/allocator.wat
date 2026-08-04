@@ -256,6 +256,84 @@
     global.set $free_list_head
 )
 
+;; `$realloc(ptr, new_size, tag)`: resizes the block at `ptr` (a payload pointer previously returned
+;; by `$malloc`/`$realloc`, or 0) to hold at least `new_size` payload bytes, preserving the existing
+;; contents up to the smaller of the old and new sizes. Returns the (possibly new) payload pointer.
+;; `ptr == 0` behaves exactly like `$malloc(new_size, tag)` (there is nothing to preserve or free).
+;;
+;; A shrink or a grow that still fits the block's already-allocated size class (recovered from the
+;; stored block size at `ptr-12`, same as `$free` does) is a free no-op: the pointer is returned
+;; unchanged with no copy, no allocation, and no free. Only a genuine grow past the current block's
+;; capacity allocates a new (larger) block, `memory.copy`s the old payload across, frees the old
+;; block, and returns the new pointer — exactly `realloc`'s usual contract, just never in-place for a
+;; same-class grow (the segregated free-list allocator has no notion of "the next bytes are free").
+(func $realloc (param $ptr i32) (param $new_size i32) (param $tag i32) (result i32)
+    (local $block_start i32)
+    (local $old_total i32)
+    (local $new_total i32)
+    (local $new_ptr i32)
+    (local $old_payload i32)
+    (local $copy_size i32)
+    local.get $ptr
+    i32.eqz
+    (if (result i32)
+        (then
+            local.get $new_size
+            local.get $tag
+            call $malloc
+        )
+        (else
+            local.get $ptr
+            i32.const 12
+            i32.sub
+            local.set $block_start
+            local.get $block_start
+            i32.load
+            local.set $old_total
+            ;; same rounding `$malloc` applies to its `$size` parameter before header accounting.
+            local.get $new_size
+            i32.const 3
+            i32.add
+            i32.const -4
+            i32.and
+            i32.const 12
+            i32.add
+            local.set $new_total
+            local.get $new_total
+            local.get $old_total
+            i32.le_u
+            (if (result i32)
+                (then local.get $ptr)
+                (else
+                    local.get $new_size
+                    local.get $tag
+                    call $malloc
+                    local.set $new_ptr
+                    local.get $old_total
+                    i32.const 12
+                    i32.sub
+                    local.set $old_payload
+                    local.get $old_payload
+                    local.get $new_size
+                    i32.lt_u
+                    (if (result i32)
+                        (then local.get $old_payload)
+                        (else local.get $new_size)
+                    )
+                    local.set $copy_size
+                    local.get $new_ptr
+                    local.get $ptr
+                    local.get $copy_size
+                    memory.copy
+                    local.get $ptr
+                    call $free
+                    local.get $new_ptr
+                )
+            )
+        )
+    )
+)
+
 (func $retain (param $ptr i32)
     (local $ref_count_ptr i32)
     local.get $ptr

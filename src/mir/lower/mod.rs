@@ -28,6 +28,20 @@ mod switch;
 /// Symbol/name of the synthesized module-init function; the backend wires it to `(start ...)`.
 pub const INIT_FN_NAME: &str = "__dream_init";
 
+/// True if `a` and `b` are both a bare read of the same local/global binding (e.g. both `this`).
+/// Used to recognize the `obj.f = Buffer.realloc<T>(obj.f, n)` self-realloc idiom in
+/// [`Lowerer::lower_stmt`] without attempting any deeper structural comparison (a `Field`/`Index`
+/// base expression is conservatively never treated as matching).
+fn same_local_var(a: &HExpr, b: &HExpr) -> bool {
+    matches!(
+        (&a.kind, &b.kind),
+        (HExprKind::Var(Binding::Local(l1)), HExprKind::Var(Binding::Local(l2))) if l1 == l2
+    ) || matches!(
+        (&a.kind, &b.kind),
+        (HExprKind::Var(Binding::Global(g1)), HExprKind::Var(Binding::Global(g2))) if g1 == g2
+    )
+}
+
 /// Lowers a whole HIR program to MIR.
 pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
     let mut functions = Vec::new();
@@ -207,6 +221,52 @@ impl Lowerer<'_> {
                 self.b.assign(Place::Local(dest), rv);
             }
             HStmt::Assign { place, value } => {
+                // `this.f = Buffer.realloc<T>(this.f, n)` (the `List<T>.grow`/`Pointer<T>.realloc`
+                // idiom): lowering `array` through the ordinary `lower_operand` path would
+                // materialize the field read into a fresh temp, losing the fact that it reads the
+                // very place being overwritten. That matters because `$realloc` already consumes
+                // the old block itself (frees it outright if it moved) — the backend's
+                // release-old-occupant step for a field/element store
+                // (`Emitter::emit_place_store_no_release_old`) only recognizes this and skips the
+                // now-double-free-prone release when the `Rvalue::ArrayRealloc` operand is literally
+                // `Operand::Copy` of the destination `Place`, so this constructs it directly rather
+                // than going through `lower_rvalue`/`lower_place` independently. Local-variable
+                // self-realloc (`x = Buffer.realloc<T>(x, n)`) does not need this: `lower_operand`
+                // already returns a direct `Place::Local` copy with no temp in that case.
+                if let (
+                    HPlace::Field {
+                        obj,
+                        field: dst_field,
+                    },
+                    HExprKind::ArrayRealloc {
+                        elem_ty,
+                        array,
+                        new_len,
+                    },
+                ) = (place, &value.kind)
+                {
+                    if let HExprKind::Field {
+                        obj: src_obj,
+                        field: src_field,
+                    } = &array.kind
+                    {
+                        if dst_field == src_field && same_local_var(obj, src_obj) {
+                            let base = self.operand_into_local(obj);
+                            let dest = Place::Field {
+                                base,
+                                field: *dst_field,
+                            };
+                            let new_len_op = self.lower_operand(new_len);
+                            let rv = Rvalue::ArrayRealloc {
+                                elem_ty: *elem_ty,
+                                array: Operand::Copy(dest.clone()),
+                                new_len: new_len_op,
+                            };
+                            self.b.assign(dest, rv);
+                            return;
+                        }
+                    }
+                }
                 let rv = self.lower_rvalue(value);
                 let p = self.lower_place(place);
                 self.b.assign(p, rv);
@@ -264,6 +324,12 @@ impl Lowerer<'_> {
                         sig: *sig,
                         args: lowered,
                     });
+                }
+                // `Buffer.free<T>(arr)` (`@unsafe`) lowers to a dedicated void statement (no result
+                // to materialize, unlike the `Rvalue::ArrayRealloc` expression form).
+                HExprKind::ForceFree(array) => {
+                    let o = self.lower_operand(array);
+                    self.b.push(Statement::ForceFree(o));
                 }
                 // `print`/`println` lower to a dedicated statement the backend maps to `print_*`.
                 HExprKind::Print { arg, newline } => {

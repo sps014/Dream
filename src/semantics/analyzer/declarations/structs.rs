@@ -32,6 +32,9 @@ impl<'a> Analyzer<'a> {
                 // boxing. Widening it to an interface *reference* (or `object`) boxes it into a fresh
                 // tagged heap copy at the upcast site — see the value struct case in `emit_cast`.
             }
+            if struct_decl.is_ref_struct {
+                self.type_ctx.interner.mark_ref_struct_def(def);
+            }
             if struct_decl.generic_parameters.is_some() {
                 // A generic class may implement a (generic or non-generic) interface; the
                 // `implements` clause is validated per monomorphization in `ensure_struct_instantiated`.
@@ -89,6 +92,113 @@ impl<'a> Analyzer<'a> {
         // last, once every non-generic class's fields are in `self.struct_table` (needed to
         // classify a field's target as a value struct vs. a class).
         self.check_weak_unowned_and_cycles(node, diagnostics);
+
+        // A `ref struct` field would smuggle a stack-only value into a heap-allocated (or
+        // otherwise longer-lived) container — reject it regardless of whether the enclosing type
+        // is a `class` or a `struct`. Run once every struct's own `is_ref_struct`/`is_value` marks
+        // are registered (the loop above), so a field referencing another `ref struct` declared
+        // later in the same file still resolves correctly.
+        for struct_decl in node.structs.iter() {
+            for field in &struct_decl.fields {
+                self.reject_ref_struct_field(&struct_decl.name.text, field, diagnostics);
+            }
+        }
+    }
+
+    /// Reports an error if `field`'s type is a `ref struct` — such a type cannot be stored as a
+    /// field of any enclosing type (`class` or `struct`), since that would let a stack-only value
+    /// outlive the stack frame it was created in.
+    pub(in crate::semantics::analyzer) fn reject_ref_struct_field(
+        &mut self,
+        owner_name: &str,
+        field: &StructFieldNode,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let tid = self.type_ctx.lower(&field.field_type);
+        if self.type_ctx.interner.is_ref_struct_type(tid) {
+            diagnostics.report_error(
+                format!(
+                    "field '{}' of '{}' cannot have type '{}': a 'ref struct' cannot be stored as a field (it would let a stack-only value escape its stack frame)",
+                    field.name.text,
+                    owner_name,
+                    field.field_type.get_type()
+                ),
+                Some(field.name.position),
+            );
+        }
+    }
+
+    /// Rejects a `ref struct`-typed parameter on any `async` function, method, or `extend`-block
+    /// method in the program: an `async` call may suspend at an `await`, which spills the coroutine's
+    /// live locals (including its parameters) into a heap-allocated state object so they survive
+    /// across the suspend point — exactly the kind of stack-frame escape a `ref struct` forbids.
+    /// Generic templates are checked once per instantiation's concrete parameter types would be
+    /// ideal, but templates don't carry a `ref struct` argument until monomorphized, so this walks
+    /// only concrete (non-generic) declarations, matching this analysis's stated conservative scope.
+    pub(in crate::semantics::analyzer) fn check_ref_struct_async_boundary(
+        &mut self,
+        node: &'a ProgramNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let check_fn = |this: &mut Self,
+                        f: &crate::syntax::nodes::function::FunctionNode<'a>,
+                        diags: &mut DiagnosticBag| {
+            if !f.is_async {
+                return;
+            }
+            for p in &f.parameters {
+                let tid = this.type_ctx.lower(&p.type_);
+                if this.type_ctx.interner.is_ref_struct_type(tid) {
+                    diags.report_error(
+                        format!(
+                            "async function '{}' cannot take 'ref struct' parameter '{}' of type '{}': it may need to survive an 'await' suspend point, which would spill it into the heap-allocated coroutine state",
+                            f.name.text,
+                            p.name.text,
+                            p.type_.get_type()
+                        ),
+                        Some(f.name.position),
+                    );
+                }
+            }
+        };
+        for f in node.functions.iter() {
+            check_fn(self, f, diagnostics);
+        }
+        for s in node.structs.iter() {
+            for m in &s.methods {
+                check_fn(self, m, diagnostics);
+            }
+        }
+        for e in node.extends.iter() {
+            for m in &e.methods {
+                check_fn(self, m, diagnostics);
+            }
+        }
+    }
+
+    /// Rejects any `ref struct` type appearing in `args` as a generic type argument: instantiating
+    /// a generic class/struct/union/function with a `ref struct` argument would store it in a field,
+    /// array element, or heap payload somewhere in that generic's body, letting a stack-only value
+    /// escape its frame. Called at every generic instantiation site (classes, unions, and — where
+    /// wired — generic function calls).
+    pub(in crate::semantics::analyzer) fn reject_ref_struct_type_args(
+        &mut self,
+        args: &[Type],
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        for arg in args {
+            let tid = self.type_ctx.lower(arg);
+            if self.type_ctx.interner.is_ref_struct_type(tid) {
+                diagnostics.report_error(
+                    format!(
+                        "'{}' is a 'ref struct' and cannot be used as a generic type argument (it would be stored in a heap-allocated container, letting it escape its stack frame)",
+                        arg.get_type()
+                    ),
+                    Some(*position),
+                );
+            }
+        }
     }
 
     /// True when value struct `start` transitively embeds itself by value. Only value-typed,
@@ -163,6 +273,7 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
+        self.reject_ref_struct_type_args(args, position, diagnostics);
         let bindings = generic_bindings(params, args);
 
         // A constrained class/struct parameter (`class Sorted<T : Comparable<T>>`) must be satisfied
@@ -199,6 +310,7 @@ impl<'a> Analyzer<'a> {
             template.visibility,
         );
         new_decl.is_value = template.is_value;
+        new_decl.is_ref_struct = template.is_ref_struct;
         new_decl.file_path = template.file_path.clone();
 
         let new_decl_ref: &'a StructDeclarationNode<'a> = self.arena.alloc(new_decl);

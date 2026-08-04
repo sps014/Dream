@@ -37,20 +37,14 @@ public class List<T> : Collection<T> {
         return this.items.size();
     }
 
-    // Doubles the backing buffer, copying existing elements across. Internal to `push`.
+    // Doubles the backing buffer, resizing in place via `Buffer.realloc` when possible.
     fun grow(): void {
         let old_cap = this.items.size();
         let new_cap = old_cap * 2;
         if (new_cap < sequence_min_capacity()) {
             new_cap = sequence_min_capacity();
         }
-        let bigger = Buffer.alloc<T>(new_cap);
-        let i = 0;
-        while (i < this.count) {
-            bigger[i] = this.items[i];
-            i = i + 1;
-        }
-        this.items = bigger;
+        this.items = Buffer.realloc<T>(this.items, new_cap);
     }
 
     // Appends a value to the end, growing if necessary.

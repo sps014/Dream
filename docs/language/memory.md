@@ -120,3 +120,25 @@ class Node {
 ```
 
 `@allow_cycle` only suppresses a cycle that is entirely contained within the classes carrying it — annotating just one class in a multi-class cycle does not launder the rest of it.
+
+## `@unsafe`: manual memory management
+
+ARC covers every allocation by default, but a handful of low-level primitives step outside it for tight, allocation-sensitive hot paths: `Buffer.realloc`/`Buffer.free` and [`Pointer<T>`](arrays.md#pointert-manual-allocation-unsafe) manage a block's lifetime directly through the allocator, bypassing reference counting entirely. Every function or method that touches one of these must be marked `@unsafe`:
+
+```dream
+@unsafe
+fun grow(p: Pointer<int>): Pointer<int> {
+    p.realloc(p.len() * 2);   // fine: this function is itself @unsafe
+    return p;
+}
+
+fun caller(): void {
+    let p = Pointer<int>.alloc(4);
+    grow(p);   // error: call to '@unsafe' function 'grow' is only allowed from
+               // another '@unsafe' function or method
+}
+```
+
+`@unsafe` is purely a caller-side gate, checked at every call site (not just where the callee is declared): calling an `@unsafe` function/method from ordinary code is a compile-time error, exactly like calling an `unsafe fn` from safe code in Rust. Marking your own function `@unsafe` propagates the same restriction to *its* callers — the attribute has to be threaded all the way up to wherever the unsafe operation is actually justified.
+
+What `@unsafe` does **not** do: it does not insert runtime checks, and it does not verify the specific contract of the operation you're calling (e.g. that a `Buffer.realloc`'d array has exactly one owner, or that a freed `Pointer<T>` is never read again). It is a documented promise from the author, not a proof — the same trade-off manual memory management makes in every language that offers it.

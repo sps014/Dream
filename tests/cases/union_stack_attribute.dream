@@ -1,0 +1,26 @@
+// `@stack` on a discriminated union is a *checked contract*: registration errors out unless the
+// union already qualifies as a value union (every payload value/primitive, or at most one
+// reference-typed payload). When it does qualify, `@stack` has no representational effect (the
+// union was already going to be inline) - its value is catching a future regression (e.g. someone
+// adding a second `string` field) at the declaration site instead of silently forcing the union
+// onto the heap.
+
+@stack
+enum Outcome {
+    Success(code: int),
+    Failure(code: int, reason: string),
+}
+
+fun describe(o: Outcome): string {
+    return switch (o) {
+        Success(c)    => "ok:" + c.to_string(),
+        Failure(c, r) => "fail:" + c.to_string() + ":" + r,
+    };
+}
+
+fun main(): void {
+    let s: Outcome = Outcome.Success(0);
+    let f: Outcome = Outcome.Failure(1, "disk full");
+    System.println(describe(s));   // ok:0
+    System.println(describe(f));   // fail:1:disk full
+}

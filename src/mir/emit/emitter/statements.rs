@@ -6,6 +6,36 @@
 
 use super::*;
 
+/// True if `rvalue` is `Rvalue::ArrayRealloc { array, .. }` whose `array` operand reads exactly the
+/// place being assigned to — the `p = Buffer.realloc<T>(p, n)` growth idiom (`List<T>.grow`,
+/// `Pointer<T>.realloc`). Only `Field`/`Local`/`Global` bases are recognized (an `Index` base is
+/// never treated as matching, conservatively, since two `Index` places can alias through a runtime
+/// index the compiler cannot compare statically). See
+/// [`Emitter::emit_place_store_no_release_old`] for why this needs special-casing.
+fn realloc_self_store(place: &Place, rvalue: &Rvalue) -> bool {
+    let Rvalue::ArrayRealloc { array, .. } = rvalue else {
+        return false;
+    };
+    let Operand::Copy(src) = array else {
+        return false;
+    };
+    match (place, src) {
+        (
+            Place::Field {
+                base: b1,
+                field: f1,
+            },
+            Place::Field {
+                base: b2,
+                field: f2,
+            },
+        ) => b1 == b2 && f1 == f2,
+        (Place::Local(l1), Place::Local(l2)) => l1 == l2,
+        (Place::Global(g1), Place::Global(g2)) => g1 == g2,
+        _ => false,
+    }
+}
+
 impl Emitter<'_> {
     pub(super) fn emit_stmt(&mut self, stmt: &Statement) {
         match stmt {
@@ -107,6 +137,10 @@ impl Emitter<'_> {
             // Emits nothing: just remembers the line so a following automatic runtime check can
             // attribute its panic message to it (see `Emitter::current_line`/`Emitter::emit_panic`).
             Statement::SourceLine(line) => self.current_line = *line,
+            Statement::ForceFree(o) => {
+                self.emit_operand(o);
+                self.line("     (call $free)");
+            }
         }
     }
 
@@ -198,6 +232,12 @@ impl Emitter<'_> {
                         self.emit_weak_field_store(b, off, fty, rvalue);
                     } else if is_unowned {
                         self.emit_unowned_field_store(b, off, fty, rvalue);
+                    } else if realloc_self_store(place, rvalue) {
+                        self.emit_place_store_no_release_old(
+                            fty,
+                            move |s| s.field_addr(b, off),
+                            rvalue,
+                        );
                     } else {
                         self.emit_place_store(fty, move |s| s.field_addr(b, off), rvalue);
                     }
@@ -241,6 +281,23 @@ impl Emitter<'_> {
         self.line(&format!("     ({})", self.store_instr(ty)));
         self.retain_stored_rvalue(ty, rvalue);
         self.release_stash(ty, stash);
+    }
+
+    /// Like [`Self::emit_place_store`], but skips the stash/release of the slot's previous
+    /// occupant. Used exactly when `rvalue` is `Rvalue::ArrayRealloc` reading the *same* place being
+    /// stored to (see [`realloc_self_store`]): `$realloc` has already consumed the old block itself
+    /// (freed it outright if the block moved, or reused it in place otherwise), so the ordinary
+    /// release-old-occupant step would double-free/decrement a block the allocator may have already
+    /// handed to someone else.
+    fn emit_place_store_no_release_old(
+        &mut self,
+        ty: TypeId,
+        addr: impl Fn(&mut Self),
+        rvalue: &Rvalue,
+    ) {
+        addr(self);
+        self.emit_rvalue(rvalue);
+        self.line(&format!("     ({})", self.store_instr(ty)));
     }
 
     /// Stores into a `weak` field (`ty` is `Option<T>` for a class `T`; see `docs/language/memory.md`

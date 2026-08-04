@@ -24,7 +24,9 @@
 //! the payoff once propagation/inlining bring a retain and its matching release together.
 
 use super::MirPass;
-use crate::mir::{Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use crate::mir::{
+    Global, Local, LocalDecl, MirFunction, Operand, Place, Rvalue, Statement, Terminator,
+};
 use crate::types::TypeInterner;
 use std::collections::HashSet;
 
@@ -217,6 +219,10 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         Rvalue::EnumName { value, .. } => check(value),
         Rvalue::ArrayNew { len, .. } => check(len),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => check(o),
+        Rvalue::ArrayRealloc { array, new_len, .. } => {
+            check(array);
+            check(new_len);
+        }
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
@@ -264,6 +270,36 @@ fn is_borrowed_copy(rvalue: &Rvalue, interner: &TypeInterner) -> bool {
     }
 }
 
+/// A [`Retain`]/[`Release`] operand normalized to the identity it protects, for matching a pair
+/// regardless of intervening statements. Only whole-place (`Local`/`Global`) operands are ever the
+/// target of a `Retain`/`Release` — [`RcKey::of`] returns `None` for anything else.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum RcKey {
+    Local(Local),
+    Global(Global),
+}
+
+impl RcKey {
+    fn of(op: &Operand) -> Option<RcKey> {
+        match op {
+            Operand::Copy(Place::Local(l)) => Some(RcKey::Local(*l)),
+            Operand::Copy(Place::Global(g)) => Some(RcKey::Global(*g)),
+            _ => None,
+        }
+    }
+}
+
+/// True for an [`Rvalue`] that reads only its operands with no possible side effect: no allocation,
+/// no call, no runtime helper that could itself retain/release/inspect an object's refcount. Exactly
+/// the rvalues [`RcElision`] permits between a pending `Retain` and its `Release` without treating
+/// them as a barrier.
+fn is_pure_rvalue(rvalue: &Rvalue) -> bool {
+    matches!(
+        rvalue,
+        Rvalue::Use(_) | Rvalue::Select { .. } | Rvalue::Binary(..) | Rvalue::Unary(..)
+    )
+}
+
 pub struct RcElision;
 
 impl MirPass for RcElision {
@@ -271,34 +307,76 @@ impl MirPass for RcElision {
         "rc-elision"
     }
 
+    /// Cancels a `Retain(x)`/`Release(x)` pair on the same identity `x` even when separated by a
+    /// *provably side-effect-free* run of statements in the same block (a basic block has no
+    /// internal branches, so this is a straight-line forward sweep, not a general dataflow
+    /// fixpoint) — generalizing the old strictly-adjacent-pair cancellation to also catch e.g. a
+    /// retain/release separated by an unrelated arithmetic assignment or a `println`.
+    ///
+    /// The refcount an object carries at any point is not purely internal bookkeeping — it is
+    /// observable, both directly (`Debug.ref_count`/`Debug.live_objects`) and indirectly (a `del()`
+    /// destructor runs, with its own visible side effects, at the exact statement where a release
+    /// drops the count to zero; two distinct locals can also alias the same object, so a release of
+    /// *one* of them can free it while a pending retain on the *other* is still "in flight"). So
+    /// **any** statement that could call into other code, allocate, or itself retain/release a
+    /// (possibly aliased) object is treated as a hard barrier: it flushes every pending `Retain`,
+    /// rather than trying to prove per-key which ones are actually affected. Only a small, clearly
+    /// safe whitelist — a plain-local assignment from a pure, call-free [`Rvalue`] (arithmetic,
+    /// `Select`, a bare `Use`), `Print`, and the two debug-line markers — is allowed to pass through
+    /// untouched. This keeps the pass sound while still reaching past pure "noise" statements that
+    /// copy-prop/inlining commonly leave between a retain and its matching release.
     fn run(&self, func: &mut MirFunction, _interner: &TypeInterner) -> bool {
         let mut changed = false;
         for block in &mut func.blocks {
-            let mut i = 0;
-            while i + 1 < block.stmts.len() {
-                let cancel = matches!(
-                    (&block.stmts[i], &block.stmts[i + 1]),
-                    (Statement::Retain(a), Statement::Release(b)) if operand_eq(a, b)
-                );
-                if cancel {
-                    block.stmts.drain(i..i + 2);
-                    changed = true;
-                    // Re-examine the position in case another pair is now adjacent.
-                    i = i.saturating_sub(1);
-                } else {
-                    i += 1;
+            let n = block.stmts.len();
+            let mut keep = vec![true; n];
+            let mut block_changed = false;
+            let mut pending: std::collections::HashMap<RcKey, Vec<usize>> =
+                std::collections::HashMap::new();
+            for i in 0..n {
+                match &block.stmts[i] {
+                    Statement::Retain(op) => {
+                        if let Some(key) = RcKey::of(op) {
+                            pending.entry(key).or_default().push(i);
+                        }
+                    }
+                    Statement::Release(op) => {
+                        if let Some(key) = RcKey::of(op) {
+                            if let Some(stack) = pending.get_mut(&key) {
+                                if let Some(retain_idx) = stack.pop() {
+                                    keep[retain_idx] = false;
+                                    keep[i] = false;
+                                    block_changed = true;
+                                    continue;
+                                }
+                            }
+                        }
+                        // An unmatched (or differently-keyed) `Release` may drop the last count of
+                        // an object some *other* pending key aliases — not provably safe to ignore.
+                        pending.clear();
+                    }
+                    Statement::Assign(Place::Local(dst), rvalue) if is_pure_rvalue(rvalue) => {
+                        let key = RcKey::Local(*dst);
+                        pending.remove(&key);
+                    }
+                    Statement::Print { .. }
+                    | Statement::DebugLine(_)
+                    | Statement::SourceLine(_) => {}
+                    _ => {
+                        // Anything else (a call, an allocation, a container store, a field/index
+                        // write, ...) may itself retain/release/inspect an object reachable through
+                        // some other pending key by aliasing — flush everything conservatively.
+                        pending.clear();
+                    }
                 }
+            }
+            if block_changed {
+                let mut kept = keep.iter();
+                block.stmts.retain(|_| *kept.next().unwrap());
+                changed = true;
             }
         }
         changed
-    }
-}
-
-fn operand_eq(a: &Operand, b: &Operand) -> bool {
-    match (a, b) {
-        (Operand::Copy(Place::Local(x)), Operand::Copy(Place::Local(y))) => x == y,
-        (Operand::Copy(Place::Global(x)), Operand::Copy(Place::Global(y))) => x == y,
-        _ => false,
     }
 }
 
@@ -314,6 +392,94 @@ mod tests {
         let mut b = FunctionBuilder::new("f", i.void());
         b.push(Statement::Retain(Operand::Copy(Place::Local(Local(0)))));
         b.push(Statement::Release(Operand::Copy(Place::Local(Local(0)))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcElision.run(&mut func, &i));
+        assert!(func.blocks[0].stmts.is_empty());
+    }
+
+    #[test]
+    fn elides_retain_release_separated_by_pure_arithmetic() {
+        // Retain(x); tmp = a + b; Release(x) — a pure, call-free arithmetic assignment to an
+        // unrelated local can't observe or affect `x`'s refcount, so the pair still cancels even
+        // though it's not adjacent.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let x = b.new_local(i.string(), Some("x".into()));
+        let tmp = b.new_local(i.int(), Some("tmp".into()));
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        b.push(Statement::Assign(
+            Place::Local(tmp),
+            Rvalue::Binary(
+                crate::mir::BinOp::Add,
+                Operand::Const(crate::mir::Const::Int(1)),
+                Operand::Const(crate::mir::Const::Int(2)),
+            ),
+        ));
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcElision.run(&mut func, &i));
+        assert_eq!(func.blocks[0].stmts.len(), 1);
+        assert!(matches!(func.blocks[0].stmts[0], Statement::Assign(..)));
+    }
+
+    #[test]
+    fn does_not_elide_across_a_call() {
+        // Retain(x); foo(); Release(x) — a call could itself inspect or drop `x`'s refcount (e.g.
+        // through an alias, or `Debug.ref_count`), so it must act as a hard barrier.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let x = b.new_local(i.string(), Some("x".into()));
+        let callee = crate::mir::Callee {
+            def: crate::types::DefId(0),
+            args: vec![],
+            ret: i.void(),
+        };
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        b.push(Statement::Call {
+            callee,
+            args: vec![],
+        });
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(!RcElision.run(&mut func, &i));
+        assert_eq!(func.blocks[0].stmts.len(), 3);
+    }
+
+    #[test]
+    fn elides_across_a_pure_copy_to_a_different_local() {
+        // Retain(x); y = x; Release(x) — `y = x` is a pure `Use` assignment to a *different* local,
+        // so it doesn't invalidate the pending retain on `x` itself; only a barrier or a
+        // reassignment of `x` would.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let x = b.new_local(i.string(), Some("x".into()));
+        let y = b.new_local(i.int(), Some("y".into()));
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        b.push(Statement::Assign(
+            Place::Local(y),
+            Rvalue::Use(Operand::Copy(Place::Local(x))),
+        ));
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(RcElision.run(&mut func, &i));
+        assert_eq!(func.blocks[0].stmts.len(), 1);
+    }
+
+    #[test]
+    fn nested_retains_cancel_innermost_first() {
+        // Retain(x); Retain(x); Release(x); Release(x) — the first `Release` must cancel the
+        // *second* (innermost) `Retain`, not the first.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.void());
+        let x = Local(0);
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
         b.terminate(Terminator::Return(None));
         let mut func = b.finish();
         assert!(RcElision.run(&mut func, &i));

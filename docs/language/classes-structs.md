@@ -48,6 +48,31 @@ println(v1.x);  // 3 (unaffected)
 
 Structs need no heap allocation and have no GC overhead, so a struct held by value is never `null` and cannot recursively contain itself by value.
 
+### `ref struct`: a stack-only value type
+
+`ref struct` is a `struct` with one additional restriction: the compiler rejects any use that would let an instance escape the current stack frame. It exists for types like `Span<T>` (see [Arrays](arrays.md)) that wrap a raw address into memory whose lifetime the compiler cannot otherwise track:
+
+```dream
+ref struct Pair {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+```
+
+A `ref struct` value behaves exactly like an ordinary `struct` as a local variable, a function parameter, or a function return value (inline storage, copy semantics, zero heap allocation). What's rejected:
+
+- **Storing it in a field** of any `class` or `struct` — that would keep it alive past the frame that created it.
+- **Using it as a generic type argument** (`List<Pair>`, `Option<Pair>`, ...) — a container's backing storage is heap-allocated.
+- **Capturing it in a lambda** — a capturing lambda's environment is a heap-allocated cell.
+- **Using it as a parameter of an `async` function** — an `await` suspend point spills the coroutine's live locals into heap-allocated state.
+
+`ref` may only precede `struct`, never `class` (a `class` is already a heap-allocated reference type, so "stack-only class" is meaningless and rejected at parse time).
+
 ### When to use which
 
 - Use a **`struct`** for small, copyable bundles with value identity — points, vectors, colors, ranges.

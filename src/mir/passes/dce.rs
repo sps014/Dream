@@ -122,6 +122,7 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
             args.iter().for_each(|a| read_operand(a, read));
         }
         Statement::Print { arg, .. } => read_operand(arg, read),
+        Statement::ForceFree(o) => read_operand(o, read),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -169,6 +170,10 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         Rvalue::ArrayNew { len, .. } => read_operand(len, read),
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             read_operand(o, read)
+        }
+        Rvalue::ArrayRealloc { array, new_len, .. } => {
+            read_operand(array, read);
+            read_operand(new_len, read);
         }
         Rvalue::Unary(_, a) => read_operand(a, read),
         Rvalue::Call { args, .. }

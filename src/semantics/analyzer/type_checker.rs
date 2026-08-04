@@ -19,18 +19,21 @@ impl<'a> Analyzer<'a> {
         self.current_file = function.file_path.clone();
         let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
-        self.with_async_flag(function.is_async, |s| {
-            s.analyze_body(
-                function.body,
-                function,
-                Some(&param_table),
-                false,
-                diagnostics,
-            )?;
-            // Enforce the v1 `await` placement rules (only in async functions, only at statement
-            // position) and that non-async functions contain no `await` at all.
-            s.check_await_positions(function, diagnostics);
-            Ok(())
+        let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
+        self.with_unsafe_flag(is_unsafe, |s| {
+            s.with_async_flag(function.is_async, |s| {
+                s.analyze_body(
+                    function.body,
+                    function,
+                    Some(&param_table),
+                    false,
+                    diagnostics,
+                )?;
+                // Enforce the v1 `await` placement rules (only in async functions, only at statement
+                // position) and that non-async functions contain no `await` at all.
+                s.check_await_positions(function, diagnostics);
+                Ok(())
+            })
         })?;
         self.hir_finish_function(diagnostics, errors_before);
         // check return

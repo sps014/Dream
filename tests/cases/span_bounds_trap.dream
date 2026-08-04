@@ -1,0 +1,10 @@
+// `Span<T>.get`/`.set` enforce the span's own logical range, independent of the backing array's
+// actual size: a slice narrower than its backing array still traps on an index that would be
+// in-bounds for the array but out-of-bounds for the span.
+
+fun main(): void {
+    let xs = [1, 2, 3, 4, 5];
+    let mid = Span<int>.of(xs).slice(1, 2); // covers xs[1..3), i.e. indices 0..2 of the span
+    System.println(mid.get(1)); // 3, in range
+    System.println(mid.get(2)); // out of range for the span (even though xs[3] exists) - traps
+}

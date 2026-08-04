@@ -1,0 +1,17 @@
+// A `ref struct` cannot be used as a generic type argument: a container like `List<T>` stores its
+// elements in a heap-allocated backing array, which would let a stack-only value escape its frame.
+
+ref struct Pair {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+fun main(): void {
+    let xs: List<Pair> = List<Pair>();
+    xs.add(Pair(1, 2));
+}

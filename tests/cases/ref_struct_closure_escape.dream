@@ -1,0 +1,18 @@
+// A `ref struct` cannot be captured by a lambda: the lambda's closure environment is a
+// heap-allocated `__Cell<T>`, which would force the captured stack-only value onto the heap.
+
+ref struct Pair {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+fun main(): void {
+    let p = Pair(1, 2);
+    let f: fun(): int = () => p.a + p.b;
+    System.println(f());
+}

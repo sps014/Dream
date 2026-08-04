@@ -170,7 +170,12 @@ fn hir_expr_edges(e: &crate::hir::HExpr, out: &mut HirEdges) {
         | K::Discriminant(x)
         | K::UnionField { base: x, .. }
         | K::IsType { value: x, .. }
+        | K::ForceFree(x)
         | K::Print { arg: x, .. } => hir_expr_edges(x, out),
+        K::ArrayRealloc { array, new_len, .. } => {
+            hir_expr_edges(array, out);
+            hir_expr_edges(new_len, out);
+        }
         K::ArrayLit { elems, .. } => {
             for el in elems {
                 hir_expr_edges(el, out);

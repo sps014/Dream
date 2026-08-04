@@ -221,13 +221,28 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
 
+        // `ref struct` is a stack-only value type: in addition to being a value type (inline, copy
+        // semantics), the compiler rejects any use of it that would let it escape the current stack
+        // frame (stored in a heap object, used as a generic type argument, captured by a closure, or
+        // crossing an `async` boundary — see `Analyzer::check_ref_struct_escapes`).
+        let is_ref_struct = self.current_token().kind == TokenKind::RefToken;
+        if is_ref_struct {
+            self.match_token(TokenKind::RefToken);
+        }
+
         // A value type is introduced with `struct`; a reference type with `class`. Both share the
         // same declaration shape and AST node, differing only in the `is_value` flag.
-        let is_value = self.current_token().kind == TokenKind::StructToken;
-        if is_value {
-            self.match_token(TokenKind::StructToken);
-        } else {
+        let is_value = is_ref_struct || self.current_token().kind == TokenKind::StructToken;
+        if self.current_token().kind == TokenKind::ClassToken {
+            if is_ref_struct {
+                self.diagnostics.report_error(
+                    "'ref' may only precede 'struct', not 'class'".to_string(),
+                    Some(self.current_token().position),
+                );
+            }
             self.match_token(TokenKind::ClassToken);
+        } else {
+            self.match_token(TokenKind::StructToken);
         }
         let mut struct_name = self.match_token(TokenKind::IdentifierToken);
         Self::splice_leading_trivia(&mut struct_name, first_trivia);
@@ -355,6 +370,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         );
         decl.implements = implements;
         decl.is_value = is_value;
+        decl.is_ref_struct = is_ref_struct;
         decl.is_sealed = is_sealed;
         decl.generic_constraints = generic_constraints;
         Ok(decl)

@@ -16,6 +16,11 @@ pub struct TypeInterner {
     /// whose def is a value type is classified as a non-reference (stored inline, copy semantics).
     /// The interner has no access to the `DefTable`, so the value-ness is mirrored here.
     value_defs: HashSet<DefId>,
+    /// `DefId`s of `ref struct` (stack-only value) types. A subset of `value_defs` — every `ref
+    /// struct` is also a value type — consulted by the escape analysis in
+    /// `Analyzer::check_ref_struct_escapes` (`src/semantics/analyzer/declarations/structs.rs`) to
+    /// reject uses that would let an instance escape the current stack frame.
+    ref_struct_defs: HashSet<DefId>,
     /// Inline `(size, align)` in bytes of each value (`struct`) type, keyed by its interned id.
     /// Populated once layouts are computed; consulted by `scalar_size` so a value struct stored as a
     /// field/element/local occupies its full inline footprint rather than a 4-byte pointer.
@@ -38,6 +43,7 @@ impl TypeInterner {
             kinds: Vec::new(),
             dedup: IndexMap::new(),
             value_defs: HashSet::new(),
+            ref_struct_defs: HashSet::new(),
             value_layouts: HashMap::new(),
             value_unions: HashSet::new(),
         };
@@ -165,6 +171,22 @@ impl TypeInterner {
     /// True when `def` names a value (`struct`) type.
     pub fn is_value_def(&self, def: DefId) -> bool {
         self.value_defs.contains(&def)
+    }
+
+    /// Records `def` as a `ref struct` (stack-only value) type. Idempotent. Callers must also call
+    /// [`Self::mark_value_def`] — a `ref struct` is always a value type too.
+    pub fn mark_ref_struct_def(&mut self, def: DefId) {
+        self.ref_struct_defs.insert(def);
+    }
+
+    /// True when `def` names a `ref struct` type.
+    pub fn is_ref_struct_def(&self, def: DefId) -> bool {
+        self.ref_struct_defs.contains(&def)
+    }
+
+    /// True when `ty` is (or resolves to) a `ref struct` type.
+    pub fn is_ref_struct_type(&self, ty: TypeId) -> bool {
+        matches!(self.kind(ty), TyKind::Struct(def, _) if self.ref_struct_defs.contains(def))
     }
 
     /// Records `id` as a value *union* type. Idempotent.

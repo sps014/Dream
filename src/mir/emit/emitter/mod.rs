@@ -265,6 +265,9 @@ impl Emitter<'_> {
         // Scratch length for `Buffer.alloc<T>(len)`: the count is needed for both the allocation size
         // and the zero-fill, so it is materialized once here.
         self.line("  (local $__len i32)");
+        // Scratch holding the old element count across a `Buffer.realloc<T>` (needed both to size the
+        // `$realloc` call and to zero-fill only the newly grown tail, if any).
+        self.line("  (local $__old_len i32)");
         // Scratch holding the previous occupant of a reference field/element across a reassignment, so
         // it can be released *after* the new value is stored (deferred release keeps a self-referential
         // `obj.f = g(obj.f)` sound).

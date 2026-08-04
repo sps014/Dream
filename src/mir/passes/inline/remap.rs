@@ -126,6 +126,10 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         Rvalue::ToBytes { value: o, .. } | Rvalue::FromBytes { bytes: o, .. } => {
             remap_operand(o, base)
         }
+        Rvalue::ArrayRealloc { array, new_len, .. } => {
+            remap_operand(array, base);
+            remap_operand(new_len, base);
+        }
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
@@ -185,6 +189,7 @@ fn remap_stmt(s: &mut Statement, base: u32) {
             }
         }
         Statement::Print { arg, .. } => remap_operand(arg, base),
+        Statement::ForceFree(o) => remap_operand(o, base),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }

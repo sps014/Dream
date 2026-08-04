@@ -342,6 +342,8 @@ impl<'a> Analyzer<'a> {
             );
         }
 
+        self.check_unsafe_call(&store_sig, name.position, diagnostics);
+
         self.validate_ref_arguments(
             &format!("function '{}'", function_name),
             &store_sig.is_ref,

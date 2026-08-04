@@ -184,6 +184,10 @@ pub enum Statement {
     /// pass — an inert, order-preserving barrier — purely so scanning the pre-emission MIR for panic
     /// call sites (which tracks the same marker) sees the same line the backend will.
     SourceLine(u32),
+    /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditionally `$free`s `array`'s backing block via the
+    /// allocator, bypassing reference counting. Modeled as a statement (not an `Rvalue`) since it
+    /// has no result — `Buffer.free` is typed `void`.
+    ForceFree(Operand),
 }
 
 /// How a block transfers control. Every block ends in exactly one terminator.
@@ -395,6 +399,13 @@ pub enum Rvalue {
     FromBytes {
         bytes: Operand,
         ty: TypeId,
+    },
+    /// `Buffer.realloc<T>(arr, new_len)` (`@unsafe`) — resizes `array`'s backing block via the
+    /// allocator's `$realloc`, preserving the overlapping prefix and zero-filling any grown tail.
+    ArrayRealloc {
+        elem_ty: TypeId,
+        array: Operand,
+        new_len: Operand,
     },
     /// A numeric/object coercion. Carries `(value, from_ty, to_ty)`; the source type is captured at
     /// lowering time so later constant propagation (which can replace the value with a bare `Const`

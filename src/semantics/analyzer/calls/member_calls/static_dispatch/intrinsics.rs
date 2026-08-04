@@ -107,6 +107,64 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Array(Box::new(element)));
         }
 
+        // `Buffer.realloc<T>(arr, new_len)` (`@unsafe`): in-place `$realloc`-based grow/shrink of
+        // `arr`'s backing block, returning a `T[]` of `new_len` elements.
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::ArrayRealloc)
+        {
+            self.check_unsafe_intrinsic_call(
+                "Buffer.realloc",
+                template,
+                method.position,
+                diagnostics,
+            );
+            let element = match generic_args.as_ref().and_then(|g| g.first()) {
+                Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
+                None => params_types
+                    .first()
+                    .map(|s| s.trim_end_matches("[]").to_string())
+                    .map(|s| {
+                        let mut t = method.clone();
+                        t.text = s;
+                        Type::from_token(t).unwrap_or(Type::Unknown)
+                    })
+                    .unwrap_or(Type::Unknown),
+            };
+            if params_types.len() != 2 {
+                diagnostics.report_error(
+                    format!(
+                        "'Buffer.realloc' expects exactly 2 arguments (array, new length), got {}",
+                        params_types.len()
+                    ),
+                    Some(method.position),
+                );
+            }
+            let mut args = arg_hirs.into_iter();
+            let array = args.next().flatten();
+            let new_len = args.next().flatten();
+            self.hir_set_array_realloc(&element, array, new_len);
+            return Ok(Type::Array(Box::new(element)));
+        }
+
+        // `Buffer.free<T>(arr)` (`@unsafe`): unconditionally returns `arr`'s backing block to the
+        // allocator, bypassing reference counting.
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::ForceFree)
+        {
+            self.check_unsafe_intrinsic_call("Buffer.free", template, method.position, diagnostics);
+            if params_types.len() != 1 {
+                diagnostics.report_error(
+                    format!(
+                        "'Buffer.free' expects exactly 1 argument (the array), got {}",
+                        params_types.len()
+                    ),
+                    Some(method.position),
+                );
+            }
+            self.hir_set_force_free(arg_hirs.into_iter().next().flatten());
+            return Ok(Type::Void);
+        }
+
         // `Bytes.of<T>(v)` / `Bytes.to<T>(bytes)`: raw byte-copy conversions between a blittable
         // value and a `byte[]` buffer (used by the worker-boundary adapter). `of` copies the
         // value's bytes out to a fresh buffer; `to` reconstructs a `T` from a buffer.

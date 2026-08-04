@@ -10,6 +10,13 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
     // defined before the collection classes that construct backing storage.
     ("<std>/core/buffer.dream", include_str!("core/buffer.dream")),
     ("<std>/core/bytes.dream", include_str!("core/bytes.dream")),
+    // `Span<T>` only needs `Buffer.alloc` (for `to_array`), so it merges right after `buffer.dream`.
+    ("<std>/core/span.dream", include_str!("core/span.dream")),
+    // `Pointer<T>` needs `Buffer.alloc`/`realloc`/`free`, so it merges right after `buffer.dream` too.
+    (
+        "<std>/core/pointer.dream",
+        include_str!("core/pointer.dream"),
+    ),
     // The closure ABI (`__Closure.funcbox_*`/`retain`) and the `__Cell<T>` capture box: needed by
     // any `fun(...)`-typed value or arrow-lambda, so merged early, before anything that uses them.
     (

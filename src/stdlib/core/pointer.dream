@@ -1,0 +1,56 @@
+// `Pointer<T>` - a manually-managed, non-owning handle to a `T[]` block allocated via
+// `Buffer.alloc`, resized via `Buffer.realloc`, and released via `Buffer.free` - never through
+// automatic reference counting. Every operation that touches the block's lifetime is `@unsafe`:
+// the compiler cannot verify the block has exactly one owner, that `free()` runs at most once, or
+// that no access happens after a `free()`.
+//
+// Prefer `Span<T>` (ARC-backed, bounds-checked, a `ref struct`) unless the value specifically
+// needs to outlive the callee's stack frame or you need C-style manual alloc/realloc/free (e.g. a
+// long-lived off-heap buffer, or interop with `Buffer.realloc`'s in-place grow path).
+public struct Pointer<T> {
+    // The backing block. Still a real Dream `T[]` (its ARC header exists), but every `Pointer<T>`
+    // method bypasses the refcount protocol by construction: nothing else ever retains this
+    // reference, and `free()` releases it directly, regardless of the stored count.
+    buf: T[];
+
+    constructor(buf: T[]) {
+        this.buf = buf;
+    }
+
+    // Allocates a fresh, zero-initialized block of `count` elements.
+    @unsafe
+    public static fun alloc(count: int): Pointer<T> {
+        return Pointer<T>(Buffer.alloc<T>(count));
+    }
+
+    // Number of elements currently addressable through this pointer.
+    public fun len(): int {
+        return this.buf.size();
+    }
+
+    // Bounds-checked read (traps if `index` is out of range, exactly like `T[]` indexing).
+    public fun get(index: int): T {
+        return this.buf[index];
+    }
+
+    // Bounds-checked write (traps if `index` is out of range).
+    public fun set(index: int, value: T): void {
+        this.buf[index] = value;
+    }
+
+    // Resizes the block in place via `Buffer.realloc`: the overlapping prefix is preserved and any
+    // newly grown tail is zero-initialized. After this call, no other alias of the pointer's old
+    // block may be read again — the same single-owner contract as `Buffer.realloc` itself.
+    @unsafe
+    public fun realloc(new_count: int): void {
+        this.buf = Buffer.realloc<T>(this.buf, new_count);
+    }
+
+    // Immediately returns the block to the allocator, bypassing reference counting. Calling
+    // `get`/`set`/`realloc`/`free` again on this (or any copy of this) `Pointer<T>` after `free()`
+    // is undefined behavior - the compiler cannot check it, by design (`@unsafe`).
+    @unsafe
+    public fun free(): void {
+        Buffer.free<T>(this.buf);
+    }
+}

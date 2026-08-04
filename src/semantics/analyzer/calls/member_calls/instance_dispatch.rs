@@ -311,6 +311,8 @@ impl<'a> Analyzer<'a> {
             }
         }
 
+        self.check_unsafe_call(&store_sig, method.position, diagnostics);
+
         let mut expected_params = store_sig.parameters.clone();
         let mut expected_defaults = store_sig.defaults.clone();
         let mut expected_is_ref = store_sig.is_ref.clone();

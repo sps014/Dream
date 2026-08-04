@@ -256,6 +256,7 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
                 .for_each(|a| collect_global_reads_operand(a, out));
         }
         Statement::Print { arg, .. } => collect_global_reads_operand(arg, out),
+        Statement::ForceFree(o) => collect_global_reads_operand(o, out),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -285,6 +286,10 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::ToBytes { value: o, .. }
         | Rvalue::FromBytes { bytes: o, .. }
         | Rvalue::UnionField { base: o, .. } => collect_global_reads_operand(o, out),
+        Rvalue::ArrayRealloc { array, new_len, .. } => {
+            collect_global_reads_operand(array, out);
+            collect_global_reads_operand(new_len, out);
+        }
         Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::Concat(a, b) => {
             collect_global_reads_operand(a, out);
             collect_global_reads_operand(b, out);

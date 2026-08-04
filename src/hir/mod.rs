@@ -403,6 +403,20 @@ pub enum HExprKind {
     /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of the node's type from the `byte[]`
     /// buffer `.0`, copying its payload into a fresh block of `T`'s size.
     FromBytes(Box<HExpr>),
+    /// `Buffer.realloc<T>(arr, new_len)` (`@unsafe`) — resizes `array`'s backing block in place via
+    /// the allocator's `$realloc`, returning a `T[]` of `new_len` elements with the overlapping
+    /// prefix preserved. `array` must have exactly one owner: the old value is never read again by
+    /// safe code, but an alias would observe a stale/freed block. Node type is `T[]`.
+    ArrayRealloc {
+        elem_ty: TypeId,
+        array: Box<HExpr>,
+        new_len: Box<HExpr>,
+    },
+    /// `Buffer.free<T>(arr)` (`@unsafe`) — immediately returns `array`'s backing block to the
+    /// allocator via `$free`, bypassing reference counting. Any other live reference to the same
+    /// block is left dangling; safe only when the caller holds the sole reference. Node type is
+    /// `void`.
+    ForceFree(Box<HExpr>),
     /// An explicit or implicit numeric/object coercion to `ty`.
     Cast(Box<HExpr>),
     /// `cond ? then : else_`.

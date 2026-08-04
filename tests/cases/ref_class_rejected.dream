@@ -1,0 +1,9 @@
+// `ref` may only precede `struct` (a value type); `ref class` is meaningless since a `class` is
+// already a heap-allocated reference type, and is rejected at parse time.
+
+ref class Pair {
+    public a: int;
+}
+
+fun main(): void {
+}

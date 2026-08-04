@@ -364,6 +364,9 @@ pub struct Analyzer<'a> {
     pending_loop_label: Option<String>,
     /// True while analyzing the body of an `async fun`. Gates the use of `await`.
     current_function_is_async: bool,
+    /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
+    /// function/method — see `Analyzer::check_unsafe_call`.
+    current_function_is_unsafe: bool,
     /// The source file of the function whose body is currently being analyzed, used for
     /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
     /// bare-identifier global reads). `None` outside any function body.
@@ -425,6 +428,7 @@ impl<'a> Analyzer<'a> {
             loop_labels: Vec::new(),
             pending_loop_label: None,
             current_function_is_async: false,
+            current_function_is_unsafe: false,
             current_file: None,
             file_modules: HashMap::new(),
             aliased_imports: Vec::new(),
@@ -664,6 +668,19 @@ impl<'a> Analyzer<'a> {
         result
     }
 
+    /// Runs `f` with `current_function_is_unsafe` set to `is_unsafe`, restoring the previous value
+    /// afterward so the flag cannot leak into a sibling function's analysis.
+    pub(super) fn with_unsafe_flag<F, R>(&mut self, is_unsafe: bool, f: F) -> R
+    where
+        F: FnOnce(&mut Self) -> R,
+    {
+        let saved = self.current_function_is_unsafe;
+        self.current_function_is_unsafe = is_unsafe;
+        let result = f(self);
+        self.current_function_is_unsafe = saved;
+        result
+    }
+
     /// Builds a concrete `Type` from a type name, used when substituting a generic
     /// parameter `T` with the concrete type chosen at the call/instantiation site.
     fn concrete_type_from_str(name: &str) -> Type {
@@ -701,6 +718,11 @@ impl<'a> Analyzer<'a> {
         self.register_structs(node, diagnostics);
         self.register_extensions(node, diagnostics);
         self.register_functions(node, diagnostics);
+        // `ref struct` params on an `async` function/method would need to survive a suspend point,
+        // which spills the function's live locals into a heap-allocated coroutine state object —
+        // exactly the escape a `ref struct` forbids. Checked once every function/method/`extend`
+        // signature above is registered.
+        self.check_ref_struct_async_boundary(node, diagnostics);
         // Aliased `import a.b.c as x;` resolve against the now-fully-registered function table
         // (cross-module collisions have already been promoted to their module-qualified keys), but
         // must land before body analysis so every call site can see the alias.

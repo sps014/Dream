@@ -1,0 +1,35 @@
+// `ref struct` is a stack-only value type: it behaves exactly like an ordinary value `struct` for
+// locals, parameters, and returns (inline storage, copy semantics, no heap allocation) - the only
+// difference is the compiler additionally rejects any use that would let it escape the current
+// stack frame (see `ref_struct_*_escape.dream`).
+
+ref struct Pair {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+fun sum(p: Pair): int {
+    return p.a + p.b;
+}
+
+fun swapped(p: Pair): Pair {
+    return Pair(p.b, p.a);
+}
+
+fun main(): void {
+    let p = Pair(3, 4);
+    System.println(sum(p));        // 7
+
+    let s = swapped(p);
+    System.println(s.a);           // 4
+    System.println(s.b);           // 3
+
+    // Copying a `ref struct` copies its bytes inline, same as any other value struct.
+    let copy = p;
+    System.println(sum(copy));     // 7
+}

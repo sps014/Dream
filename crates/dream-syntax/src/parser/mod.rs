@@ -363,7 +363,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::InternalToken
                 | TokenKind::StaticToken
                 | TokenKind::AsyncToken
-                | TokenKind::SealedToken => i += 1,
+                | TokenKind::SealedToken
+                // `ref` only appears at declaration position as the `ref struct` modifier.
+                | TokenKind::RefToken => i += 1,
                 other => return other,
             }
         }
@@ -380,7 +382,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::InternalToken
                 | TokenKind::StaticToken
                 | TokenKind::AsyncToken
-                | TokenKind::SealedToken => i += 1,
+                | TokenKind::SealedToken
+                | TokenKind::RefToken => i += 1,
                 TokenKind::AtToken => {
                     i += 1; // `@`
                     if self.peek_token(i).kind == TokenKind::IdentifierToken {

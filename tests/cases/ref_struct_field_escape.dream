@@ -1,0 +1,24 @@
+// A `ref struct` cannot be stored as a field of any enclosing type: that would let a stack-only
+// value outlive the stack frame it was created in.
+
+ref struct Pair {
+    public a: int;
+    public b: int;
+
+    constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+class Holder {
+    public pair: Pair;
+
+    constructor(pair: Pair) {
+        this.pair = pair;
+    }
+}
+
+fun main(): void {
+    let h = Holder(Pair(1, 2));
+}

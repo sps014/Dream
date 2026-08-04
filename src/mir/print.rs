@@ -54,6 +54,7 @@ fn stmt(s: &Statement) -> String {
         Statement::Nop => "nop".to_string(),
         Statement::DebugLine(line) => format!("dbg_line {}", line),
         Statement::SourceLine(line) => format!("src_line {}", line),
+        Statement::ForceFree(o) => format!("force_free {}", operand(o)),
     }
 }
 
@@ -160,6 +161,16 @@ fn rvalue(r: &Rvalue) -> String {
         }
         Rvalue::ToBytes { value, ty } => format!("to_bytes::<ty{}>({})", ty.0, operand(value)),
         Rvalue::FromBytes { bytes, ty } => format!("from_bytes::<ty{}>({})", ty.0, operand(bytes)),
+        Rvalue::ArrayRealloc {
+            elem_ty,
+            array,
+            new_len,
+        } => format!(
+            "array_realloc::<ty{}>({}, {})",
+            elem_ty.0,
+            operand(array),
+            operand(new_len)
+        ),
         Rvalue::HashCode(o) => format!("hash_code({})", operand(o)),
         Rvalue::ToString(o) => format!("to_string({})", operand(o)),
         Rvalue::Concat(a, b) => format!("concat({}, {})", operand(a), operand(b)),

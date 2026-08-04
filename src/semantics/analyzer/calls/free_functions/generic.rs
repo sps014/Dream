@@ -59,6 +59,7 @@ impl<'a> Analyzer<'a> {
                     .map(|ret| Self::monomorphize_type(ret, bindings)),
                 is_async: template.is_async,
                 is_static: template.is_static,
+                is_unsafe: template.attributes.iter().any(|a| a.name.text == "unsafe"),
                 visibility: template.visibility,
                 intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
                 declaring_file: template.file_path.clone(),

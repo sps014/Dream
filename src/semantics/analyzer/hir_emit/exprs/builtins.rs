@@ -303,6 +303,51 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Records `Buffer.realloc<T>(arr, new_len)` — an in-place `$realloc`-based grow/shrink of
+    /// `arr`'s backing block. Drops out of coverage if either operand is not representable.
+    pub(in crate::semantics::analyzer) fn hir_set_array_realloc(
+        &mut self,
+        elem_ty: &Type,
+        array: Option<HExpr>,
+        new_len: Option<HExpr>,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match (array, new_len) {
+            (Some(array), Some(new_len)) => {
+                let elem = self.type_ctx.lower(elem_ty);
+                let arr = self.type_ctx.interner.array(elem);
+                self.hir.last = Some(HExpr::new(
+                    arr,
+                    HExprKind::ArrayRealloc {
+                        elem_ty: elem,
+                        array: Box::new(array),
+                        new_len: Box::new(new_len),
+                    },
+                ));
+            }
+            _ => self.hir.last = None,
+        }
+    }
+
+    /// Records `Buffer.free<T>(arr)` — an unconditional `$free` of `arr`'s backing block, bypassing
+    /// reference counting. Drops out of coverage if the operand is not representable.
+    pub(in crate::semantics::analyzer) fn hir_set_force_free(&mut self, array: Option<HExpr>) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match array {
+            Some(array) => {
+                let void = self.type_ctx.interner.void();
+                self.hir.last = Some(HExpr::new(void, HExprKind::ForceFree(Box::new(array))));
+            }
+            None => self.hir.last = None,
+        }
+    }
+
     /// Records `recv.char_at(idx)` (typed `char`): a runtime `$char_at` read. Drops out of coverage
     /// if either the receiver or the index is not representable.
     pub(in crate::semantics::analyzer) fn hir_set_char_at(

@@ -113,6 +113,12 @@ pub const ATTR_TO_BYTES: &str = "to_bytes";
 /// `Bytes.to<T>(bytes)` — reconstruct a blittable value from a `byte[]` buffer (a raw copy
 /// of the buffer's payload into a fresh block of `T`'s size).
 pub const ATTR_FROM_BYTES: &str = "from_bytes";
+/// `Buffer.realloc<T>(arr, new_len)` — in-place `$realloc`-based grow/shrink of an array's
+/// backing block.
+pub const ATTR_ARRAY_REALLOC: &str = "array_realloc";
+/// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
+/// reference counting.
+pub const ATTR_FORCE_FREE: &str = "force_free";
 
 /// The operation a `@intrinsic("…")`-tagged static method lowers to. Derived once from the
 /// attribute key via [`IntrinsicOp::from_key`], so every layer dispatches off the same enum
@@ -155,6 +161,10 @@ pub enum IntrinsicOp {
     ToBytes,
     /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of `T` from a `byte[]` buffer.
     FromBytes,
+    /// `Buffer.realloc<T>(arr, new_len)` (`@unsafe`) — in-place `$realloc`-based grow/shrink.
+    ArrayRealloc,
+    /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
+    ForceFree,
 }
 
 impl IntrinsicOp {
@@ -179,6 +189,8 @@ impl IntrinsicOp {
             ATTR_DEBUG_REF_COUNT => IntrinsicOp::DebugRefCount,
             ATTR_TO_BYTES => IntrinsicOp::ToBytes,
             ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
+            ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,
+            ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             _ => return None,
         })
     }

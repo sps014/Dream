@@ -80,10 +80,12 @@ impl<'a> Analyzer<'a> {
         // instantiate generic unions whose templates were collected in pass 1.
         for enum_decl in node.enums.iter() {
             if enum_decl.is_data_enum() && enum_decl.generic_parameters.is_none() {
+                let has_stack = enum_decl.attributes.iter().any(|a| a.name.text == "stack");
                 self.register_union(
                     &enum_decl.name.text,
                     &enum_decl.variants,
                     &GenericBindings::new(),
+                    has_stack,
                     diagnostics,
                 );
             }
@@ -94,11 +96,15 @@ impl<'a> Analyzer<'a> {
     /// `union_name`. Each variant's payload starts after the discriminant word; payloads of
     /// different variants overlap, so the block is sized to the largest variant. `bindings`
     /// substitutes any generic parameters in field types (empty for non-generic unions).
+    /// `has_stack` is true when the union declaration carries `@stack`: a checked contract that
+    /// every monomorphized instance must qualify as inline/value (see the `inlineable` computation
+    /// below), rather than just the usual best-effort automatic classification.
     pub(in crate::semantics::analyzer) fn register_union(
         &mut self,
         union_name: &str,
         variants: &[EnumVariantNode],
         bindings: &GenericBindings,
+        has_stack: bool,
         diagnostics: &mut DiagnosticBag,
     ) {
         let mut variant_infos = Vec::new();
@@ -130,6 +136,18 @@ impl<'a> Analyzer<'a> {
                             diagnostics,
                         );
                     }
+                }
+                let ftid = self.type_ctx.lower(&ftype);
+                if self.type_ctx.interner.is_ref_struct_type(ftid) {
+                    diagnostics.report_error(
+                        format!(
+                            "field '{}' of variant '{}' cannot have type '{}': a 'ref struct' cannot be stored as a union payload (it would let a stack-only value escape its stack frame)",
+                            field.name.text,
+                            variant.name.text,
+                            ftype.get_type()
+                        ),
+                        Some(field.name.position),
+                    );
                 }
                 let (size, align) = value_size_align(&ftype.get_type());
                 let rem = offset % align;
@@ -171,14 +189,52 @@ impl<'a> Analyzer<'a> {
         // allocation) when every variant payload is itself value/primitive. Decided here, per
         // (monomorphized) instance, because `Option<int>` (value) and `Option<string>` (heap) share
         // one `DefId`. The inline layout is finalized later in `hir_build_layouts` (value-aware sizes).
-        let all_value = variant_infos.iter().all(|v| {
-            v.fields
-                .iter()
-                .all(|f| self.payload_type_is_value(&f.type_))
-        });
-        if all_value {
-            let union_tid = self.type_ctx.lower_str(union_name);
+        //
+        // `@stack` additionally allows *one* reference-typed payload field (across the whole union)
+        // to still go inline, storing it as a retained pointer exactly like a reference field
+        // embedded in a value `struct` already is (see `construct_value_union` in
+        // `mir::emit::emitter::value_struct`). This relaxation is opt-in only, gated behind
+        // `@stack`, rather than automatic: several existing constructs (e.g. a `weak parent:
+        // Option<Node>` field, see `docs/language/memory.md`) depend on `Option<T>` staying a heap
+        // reference whenever `T` is itself a reference type, so widening the automatic inference
+        // would silently change their runtime representation. `@stack` is an explicit, checked
+        // opt-in instead: it errors if the union still doesn't qualify (rather than silently
+        // falling back to the heap), and its scope is limited to declarations that ask for it.
+        let union_tid = self.type_ctx.lower_str(union_name);
+        let mut ref_field: Option<(String, String)> = None;
+        let mut ref_count = 0usize;
+        let mut self_referential = false;
+        for v in &variant_infos {
+            for f in &v.fields {
+                if self.payload_type_is_value(&f.type_) {
+                    continue;
+                }
+                ref_count += 1;
+                if self.type_ctx.lower(&f.type_) == union_tid {
+                    self_referential = true;
+                }
+                if ref_field.is_none() {
+                    ref_field = Some((f.name.clone(), f.type_.get_type()));
+                }
+            }
+        }
+        let all_value = ref_count == 0;
+        let stack_inlineable = has_stack && !self_referential && ref_count <= 1;
+        if all_value || stack_inlineable {
             self.type_ctx.interner.mark_value_union(union_tid);
+        } else if has_stack {
+            let (field_name, field_type) = ref_field
+                .unwrap_or_else(|| ("<variant>".to_string(), "<self-referential>".to_string()));
+            diagnostics.report_error(
+                format!(
+                    "'@stack' union '{}' cannot be stored inline: field '{}' has type '{}', which is a{} reference type that would force this union onto the heap",
+                    union_name,
+                    field_name,
+                    field_type,
+                    if self_referential { " self-referential" } else { "n additional" }
+                ),
+                None,
+            );
         }
 
         self.union_table.insert(
@@ -233,8 +289,16 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
+        self.reject_ref_struct_type_args(args, position, diagnostics);
         let bindings = generic_bindings(params, args);
-        self.register_union(&mangled, &template.variants, &bindings, diagnostics);
+        let has_stack = template.attributes.iter().any(|a| a.name.text == "stack");
+        self.register_union(
+            &mangled,
+            &template.variants,
+            &bindings,
+            has_stack,
+            diagnostics,
+        );
         self.register_generic_extension_methods(base_name, &mangled, args, diagnostics);
     }
 
