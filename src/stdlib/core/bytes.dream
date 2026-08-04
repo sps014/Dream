@@ -13,16 +13,38 @@ public class Bytes {
     // Reconstruct a blittable `T` from a `byte[]` buffer produced by `Bytes.of<T>`.
     @intrinsic("from_bytes")
     static extern fun to<T : unmanaged>(bytes: byte[]): T;
-}
 
-// Worker-boundary adapter: decode `inBytes` to `TIn`, run `body`, and encode its `TOut` result
-// back to a byte buffer. Monomorphized per `(TIn, TOut)`. Because Dream has no closures, the host
-// drives a worker with two funcrefs - this adapter and the user's `body` - rather than capturing
-// `body` in a closure. The adapter's own signature is uniformly `(funcref, byte[]) -> byte[]`
-// (all i32 on the wire), so bodies that return a struct (and thus use the sret ABI internally) do
-// not force a per-body host trampoline.
-public fun __worker_run<TIn : unmanaged, TOut : unmanaged>(body: fun(TIn): TOut, inBytes: byte[]): byte[] {
-    let input = Bytes.to<TIn>(inBytes);
-    let output = body(input);
-    return Bytes.of<TOut>(output);
+    // Encodes `bytes` as a `string` with one codepoint (0-255) per byte - lossless, since every
+    // byte value is a valid standalone Unicode codepoint, and the inverse of `fromWireString`.
+    // Used to carry an arbitrary byte buffer over a channel that only understands `string`s (the
+    // `WebWorker` wire), without needing a second, binary-native transport.
+    public static fun toWireString(bytes: byte[]): string {
+        let n = bytes.size();
+        let s = string.alloc(n);
+        for (let i = 0; i < n; i = i + 1) {
+            string.set(s, i, (char)bytes[i]);
+        }
+        return s;
+    }
+
+    // The inverse of `toWireString`.
+    public static fun fromWireString(s: string): byte[] {
+        let n = s.size();
+        let out = Buffer.alloc<byte>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            out[i] = (byte)s.char_at(i).to_int();
+        }
+        return out;
+    }
+
+    // Encodes a `WebWorker`-safe value of type `T` as the `string` the worker wire carries:
+    // identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`)
+    // re-encoded via `toWireString`. Used by `WebWorker<TIn, TOut>`/`WebWorker.map`/
+    // `WebWorkerPool.dispatch` to marshal an arbitrary `TIn`/`TOut` without a second wire format.
+    @intrinsic("wire_encode")
+    static extern fun toWire<T>(value: T): string;
+
+    // The inverse of `toWire`.
+    @intrinsic("wire_decode")
+    static extern fun fromWire<T>(text: string): T;
 }

@@ -127,6 +127,7 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
         }
         Statement::Print { arg, .. } => read_operand(arg, read),
         Statement::ForceFree(o) => read_operand(o, read),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) => read_operand(o, read),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }

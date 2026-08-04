@@ -34,6 +34,10 @@ impl<'a> Analyzer<'a> {
                 .map(|s| Self::expected_param_types(&s))
         };
 
+        let call_target = format!("{}.{}", type_name, method.text);
+        let saved_call_target = self.current_call_target_name.take();
+        self.current_call_target_name = Some(call_target);
+
         let (arg_types, arg_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
             params,
             expected_params.as_deref(),
@@ -41,6 +45,8 @@ impl<'a> Analyzer<'a> {
             symbol_table,
             diagnostics,
         )?;
+
+        self.current_call_target_name = saved_call_target;
 
         let store_sig = if is_overloaded {
             match self.select_function_overload(&base, &arg_types) {

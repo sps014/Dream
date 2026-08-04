@@ -41,8 +41,9 @@ impl Emitter<'_> {
         match stmt {
             Statement::Assign(place, rvalue) => self.emit_assign(place, rvalue),
             Statement::Retain(o) => {
+                let ty = self.operand_ty(o);
                 self.emit_operand(o);
-                self.line("     (call $retain)");
+                self.line(&format!("     (call {})", retain_call(self.interner, ty)));
             }
             Statement::Release(o) => {
                 // Deep release by the operand's declared type: structs/unions/reference arrays run
@@ -146,6 +147,28 @@ impl Emitter<'_> {
                 self.emit_operand(o);
                 self.line("     (call $free)");
             }
+            Statement::LockAcquire(o) => {
+                self.emit_lock_addr(o);
+                self.line("     (call $__lock_acquire)");
+            }
+            Statement::LockRelease(o) => {
+                self.emit_lock_addr(o);
+                self.line("     (call $__lock_release)");
+            }
+        }
+    }
+
+    /// Pushes the address of `o`'s (an `@shared class`-typed pointer operand) embedded lock word:
+    /// `obj_ptr + layout.size`, i.e. the first word past the object's last field — see
+    /// `src/mir/abi.rs`'s `@shared class` header-extension note and the `is_shared` branch of
+    /// `Rvalue::New` emission, which reserves and zeroes exactly this word.
+    fn emit_lock_addr(&mut self, o: &Operand) {
+        let ty = self.operand_ty(o);
+        let size = self.layouts.get(ty).map(|l| l.size).unwrap_or(0);
+        self.emit_operand(o);
+        if size > 0 {
+            self.line(&format!("     (i32.const {})", size));
+            self.line("     (i32.add)");
         }
     }
 
@@ -507,7 +530,10 @@ impl Emitter<'_> {
         let borrowed = matches!(value, Operand::Copy(_) | Operand::Const(Const::Str(_)));
         if self.interner.is_reference(value_ty) && borrowed {
             self.emit_operand(value);
-            self.line("     (call $retain)");
+            self.line(&format!(
+                "     (call {})",
+                retain_call(self.interner, value_ty)
+            ));
         }
     }
 

@@ -259,6 +259,10 @@ impl<'a> Analyzer<'a> {
                 })
         };
 
+        let call_target = format!("{}.{}", struct_name, method.text);
+        let saved_call_target = self.current_call_target_name.take();
+        self.current_call_target_name = Some(call_target);
+
         // Analyze the explicit arguments once, then resolve the method (overloaded methods select
         // by argument types, with the receiver supplied as the implicit `this` argument).
         let (mut arg_types, mut arg_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
@@ -268,6 +272,8 @@ impl<'a> Analyzer<'a> {
             ctx.symbol_table,
             diagnostics,
         )?;
+
+        self.current_call_target_name = saved_call_target;
 
         let store_sig = if self.function_table.is_overloaded(&mangled_name) {
             let mut selection_args = Vec::with_capacity(arg_types.len() + 1);

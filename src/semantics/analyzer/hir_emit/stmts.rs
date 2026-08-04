@@ -313,6 +313,17 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Appends a `lock (target) { body }`. Fails the function if `target` was not representable.
+    pub(in crate::semantics::analyzer) fn hir_lock(&mut self, target: Option<HExpr>, body: Vec<HStmt>) {
+        if !self.active() {
+            return;
+        }
+        match target {
+            Some(target) => self.push_stmt(HStmt::Lock { target, body }),
+            None => self.hir.ok = false,
+        }
+    }
+
     /// Appends a `do { body } while (cond)`. Fails the function if the condition was not
     /// representable.
     pub(in crate::semantics::analyzer) fn hir_do_while(
@@ -333,9 +344,11 @@ impl<'a> Analyzer<'a> {
     /// Appends a desugared `for (init; cond; step) { body }`. `init`/`step` must each be exactly one
     /// statement (the surface form guarantees this) and `cond` must be present. `hir_mark_line`
     /// unconditionally opens each of `init`/`step` with a fresh-block [`HStmt::SourceLine`] marker
-    /// (see `hir_open_block`); stripped here since [`HStmt::For`] carries `init`/`step` as a single
-    /// bare statement, not a block, and losing marker precision on a `for` header's init/step is an
-    /// acceptable v1 tradeoff (its `body` is a real block and keeps its markers).
+    /// (and, with debug info on, an additional [`HStmt::DebugLine`] marker too — see
+    /// `hir_open_block`/`hir_mark_line`); both are stripped here since [`HStmt::For`] carries
+    /// `init`/`step` as a single bare statement, not a block, and losing marker precision on a
+    /// `for` header's init/step is an acceptable v1 tradeoff (its `body` is a real block and keeps
+    /// its markers).
     pub(in crate::semantics::analyzer) fn hir_for(
         &mut self,
         mut init: Vec<HStmt>,
@@ -347,8 +360,8 @@ impl<'a> Analyzer<'a> {
         if !self.active() {
             return;
         }
-        init.retain(|s| !matches!(s, HStmt::SourceLine(_)));
-        step.retain(|s| !matches!(s, HStmt::SourceLine(_)));
+        init.retain(|s| !matches!(s, HStmt::SourceLine(_) | HStmt::DebugLine(_)));
+        step.retain(|s| !matches!(s, HStmt::SourceLine(_) | HStmt::DebugLine(_)));
         match (init.len(), step.len(), cond) {
             (1, 1, Some(cond)) => self.push_stmt(HStmt::For {
                 init: Box::new(init.remove(0)),

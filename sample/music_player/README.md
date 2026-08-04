@@ -33,6 +33,14 @@ npx serve .
 Serving `sample/music_player/` directly would put `../../runtime/dream.js` above the served root
 and the page would 404 on the runtime.
 
+If you later add [`WebWorker`](../../docs/language/webworkers.md) calls to a browser sample, the
+host page needs [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated)
+headers so Dream can allocate a shared `WebAssembly.Memory` (`SharedArrayBuffer`). With a static
+file server such as `npx serve`, add response headers like
+`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (see
+the WebWorkers doc). This music player does not spawn workers today, so the default serve command
+above is enough.
+
 ## How it works
 
 - `js.global.document` / `.getElementById(...)` reach every DOM node the player touches.

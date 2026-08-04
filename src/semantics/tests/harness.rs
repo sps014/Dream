@@ -99,12 +99,18 @@ pub(super) fn run_wat(wat: &str, entry: &str) -> String {
     use wasmtime::*;
 
     let wasm = wat::parse_str(wat).expect("module should assemble");
-    let engine = Engine::default();
+    let config = crate::execution::host::threaded_wasm_config();
+    let engine = Engine::new(&config).expect("engine should build");
     let module = Module::new(&engine, &wasm).expect("module should compile");
+    let shared_mem = crate::execution::host::shared_memory_for(&engine, &module)
+        .expect("module should import env.memory");
 
     let out = Arc::new(Mutex::new(String::new()));
     let mut store = Store::new(&engine, out.clone());
     let mut linker = Linker::new(&engine);
+    linker
+        .define(&mut store, "env", "memory", shared_mem.clone())
+        .expect("failed to define shared memory");
 
     linker
         .func_wrap(
@@ -149,8 +155,8 @@ pub(super) fn run_wat(wat: &str, entry: &str) -> String {
             "env",
             "print_string",
             |mut c: Caller<'_, Arc<Mutex<String>>>, ptr: i32| {
-                let mem = c.get_export("memory").unwrap().into_memory().unwrap();
-                let data = mem.data(&c);
+                let mem = c.get_export("memory").unwrap().into_shared_memory().unwrap();
+                let data = crate::execution::host::shared_bytes(&mem);
                 // Length-prefixed string: `[len: i32][utf8...][\0]` at the data pointer.
                 let base = ptr as usize;
                 let len = i32::from_le_bytes([

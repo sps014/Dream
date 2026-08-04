@@ -74,6 +74,7 @@ pub(super) fn statement_line(statement: &crate::syntax::nodes::StatementNode) ->
         | StatementNode::AwaitStmt(e)
         | StatementNode::While(e, _)
         | StatementNode::DoWhile(_, e)
+        | StatementNode::Lock(e, _)
         | StatementNode::IfElse(e, _, _, _)
         | StatementNode::Switch(e, _, _) => line(e.position()),
         StatementNode::For(_, Some(cond), _, _) => line(cond.position()),
@@ -276,11 +277,15 @@ pub struct Analyzer<'a> {
     arena: &'a Bump,
     generic_functions: HashMap<String, &'a FunctionNode<'a>>,
     instantiated_generics: IndexMap<String, (GenericBindings, &'a FunctionNode<'a>)>,
-    /// Non-capturing arrow-lambdas lowered to synthesized top-level functions (`__lambda_0`, ...),
-    /// keyed by their synthesized name. Bodies are analyzed in the same deferred fixpoint pass as
-    /// `instantiated_generics` (see `analyze_pending_instantiations`), since a function's body
-    /// cannot be analyzed while another function's analysis is already in progress.
-    pending_lambdas: IndexMap<String, &'a FunctionNode<'a>>,
+    /// Arrow-lambdas (capturing or not) lowered to synthesized top-level functions (`__lambda_0`,
+    /// ...), keyed by their synthesized name, paired with the generic bindings active at the
+    /// lambda literal's own use site (e.g. `TIn`/`TOut` -> `int` for a lambda written inside a
+    /// `WebWorker<TIn, TOut>` method) so its body is re-checked under the same substitution when
+    /// analyzed. Bodies are analyzed in the same deferred fixpoint pass as `instantiated_generics`
+    /// (see `analyze_pending_instantiations`), since a function's body cannot be analyzed while
+    /// another function's analysis is already in progress. The lambda literal itself is never
+    /// generic in v1 - only the *enclosing* context it was written in can be.
+    pending_lambdas: IndexMap<String, (&'a FunctionNode<'a>, GenericBindings)>,
     /// Counter used to name synthesized lambda functions uniquely (`__lambda_<n>`).
     lambda_counter: usize,
     /// Names, local to the function currently being analyzed, that a nested lambda captures — and
@@ -312,6 +317,13 @@ pub struct Analyzer<'a> {
     is_binding_aliases: Vec<(String, Type, &'a ExpressionNode<'a>)>,
     generic_structs:
         HashMap<String, &'a crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
+    /// Every concrete `(base name, type args)` a generic class has been instantiated with (recorded
+    /// by `ensure_struct_instantiated`). `node.structs` (the parsed AST) only ever holds the
+    /// generic *template* declaration, never its monomorphizations — so `hir_build_imports`/
+    /// `hir_build_intrinsics` (which need to emit a per-instantiation `(import ...)` or intrinsic
+    /// binding for each of a generic class's `extern`/`@intrinsic` methods, mangled per instance)
+    /// consult this list instead of `node.structs` to find every instantiation that needs one.
+    generic_struct_instances: Vec<(String, Vec<Type>)>,
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
     /// Registered enums: name -> (member -> value). Enum values are plain `i32`s at runtime.
     enum_table: EnumTable,
@@ -356,6 +368,11 @@ pub struct Analyzer<'a> {
     /// struct-method body. Empty outside of any generic instantiation. Used to resolve generic
     /// type parameters that appear inside a body (e.g. the `T` in `array_new<T>(...)`).
     current_generic_bindings: GenericBindings,
+    /// The callee name (function/constructor) whose arguments are currently being analyzed, or
+    /// `None` outside of any call. Consulted by `analyze_lambda` to apply `WebWorker`-specific
+    /// capture restrictions (see `WEBWORKER_CTOR_CLASS`) without threading a dedicated parameter
+    /// through every call-argument-analysis helper.
+    current_call_target_name: Option<String>,
     /// Stack of loop labels currently in scope, so `break label;`/`continue label;` can be
     /// validated against an enclosing labeled loop.
     loop_labels: Vec<String>,
@@ -412,6 +429,7 @@ impl<'a> Analyzer<'a> {
             closure_captures: HashMap::new(),
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
+            generic_struct_instances: Vec::new(),
             struct_methods: Vec::new(),
             enum_table: IndexMap::new(),
             union_table: IndexMap::new(),
@@ -425,6 +443,7 @@ impl<'a> Analyzer<'a> {
             operator_overloads: HashMap::new(),
             current_expected_type: None,
             current_generic_bindings: GenericBindings::new(),
+            current_call_target_name: None,
             loop_labels: Vec::new(),
             pending_loop_label: None,
             current_function_is_async: false,

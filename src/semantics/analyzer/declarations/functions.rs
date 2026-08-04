@@ -178,8 +178,10 @@ impl<'a> Analyzer<'a> {
                 progressed = true;
             }
 
-            // Non-capturing lambdas lowered to synthesized top-level functions (see
-            // `expressions::lambda`). No generic bindings apply (lambdas are never generic in v1).
+            // Arrow-lambdas lowered to synthesized top-level functions (see `expressions::lambda`).
+            // The lambda literal itself is never generic in v1, but the *enclosing* method it was
+            // written in might be (e.g. a lambda inside a `WebWorker<TIn, TOut>` method) - re-apply
+            // the bindings captured at its use site so its body sees the same substitution.
             let pending_lambdas: Vec<String> = self
                 .pending_lambdas
                 .keys()
@@ -188,12 +190,13 @@ impl<'a> Analyzer<'a> {
                 .collect();
             for name in pending_lambdas {
                 processed_generics.insert(name.clone());
-                let template = match self.pending_lambdas.get(&name) {
-                    Some(t) => *t,
+                let (template, bindings) = match self.pending_lambdas.get(&name) {
+                    Some((t, b)) => (*t, b.clone()),
                     None => continue,
                 };
                 diagnostics.file_path = file_path_string(&template.file_path);
-                let table = self.analyze_function(template, diagnostics)?;
+                let table = self
+                    .with_generic_bindings(bindings, |s| s.analyze_function(template, diagnostics))?;
                 symbol_table_map.insert(name, table);
                 progressed = true;
             }

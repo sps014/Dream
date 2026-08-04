@@ -211,6 +211,15 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// True when `ty` is a still-unbound generic type parameter (an unresolved name, e.g. `TIn`
+    /// inside a generic template's own body before monomorphization substitutes it) rather than a
+    /// concrete, checkable type. Lets a call-site intrinsic (e.g. `Bytes.toWire<T>`) defer its own
+    /// validation to the monomorphized pass instead of misreporting the bare parameter name as
+    /// failing a constraint it hasn't been bound long enough to actually satisfy or violate.
+    pub(super) fn is_unresolved_generic_type(&self, ty: &Type) -> bool {
+        matches!(self.name_shape(&ty.get_type()), NameShape::Unknown)
+    }
+
     /// Reports an error unless `ty` satisfies the `unmanaged` (blittable) kind. Used by the raw
     /// byte-blit intrinsics (`Bytes.of`/`Bytes.to`), whose generic bound is verified here rather
     /// than through the normal call-site constraint path (which they bypass).

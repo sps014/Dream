@@ -2,7 +2,7 @@
 //! table (see [`sourcemap::TypeDesc`]) to expand strings, structs, unions, and arrays into DAP
 //! `variables` trees. Split out of `mod.rs`.
 
-use crate::execution::host::read_string_from_memory;
+use crate::execution::host::{read_string_from_memory, shared_bytes};
 use std::collections::HashMap;
 use std::sync::Arc;
 use wasmtime::*;
@@ -52,11 +52,13 @@ pub(super) fn snapshot_locals(
         })
         .collect();
 
-    let Some(mem) = caller.get_export("memory").and_then(Extern::into_memory) else {
+    let Some(mem) = caller
+        .get_export("memory")
+        .and_then(Extern::into_shared_memory)
+    else {
         return HashMap::new();
     };
     let mut dec = Decoder {
-        caller: &*caller,
         mem,
         types: &sm.types,
         refs: HashMap::new(),
@@ -89,15 +91,14 @@ fn read_global_i64(caller: &mut Caller<'_, ()>, global: u32) -> Option<i64> {
 
 /// Walks live values in linear memory against the debug type table, producing displayable strings and
 /// a registry of expandable children keyed by `variablesReference`.
-struct Decoder<'a, 'c> {
-    caller: &'a Caller<'c, ()>,
-    mem: Memory,
+struct Decoder<'a> {
+    mem: SharedMemory,
     types: &'a [TypeDesc],
     refs: HashMap<i64, Vec<VarValue>>,
     next_ref: i64,
 }
 
-impl Decoder<'_, '_> {
+impl Decoder<'_> {
     fn desc(&self, type_id: u32) -> TypeDesc {
         self.types
             .get(type_id as usize)
@@ -117,12 +118,12 @@ impl Decoder<'_, '_> {
     }
 
     fn u8_at(&self, addr: u32) -> u8 {
-        let d = self.mem.data(self.caller);
+        let d = shared_bytes(&self.mem);
         d.get(addr as usize).copied().unwrap_or(0)
     }
 
     fn u32_at(&self, addr: u32) -> u32 {
-        let d = self.mem.data(self.caller);
+        let d = shared_bytes(&self.mem);
         let a = addr as usize;
         if a + 4 <= d.len() {
             u32::from_le_bytes([d[a], d[a + 1], d[a + 2], d[a + 3]])
@@ -132,7 +133,7 @@ impl Decoder<'_, '_> {
     }
 
     fn u64_at(&self, addr: u32) -> u64 {
-        let d = self.mem.data(self.caller);
+        let d = shared_bytes(&self.mem);
         let a = addr as usize;
         if a + 8 <= d.len() {
             let mut b = [0u8; 8];
@@ -144,7 +145,7 @@ impl Decoder<'_, '_> {
     }
 
     fn read_string(&self, ptr: u32) -> String {
-        read_string_from_memory(&self.mem, self.caller, ptr as i32)
+        read_string_from_memory(&self.mem, ptr as i32)
     }
 
     /// Loads a scalar's raw bits from memory at `addr`, honoring its storage width.

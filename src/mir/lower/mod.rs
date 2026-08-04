@@ -147,6 +147,7 @@ fn lower_sync_function(func: &HFunction, interner: &TypeInterner) -> MirFunction
         interner,
         locals,
         loops: Vec::new(),
+        locks: Vec::new(),
         async_coroutine: false,
     };
     lo.lower_block(&func.body);
@@ -171,6 +172,7 @@ pub fn lower_async_poll_body(func: &HFunction, interner: &TypeInterner) -> MirFu
         interner,
         locals,
         loops: Vec::new(),
+        locks: Vec::new(),
         async_coroutine: true,
     };
     lo.lower_block(&func.body);
@@ -186,6 +188,10 @@ struct LoopCtx {
     break_blk: super::BlockId,
     continue_blk: super::BlockId,
     label: Option<String>,
+    /// `self.locks.len()` at the point the loop was entered: a `break`/`continue` releases every
+    /// lock acquired *inside* the loop (`self.locks[lock_depth..]`, innermost first) but leaves any
+    /// lock already held when the loop started untouched.
+    lock_depth: usize,
 }
 
 struct Lowerer<'a> {
@@ -193,6 +199,10 @@ struct Lowerer<'a> {
     interner: &'a TypeInterner,
     locals: HashMap<u32, Local>,
     loops: Vec<LoopCtx>,
+    /// Addresses (as MIR locals) of every `lock (obj) { ... }` currently entered, outermost first —
+    /// see [`Lowerer::lower_lock`] and the release-on-every-exit-path logic in `lower_break`/
+    /// `lower_continue`/`HStmt::Return`.
+    locks: Vec<Local>,
     /// When set, this is an async coroutine body: `return` completes the async task (rather than
     /// returning from a WASM function), and each `await` lowers to a [`Terminator::Await`] suspend
     /// point that splits the current block (so awaits work in any control-flow position).
@@ -356,6 +366,7 @@ impl Lowerer<'_> {
             },
             HStmt::Return(e) => {
                 let op = e.as_ref().map(|e| self.lower_operand(e));
+                self.release_all_locks();
                 if self.async_coroutine {
                     self.b.terminate(Terminator::AsyncComplete(op));
                 } else {
@@ -391,6 +402,7 @@ impl Lowerer<'_> {
             } => self.lower_switch(scrutinee, arms, default),
             HStmt::Break(label) => self.lower_break(label.as_deref()),
             HStmt::Continue(label) => self.lower_continue(label.as_deref()),
+            HStmt::Lock { target, body } => self.lower_lock(target, body),
             HStmt::DebugLine(line) => self.b.push(Statement::DebugLine(*line)),
             HStmt::SourceLine(line) => self.b.push(Statement::SourceLine(*line)),
         }

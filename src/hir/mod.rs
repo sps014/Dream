@@ -224,6 +224,15 @@ pub enum HStmt {
         body: Vec<HStmt>,
         label: Option<String>,
     },
+    /// `lock (target) { body }`: mutual exclusion on `target` (an `@shared class` instance, type-
+    /// checked in `src/semantics/analyzer/statements/lock.rs`), reentrant per calling thread. Lowered
+    /// to acquire/release of the target's embedded lock word, released on every exit path out of
+    /// `body` (fallthrough, `return`, `break`, `continue`) — see `src/mir/lower/control_flow.rs`'s
+    /// `lower_lock`.
+    Lock {
+        target: HExpr,
+        body: Vec<HStmt>,
+    },
     /// A `switch` over a scrutinee (both the C-style and pattern-matching forms lower here). Each
     /// arm is a typed pattern + body; `default` runs when no arm matches.
     Switch {

@@ -1,0 +1,15 @@
+// An async `WebWorker` body must return `string`: `Bytes.toWire<TOut>` is only a true identity
+// passthrough for `TOut = string` (see `IntrinsicOp::WireEncode` in
+// `static_dispatch/intrinsics.rs`), which is what lets the worker-invoke trampoline's untagged
+// `Future` result reach it unchanged. Any other `TOut` would instead byte-blit the raw, not-yet-
+// awaited `Future` pointer as if it were already the real result, so it stays a compile error.
+async fun computeInt(n: int): int {
+    await Time.sleep(1);
+    return n * 2;
+}
+
+async fun main(): void {
+    let w = WebWorker<int, int>(computeInt);
+    System.println((await w.send(21)).to_string());
+    w.terminate();
+}

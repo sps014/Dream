@@ -51,6 +51,7 @@ pub const PRELUDE_FILES: &[(&str, &str)] = &[
         "<std>/core/webworker.dream",
         include_str!("core/webworker.dream"),
     ),
+    ("<std>/core/sync.dream", include_str!("core/sync.dream")),
     ("<std>/core/js.dream", include_str!("core/js.dream")),
     ("<std>/core/math.dream", include_str!("core/math.dream")),
     // Collections (`List`/`Map` and their cursors), one class per file under `collections/`.

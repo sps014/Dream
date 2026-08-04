@@ -121,6 +121,16 @@ The analyzer-facing bundle: it owns the `TypeInterner` and `DefTable` and lowers
 
 Because the parser emits `Type::Struct` for *any* bare identifier (structs, unions, and enums look identical syntactically), `TypeCtx` keeps a `nominal: name → DefKind` registry so `lower` can pick `Struct`/`Union`/`Enum`. Register declarations before lowering their uses.
 
+### `@shared` classes
+
+The analyzer marks a class def as `@shared` when it carries the `@shared` attribute (`TypeInterner::mark_shared_def` / `is_shared_def`). That flag is load-bearing in three places downstream:
+
+1. **Field validation** — every field of an `@shared` class must be unmanaged or itself `@shared` (closed-graph rule; see `check_shared_field` in `src/semantics/analyzer/declarations/structs.rs`).
+2. **Layout** — `@shared` allocations are four bytes larger than the equivalent non-`@shared` class to hold a reentrant lock word past the last field (`HEADER_LOCK_WORD_SIZE` in `src/mir/abi.rs`; zero-initialized in `Rvalue::New` emission).
+3. **Backend RC** — retain/release codegen selects atomic helpers for `@shared` types only (`retain_call` / `emit_release_prologue_atomic` in `src/mir/emit/release.rs`).
+
+Never compare types by mangled name to detect sharing — always go through `TypeInterner::is_shared_type`.
+
 ## How to add a new type to the language
 
 Worked example: a 128-bit integer `i128`.

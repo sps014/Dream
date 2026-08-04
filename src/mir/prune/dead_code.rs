@@ -233,6 +233,12 @@ fn prune_dead_globals(mir: &mut Mir) {
             }
         }
     }
+    // `Global(0)` is always the synthetic `__closure_env` slot (`register_globals` registers it
+    // first, unconditionally, before any user global — see its doc comment). The unconditionally
+    // emitted `$__dream_worker_invoke` trampoline (`src/mir/emit/module.rs`) writes to it by literal
+    // id (`$g0`) even in a program with no closures at all, so it must never be pruned even though
+    // no *MIR function* reads or writes it in that case.
+    referenced.insert(Global(0));
     mir.globals.retain(|g| referenced.contains(&g.id));
 }
 
@@ -262,6 +268,9 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
         }
         Statement::Print { arg, .. } => collect_global_reads_operand(arg, out),
         Statement::ForceFree(o) => collect_global_reads_operand(o, out),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) => {
+            collect_global_reads_operand(o, out)
+        }
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }

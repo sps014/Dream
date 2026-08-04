@@ -23,6 +23,7 @@ mod assignments;
 mod bindings;
 mod case_switch;
 mod conditionals;
+mod lock;
 mod loops;
 
 impl<'a> Analyzer<'a> {

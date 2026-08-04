@@ -16,14 +16,21 @@ pub(super) fn runtime_prelude(debug: bool) -> String {
     };
     let mut out = RUNTIME_ALLOCATOR
         .replace(";;@DEBUG_ALLOC_COUNT@", malloc_count)
-        .replace(";;@DEBUG_FREE_COUNT@", free_count);
+        .replace(";;@DEBUG_FREE_COUNT@", free_count)
+        .replace(
+            "{ALLOC_LOCK_ADDR}",
+            &crate::mir::abi::ALLOC_LOCK_ADDR.to_string(),
+        )
+        .replace("{HEAP_PTR_ADDR}", &crate::mir::abi::HEAP_PTR_ADDR.to_string());
     out.push('\n');
     // The string runtime tags freshly allocated string blocks with the heap `TAG_STRING`. `$char_at`
     // itself no longer bounds-checks: callers emit a located check inline before calling it (see
     // `Emitter::emit_char_at`), so a string-index panic gets a precise file:line rather than the one
     // bare, unlocated message a truly shared runtime helper would be stuck with.
     out.push_str(
-        &RUNTIME_STRINGS.replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string()),
+        &RUNTIME_STRINGS
+            .replace("{TAG_STRING}", &crate::mir::abi::TAG_STRING.to_string())
+            .replace("{HEAP_PTR_ADDR}", &crate::mir::abi::HEAP_PTR_ADDR.to_string()),
     );
     out
 }

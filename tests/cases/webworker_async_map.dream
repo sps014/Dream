@@ -1,0 +1,15 @@
+// `WebWorker<TIn, TOut>.map` also accepts an async body (see `webworker_async_body.dream`): each
+// spawned worker drives its own body's awaits to completion independently before replying, so the
+// parallelism `map` promises still holds even when every worker's work involves a real await.
+async fun fetchLike(url: string): string {
+    await Time.sleep(1);
+    return "resp:" + url;
+}
+
+async fun main(): void {
+    let urls = ["a", "b", "c"];
+    let results = await WebWorker<string, string>.map(urls, fetchLike);
+    for (let r in results) {
+        System.println(r);
+    }
+}

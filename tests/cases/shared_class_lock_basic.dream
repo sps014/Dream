@@ -1,0 +1,58 @@
+// `@shared class` + `lock (obj) { ... }`: basic single-threaded sanity check (acquire, mutate,
+// release; reentrancy; and that `Lock`/`Semaphore` work as standalone primitives).
+
+@shared
+class Counter {
+    public value: int;
+
+    constructor() {
+        this.value = 0;
+    }
+
+    public fun increment(): void {
+        lock (this) {
+            this.value = this.value + 1;
+        }
+    }
+
+    public fun get(): int {
+        lock (this) {
+            return this.value;
+        }
+    }
+}
+
+fun reentrant(counter: Counter, depth: int): void {
+    lock (counter) {
+        if (depth > 0) {
+            reentrant(counter, depth - 1);
+        } else {
+            counter.value = counter.value + 100;
+        }
+    }
+}
+
+fun main(): void {
+    let c = Counter();
+    c.increment();
+    c.increment();
+    c.increment();
+    System.println(c.get());
+
+    reentrant(c, 3);
+    System.println(c.value);
+
+    let lock1 = Lock();
+    lock1.acquire();
+    lock1.acquire(); // reentrant
+    lock1.release();
+    lock1.release();
+    System.println("lock ok");
+
+    let sem = Semaphore(2);
+    sem.acquire();
+    sem.acquire();
+    sem.release();
+    sem.release();
+    System.println("semaphore ok");
+}

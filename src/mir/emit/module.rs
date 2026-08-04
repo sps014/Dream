@@ -119,6 +119,13 @@ pub fn emit_module_with_debug(
         );
     }
 
+    // The shared-memory import (below) must textually precede every non-import module field (WASM's
+    // fixed section order puts the whole import section first), but its page count is only known
+    // once the static-data/interface-dispatch layout below has been computed. Remember this
+    // position and splice the import in once that size is known, rather than reordering the many
+    // interdependent emission steps that follow.
+    let memory_import_pos = out.len();
+
     // `call_indirect` signature types (declared before use), plus the function table + its export.
     emit_func_signatures(&mut out, interner);
     emit_func_table(&mut out, mir);
@@ -136,13 +143,26 @@ pub fn emit_module_with_debug(
     let data_end = iface.heap_start;
     let heap_base = data_end + SHADOW_STACK_SIZE;
     let initial_pages = heap_base.div_ceil(WASM_PAGE_SIZE) + INITIAL_HEAP_PAGES;
-    let _ = writeln!(out, "(memory {})", initial_pages);
-    let _ = writeln!(
-        out,
-        "(global $heap_ptr (mut i32) (i32.const {}))",
-        heap_base
+    // Imported (not module-defined) and `shared`: a `wasmtime::SharedMemory`/JS `WebAssembly.Memory
+    // ({shared:true})` created by the host is handed to the owner instance and every subsequently
+    // spawned `WebWorker` instance of this same module, so linear memory is genuinely shared across
+    // threads rather than copied. The threads proposal requires a shared memory to declare a fixed
+    // maximum up front; `MAX_MEMORY_PAGES` is the wasm32 address-space ceiling, not a real cap on
+    // heap growth (the allocator's `memory.grow` bump path is otherwise unbounded). Spliced in at
+    // `memory_import_pos` (see above) so it textually precedes the func table/signatures already
+    // emitted, satisfying WASM's import-section-comes-first ordering.
+    out.insert_str(
+        memory_import_pos,
+        &format!(
+            "(import \"env\" \"memory\" (memory {} {} shared))\n",
+            initial_pages,
+            crate::mir::abi::MAX_MEMORY_PAGES
+        ),
     );
     out.push_str("(global $free_list_head (mut i32) (i32.const 0))\n");
+    // Per-instance (per-thread) cache of this thread's id — see `runtime/sync.wat`'s `$__thread_id`
+    // and `THREAD_ID_COUNTER_ADDR`'s doc comment in `src/mir/abi.rs`.
+    out.push_str("(global $__tid (mut i32) (i32.const 0))\n");
     // Shadow-stack pointer for inline value (`struct`) locals; grows down from the heap base toward
     // the static data (its region floor).
     let _ = writeln!(out, "(global $__sp (mut i32) (i32.const {}))", heap_base);
@@ -176,6 +196,11 @@ pub fn emit_module_with_debug(
     out.push_str(RUNTIME_WEAK);
     out.push('\n');
     out.push_str(RUNTIME_CLOSURE);
+    out.push('\n');
+    out.push_str(&RUNTIME_SYNC.replace(
+        "{THREAD_ID_COUNTER_ADDR}",
+        &crate::mir::abi::THREAD_ID_COUNTER_ADDR.to_string(),
+    ));
     out.push('\n');
     if crate::mir::async_emit::module_has_async(&mir.functions) {
         out.push_str(&crate::mir::async_emit::async_runtime_wat());
@@ -267,20 +292,82 @@ pub fn emit_module_with_debug(
         out.push('\n');
     }
 
-    // Worker-thread trampoline: given a `fun(string): string` body funcref index and a message
-    // string pointer, perform one indirect call and return the reply pointer. Emitted for every
-    // module (it only depends on the always-present `$__ft` table) so a freshly instantiated worker
+    // Worker-thread trampoline: given a `fun(string): string` body's funcref index, its closure
+    // environment word (0 for a non-capturing body; an `@shared`-object pointer or a by-value
+    // `__Cell`/`object[]` env for a capturing one — see `analyze_lambda`'s `WebWorker` capture
+    // check), and a message string pointer, publish the env to `$g0` (the synthetic
+    // `__closure_env` global every module registers first — see `register_globals` — so a
+    // capturing callee's own prologue reads the right environment on whichever thread invokes it)
+    // then perform one indirect call and return the reply pointer. Emitted for every module (it
+    // only depends on the always-present `$__ft` table and `$g0`) so a freshly instantiated worker
     // of the same module can be driven from the host (see `src/stdlib/core/webworker.dream`).
+    //
+    // A body's funcref index may name an `async fun`'s *constructor* rather than an ordinary
+    // function (the analyzer allows this specifically for a `WebWorker`/`.map`/`.dispatch` body
+    // argument — see `Analyzer::is_webworker_body_call`); calling it synchronously here would hand
+    // back a raw `Future` frame pointer where the caller expects the real reply value. Every heap
+    // allocation carries a tag except a `Future` frame (`dream_new_future` mallocs with tag `0`,
+    // a value never used by any real Dream type — see `abi::TAG_*`), so that is the exact, cheap
+    // signal to distinguish the two cases: an untagged, non-null result means the call_indirect hit
+    // an async constructor, so drive it to completion (`$dream_run_loop` — sound only because every
+    // native host `async` op resolves synchronously before returning, so one drain pass always
+    // finishes the task; see `docs/language/webworkers.md`'s async-body section for why this does
+    // *not* hold for the browser `Worker` backend) and unwrap its settled `Future.result` in place
+    // of the constructor's own return value. An ordinary (non-async) body's result is already
+    // tagged (`string`, at minimum) and passes straight through untouched.
     out.push_str("(type $__worker_sig (func (param i32) (result i32)))\n");
+    // `$g0` (the synthetic `__closure_env` global — see `register_globals`) only exists in modules
+    // that went through the full front-end; a handful of backend unit tests assemble a minimal
+    // `Mir` directly (skipping `register_globals` entirely) and have no globals at all, so guard
+    // the env-publishing write on it actually being present rather than assuming it unconditionally.
+    let has_closure_env = mir.globals.iter().any(|g| g.id.0 == 0);
+    // `$dream_run_loop` (and hence a `Future`'s `F_RESULT` slot) only exists once the async runtime
+    // is spliced in (see above) — a module with no `async fun` at all (so no `WebWorker` body could
+    // possibly be one) never needs the drive-to-completion check.
+    let has_async_runtime = crate::mir::async_emit::module_has_async(&mir.functions);
+    let publish_env = if has_closure_env {
+        " local.get $env\n global.set $g0\n"
+    } else {
+        ""
+    };
+    // The raw call: publish the closure env (if any) then one `call_indirect`. Exported as-is for
+    // the browser driver (see `EXPORT_WORKER_INVOKE_RAW`'s doc comment); wrapped below with the
+    // drive-to-completion check for the native driver.
     let _ = writeln!(
         out,
-        "(func $__dream_worker_invoke (param $fn i32) (param $arg i32) (result i32)\n local.get $arg\n local.get $fn\n call_indirect $__ft (type $__worker_sig))"
+        "(func $__dream_worker_invoke_raw (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n{publish_env} local.get $arg\n local.get $fn\n call_indirect $__ft (type $__worker_sig))"
     );
-
-    // Run global initializers before any entry point.
-    if has_init {
-        let _ = writeln!(out, "(start ${})", crate::mir::lower::INIT_FN_NAME);
+    if has_async_runtime {
+        let _ = writeln!(
+            out,
+            "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n (local $r i32)\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw\n local.set $r\n local.get $r\n i32.const 0\n i32.ne\n local.get $r\n call $object_tag\n i32.eqz\n i32.and\n (if\n  (then\n   call $dream_run_loop\n   local.get $r\n   i32.load offset={}\n   local.set $r\n  )\n )\n local.get $r)",
+            crate::mir::async_emit::F_RESULT,
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "(func $__dream_worker_invoke (param $fn i32) (param $env i32) (param $arg i32) (result i32)\n local.get $fn\n local.get $env\n local.get $arg\n call $__dream_worker_invoke_raw)"
+        );
     }
+
+    // Every instantiation of this module (the owner, and every `WebWorker` spawned afterward) runs
+    // `(start)` against the *same* shared linear memory. The bump-pointer heap high-water mark
+    // (`HEAP_PTR_ADDR`) must therefore be initialized exactly once across all of them, not reset to
+    // `heap_base` on every instantiation (that would let a later instance re-bump-allocate over an
+    // earlier instance's live objects). An atomic compare-exchange from 0 makes this init race-safe:
+    // whichever instance's `$__runtime_init` runs first wins the exchange, every later one is a no-op.
+    let _ = writeln!(out, "(func $__runtime_init");
+    let _ = writeln!(
+        out,
+        "  i32.const {}\n  i32.const 0\n  i32.const {}\n  i32.atomic.rmw.cmpxchg\n  drop",
+        crate::mir::abi::HEAP_PTR_ADDR,
+        heap_base
+    );
+    if has_init {
+        let _ = writeln!(out, "  call ${}", crate::mir::lower::INIT_FN_NAME);
+    }
+    out.push_str(")\n");
+    out.push_str("(start $__runtime_init)\n");
 
     // Host-facing exports: memory and the allocator (so a JS runtime can build heap values).
     use crate::mir::abi;
@@ -291,6 +378,11 @@ pub fn emit_module_with_debug(
         out,
         "(export \"{}\" (func $__dream_worker_invoke))",
         abi::EXPORT_WORKER_INVOKE
+    );
+    let _ = writeln!(
+        out,
+        "(export \"{}\" (func $__dream_worker_invoke_raw))",
+        abi::EXPORT_WORKER_INVOKE_RAW
     );
     if crate::mir::async_emit::module_has_async(&mir.functions) {
         let _ = writeln!(

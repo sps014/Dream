@@ -282,6 +282,7 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
         }
         Statement::Print { arg, .. } => operand_reads(arg, f),
         Statement::ForceFree(o) => operand_reads(o, f),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) => operand_reads(o, f),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }

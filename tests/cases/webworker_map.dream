@@ -1,0 +1,15 @@
+// `WebWorker.map` fans a `body` out over `items`, one worker per element, computed in parallel,
+// and collects the results back in input order.
+
+fun square(x: string): string {
+    let n = int.parse(x).unwrap_or(0);
+    return (n * n).to_string();
+}
+
+async fun main(): void {
+    let items = ["1", "2", "3", "4", "5"];
+    let results = await WebWorker<string, string>.map(items, square);
+    for (let r in results) {
+        System.println(r);
+    }
+}

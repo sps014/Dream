@@ -37,7 +37,43 @@
     i32.sub
 )
 
+;; Acquires the cross-thread allocator spinlock at `ALLOC_LOCK_ADDR` ({ALLOC_LOCK_ADDR}): every
+;; instance of this module (the owner + every `WebWorker`) shares the same linear memory, so
+;; `$malloc`/`$free`'s free-list/bump-pointer logic must be mutually exclusive across threads, not
+;; just within one instance. `i32.atomic.rmw.cmpxchg` only succeeds (returns the expected value 0)
+;; for the one thread that flips the lock 0->1; every other thread's exchange fails (returns 1) and
+;; spins.
+(func $__alloc_lock_acquire
+    (loop $acquire
+        i32.const {ALLOC_LOCK_ADDR}
+        i32.const 0
+        i32.const 1
+        i32.atomic.rmw.cmpxchg
+        i32.const 0
+        i32.ne
+        br_if $acquire
+    )
+)
+
+(func $__alloc_lock_release
+    i32.const {ALLOC_LOCK_ADDR}
+    i32.const 0
+    i32.atomic.store
+)
+
 (func $malloc (param $size i32) (param $tag i32) (result i32)
+    (local $result i32)
+    call $__alloc_lock_acquire
+    local.get $size
+    local.get $tag
+    call $__malloc_locked
+    local.set $result
+    call $__alloc_lock_release
+    local.get $result
+)
+
+;; Body of `$malloc`, executed only while `$__alloc_lock_acquire` is held.
+(func $__malloc_locked (param $size i32) (param $tag i32) (result i32)
     (local $idx i32)
     (local $alloc_size i32)
     (local $head_addr i32)
@@ -158,7 +194,8 @@
     i32.eqz
     (if
         (then
-            global.get $heap_ptr
+            i32.const {HEAP_PTR_ADDR}
+            i32.atomic.load
             local.set $block
             ;; new bump pointer after this block
             local.get $block
@@ -190,8 +227,9 @@
                 i32.eq
                 (if (then unreachable))
             )
+            i32.const {HEAP_PTR_ADDR}
             local.get $new_heap
-            global.set $heap_ptr
+            i32.atomic.store
             local.get $block
             local.get $alloc_size
             i32.store
@@ -215,6 +253,17 @@
 )
 
 (func $free (param $ptr i32)
+    local.get $ptr
+    i32.eqz
+    br_if 0
+    call $__alloc_lock_acquire
+    local.get $ptr
+    call $__free_locked
+    call $__alloc_lock_release
+)
+
+;; Body of `$free`, executed only while `$__alloc_lock_acquire` is held.
+(func $__free_locked (param $ptr i32)
     (local $block_start i32)
     (local $idx i32)
     (local $head_addr i32)

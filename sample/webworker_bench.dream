@@ -38,10 +38,10 @@ async fun main(): void {
 
     // --- Parallel: N workers, each runs heavy() once, all at the same time. ---
     let par_start = Time.nano_time();
-    let workers = Buffer.alloc<WebWorker>(tasks);
+    let workers = Buffer.alloc<WebWorker<string, string>>(tasks);
     let s = 0;
     while (s < tasks) {
-        workers[s] = WebWorker(heavy);
+        workers[s] = WebWorker<string, string>(heavy);
         workers[s].post("par");   // fire off the work; does not block
         s = s + 1;
     }

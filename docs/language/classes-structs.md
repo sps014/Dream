@@ -126,6 +126,41 @@ extend Token { public fun describe(): string { return "token"; } }
 
 `sealed` combines with `public` in either order (`public sealed class ...`). It only blocks user `extend` blocks — a sealed type may still implement interfaces (including their defaults) and derive `@json`.
 
+## Advanced: `@shared` classes
+
+Prefix a `class` with `@shared` to make it safe to pass by reference across [`WebWorker`](webworkers.md) threads. A `@shared` class pays two costs, and only when opted in:
+
+- **Atomic refcounting.** Retain/release use atomic instructions instead of the ordinary fast path, since a `@shared` instance's refcount can be touched from more than one thread.
+- **An extra header word** reserved for a reentrant lock, used by [`lock (obj) { ... }`](webworkers.md#sharing-state-safely) and the instance's own implicit locking.
+
+```dream
+@shared
+class Counter {
+    public value: int;
+    constructor() { this.value = 0; }
+
+    public fun increment(): void {
+        lock (this) {
+            this.value = this.value + 1;
+        }
+    }
+}
+```
+
+**The closed-graph field rule:** every field of a `@shared class` must itself be either unmanaged (a primitive or a value `struct` with no reference fields) or another `@shared class` instance. This is enforced at compile time so there is no way to reach an unprotected, ordinary managed reference by following fields from a `@shared` object — every reachable piece of its state is either safe to copy or independently `@shared`.
+
+```dream
+class Plain { public x: int; }
+
+@shared
+class Bad {
+    // error: field 'p' of type 'Plain' is not unmanaged or '@shared'
+    public p: Plain;
+}
+```
+
+`@shared struct` is rejected outright — a lock plus atomic-refcount header on a value type would defeat the point of a zero-allocation value type. Wrap the value in a `@shared class` instead if it needs to cross threads.
+
 ## Advanced: boxing a struct
 
 When a struct is used where a reference is expected, it is **boxed** into a heap copy. A nullable struct (`Vec2?`) stores a nullable pointer to a boxed value — so `null` is representable and `??` unboxes it back to an inline struct — and assigning a struct to a bare interface or `object` variable boxes it for dynamic dispatch.

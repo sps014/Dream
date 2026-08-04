@@ -35,6 +35,13 @@ impl<'a> Analyzer<'a> {
             if struct_decl.is_ref_struct {
                 self.type_ctx.interner.mark_ref_struct_def(def);
             }
+            if struct_decl
+                .attributes
+                .iter()
+                .any(|a| a.name.text == "shared")
+            {
+                self.type_ctx.interner.mark_shared_def(def);
+            }
             if struct_decl.generic_parameters.is_some() {
                 // A generic class may implement a (generic or non-generic) interface; the
                 // `implements` clause is validated per monomorphization in `ensure_struct_instantiated`.
@@ -88,6 +95,27 @@ impl<'a> Analyzer<'a> {
             }
         }
 
+        // `@shared class` closed-graph rule: every field must be safe to access from another
+        // thread without going through this class's own lock — either unmanaged/value-typed
+        // (copied, no shared heap pointer) or itself another `@shared` type (guarded by its own
+        // lock). Run once every non-generic class's `is_shared`/fields are registered above, so a
+        // field referencing another `@shared` class declared later in the same file still resolves.
+        for struct_decl in node.structs.iter() {
+            if struct_decl.generic_parameters.is_some() {
+                continue;
+            }
+            if !struct_decl
+                .attributes
+                .iter()
+                .any(|a| a.name.text == "shared")
+            {
+                continue;
+            }
+            for field in &struct_decl.fields {
+                self.check_shared_field(&struct_decl.name.text, field, diagnostics);
+            }
+        }
+
         // `weak`/`unowned` field validation and the whole-program class reference-cycle check run
         // last, once every non-generic class's fields are in `self.struct_table` (needed to
         // classify a field's target as a value struct vs. a class).
@@ -103,6 +131,44 @@ impl<'a> Analyzer<'a> {
                 self.reject_ref_struct_field(&struct_decl.name.text, field, diagnostics);
             }
         }
+    }
+
+    /// Reports an error unless `field`'s type is safe to store in an `@shared class`: unmanaged
+    /// (blittable, copied by value — a primitive or a value `struct` with no reference fields) or
+    /// itself another `@shared` type (guarded by its own embedded lock). A plain (non-`@shared`)
+    /// class/array/string field would let a second thread reach mutable, unlocked heap state
+    /// through this field without going through *any* lock.
+    fn check_shared_field(
+        &mut self,
+        owner_name: &str,
+        field: &StructFieldNode,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if self.type_satisfies_kind(
+            &field.field_type,
+            crate::syntax::nodes::ConstraintKind::Unmanaged,
+        ) {
+            return;
+        }
+        let field_type_name = field.field_type.get_type();
+        if let Some(def) = self
+            .type_ctx
+            .defs
+            .lookup(DefKind::Struct, field_type_name.as_str())
+        {
+            if self.type_ctx.interner.is_shared_def(def) {
+                return;
+            }
+        }
+        diagnostics.report_error(
+            format!(
+                "field '{}' of '@shared class {}' has type '{}', which is neither unmanaged nor itself '@shared': an '@shared class' may only hold unmanaged/value fields or references to other '@shared' types",
+                field.name.text,
+                owner_name,
+                field_type_name
+            ),
+            Some(field.name.position),
+        );
     }
 
     /// Reports an error if `field`'s type is a `ref struct` — such a type cannot be stored as a
@@ -263,6 +329,8 @@ impl<'a> Analyzer<'a> {
             Some(template) => *template,
             None => return,
         };
+        self.generic_struct_instances
+            .push((base_name.to_string(), args.to_vec()));
 
         let params = template.generic_parameters.as_deref().unwrap_or(&[]);
         Self::check_generic_arity(

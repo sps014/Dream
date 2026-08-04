@@ -27,6 +27,18 @@ pub(super) fn release_call(interner: &TypeInterner, layouts: &LayoutTable, ty: T
     }
 }
 
+/// The retain symbol for a reference value of `ty`: `@shared class` instances (may be captured
+/// into another `WebWorker` thread and retained/released concurrently — see `lock`/point 4 in the
+/// shared-memory-WebWorkers plan) go through `$retain_shared` (atomic RMW increment); every other
+/// reference type keeps the plain, non-atomic `$retain` fast path.
+pub(super) fn retain_call(interner: &TypeInterner, ty: TypeId) -> &'static str {
+    if interner.is_shared_type(ty) {
+        "$retain_shared"
+    } else {
+        "$retain"
+    }
+}
+
 /// Emits the null check + refcount decrement shared by every per-type release, opening the
 /// `if (new_count == 0) (then` block that the caller fills with the deep-release + `$free`. Uses only
 /// the `$rc`/`$nc` locals, which every release function declares. Matches `$release_generic`'s ABI
@@ -36,6 +48,19 @@ pub(super) fn emit_release_prologue(out: &mut String) {
     out.push_str("  (local.get $ptr) (i32.const 4) (i32.sub) (local.set $rc)\n");
     out.push_str("  (local.get $rc) (i32.load) (i32.const 1) (i32.sub) (local.set $nc)\n");
     out.push_str("  (local.get $rc) (local.get $nc) (i32.store)\n");
+    out.push_str("  (local.get $nc) (i32.eqz) (if (then\n");
+}
+
+/// Like [`emit_release_prologue`], but for an `@shared class`'s generated `$release_<Type>`: the
+/// refcount decrement is an atomic RMW (`i32.atomic.rmw.sub`, which returns the *old* value, hence
+/// subtracting 1 from it here) since another thread may concurrently retain/release the same
+/// instance through a captured reference.
+pub(super) fn emit_release_prologue_atomic(out: &mut String) {
+    out.push_str("  (local.get $ptr) (i32.eqz) (if (then (return)))\n");
+    out.push_str("  (local.get $ptr) (i32.const 4) (i32.sub) (local.set $rc)\n");
+    out.push_str(
+        "  (local.get $rc) (i32.const 1) (i32.atomic.rmw.sub) (i32.const 1) (i32.sub) (local.set $nc)\n",
+    );
     out.push_str("  (local.get $nc) (i32.eqz) (if (then\n");
 }
 
@@ -179,11 +204,15 @@ pub(super) fn emit_release_funcs(
         fn_names.contains(sym.as_str()).then_some(sym)
     };
 
-    for layout in mir.layouts.structs.values() {
+    for (ty, layout) in &mir.layouts.structs {
         let del = del_of(&layout.name);
         let _ = writeln!(out, "(func $release_{} (param $ptr i32)", layout.name);
         out.push_str("  (local $rc i32) (local $nc i32) (local $__wbox i32)\n");
-        emit_release_prologue(out);
+        if interner.is_shared_type(*ty) {
+            emit_release_prologue_atomic(out);
+        } else {
+            emit_release_prologue(out);
+        }
         emit_del_call(out, del.as_deref());
         // `weak`/`unowned` fields never held a strong reference, so they are excluded from the
         // generic reference-field release loop (which would otherwise wrongly decrement/deep-release

@@ -35,9 +35,10 @@ impl MirPass for Dse {
                         if rvalue_touches_memory(rv) {
                             pending.clear();
                         }
-                        // Overwriting a base/global local invalidates pending stores keyed on it.
+                        // Overwriting a base/index local invalidates every pending store keyed on
+                        // it (see `PKey::depends_on`).
                         if let Place::Local(l) = place {
-                            pending.retain(|k, _| k.base_local() != Some(*l));
+                            pending.retain(|k, _| !k.depends_on(*l));
                         }
                         match place_key(place) {
                             Some(key) => {
@@ -62,6 +63,12 @@ impl MirPass for Dse {
                     | Statement::Retain(_)
                     | Statement::Release(_)
                     | Statement::ForceFree(_)
+                    // A lock acquire/release is a cross-thread synchronization point: any store
+                    // pending before it must be visible to another thread that may observe this
+                    // object once the lock changes hands, so it is a barrier like every other
+                    // memory-observing statement.
+                    | Statement::LockAcquire(_)
+                    | Statement::LockRelease(_)
                     | Statement::Panic(_) => pending.clear(),
                     // A debug line-hook is an observable host call: it must see every prior store, so
                     // it forgets all pending (still-eliminable) stores.
@@ -96,12 +103,17 @@ enum PKey {
 }
 
 impl PKey {
-    /// The base local this key is anchored on (if any), for invalidation when that local is
-    /// reassigned.
-    fn base_local(&self) -> Option<Local> {
+    /// Every local this key's identity depends on, for invalidation when one of them is
+    /// reassigned: the base array/object for every variant, plus (for `IndexLocal`) the index
+    /// local itself — a pending `arr[i] = ...` no longer provably aliases a later `arr[i] = ...`
+    /// once `i` has been reassigned in between (e.g. a fully-unrolled loop's `i = i + 1`
+    /// re-using one induction-variable local across every copy of the body), since the two
+    /// stores' `i` reads may now observe different values despite sharing the same local.
+    fn depends_on(&self, l: Local) -> bool {
         match self {
-            PKey::Field(b, _) | PKey::IndexConst(b, _) | PKey::IndexLocal(b, _) => Some(*b),
-            PKey::Global(_) => None,
+            PKey::Field(b, _) | PKey::IndexConst(b, _) => *b == l,
+            PKey::IndexLocal(b, idx) => *b == l || *idx == l,
+            PKey::Global(_) => false,
         }
     }
 }

@@ -366,7 +366,8 @@ impl<'a> Analyzer<'a> {
         // `expressions::lambda`'s own `__lambda_<n>` names), so this cannot collide.
         let _ = self.function_table.add_function(name.clone(), info);
         self.type_ctx.register(DefKind::Function, &name, vec![]);
-        self.pending_lambdas.insert(name.clone(), func_ref);
+        self.pending_lambdas
+            .insert(name.clone(), (func_ref, self.current_generic_bindings.clone()));
         self.closure_captures
             .insert(name.clone(), vec![(recv_name, receiver_ty.clone())]);
 

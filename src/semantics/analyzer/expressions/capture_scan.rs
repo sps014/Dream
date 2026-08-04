@@ -111,6 +111,10 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_stmts_for_ref_targets(body, out);
             walk_expr_for_ref_targets(cond, out);
         }
+        StatementNode::Lock(target, body) => {
+            walk_expr_for_ref_targets(target, out);
+            walk_stmts_for_ref_targets(body, out);
+        }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
                 walk_stmt_for_ref_targets(i, out);
@@ -272,6 +276,10 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
         StatementNode::DoWhile(body, cond) => {
             walk_stmts_for_lambdas(body, out);
             walk_expr_for_lambdas(cond, out);
+        }
+        StatementNode::Lock(target, body) => {
+            walk_expr_for_lambdas(target, out);
+            walk_stmts_for_lambdas(body, out);
         }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
@@ -436,7 +444,10 @@ fn collect_names_stmt(
             collect_names_expr(e, bound, referenced);
             bound.insert(name.text.clone());
         }
-        StatementNode::FunctionInvocation(_, _, args) => {
+        // Same note as the `ExpressionNode::FunctionCall` arm below: the callee may be a captured
+        // `fun(...)`-typed local invoked as a bare statement (its result discarded).
+        StatementNode::FunctionInvocation(name, _, args) => {
+            referenced.insert(name.text.clone());
             for a in args {
                 collect_names_expr(a, bound, referenced);
             }
@@ -467,6 +478,10 @@ fn collect_names_stmt(
         StatementNode::DoWhile(body, cond) => {
             collect_names_stmts(body, bound, referenced);
             collect_names_expr(cond, bound, referenced);
+        }
+        StatementNode::Lock(target, body) => {
+            collect_names_expr(target, bound, referenced);
+            collect_names_stmts(body, bound, referenced);
         }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
@@ -533,7 +548,10 @@ fn collect_names_expr(
         }
         ExpressionNode::Unary(_, e) => collect_names_expr(e, bound, referenced),
         ExpressionNode::Parenthesized(e) => collect_names_expr(e, bound, referenced),
-        ExpressionNode::FunctionCall(_, _, args) => {
+        // See the identical note in `walk_expr_for_lambdas`: the callee may be a captured
+        // `fun(...)`-typed local, so its name must be a candidate free name too.
+        ExpressionNode::FunctionCall(name, _, args) => {
+            referenced.insert(name.text.clone());
             for a in args {
                 collect_names_expr(a, bound, referenced);
             }

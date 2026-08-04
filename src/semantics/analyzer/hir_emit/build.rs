@@ -252,7 +252,31 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(move |m| (m, method_fn(&e.target.text, &m.name.text)))
         });
-        for (func, sym_name) in top.chain(class_methods).chain(extend_methods) {
+        // A generic class's `extern`/`@intrinsic` methods (e.g. `WebWorker<TIn, TOut>.__spawn`) are
+        // duplicated per instantiation under a mangled `{Type_args}_{method}` name absent from
+        // `node.structs` (which only ever holds the unmangled template) — walk
+        // `generic_struct_instances` (recorded by `ensure_struct_instantiated`) for those instead.
+        let generic_instance_methods: Vec<(&crate::syntax::nodes::FunctionNode, String)> = self
+            .generic_struct_instances
+            .iter()
+            .filter_map(|(base, args)| {
+                let template = *self.generic_structs.get(base.as_str())?;
+                let mangled = crate::syntax::nodes::types::mangle_generic(base, args);
+                Some(
+                    template
+                        .methods
+                        .iter()
+                        .map(move |m| (m, method_fn(&mangled, &m.name.text)))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .flatten()
+            .collect();
+        for (func, sym_name) in top
+            .chain(class_methods)
+            .chain(extend_methods)
+            .chain(generic_instance_methods)
+        {
             if !func.is_extern || crate::intrinsics::has_intrinsic_attr(&func.attributes) {
                 continue;
             }
@@ -322,6 +346,22 @@ impl<'a> Analyzer<'a> {
             for m in e.methods.iter() {
                 if let Some(key) = crate::intrinsics::intrinsic_key(&m.attributes) {
                     let mangled = method_fn(&e.target.text, &m.name.text);
+                    if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled) {
+                        out.push((def, key));
+                    }
+                }
+            }
+        }
+        // See the matching comment in `hir_build_imports`: a generic class's `@intrinsic` methods
+        // need one binding per monomorphization, under its mangled name, not the template's.
+        for (base, args) in self.generic_struct_instances.iter() {
+            let Some(template) = self.generic_structs.get(base.as_str()) else {
+                continue;
+            };
+            let mangled_struct = crate::syntax::nodes::types::mangle_generic(base, args);
+            for m in template.methods.iter() {
+                if let Some(key) = crate::intrinsics::intrinsic_key(&m.attributes) {
+                    let mangled = method_fn(&mangled_struct, &m.name.text);
                     if let Some(def) = self.type_ctx.defs.lookup(DefKind::Function, &mangled) {
                         out.push((def, key));
                     }

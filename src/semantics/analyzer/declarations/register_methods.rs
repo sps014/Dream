@@ -65,10 +65,6 @@ impl<'a> Analyzer<'a> {
                 generic_param_names(&method.generic_parameters),
             );
 
-            if method.generic_parameters.is_some() {
-                self.generic_functions.insert(mangled_name.clone(), method);
-            }
-
             let mut new_method = method.clone();
             new_method.name = synthetic_token(TokenKind::IdentifierToken, &mangled_name);
 
@@ -81,6 +77,17 @@ impl<'a> Analyzer<'a> {
                 new_method
                     .parameters
                     .insert(0, Self::make_this_param(target_type_str));
+            }
+
+            // Stash the *renamed* clone (`{Type}_{method}`), not the raw declaration: its own
+            // later deferred-body analysis uses this same node as `parent_function`, and
+            // `in_methods_of`'s static-method check matches on the `{base}_` name prefix to grant
+            // the method access to its own class's private members — the unrenamed original's bare
+            // method name (e.g. `idx`, not `Helper_idx`) would never match that prefix.
+            if method.generic_parameters.is_some() {
+                let renamed_template: &'a FunctionNode<'a> = self.arena.alloc(new_method.clone());
+                self.generic_functions
+                    .insert(mangled_name.clone(), renamed_template);
             }
 
             let param_types: Vec<String> = new_method

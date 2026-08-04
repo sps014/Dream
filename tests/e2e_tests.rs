@@ -95,14 +95,18 @@ fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
     // frame per node through both the struct's and its `Option` wrapper's release function, so the
     // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up to match
     // the production runner (`execution::wasm_runner::execute_wasm`).
-    let mut config = Config::new();
-    config.max_wasm_stack(16 * 1024 * 1024);
-    config.async_stack_size(20 * 1024 * 1024);
+    let config = dream::execution::host::threaded_wasm_config();
     let engine = Engine::new(&config).expect("Failed to create engine");
     let module = Module::new(&engine, &wasm_bytes).expect("Failed to create module");
+    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
+        .expect("module should import env.memory");
+    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
 
     let mut store = Store::new(&engine, ());
     let mut linker = Linker::new(&engine);
+    linker
+        .define(&mut store, "env", "memory", shared_mem.clone())
+        .expect("Failed to define shared memory");
 
     // 4. Setup Host Functions
     let env = TestEnv::new();
@@ -146,8 +150,12 @@ fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
             "env",
             "print_string",
             move |mut caller: Caller<'_, ()>, ptr: i32| {
-                let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
-                let s = read_string_from_memory(&memory, &caller, ptr);
+                let memory = caller
+                    .get_export("memory")
+                    .unwrap()
+                    .into_shared_memory()
+                    .unwrap();
+                let s = read_string_from_memory(&memory, ptr);
                 env_clone.print(&s);
             },
         )

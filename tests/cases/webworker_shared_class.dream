@@ -1,0 +1,40 @@
+// `WebWorker` body may capture an `@shared class` instance directly (no wrapper/handle): the
+// worker thread mutates it through the same `lock`/atomic-refcount machinery as any other thread.
+
+@shared
+class Counter {
+    public value: int;
+
+    constructor() {
+        this.value = 0;
+    }
+
+    public fun increment(): void {
+        lock (this) {
+            this.value = this.value + 1;
+        }
+    }
+}
+
+async fun main(): void {
+    let counter = Counter();
+
+    let a = WebWorker<string, string>((msg) => {
+        lock (counter) {
+            counter.value = counter.value + 1;
+        }
+        return msg;
+    });
+    let b = WebWorker<string, string>((msg) => {
+        counter.increment();
+        return msg;
+    });
+
+    await a.send("go");
+    await b.send("go");
+
+    System.println(counter.value);
+
+    a.terminate();
+    b.terminate();
+}

@@ -1,0 +1,1 @@
+cannot capture 'counter' of type 'Counter' in a `WebWorker` body: only '@shared class' instances and unmanaged (blittable) values can safely cross into another thread — mark its type '@shared' or avoid capturing it

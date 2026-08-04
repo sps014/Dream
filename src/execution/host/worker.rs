@@ -2,11 +2,14 @@
 //! `src/stdlib/core/webworker.dream`).
 //!
 //! Each worker runs on its own OS thread with a fresh wasmtime `Store` + `Instance` of the *same*
-//! module, so it has a completely separate linear memory - nothing is shared. Messages cross the
-//! boundary as copied UTF-8 strings over `std::sync::mpsc` channels. The worker thread drives the
-//! message loop from Rust: for each inbound message it writes the string into the worker instance's
-//! memory and calls the exported `__dream_worker_invoke` trampoline (one `call_indirect` on the
-//! `fun(string): string` body), then ships the reply string back.
+//! module, importing the *same* `SharedMemory` as the owner (see `set_worker_runtime`) - so linear
+//! memory (and anything allocated in it, including `@shared class` objects) is genuinely shared,
+//! even though each instance still has its own private globals/stack. Messages cross the boundary
+//! as copied UTF-8 strings over `std::sync::mpsc` channels; a capturing body's environment word
+//! (see `workerSpawn`) crosses once at spawn time and is reused for every message. The worker
+//! thread drives the message loop from Rust: for each inbound message it writes the string into
+//! the worker instance's memory and calls the exported `__dream_worker_invoke` trampoline (one
+//! `call_indirect` on the `fun(string): string` body), then ships the reply string back.
 //!
 //! The owner side mirrors the async-future bridge used by `http.rs`: `workerRecv` blocks on the
 //! reply channel and pre-resolves a host `Future`, so `await w.receive()` works under wasmtime
@@ -55,10 +58,15 @@ fn worker_debug() -> Option<Arc<dyn WorkerDebug>> {
 const TAG_STRING: i32 = abi::TAG_STRING;
 const LEN_PREFIX: i32 = abi::LEN_PREFIX_SIZE as i32;
 
-/// A unit of work sent from the owner to a worker thread.
+/// A unit of work sent from the owner to a worker thread: which `fun(string): string` body to
+/// run (its function-table index plus closure environment word) and the message to run it with.
+/// Carried per-job (not fixed once at spawn) so the same worker thread can be reused across
+/// different bodies — see [`WebWorkerPool`](self)'s dispatch path, which supplies a fresh
+/// `(fn_idx, env)` on every call; a plain [`WorkerHandle::fn_idx`]/`env` pair fills this in
+/// automatically for an ordinary single-body `WebWorker`'s `post`/`send`.
 enum Job {
-    /// Run the body on this message.
-    Message(String),
+    /// Run the body at `(fn_idx, env)` on `msg`.
+    Message(i32, i32, String),
     /// Shut the worker thread down.
     Terminate,
 }
@@ -69,6 +77,12 @@ struct WorkerHandle {
     /// Wrapped so `workerRecv` can block on the reply without holding the registry lock (keeping
     /// different workers' receives independent, hence genuinely parallel).
     from_worker: Arc<Mutex<Receiver<String>>>,
+    /// This worker's fixed body, reused by `workerPost`/`workerRecv` for an ordinary `WebWorker`
+    /// (spawned via `workerSpawn`). A pool worker (spawned via `workerPoolSpawn`, body-less) has
+    /// no fixed body — `(0, 0)` here is never read, since pool dispatch always supplies its own
+    /// `(fn_idx, env)` explicitly per call instead of going through `workerPost`/`workerRecv`.
+    fn_idx: i32,
+    env: i32,
 }
 
 /// Process-wide registry of live workers, keyed by a globally unique id.
@@ -85,6 +99,12 @@ thread_local! {
     /// on module identity. `set_worker_module` is called on the main/host thread before running,
     /// and re-established on each worker thread so nested spawns work.
     static WASM_BYTES: std::cell::RefCell<Option<Arc<Vec<u8>>>> = const { std::cell::RefCell::new(None) };
+    /// The `(Engine, SharedMemory)` pair every worker spawned from this host thread must reuse, set
+    /// alongside `WASM_BYTES` by `set_worker_runtime`. Unlike the module bytes (immutable content,
+    /// safe to independently re-derive per thread), the memory must be the literal same shared
+    /// object across every instance for sharing to mean anything, so it is threaded explicitly
+    /// through `workerSpawn` -> `worker_thread` rather than each thread creating its own.
+    static SHARED_RUNTIME: std::cell::RefCell<Option<(Engine, SharedMemory)>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Records the module bytes the current host thread's workers should instantiate. Call once before
@@ -94,8 +114,19 @@ pub fn set_worker_module(bytes: &[u8]) {
     WASM_BYTES.with(|c| *c.borrow_mut() = Some(arc));
 }
 
+/// Records the `Engine` + `SharedMemory` every worker spawned from this host thread must import, so
+/// linear memory is genuinely shared with the owner instance rather than a private copy per worker.
+/// Call once, alongside `set_worker_module`, before running a module that may spawn workers.
+pub fn set_worker_runtime(engine: Engine, memory: SharedMemory) {
+    SHARED_RUNTIME.with(|c| *c.borrow_mut() = Some((engine, memory)));
+}
+
 fn module_bytes() -> Option<Arc<Vec<u8>>> {
     WASM_BYTES.with(|c| c.borrow().clone())
+}
+
+fn worker_runtime() -> Option<(Engine, SharedMemory)> {
+    SHARED_RUNTIME.with(|c| c.borrow().clone())
 }
 
 /// Calls an exported `(i32, i32) -> ()` function on the caller module by name (used for
@@ -133,7 +164,7 @@ fn resolve_host_future_string(caller: &mut Caller<'_, ()>, s: &str) -> Result<i3
 fn store_write_string(
     store: &mut Store<()>,
     malloc: &TypedFunc<(i32, i32), i32>,
-    memory: &Memory,
+    memory: &SharedMemory,
     s: &str,
 ) -> Option<i32> {
     let bytes = s.as_bytes();
@@ -141,7 +172,7 @@ fn store_write_string(
         .call(&mut *store, (LEN_PREFIX + bytes.len() as i32, TAG_STRING))
         .ok()?;
     let base = ptr as usize;
-    let data = memory.data_mut(&mut *store);
+    let data = super::memory::shared_bytes_mut(memory);
     if base + LEN_PREFIX as usize + bytes.len() > data.len() {
         return None;
     }
@@ -151,19 +182,24 @@ fn store_write_string(
     Some(ptr)
 }
 
-/// The worker thread body: instantiate a fresh copy of the module and run the message loop, calling
-/// the `fun(string): string` body (funcref `fn_idx`) once per inbound message. Exits (dropping
-/// `reply_tx`, which unblocks any pending owner `recv`) on `Terminate`, channel close, or any
-/// instantiation failure.
+/// The worker thread body: instantiate a fresh copy of the module and run the message loop,
+/// calling each job's own `(fn_idx, env)` body on its message — an ordinary `WebWorker`'s jobs all
+/// carry the same fixed pair (attached by `workerPost`/`send`); a pooled worker's jobs carry a
+/// fresh pair per dispatch (attached by `workerPoolDispatch`), so the same thread runs a different
+/// body every call with no respawn cost. Exits (dropping `reply_tx`, which unblocks any pending
+/// owner `recv`) on `Terminate`, channel close, or any instantiation failure.
 fn worker_thread(
     bytes: Arc<Vec<u8>>,
-    fn_idx: i32,
+    engine: Engine,
+    shared_mem: SharedMemory,
     job_rx: Receiver<Job>,
     reply_tx: Sender<String>,
     dap_tid: Option<u32>,
 ) {
-    // Re-establish the module bytes on this thread so a worker can itself spawn sub-workers.
+    // Re-establish the module bytes + shared runtime on this thread so a worker can itself spawn
+    // sub-workers (which must import the exact same `SharedMemory`, not a fresh one).
     WASM_BYTES.with(|c| *c.borrow_mut() = Some(bytes.clone()));
+    SHARED_RUNTIME.with(|c| *c.borrow_mut() = Some((engine.clone(), shared_mem.clone())));
 
     // Announce thread exit to the debugger on every return path from this point on.
     struct ExitGuard(Option<u32>);
@@ -176,20 +212,18 @@ fn worker_thread(
     }
     let _exit_guard = ExitGuard(dap_tid);
 
-    // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
-    // recursive `Option<T>`-boxed data structures.
-    let mut config = Config::new();
-    config.max_wasm_stack(16 * 1024 * 1024);
-    config.async_stack_size(20 * 1024 * 1024);
-    let Ok(engine) = Engine::new(&config) else {
-        return;
-    };
     let Ok(module) = Module::new(&engine, &bytes[..]) else {
         return;
     };
     let mut store = Store::new(&engine, ());
     let mut linker: Linker<()> = Linker::new(&engine);
     build_worker_linker(&mut linker, dap_tid);
+    if linker
+        .define(&mut store, "env", "memory", shared_mem.clone())
+        .is_err()
+    {
+        return;
+    }
     if linker.define_unknown_imports_as_traps(&module).is_err() {
         return;
     }
@@ -197,7 +231,7 @@ fn worker_thread(
         return;
     };
     let Ok(invoke) =
-        instance.get_typed_func::<(i32, i32), i32>(&mut store, abi::EXPORT_WORKER_INVOKE)
+        instance.get_typed_func::<(i32, i32, i32), i32>(&mut store, abi::EXPORT_WORKER_INVOKE)
     else {
         return;
     };
@@ -205,20 +239,13 @@ fn worker_thread(
     else {
         return;
     };
-    let Some(memory) = instance
-        .get_export(&mut store, abi::EXPORT_MEMORY)
-        .and_then(Extern::into_memory)
-    else {
-        return;
-    };
-
     while let Ok(job) = job_rx.recv() {
         match job {
             Job::Terminate => break,
-            Job::Message(msg) => {
-                let reply = match store_write_string(&mut store, &malloc, &memory, &msg) {
-                    Some(ptr) => match invoke.call(&mut store, (fn_idx, ptr)) {
-                        Ok(reply_ptr) => read_string_from_memory(&memory, &store, reply_ptr),
+            Job::Message(fn_idx, env, msg) => {
+                let reply = match store_write_string(&mut store, &malloc, &shared_mem, &msg) {
+                    Some(ptr) => match invoke.call(&mut store, (fn_idx, env, ptr)) {
+                        Ok(reply_ptr) => read_string_from_memory(&shared_mem, reply_ptr),
                         Err(_) => String::new(),
                     },
                     None => String::new(),
@@ -265,9 +292,9 @@ fn link_plain_print(linker: &mut Linker<()>) {
         |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
             let memory = caller
                 .get_export(abi::EXPORT_MEMORY)
-                .and_then(Extern::into_memory)
+                .and_then(Extern::into_shared_memory)
                 .ok_or_else(|| Error::msg("module must export `memory`"))?;
-            print!("{}", read_string_from_memory(&memory, &caller, ptr));
+            print!("{}", read_string_from_memory(&memory, ptr));
             Ok(())
         },
     );
@@ -281,51 +308,77 @@ fn link_noop_debug_hooks(linker: &mut Linker<()>) {
     let _ = linker.func_wrap("dream_debug", "line", |_file: i32, _line: i32| {});
 }
 
+/// Starts a fresh worker thread and registers it, returning its host id. Shared by `workerSpawn`
+/// (an ordinary `WebWorker`, always dispatched with its own fixed `fn_idx`/`env`) and
+/// `workerPoolSpawn` (a [`WebWorkerPool`](self) member, spawned with `(0, 0)` — never read, since
+/// pool dispatch always supplies its own `(fn_idx, env)` explicitly per call via
+/// `workerPoolDispatch` rather than `workerPost`/`workerRecv`).
+fn spawn_worker_thread(fn_idx: i32, env: i32) -> Result<i32> {
+    let bytes = module_bytes().ok_or_else(|| Error::msg("worker module bytes not initialized"))?;
+    let (engine, shared_mem) =
+        worker_runtime().ok_or_else(|| Error::msg("worker shared runtime not initialized"))?;
+    let (job_tx, job_rx) = channel::<Job>();
+    let (reply_tx, reply_rx) = channel::<String>();
+    let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+    // If a debugger is attached, surface this worker as its own DAP thread and thread its id
+    // through to the worker's instance so its debug hooks report against the right thread.
+    let dbg = worker_debug();
+    let dap_tid = dbg.as_ref().map(|d| d.dap_thread_id(id));
+    if let (Some(d), Some(tid)) = (&dbg, dap_tid) {
+        d.on_start(tid);
+    }
+    std::thread::spawn(move || worker_thread(bytes, engine, shared_mem, job_rx, reply_tx, dap_tid));
+    workers().lock().unwrap().insert(
+        id,
+        WorkerHandle {
+            to_worker: job_tx,
+            from_worker: Arc::new(Mutex::new(reply_rx)),
+            fn_idx,
+            env,
+        },
+    );
+    Ok(id as i32)
+}
+
 /// Registers the `WebWorker` host functions on `linker` (the owner side). Safe to call on both the
 /// top-level runner's linker and each worker instance's linker (for nested spawns).
 pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
-    // workerSpawn(body_funcref) -> id: start a thread running a fresh instance of the module.
+    // workerSpawn(body_funcref, env) -> id: start a thread running a fresh instance of the module.
+    // `env` is the body's closure environment word (0 for a non-capturing body; see
+    // `__dream_worker_invoke`'s doc comment in `src/mir/emit/module.rs`), reused for every message
+    // this worker ever processes — the body closure is fixed at spawn time, not re-sent per message.
     linker.func_wrap(
         "Dream",
         "workerSpawn",
-        |_caller: Caller<'_, ()>, fn_idx: i32| -> Result<i32> {
-            let bytes =
-                module_bytes().ok_or_else(|| Error::msg("worker module bytes not initialized"))?;
-            let (job_tx, job_rx) = channel::<Job>();
-            let (reply_tx, reply_rx) = channel::<String>();
-            let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-            // If a debugger is attached, surface this worker as its own DAP thread and thread its id
-            // through to the worker's instance so its debug hooks report against the right thread.
-            let dbg = worker_debug();
-            let dap_tid = dbg.as_ref().map(|d| d.dap_thread_id(id));
-            if let (Some(d), Some(tid)) = (&dbg, dap_tid) {
-                d.on_start(tid);
-            }
-            std::thread::spawn(move || worker_thread(bytes, fn_idx, job_rx, reply_tx, dap_tid));
-            workers().lock().unwrap().insert(
-                id,
-                WorkerHandle {
-                    to_worker: job_tx,
-                    from_worker: Arc::new(Mutex::new(reply_rx)),
-                },
-            );
-            Ok(id as i32)
+        |_caller: Caller<'_, ()>, fn_idx: i32, env: i32| -> Result<i32> {
+            spawn_worker_thread(fn_idx, env)
         },
     )?;
 
-    // workerPost(id, msg): enqueue a message to the worker's inbox (non-blocking).
+    // workerPoolSpawn() -> id: start a body-less thread for a `WebWorkerPool` member. Every task
+    // it ever runs arrives via `workerPoolDispatch`'s own `(fn_idx, env)`, so no fixed body is
+    // needed at spawn time — that is exactly what lets the same thread be reused across different
+    // bodies without a respawn.
+    linker.func_wrap(
+        "Dream",
+        "workerPoolSpawn",
+        |_caller: Caller<'_, ()>| -> Result<i32> { spawn_worker_thread(0, 0) },
+    )?;
+
+    // workerPost(id, msg): enqueue a message to the worker's inbox (non-blocking), running its
+    // fixed spawn-time body.
     linker.func_wrap(
         "Dream",
         "workerPost",
         |mut caller: Caller<'_, ()>, id: i32, msg_ptr: i32| -> Result<()> {
             let msg = read_arg_string(&mut caller, msg_ptr)?;
-            let sender = workers()
+            let job_sender = workers()
                 .lock()
                 .unwrap()
                 .get(&(id as u32))
-                .map(|h| h.to_worker.clone());
-            if let Some(tx) = sender {
-                let _ = tx.send(Job::Message(msg));
+                .map(|h| (h.to_worker.clone(), h.fn_idx, h.env));
+            if let Some((tx, fn_idx, env)) = job_sender {
+                let _ = tx.send(Job::Message(fn_idx, env, msg));
             }
             Ok(())
         },
@@ -343,6 +396,34 @@ pub fn link_worker_functions(linker: &mut Linker<()>) -> Result<()> {
                 .map(|h| h.from_worker.clone());
             let reply = match receiver {
                 Some(rx) => {
+                    let guard = rx.lock().unwrap();
+                    guard.recv().unwrap_or_default()
+                }
+                None => String::new(),
+            };
+            resolve_host_future_string(&mut caller, &reply)
+        },
+    )?;
+
+    // workerPoolDispatch(id, fn_idx, env, msg) -> future: run the body at `(fn_idx, env)` on
+    // `msg` on the pool member `id`'s already-running thread, and await its reply — the
+    // post-then-immediately-receive pattern of `send`, but with an explicit per-call body instead
+    // of the target's fixed one. `id` is otherwise an ordinary worker id and could equally be
+    // dispatched at (used interchangeably with `workerPost`/`workerRecv` if ever useful), but
+    // `WebWorkerPool` only ever calls this on ids from `workerPoolSpawn`.
+    linker.func_wrap(
+        "Dream",
+        "workerPoolDispatch",
+        |mut caller: Caller<'_, ()>, id: i32, fn_idx: i32, env: i32, msg_ptr: i32| -> Result<i32> {
+            let msg = read_arg_string(&mut caller, msg_ptr)?;
+            let handle = workers()
+                .lock()
+                .unwrap()
+                .get(&(id as u32))
+                .map(|h| (h.to_worker.clone(), h.from_worker.clone()));
+            let reply = match handle {
+                Some((tx, rx)) => {
+                    let _ = tx.send(Job::Message(fn_idx, env, msg));
                     let guard = rx.lock().unwrap();
                     guard.recv().unwrap_or_default()
                 }

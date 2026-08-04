@@ -108,6 +108,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::IfToken => Ok(self.parse_if_else()?),
             TokenKind::WhileToken => Ok(self.parse_while()?),
             TokenKind::DoToken => Ok(self.parse_do_while()?),
+            TokenKind::LockToken => Ok(self.parse_lock()?),
             TokenKind::ForToken => Ok(self.parse_for()?),
             TokenKind::SwitchToken => Ok(self.parse_switch()?),
             TokenKind::BreakToken => Ok(self.parse_break()?),
@@ -240,6 +241,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::IfToken
             | TokenKind::WhileToken
             | TokenKind::DoToken
+            | TokenKind::LockToken
             | TokenKind::ReturnToken
             | TokenKind::SwitchToken
             | TokenKind::CurlyCloseBracketToken
@@ -268,6 +270,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::IfToken
                 | TokenKind::WhileToken
                 | TokenKind::DoToken
+                | TokenKind::LockToken
                 | TokenKind::ReturnToken
                 | TokenKind::SwitchToken
                 | TokenKind::CurlyCloseBracketToken => {
@@ -445,6 +448,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::CloseParenthesisToken);
         let body = self.parse_block()?;
         Ok(StatementNode::While(condition, body))
+    }
+    /// Parses `lock (target) { body }` — mutual exclusion on `target` (an `@shared class` instance
+    /// or `Lock`), reentrant per-thread. Same shape as `while`, minus the loop-back edge.
+    pub(super) fn parse_lock(&mut self) -> Result<StatementNode<'a>, Error> {
+        self.match_token(TokenKind::LockToken);
+        self.match_token(TokenKind::OpenParenthesisToken);
+        let target = self.parse_expression(0)?;
+        self.match_token(TokenKind::CloseParenthesisToken);
+        let body = self.parse_block()?;
+        Ok(StatementNode::Lock(target, body))
     }
     /// Parses a do-while loop: `do { body } while (condition);`.
     pub(super) fn parse_do_while(&mut self) -> Result<StatementNode<'a>, Error> {

@@ -1,0 +1,20 @@
+// `WebWorkerPool` keeps a fixed set of worker threads alive and dispatches tasks to them
+// round-robin, so repeated small jobs don't pay a spawn/teardown cost each time.
+
+fun square(x: string): string {
+    let n = int.parse(x).unwrap_or(0);
+    return (n * n).to_string();
+}
+
+async fun main(): void {
+    let pool = WebWorkerPool(2);
+    let a = pool.dispatch("3", square);
+    let b = pool.dispatch("4", square);
+    let c = pool.dispatch("5", square);
+    let d = pool.dispatch("6", square);
+    System.println(await a);
+    System.println(await b);
+    System.println(await c);
+    System.println(await d);
+    pool.shutdown();
+}

@@ -139,7 +139,8 @@ impl<'a> Analyzer<'a> {
             | StatementNode::Labeled(..)
             | StatementNode::FunctionInvocation(..)
             | StatementNode::MethodInvocation(..)
-            | StatementNode::AwaitStmt(..) => {}
+            | StatementNode::AwaitStmt(..)
+            | StatementNode::Lock(..) => {}
         }
         match statement {
             StatementNode::Declaration(left, type_annotation, right, is_const) => self
@@ -175,6 +176,14 @@ impl<'a> Analyzer<'a> {
             StatementNode::DoWhile(body, condition) => {
                 self.analyze_do_while(condition, body, parent_function, symbol_table, diagnostics)?
             }
+            StatementNode::Lock(target, body) => self.analyze_lock(
+                target,
+                body,
+                parent_function,
+                symbol_table,
+                has_parent_while,
+                diagnostics,
+            )?,
             StatementNode::For(init, condition, increment, body) => {
                 self.analyze_for(init, condition, increment, body, &ctx, diagnostics)?
             }

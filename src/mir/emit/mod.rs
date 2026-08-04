@@ -72,6 +72,11 @@ const RUNTIME_PANIC: &str = include_str!("../runtime/panic.wat");
 const RUNTIME_WEAK: &str = include_str!("../runtime/weak.wat");
 const RUNTIME_CLOSURE: &str = include_str!("../runtime/closure.wat");
 
+/// Cross-thread synchronization primitives (`$__thread_id`/`$__lock_acquire`/`$__lock_release`/
+/// `$retain_shared`) backing `@shared class`, `lock (obj) { ... }`, and `Lock`. `{THREAD_ID_COUNTER_ADDR}`
+/// is substituted in `module.rs` alongside the other fixed shared-memory address constants.
+const RUNTIME_SYNC: &str = include_str!("../runtime/sync.wat");
+
 /// String constants the `*_to_string` runtime references by address: `bool` renders to `"true"`/
 /// `"false"`; the `double` formatter prepends `"-"`. Interned into every module so the runtime is
 /// always self-contained, regardless of which literals the program itself uses.

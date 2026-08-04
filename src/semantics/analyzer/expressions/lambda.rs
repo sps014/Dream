@@ -170,6 +170,47 @@ impl<'a> Analyzer<'a> {
             ));
         }
 
+        // A lambda passed directly as `WebWorker(body)`'s argument runs on another OS thread that
+        // shares the same linear memory as the creating thread. A captured `@shared`-typed object is
+        // safe to hand across (atomic refcount + its own embedded lock); a captured unmanaged/value
+        // local is safe too, since its `__Cell` is written once by the creating thread before the
+        // worker ever reads it and never mutated afterward through that same box. An ordinary
+        // managed object reference would instead hand the worker a live pointer into memory the
+        // creating thread may keep mutating non-atomically — reject that here rather than let it
+        // silently race.
+        if self.is_webworker_body_call() {
+            if let Some((bad, bad_ty)) = captures.iter().find(|(_, ty)| {
+                let tid = self.type_ctx.lower(ty);
+                // A captured `fun(...)` value's own captures (if any) were already validated by
+                // this same check at the point *that* closure was built (whatever WebWorker body
+                // it was itself written as, or none if it is a non-capturing top-level function
+                // reference) - its closure box is a small immutable-after-creation heap cell that
+                // is safe to hand across threads regardless, so it is exempt here rather than
+                // needing its own `@shared`/unmanaged wrapper (used by the generic `WebWorker<TIn,
+                // TOut>`'s own internal wire-marshaling wrapper, which necessarily re-captures the
+                // caller's already-vetted `body`).
+                !matches!(ty, Type::Function(_, _))
+                    && !self.type_ctx.interner.is_shared_type(tid)
+                    && !self.type_satisfies_kind(ty, crate::syntax::nodes::ConstraintKind::Unmanaged)
+            }) {
+                self.hir_none();
+                let who = self
+                    .current_call_target_name
+                    .as_deref()
+                    .unwrap_or("WebWorker");
+                return Err(report(
+                    diagnostics,
+                    format!(
+                        "cannot capture '{}' of type '{}' in a `{}` body: only '@shared class' instances and unmanaged (blittable) values can safely cross into another thread — mark its type '@shared' or avoid capturing it",
+                        bad,
+                        bad_ty.get_type(),
+                        who
+                    ),
+                    Some(lambda.open_paren_position),
+                ));
+            }
+        }
+
         let body: &'a [StatementNode<'a>] = match &lambda.body {
             LambdaBody::Block(stmts) => stmts,
             LambdaBody::Expr(expr) => {
@@ -201,7 +242,8 @@ impl<'a> Analyzer<'a> {
         // collide with a user function or an earlier lambda.
         let _ = self.function_table.add_function(name.clone(), info);
         self.type_ctx.register(DefKind::Function, &name, vec![]);
-        self.pending_lambdas.insert(name.clone(), func_ref);
+        self.pending_lambdas
+            .insert(name.clone(), (func_ref, self.current_generic_bindings.clone()));
 
         let func_ty = Type::Function(param_types, Box::new(ret_type.clone()));
         match captures.len() {
@@ -243,5 +285,27 @@ impl<'a> Analyzer<'a> {
             }
         }
         Ok(func_ty)
+    }
+
+    /// True when the lambda/function-value being analyzed is a `WebWorker`/`WebWorker.map`/
+    /// `WebWorkerPool.dispatch` body argument — see `current_call_target_name` set by the
+    /// call-argument analysis paths. `WebWorker<TIn, TOut>.map(...)` dispatches through the
+    /// *generic*-class static-call path (`try_analyze_static_method`'s `generic_structs` branch in
+    /// `static_dispatch/mod.rs`), which monomorphizes the receiver to its mangled name
+    /// (`WebWorker_string_string`) before `plain.rs` sets the call target from *that* — so the
+    /// receiver half is matched by its unmangled prefix (mangling only ever appends `_{arg}...`),
+    /// not by exact string.
+    pub(in crate::semantics::analyzer) fn is_webworker_body_call(&self) -> bool {
+        match self.current_call_target_name.as_deref() {
+            Some("WebWorker") => true,
+            Some(name) => match name.split_once('.') {
+                Some((recv, "map")) => {
+                    recv == "WebWorker" || recv.starts_with("WebWorker_")
+                }
+                Some((recv, "dispatch")) => recv == "WebWorkerPool",
+                _ => false,
+            },
+            None => false,
+        }
     }
 }

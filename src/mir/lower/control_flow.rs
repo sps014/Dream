@@ -48,6 +48,7 @@ impl Lowerer<'_> {
             break_blk: after_blk,
             continue_blk: cond_blk,
             label: label.map(str::to_string),
+            lock_depth: self.locks.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -71,6 +72,7 @@ impl Lowerer<'_> {
             break_blk: after_blk,
             continue_blk: cond_blk,
             label: label.map(str::to_string),
+            lock_depth: self.locks.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -117,6 +119,7 @@ impl Lowerer<'_> {
             break_blk: after_blk,
             continue_blk: step_blk,
             label: label.map(str::to_string),
+            lock_depth: self.locks.len(),
         });
         self.b.switch_to(body_blk);
         self.lower_block(body);
@@ -181,6 +184,7 @@ impl Lowerer<'_> {
             break_blk: after_blk,
             continue_blk: step_blk,
             label: label.map(str::to_string),
+            lock_depth: self.locks.len(),
         });
         self.b.switch_to(body_blk);
         let elem_local = self.mir_local(elem);
@@ -212,18 +216,24 @@ impl Lowerer<'_> {
     }
 
     pub(super) fn lower_break(&mut self, label: Option<&str>) {
-        if let Some(target) = self.loop_target(label, true) {
+        if let Some((target, lock_depth)) = self.loop_target(label, true) {
+            self.release_locks_above(lock_depth);
             self.b.terminate(Terminator::Goto(target));
         }
     }
 
     pub(super) fn lower_continue(&mut self, label: Option<&str>) {
-        if let Some(target) = self.loop_target(label, false) {
+        if let Some((target, lock_depth)) = self.loop_target(label, false) {
+            self.release_locks_above(lock_depth);
             self.b.terminate(Terminator::Goto(target));
         }
     }
 
-    fn loop_target(&self, label: Option<&str>, is_break: bool) -> Option<super::super::BlockId> {
+    fn loop_target(
+        &self,
+        label: Option<&str>,
+        is_break: bool,
+    ) -> Option<(super::super::BlockId, usize)> {
         let ctx = match label {
             Some(l) => self
                 .loops
@@ -232,10 +242,53 @@ impl Lowerer<'_> {
                 .find(|c| c.label.as_deref() == Some(l)),
             None => self.loops.last(),
         }?;
-        Some(if is_break {
+        let blk = if is_break {
             ctx.break_blk
         } else {
             ctx.continue_blk
-        })
+        };
+        Some((blk, ctx.lock_depth))
+    }
+
+    /// `lock (target) { body }`: evaluates `target` exactly once into a fresh temp (so a
+    /// `break`/`continue`/`return` out of `body` can release the same instance without
+    /// re-evaluating `target`, which may have side effects), acquires its embedded lock word,
+    /// lowers `body`, then releases on the normal fallthrough exit. `break`/`continue`/`return`
+    /// release it (and any other lock entered inside `body`) on their own paths — see
+    /// [`Self::release_locks_above`]/[`Self::release_all_locks`]. The temp's *declared* type (a
+    /// `@shared class`) is what lets the backend find the target's lock-word offset
+    /// (`obj_ptr + layout.size`, computed from the layout table at emission — see
+    /// `Emitter::emit_stmt`'s `Statement::LockAcquire`/`LockRelease` arms) without needing the
+    /// layout table here during HIR->MIR lowering.
+    pub(super) fn lower_lock(&mut self, target: &HExpr, body: &[HStmt]) {
+        let target_op = self.lower_operand(target);
+        let ptr = self.b.new_temp(target.ty);
+        self.b.assign(Place::Local(ptr), Rvalue::Use(target_op));
+        self.b
+            .push(Statement::LockAcquire(Operand::Copy(Place::Local(ptr))));
+        self.locks.push(ptr);
+        self.lower_block(body);
+        self.locks.pop();
+        if !self.b.is_terminated() {
+            self.b
+                .push(Statement::LockRelease(Operand::Copy(Place::Local(ptr))));
+        }
+    }
+
+    /// Releases every lock in `self.locks` above `depth`, innermost (most recently acquired) first —
+    /// used when a `break`/`continue` jumps out past one or more `lock` blocks nested inside the
+    /// loop it targets, but leaves any lock already held before the loop was entered untouched.
+    fn release_locks_above(&mut self, depth: usize) {
+        for i in (depth..self.locks.len()).rev() {
+            let addr = self.locks[i];
+            self.b
+                .push(Statement::LockRelease(Operand::Copy(Place::Local(addr))));
+        }
+    }
+
+    /// Releases every currently-held lock, innermost first — used at `return`, which unwinds every
+    /// `lock` scope on its way out of the function.
+    pub(super) fn release_all_locks(&mut self) {
+        self.release_locks_above(0);
     }
 }

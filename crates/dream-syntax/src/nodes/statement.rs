@@ -67,4 +67,7 @@ pub enum StatementNode<'a> {
         Vec<(Vec<ExpressionNode<'a>>, &'a [StatementNode<'a>])>,
         Option<&'a [StatementNode<'a>]>,
     ),
+    /// `lock (target) { body }` — mutual exclusion on `target` (must be `@shared class`-typed, or
+    /// `Lock`), reentrant per-thread. See `docs/language` webworkers/concurrency notes.
+    Lock(ExpressionNode<'a>, &'a [StatementNode<'a>]),
 }

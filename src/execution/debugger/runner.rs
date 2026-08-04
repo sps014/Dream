@@ -77,12 +77,12 @@ fn run_program(
     crate::execution::host::set_worker_module(&wasm_bytes);
 
     // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
-    // recursive `Option<T>`-boxed data structures.
-    let mut config = Config::new();
-    config.max_wasm_stack(16 * 1024 * 1024);
-    config.async_stack_size(20 * 1024 * 1024);
+    // recursive `Option<T>`-boxed data structures, and for the shared-memory (WASM threads) config.
+    let config = crate::execution::host::threaded_wasm_config();
     let engine = Engine::new(&config)?;
     let module = Module::new(&engine, &wasm_bytes)?;
+    let shared_mem = crate::execution::host::shared_memory_for(&engine, &module)?;
+    crate::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
     let mut store = Store::new(&engine, ());
     let mut linker: Linker<()> = Linker::new(&engine);
 
@@ -90,6 +90,7 @@ fn run_program(
     link_debug_print_functions(&mut linker, writer)?;
     link_runtime_host_functions(&mut linker)?;
     link_debug_hooks(&mut linker, shared, source_map, writer, MAIN_THREAD)?;
+    linker.define(&mut store, "env", "memory", shared_mem.clone())?;
     linker.define_unknown_imports_as_traps(&module)?;
 
     let instance = linker.instantiate(&mut store, &module)?;
@@ -335,7 +336,7 @@ fn link_debug_hooks(
 pub(super) fn read_caller_string(caller: &mut Caller<'_, ()>, ptr: i32) -> Result<String> {
     let memory = caller
         .get_export("memory")
-        .and_then(Extern::into_memory)
+        .and_then(Extern::into_shared_memory)
         .ok_or_else(|| Error::msg("module must export `memory`"))?;
-    Ok(read_string_from_memory(&memory, &*caller, ptr))
+    Ok(read_string_from_memory(&memory, ptr))
 }

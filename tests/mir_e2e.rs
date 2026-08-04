@@ -63,13 +63,17 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
     set_worker_module(&wasm);
     // See `execution::wasm_runner::execute_wasm` for why the default wasm stack is undersized for
     // recursive `Option<T>`-boxed data structures.
-    let mut config = Config::new();
-    config.max_wasm_stack(16 * 1024 * 1024);
-    config.async_stack_size(20 * 1024 * 1024);
+    let config = dream::execution::host::threaded_wasm_config();
     let engine = Engine::new(&config).map_err(|e| format!("engine: {e:#}"))?;
     let module = Module::new(&engine, &wasm).map_err(|e| format!("module: {e:#}"))?;
+    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)
+        .map_err(|e| format!("shared memory: {e:#}"))?;
+    dream::execution::host::set_worker_runtime(engine.clone(), shared_mem.clone());
     let mut store = Store::new(&engine, ());
     let mut linker = Linker::new(&engine);
+    linker
+        .define(&mut store, "env", "memory", shared_mem.clone())
+        .map_err(|e| format!("define shared memory: {e:#}"))?;
     let env = TestEnv::new();
 
     let e = env.clone();
@@ -98,8 +102,12 @@ fn compile_and_run_mir(dream_file: &Path) -> Result<String, String> {
             "env",
             "print_string",
             move |mut caller: Caller<'_, ()>, ptr: i32| {
-                let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
-                let s = read_string_from_memory(&memory, &caller, ptr);
+                let memory = caller
+                    .get_export("memory")
+                    .unwrap()
+                    .into_shared_memory()
+                    .unwrap();
+                let s = read_string_from_memory(&memory, ptr);
                 e.print(&s);
             },
         )

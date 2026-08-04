@@ -82,6 +82,11 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
         Feature::TailCall,
         Feature::ExtendedConst,
         Feature::Memory64,
+        // Linear memory is always emitted `shared` (`src/mir/emit/module.rs`) so every `WebWorker`
+        // instance can import the same `wasmtime::SharedMemory` — Binaryen needs the threads
+        // proposal ("Atomics" in its feature naming) enabled just to parse/validate that, even
+        // before any atomic instruction is actually emitted (Phase 2+).
+        Feature::Atomics,
     ]);
 
     options

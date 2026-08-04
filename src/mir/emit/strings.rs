@@ -214,6 +214,7 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
         }
         Statement::Print { arg, .. } => strings_in_operand(arg, out),
         Statement::ForceFree(o) => strings_in_operand(o, out),
+        Statement::LockAcquire(o) | Statement::LockRelease(o) => strings_in_operand(o, out),
         Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
     }
 }
@@ -327,6 +328,8 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::IndirectCall { .. }
         | Statement::Print { .. }
         | Statement::ForceFree(_)
+        | Statement::LockAcquire(_)
+        | Statement::LockRelease(_)
         | Statement::Nop
         | Statement::DebugLine(_)
         | Statement::SourceLine(_) => {}

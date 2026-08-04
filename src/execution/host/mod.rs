@@ -16,6 +16,7 @@ mod file;
 mod http;
 mod math;
 mod memory;
+mod shared_memory;
 mod worker;
 
 pub use console::{enable_ansi_support, link_console_functions};
@@ -23,8 +24,14 @@ pub use datetime::link_datetime_functions;
 pub use file::link_file_functions;
 pub use http::link_http_functions;
 pub use math::link_math_functions;
-pub use memory::{read_string_from_memory, write_bytes_to_memory, write_string_to_memory};
-pub use worker::{link_worker_functions, set_worker_debug, set_worker_module, WorkerDebug};
+pub use memory::{
+    read_string_from_memory, shared_bytes, shared_bytes_mut, write_bytes_to_memory,
+    write_string_to_memory,
+};
+pub use shared_memory::{shared_memory_for, threaded_wasm_config};
+pub use worker::{
+    link_worker_functions, set_worker_debug, set_worker_module, set_worker_runtime, WorkerDebug,
+};
 
 #[cfg(test)]
 mod contract_tests {

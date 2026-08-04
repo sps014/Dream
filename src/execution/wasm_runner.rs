@@ -1,7 +1,7 @@
 use super::host::{
     enable_ansi_support, link_console_functions, link_datetime_functions, link_file_functions,
     link_http_functions, link_math_functions, link_worker_functions, read_string_from_memory,
-    set_worker_module,
+    set_worker_module, set_worker_runtime, shared_memory_for, threaded_wasm_config,
 };
 use std::fs;
 use wasmtime::*;
@@ -18,17 +18,23 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
     // frame per node through both the struct's and its `Option` wrapper's release function, so the
     // default 512 KiB wasm stack undersizes for large-but-ordinary data structures; size up to match
-    // a typical native thread stack.
-    let mut config = Config::new();
-    config.max_wasm_stack(16 * 1024 * 1024);
-    config.async_stack_size(20 * 1024 * 1024);
+    // a typical native thread stack. `threaded_wasm_config` also enables the WASM threads proposal
+    // and `SharedMemory` creation, needed since the module imports its linear memory as `shared`.
+    let config = threaded_wasm_config();
     let engine = Engine::new(&config)?;
     let module = Module::new(&engine, &wasm_bytes)?;
+
+    // One `SharedMemory` for this whole run, imported by the owner instance below and by every
+    // `WebWorker` instance spawned afterward (`set_worker_runtime` hands the same engine + memory to
+    // `workerSpawn`) — linear memory is genuinely shared, not copied per instance.
+    let shared_mem = shared_memory_for(&engine, &module)?;
+    set_worker_runtime(engine.clone(), shared_mem.clone());
 
     let mut store = Store::new(&engine, ());
     let mut linker = Linker::new(&engine);
 
     link_host_functions(&mut linker)?;
+    linker.define(&mut store, "env", "memory", shared_mem.clone())?;
 
     // JS-interop externs (e.g. the `Dream` host module behind the dynamic `js` type/regex/fetch, or any
     // user `@js(...)` import) have no native implementation. Stub every still-unresolved import
@@ -97,9 +103,9 @@ pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
         |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
             let memory = caller
                 .get_export("memory")
-                .and_then(Extern::into_memory)
+                .and_then(Extern::into_shared_memory)
                 .ok_or_else(|| Error::msg("module must export `memory`"))?;
-            let s = read_string_from_memory(&memory, &caller, ptr);
+            let s = read_string_from_memory(&memory, ptr);
             print!("{}", s);
             Ok(())
         },
@@ -111,9 +117,9 @@ pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
         |mut caller: Caller<'_, ()>, ptr: i32| -> Result<()> {
             let memory = caller
                 .get_export("memory")
-                .and_then(Extern::into_memory)
+                .and_then(Extern::into_shared_memory)
                 .ok_or_else(|| Error::msg("module must export `memory`"))?;
-            let s = read_string_from_memory(&memory, &caller, ptr);
+            let s = read_string_from_memory(&memory, ptr);
             println!("{}", s);
             Ok(())
         },

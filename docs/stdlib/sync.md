@@ -1,0 +1,83 @@
+# Lock & Semaphore
+
+Standalone synchronization primitives for coordinating [`WebWorker`](../language/webworkers.md) threads over shared state. Both are `@shared class` themselves, so they can be captured directly by a `WebWorker` body like any other shared object — see [Sharing state safely](../language/webworkers.md#sharing-state-safely).
+
+Prefer the built-in `lock (obj) { ... }` statement directly on an `@shared class` instance when you can — it needs no separate `Lock` object and cannot be left unreleased. Reach for a standalone `Lock`/`Semaphore` when the critical section doesn't map to a single block (e.g. it spans a `WebWorker` closure boundary) or you need semaphore-style counting rather than mutual exclusion.
+
+## `Lock`
+
+A reentrant mutual-exclusion lock, equivalent to `lock (obj) { ... }` bracketed manually:
+
+```dream
+public class Lock {
+    public fun acquire(): void;   // blocks until available, then takes it
+    public fun release(): void;   // releases one level
+}
+```
+
+- **Reentrant**: the same thread may call `acquire()` again before releasing — it must call `release()` the same number of times to fully release it. A different thread blocks until the holder releases every level.
+- **Blocking**: `acquire()` busy-waits (parks the OS thread on a WASM atomic wait, not a spin loop) until the lock is free.
+
+```dream
+@shared
+class Account {
+    public balance: int;
+    constructor() { this.balance = 0; }
+}
+
+fun transfer(acct: Account, amount: int, mtx: Lock): void {
+    mtx.acquire();
+    acct.balance = acct.balance + amount;
+    mtx.release();
+}
+
+async fun main(): void {
+    let acct = Account();
+    let mtx = Lock();
+
+    let w1 = WebWorker<string, string>((_) => { transfer(acct, 10, mtx); return ""; });
+    let w2 = WebWorker<string, string>((_) => { transfer(acct, 5, mtx); return ""; });
+
+    await w1.send("");
+    await w2.send("");
+    System.println(acct.balance);   // 15
+}
+```
+
+!!! note
+    This is exactly what `lock (acct) { acct.balance = acct.balance + amount; }` gives you for free when the critical section is a single object and a single block — reach for a standalone `Lock` only when it isn't.
+
+## `Semaphore`
+
+A classic counting semaphore. `initial` permits are available up front; unlike `Lock`, a semaphore has no notion of ownership — any thread may `release()`, and the same thread may hold more than one permit at once:
+
+```dream
+public class Semaphore {
+    public constructor(initial: int);
+
+    public fun acquire(): void;   // blocks until a permit is available, then takes one
+    public fun release(): void;   // returns one permit
+}
+```
+
+Use it to cap concurrency — e.g. limiting how many workers touch a resource (a connection pool, a fixed-size buffer) at once:
+
+```dream
+async fun main(): void {
+    let gate = Semaphore(2);   // at most 2 concurrent holders
+
+    let w1 = WebWorker<string, string>((_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
+    let w2 = WebWorker<string, string>((_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
+    let w3 = WebWorker<string, string>((_) => { gate.acquire(); /* ... */ gate.release(); return ""; });
+
+    await w1.send("");
+    await w2.send("");
+    await w3.send("");
+}
+```
+
+## Notes and limits
+
+- Both `Lock` and `Semaphore` are `@shared class` instances and only provide cross-thread synchronization when worker instances genuinely share linear memory (native wasmtime, or browser with COOP/COEP — see [WebWorkers](../language/webworkers.md)).
+- `acquire()` busy-waits via a WASM atomic wait, not a spin loop burning CPU — but there is still no fairness guarantee (no FIFO ordering among waiters) and no timeout; a deadlocked pair of workers will wait forever.
+- `release()` on a `Lock` you don't hold, or on a `Semaphore` past its `initial` count, is undefined — these primitives trust the caller, the same way C#'s `Monitor`/`SemaphoreSlim` do.

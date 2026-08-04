@@ -9,7 +9,10 @@ use std::io::Error;
 /// are not valid in a generated WASM identifier; a generic instantiated with an array type
 /// argument (e.g. `Result<char[], string>`) would otherwise produce an unassemblable function
 /// name. This rewrite is purely on the mangled name and is applied uniformly to type identity and
-/// codegen, so the two never disagree.
+/// codegen, so the two never disagree. Any character still left over after that rewrite (e.g. a
+/// `fun(int): int` type argument's `(`, `)`, `:`, `,`, ` ` — a generic instantiated over a
+/// `fun(...)` type, such as `__Cell<fun(int): int>`, is otherwise legal) is replaced with `_` in a
+/// final sanitizing pass, so every mangled name stays a valid WASM/identifier token.
 pub fn mangle_with_suffixes<S: AsRef<str>>(
     base: &str,
     suffixes: impl IntoIterator<Item = S>,
@@ -17,7 +20,14 @@ pub fn mangle_with_suffixes<S: AsRef<str>>(
     let mut name = base.to_string();
     for suffix in suffixes {
         name.push('_');
-        name.push_str(&suffix.as_ref().replace("[]", "Array"));
+        let rewritten = suffix.as_ref().replace("[]", "Array");
+        name.extend(rewritten.chars().map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        }));
     }
     name
 }

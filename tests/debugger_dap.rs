@@ -348,7 +348,7 @@ const WORKER_PROGRAM: &str = r#"fun work(input: string): string {
 }
 
 async fun main(): void {
-    let w = WebWorker(work);
+    let w = WebWorker<string, string>(work);
     w.post("hello");
     let r = await w.receive();
     System.println(r);

@@ -186,13 +186,22 @@ impl Emitter<'_> {
                     )
                 });
                 if let Some((size, fields)) = info {
-                    self.line(&format!("     (i32.const {})", size));
+                    // `@shared class` instances carry one extra header-adjacent word right past the
+                    // last field (the reentrant lock word backing `lock (obj) { ... }` and atomic
+                    // retain/release — see `src/mir/abi.rs`'s shared-lock-word note). Reused heap
+                    // blocks are not zeroed, so it must be zeroed explicitly, same as any field.
+                    let is_shared = self.interner.is_shared_type(*ty);
+                    let alloc_size = if is_shared { size + 4 } else { size };
+                    self.line(&format!("     (i32.const {})", alloc_size));
                     self.line(&format!(
                         "     (i32.const {}) ;; tag",
                         self.type_tag(*ty, *def)
                     ));
                     self.line("     (call $malloc)");
                     self.line("     (local.set $__obj)");
+                    if is_shared {
+                        self.zero_at_obj(size, self.interner.int());
+                    }
                     if let Some(ctor) = ctor {
                         // A user `constructor(this, args...)` sets the fields itself. Reused heap
                         // blocks are not zeroed, so zero every field first (a constructor that leaves a
@@ -353,9 +362,11 @@ impl Emitter<'_> {
                 self.line("     (i32.load) ;; array length is the first word");
             }
             Rvalue::ToBytes { value, ty } => {
-                // Allocate a `byte[]` of `[len: i32][size bytes]` and raw-copy the value's inline
-                // bytes into the payload. `byte` elements are one byte, so the length word is the
-                // byte count.
+                // Allocate a `byte[]` of `[len: i32][size bytes]`. `byte` elements are one byte, so
+                // the length word is the byte count. A value-struct `T` is already addressed (never
+                // loaded), so its bytes are `memory.copy`'d from that address; a scalar `T` (int,
+                // double, bool, ...) is a raw WASM value on the stack with no address of its own, so
+                // it is written directly with the matching store instruction instead.
                 let size = self.value_size(*ty);
                 self.line(&format!("     (i32.const {}) ;; 4 + byte size", 4 + size));
                 self.line(&format!("     (i32.const {}) ;; array tag", ARRAY_TAG));
@@ -364,32 +375,50 @@ impl Emitter<'_> {
                 self.line("     (local.get $__obj)");
                 self.line(&format!("     (i32.const {})", size));
                 self.line("     (i32.store) ;; byte length");
-                // memory.copy(dst = obj+4, src = value address, size)
-                self.line("     (local.get $__obj)");
-                self.line("     (i32.const 4)");
-                self.line("     (i32.add)");
-                self.emit_operand(value);
-                self.line(&format!("     (i32.const {})", size));
-                self.line("     (memory.copy)");
+                if self.interner.is_value_type(*ty) {
+                    // memory.copy(dst = obj+4, src = value address, size)
+                    self.line("     (local.get $__obj)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.emit_operand_addr(value);
+                    self.line(&format!("     (i32.const {})", size));
+                    self.line("     (memory.copy)");
+                } else {
+                    self.line("     (local.get $__obj)");
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.emit_operand(value);
+                    self.line(&format!("     ({})", self.store_instr(*ty)));
+                }
                 self.line("     (local.get $__obj)");
             }
             Rvalue::FromBytes { bytes, ty } => {
-                // Allocate a fresh `T`-sized block (tagged as `T`) and raw-copy the buffer's payload
-                // (which starts after the 4-byte length prefix) into it.
+                // A scalar `T` (int, double, bool, ...) is reconstructed by loading it straight out
+                // of the buffer's payload (which starts after the 4-byte length prefix) - no
+                // allocation needed, since the result is a raw WASM value, not a heap reference. A
+                // value-struct `T` needs its own private storage (a value struct is always
+                // addressed), so it is copied into a fresh `T`-tagged block instead.
                 let size = self.value_size(*ty);
-                let tag = self.type_tag(*ty, crate::types::DefId(0));
-                self.line(&format!("     (i32.const {})", size));
-                self.line(&format!("     (i32.const {}) ;; tag", tag));
-                self.line("     (call $malloc)");
-                self.line("     (local.set $__obj)");
-                // memory.copy(dst = obj, src = bytes+4, size)
-                self.line("     (local.get $__obj)");
-                self.emit_operand(bytes);
-                self.line("     (i32.const 4)");
-                self.line("     (i32.add)");
-                self.line(&format!("     (i32.const {})", size));
-                self.line("     (memory.copy)");
-                self.line("     (local.get $__obj)");
+                if self.interner.is_value_type(*ty) {
+                    let tag = self.type_tag(*ty, crate::types::DefId(0));
+                    self.line(&format!("     (i32.const {})", size));
+                    self.line(&format!("     (i32.const {}) ;; tag", tag));
+                    self.line("     (call $malloc)");
+                    self.line("     (local.set $__obj)");
+                    // memory.copy(dst = obj, src = bytes+4, size)
+                    self.line("     (local.get $__obj)");
+                    self.emit_operand(bytes);
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line(&format!("     (i32.const {})", size));
+                    self.line("     (memory.copy)");
+                    self.line("     (local.get $__obj)");
+                } else {
+                    self.emit_operand(bytes);
+                    self.line("     (i32.const 4)");
+                    self.line("     (i32.add)");
+                    self.line(&format!("     ({})", self.load_instr(*ty)));
+                }
             }
             Rvalue::ArrayRealloc {
                 elem_ty,

@@ -169,6 +169,16 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
     },
     AttributeSpec {
+        name: "shared",
+        // `class` only: a `struct` is a value type (copied on assignment, no heap allocation), so
+        // an embedded lock word would defeat the point (`Shared<T>` is the value-type equivalent —
+        // see `src/stdlib/core/sync.dream`). Rejecting `@shared struct` here means the rest of the
+        // compiler never needs to reason about a value-typed shared class.
+        targets: &[AttributeTarget::Struct],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    AttributeSpec {
         name: "stack",
         // A checked contract, not a request: every monomorphized instance of a `@stack` union
         // must already qualify as a value union (all payloads value/primitive, or a single

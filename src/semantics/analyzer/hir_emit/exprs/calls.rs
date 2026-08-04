@@ -410,7 +410,22 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         };
-        let target = HExpr::new(ty, HExprKind::Var(Binding::Local(local)));
+        // A captured `fun(...)`-typed name (`self.hir.boxed`, see `hir_set_var`'s doc comment)
+        // reads through its `__Cell<T>` box's `.value` field: `ty` here is the *cell's* type, not
+        // the `fun(...)` shape `hir_set_indirect_call_expr` needs to pick the right
+        // `call_indirect` signature — dereference it exactly like a plain read would.
+        let target = if let Some(&elem_ty) = self.hir.boxed.get(name) {
+            let obj = HExpr::new(ty, HExprKind::Var(Binding::Local(local)));
+            HExpr::new(
+                elem_ty,
+                HExprKind::Field {
+                    obj: Box::new(obj),
+                    field: 0,
+                },
+            )
+        } else {
+            HExpr::new(ty, HExprKind::Var(Binding::Local(local)))
+        };
         self.hir_set_indirect_call_expr(target, args, ret);
     }
 

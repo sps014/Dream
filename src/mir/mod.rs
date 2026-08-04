@@ -196,6 +196,14 @@ pub enum Statement {
     /// allocator, bypassing reference counting. Modeled as a statement (not an `Rvalue`) since it
     /// has no result — `Buffer.free` is typed `void`.
     ForceFree(Operand),
+    /// Acquires the reentrant lock word at address `Operand` (an `i32`, `obj_ptr + layout.size` for
+    /// the `lock` statement's `@shared class` target — see `src/mir/abi.rs`'s `@shared class`
+    /// header-extension note). Emitted by `lower_lock`; released by a matching
+    /// [`Statement::LockRelease`] on every exit path out of the guarded body.
+    LockAcquire(Operand),
+    /// Releases one level of the reentrant lock word acquired by a matching
+    /// [`Statement::LockAcquire`].
+    LockRelease(Operand),
 }
 
 /// How a block transfers control. Every block ends in exactly one terminator.

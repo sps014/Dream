@@ -1,0 +1,17 @@
+// Capturing plain unmanaged/value locals (not an `@shared class`) into a `WebWorker` body is
+// allowed — it is safe to snapshot by value.
+
+async fun main(): void {
+    let scale = 3;
+    let offset = 3;
+
+    let w = WebWorker<string, string>((msg) => {
+        let result = scale + offset;
+        if (result == 6) {
+            return msg + "ok";
+        }
+        return msg + "bad";
+    });
+
+    System.println(await w.send("result="));
+}

@@ -40,14 +40,14 @@ fn unique_temp_path(name: &str, ext: &str) -> PathBuf {
 /// uses (`src/execution/wasm_runner.rs`) and calls `main`, so a module that merely "validates" but
 /// can't actually be loaded/executed under this project's runtime config still fails the test.
 fn run_wasm_binary(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-    let mut config = wasmtime::Config::new();
-    config.max_wasm_stack(16 * 1024 * 1024);
-    config.async_stack_size(20 * 1024 * 1024);
+    let config = dream::execution::host::threaded_wasm_config();
     let engine = wasmtime::Engine::new(&config)?;
     let module = wasmtime::Module::new(&engine, bytes)?;
+    let shared_mem = dream::execution::host::shared_memory_for(&engine, &module)?;
     let mut store = wasmtime::Store::new(&engine, ());
     let mut linker = wasmtime::Linker::new(&engine);
     link_host_functions(&mut linker)?;
+    linker.define(&mut store, "env", "memory", shared_mem.clone())?;
     linker.define_unknown_imports_as_traps(&module)?;
     let instance = linker.instantiate(&mut store, &module)?;
     if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, "main") {

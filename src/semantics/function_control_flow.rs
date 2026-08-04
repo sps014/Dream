@@ -118,6 +118,10 @@ impl<'a> FunctionControlGraph<'a> {
             StatementNode::Switch(_, cases, default) => {
                 self.visit_switch(cases, default, parent)?
             }
+            // `lock (target) { body }` runs `body` exactly once (unlike `if`/`switch`, it is not a
+            // set of alternative paths), so for return-coverage purposes it is transparent: fold
+            // its body straight into the current path.
+            StatementNode::Lock(_, body) => self.visit_block(body, parent)?,
             _ => {}
         };
         Ok(())

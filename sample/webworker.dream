@@ -23,15 +23,15 @@ fun work(input: string): string {
 
 async fun main(): void {
     // 1) Request/response on one worker.
-    let g = WebWorker(greet);
+    let g = WebWorker<string, string>(greet);
     System.println(await g.send("dream"));
     g.terminate();
 
     // 2) Fan work out to several workers that run concurrently: post to all first, then collect the
     //    replies. The three loops run in parallel on three threads.
-    let w1 = WebWorker(work);
-    let w2 = WebWorker(work);
-    let w3 = WebWorker(work);
+    let w1 = WebWorker<string, string>(work);
+    let w2 = WebWorker<string, string>(work);
+    let w3 = WebWorker<string, string>(work);
     w1.post("alpha");
     w2.post("beta");
     w3.post("gamma");

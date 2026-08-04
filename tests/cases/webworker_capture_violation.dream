@@ -1,0 +1,22 @@
+// Capturing an ordinary (non-`@shared`) managed object into a `WebWorker` body is a compile error:
+// it would hand the worker a live pointer into memory the creating thread may keep mutating
+// non-atomically.
+
+class Counter {
+    public value: int;
+
+    constructor() {
+        this.value = 0;
+    }
+}
+
+async fun main(): void {
+    let counter = Counter();
+
+    let w = WebWorker<string, string>((msg) => {
+        counter.value = counter.value + 1;
+        return msg;
+    });
+
+    await w.send("go");
+}

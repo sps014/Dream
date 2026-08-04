@@ -13,14 +13,14 @@ fun twice(msg: string): string {
 
 async fun main(): void {
     // Request/response on a single worker.
-    let w = WebWorker(shout);
+    let w = WebWorker<string, string>(shout);
     System.println(await w.send("hello"));
     System.println(await w.send("world"));
     w.terminate();
 
     // Two workers running concurrently: post to both, then collect the replies.
-    let a = WebWorker(shout);
-    let b = WebWorker(twice);
+    let a = WebWorker<string, string>(shout);
+    let b = WebWorker<string, string>(twice);
     a.post("A");
     b.post("B");
     System.println(await a.receive());

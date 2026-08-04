@@ -59,6 +59,10 @@ fn hir_stmt_edges(stmt: &crate::hir::HStmt, out: &mut HirEdges) {
             hir_expr_edges(cond, out);
             hir_body_edges(body, out);
         }
+        HStmt::Lock { target, body } => {
+            hir_expr_edges(target, out);
+            hir_body_edges(body, out);
+        }
         HStmt::For {
             init,
             cond,

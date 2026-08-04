@@ -132,6 +132,8 @@ pub enum TokenKind {
     WhileToken,
     #[token("do")]
     DoToken,
+    #[token("lock")]
+    LockToken,
     #[token("return")]
     ReturnToken,
     #[token("break")]
@@ -274,6 +276,7 @@ impl TokenKind {
             TokenKind::ForToken => "'for'",
             TokenKind::WhileToken => "'while'",
             TokenKind::DoToken => "'do'",
+            TokenKind::LockToken => "'lock'",
             TokenKind::ReturnToken => "'return'",
             TokenKind::BreakToken => "'break'",
             TokenKind::ContinueToken => "'continue'",

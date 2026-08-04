@@ -550,9 +550,17 @@ fn test_hir_emission_global_initializer_runs_in_start() {
         "missing init function:\n{}",
         wat
     );
+    // `$__dream_init` is itself invoked from `$__runtime_init`, which `(start)` actually wires up —
+    // the wrapper also atomically initializes the cross-thread shared-memory heap pointer once
+    // before running any user global initializer (see `emit/module.rs`).
     assert!(
-        wat.contains("(start $__dream_init)"),
-        "init must run at start:\n{}",
+        wat.contains("call $__dream_init"),
+        "init must be invoked from the runtime-init wrapper:\n{}",
+        wat
+    );
+    assert!(
+        wat.contains("(start $__runtime_init)"),
+        "runtime init wrapper must run at start:\n{}",
         wat
     );
     // `$g0` is the synthetic `__closure_env` global (see `register_globals`), registered before any

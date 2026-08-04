@@ -90,6 +90,7 @@ nav:
     - Strings: stdlib/string.md
     - Option & Result: stdlib/option-result.md
     - Collections (List & Map): stdlib/collections.md
+    - Lock & Semaphore: stdlib/sync.md
     - System & IO:
       - JSON: stdlib/json.md
       - File I/O: stdlib/file.md

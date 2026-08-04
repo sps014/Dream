@@ -324,7 +324,9 @@ fn emit_field_glue(
     if interner.is_reference(f.ty) {
         addr(out);
         match op {
-            GlueOp::Retain => out.push_str(" (i32.load) (call $retain)\n"),
+            GlueOp::Retain => {
+                let _ = writeln!(out, " (i32.load) (call {})", retain_call(interner, f.ty));
+            }
             GlueOp::Drop => {
                 let _ = writeln!(
                     out,

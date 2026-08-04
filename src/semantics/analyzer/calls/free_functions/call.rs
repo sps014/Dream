@@ -131,10 +131,40 @@ impl<'a> Analyzer<'a> {
                         .skip(1)
                         .collect()
                 })
+        } else if let Some(args) = generic_args.as_ref().filter(|a| !a.is_empty()) {
+            // A generic constructor call (`WebWorker<int, int>(body)`). The struct isn't
+            // instantiated yet at this point (that happens inside `analyze_constructor_call`,
+            // after arguments are analyzed below), so its constructor's parameter types are looked
+            // up straight from the *template* AST and substituted by hand here — deliberately not
+            // via `ensure_struct_instantiated`, which would fully analyze every method's body
+            // (including ones a self-referential generic, like `WebWorker<TIn, TOut>` constructing
+            // itself inside its own `map`, would recurse back into before it's registered).
+            let concrete_generic_args: Vec<Type> = args
+                .iter()
+                .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
+                .collect();
+            self.generic_structs.get(function_name.as_str()).and_then(|template| {
+                let type_params = template.generic_parameters.as_deref().unwrap_or(&[]);
+                if type_params.len() != concrete_generic_args.len() {
+                    return None;
+                }
+                let ctor = template.methods.iter().find(|m| {
+                    m.name.text == crate::syntax::nodes::types::CONSTRUCTOR_NAME
+                })?;
+                let bindings = generic_bindings(type_params, &concrete_generic_args);
+                Some(
+                    ctor.parameters
+                        .iter()
+                        .map(|p| Self::monomorphize_type(&p.type_, &bindings))
+                        .collect(),
+                )
+            })
         } else {
             None
         };
         let mut arg_is_ref: Vec<bool> = Vec::with_capacity(params.len());
+        let saved_call_target = self.current_call_target_name.take();
+        self.current_call_target_name = Some(function_name.clone());
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();
             self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
@@ -159,6 +189,7 @@ impl<'a> Analyzer<'a> {
             arg_hirs.push(self.hir_take());
             params_types.push(t.get_type());
         }
+        self.current_call_target_name = saved_call_target;
         // Calling a `js`-typed local (`cb(a, b)`) invokes the underlying JS value dynamically.
         let name_sym = (*symbol_table).as_ref().borrow().get_symbol(name);
         if let Ok(sym_ty) = name_sym {

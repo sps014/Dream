@@ -65,8 +65,57 @@ pub const SHADOW_STACK_SIZE: u32 = 16 * WASM_PAGE_SIZE; // 1 MiB
 /// heap grows past this on demand via `memory.grow`, so this is only a starting cushion.
 pub const INITIAL_HEAP_PAGES: u32 = 1;
 
+/// Maximum page count declared on the module's linear memory. The WASM threads proposal requires a
+/// shared memory to declare a fixed maximum up front (unlike a plain memory, which may leave it
+/// unbounded) — this is the wasm32 address-space ceiling (`65536 * 64KiB` = 4 GiB), so it does not
+/// otherwise constrain how far the bump-pointer heap (`memory.grow`) can grow.
+pub const MAX_MEMORY_PAGES: u32 = 65536;
+
 /// Base address (block start) of the interned string data segment; the heap begins above it.
 pub const STRING_BASE: u32 = 1024;
+
+// -- Cross-thread allocator coordination (linear memory is `shared`, see `execution::host::shared_memory`) --
+//
+// The segregated free-list table occupies bytes [4, 44) (`runtime/allocator.wat`'s slot table: 8
+// size-class heads + 1 large-object head). Two more coordination words are reserved right after it,
+// both well below `STRING_BASE` (1024) so they can never collide with static data:
+//
+// - `ALLOC_LOCK_ADDR`: a spinlock (0 = free, 1 = held) serializing every `$malloc`/`$free` body. The
+//   owner instance and every `WebWorker` instance of the same module import the *same*
+//   `wasmtime::SharedMemory`, so without this lock two threads racing the free-list/bump-pointer
+//   logic concurrently would corrupt the heap (lost updates, double-allocated blocks).
+// - `HEAP_PTR_ADDR`: the bump-pointer high-water mark, moved out of a WASM global (which is
+//   per-*instance*, not per-memory) into shared memory so every thread bumps the same pointer.
+//   Initialized exactly once across however many instances share this memory, via an atomic
+//   compare-exchange from 0 in `$__runtime_init` (see `emit/module.rs`) — whichever instance runs
+//   first wins the exchange, every later instantiation's exchange is a no-op.
+pub const ALLOC_LOCK_ADDR: u32 = 44;
+pub const HEAP_PTR_ADDR: u32 = 48;
+
+/// A monotonically increasing counter (`i32.atomic.rmw.add`) handing out a small, dense, unique id
+/// to each thread that ever calls `$__thread_id` (see `runtime/sync.wat`) — the owner instance and
+/// every `WebWorker` instance draw from this one shared word, so ids never collide across threads.
+/// Each thread caches its own id in the ordinary (per-*instance*) WASM global `$__tid` after the
+/// first call, so every later call is a single `global.get`, not a repeat atomic RMW. Backs the
+/// owner-thread-id half of the reentrant lock word (`@shared class`'s embedded lock, `lock (obj)
+/// { ... }`, and `Lock`) — see `HEADER_LOCK_WORD_SIZE` below for the lock word's own layout.
+pub const THREAD_ID_COUNTER_ADDR: u32 = 52;
+
+// -- `@shared class` header extension --------------------------------------------------------
+//
+// An `@shared class` instance carries one extra `i32` word, right past its last field (i.e. at
+// `data_ptr + TypeLayout::size`, computed per-type at emit time — see `Rvalue::New` emission in
+// `src/mir/emit/emitter/rvalue/mod.rs`), reserved as a reentrant lock word backing `lock (obj)
+// { ... }` and `Lock`'s `acquire`/`release`. Packed as `(owner_thread_id << LOCK_DEPTH_BITS) |
+// recursion_depth`, `0` meaning unlocked. Ordinary (non-`@shared`) classes pay nothing for this —
+// their allocation size is exactly their field layout's `size`, no extra word.
+pub const HEADER_LOCK_WORD_SIZE: u32 = 4;
+
+/// Bit width of the reentrant lock word's recursion-depth field (low bits); the remaining high
+/// bits hold the owning thread's id. `1 << LOCK_DEPTH_BITS` is both the max recursion depth and
+/// the max distinct thread ids this scheme supports — 65536 of each is far beyond any realistic
+/// nesting depth or worker-thread count.
+pub const LOCK_DEPTH_BITS: u32 = 16;
 
 // -- Runtime export / import symbol names --------------------------------------------------------
 //
@@ -92,9 +141,20 @@ pub const EXPORT_RUN_LOOP: &str = "__dream_run_loop";
 pub const EXPORT_RESOLVE: &str = "__dream_resolve";
 pub const EXPORT_NEW_FUTURE: &str = "__dream_new_future";
 
-/// Worker-thread trampoline export (see `src/stdlib/core/webworker.dream`). The host worker driver
-/// (native `execution/host/worker.rs` and `runtime/dream.js`) calls this with a body funcref index
-/// and a message string pointer; it performs one `call_indirect` on the `fun(string): string` body
-/// and returns the reply string pointer. Kept a fixed export so a freshly instantiated worker
-/// instance of the same module can be driven entirely from the host.
+/// Worker-thread trampoline export (see `src/stdlib/core/webworker.dream`). The *native* host
+/// worker driver (`execution/host/worker.rs`) calls this with a body funcref index and a message
+/// string pointer; it performs one `call_indirect` on the `fun(string): string` body — driving an
+/// async body's constructor to completion in place if the call_indirect result turns out to be an
+/// untagged `Future` frame rather than the real value (see `src/mir/emit/module.rs`) — and returns
+/// the reply string pointer. Kept a fixed export so a freshly instantiated worker instance of the
+/// same module can be driven entirely from the host. Sound only because every native host `async`
+/// op resolves synchronously before returning to WASM; the browser worker driver (`runtime/dream.js`)
+/// cannot assume that, so it calls [`EXPORT_WORKER_INVOKE_RAW`] instead and drives completion itself.
 pub const EXPORT_WORKER_INVOKE: &str = "__dream_worker_invoke";
+
+/// The same one `call_indirect` `__dream_worker_invoke` performs, minus its synchronous
+/// drive-to-completion step — the raw constructor/function return value, un-interpreted. Used only
+/// by the browser worker driver (`runtime/dream.js`), which must instead check whether the result
+/// is a still-pending `Future` and await it asynchronously (a real `extern async` host call there
+/// settles later via a Promise callback, never synchronously within the `call_indirect`).
+pub const EXPORT_WORKER_INVOKE_RAW: &str = "__dream_worker_invoke_raw";

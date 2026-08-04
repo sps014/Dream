@@ -119,6 +119,12 @@ pub const ATTR_ARRAY_REALLOC: &str = "array_realloc";
 /// `Buffer.free<T>(arr)` — unconditional `$free` of an array's backing block, bypassing
 /// reference counting.
 pub const ATTR_FORCE_FREE: &str = "force_free";
+/// `Bytes.toWire<T>(v)` — encode a `WebWorker`-safe value as a `string` for the (string-typed)
+/// worker wire: identity for `string`, otherwise a byte-blit of an unmanaged `T` re-encoded as a
+/// codepoint-per-byte `string` (see `Bytes.toWireString`).
+pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
+/// `Bytes.fromWire<T>(s)` — the inverse of [`ATTR_WIRE_ENCODE`].
+pub const ATTR_WIRE_DECODE: &str = "wire_decode";
 
 /// The operation a `@intrinsic("…")`-tagged static method lowers to. Derived once from the
 /// attribute key via [`IntrinsicOp::from_key`], so every layer dispatches off the same enum
@@ -165,6 +171,11 @@ pub enum IntrinsicOp {
     ArrayRealloc,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
     ForceFree,
+    /// `Bytes.toWire<T>(v)` — encode a `WebWorker`-safe `T` (a `string`, or an `unmanaged` value)
+    /// as the `string` the worker wire actually carries.
+    WireEncode,
+    /// `Bytes.fromWire<T>(s)` — the inverse of [`IntrinsicOp::WireEncode`].
+    WireDecode,
 }
 
 impl IntrinsicOp {
@@ -191,6 +202,8 @@ impl IntrinsicOp {
             ATTR_FROM_BYTES => IntrinsicOp::FromBytes,
             ATTR_ARRAY_REALLOC => IntrinsicOp::ArrayRealloc,
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
+            ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
+            ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,
             _ => return None,
         })
     }

@@ -212,6 +212,76 @@ impl<'a> Analyzer<'a> {
             return Ok(target);
         }
 
+        // `Bytes.toWire<T>(v)` / `Bytes.fromWire<T>(s)`: the `WebWorker` wire marshal. `T = string`
+        // is an identity passthrough (the wire already is a `string`); any other `T` must be
+        // `unmanaged` and goes through a raw byte-blit (`Bytes.of`/`to`) re-encoded as a
+        // codepoint-per-byte `string` (`Bytes.toWireString`/`fromWireString`).
+        if byte_op == Some(intrinsics::IntrinsicOp::WireEncode) {
+            let named = |name: &str| -> Type {
+                let mut t = method.clone();
+                t.text = name.to_string();
+                Type::from_token(t).unwrap_or(Type::Unknown)
+            };
+            let payload = match generic_args.as_ref().and_then(|g| g.first()) {
+                Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
+                None => params_types
+                    .first()
+                    .map(|s| named(s))
+                    .unwrap_or(Type::Unknown),
+            };
+            let value = arg_hirs.into_iter().next().flatten();
+            // A still-abstract type parameter means this call sits inside a generic struct's own
+            // declaration-time analysis pass (its methods are fully HIR-emitted once using the
+            // class's type parameters as literal placeholder types, in addition to once per real
+            // instantiation - unlike generic free functions, there is no "skip the unbound pass"
+            // path for struct-level generics). That placeholder body is never actually reached by
+            // any real call site, so its HIR just needs to type-check structurally: treat `T` as
+            // `string` (identity passthrough) rather than trying to validate an unresolvable bound.
+            if self.is_unresolved_generic_type(&payload) || payload.get_type() == "string" {
+                self.hir_set_last(value);
+            } else {
+                self.require_unmanaged(&payload, "Bytes.toWire", &method.position, diagnostics);
+                self.hir_set_to_bytes(value);
+                let bytes = self.hir_take();
+                self.hir_set_call("Bytes_toWireString", vec![bytes], &named("string"));
+            }
+            return Ok(named("string"));
+        }
+        if byte_op == Some(intrinsics::IntrinsicOp::WireDecode) {
+            let target = match generic_args.as_ref().and_then(|g| g.first()) {
+                Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
+                None => {
+                    diagnostics.report_error(
+                        "'Bytes.fromWire' requires a type argument, e.g. Bytes.fromWire<T>(text)"
+                            .to_string(),
+                        Some(method.position),
+                    );
+                    Type::Void
+                }
+            };
+            let text = arg_hirs.into_iter().next().flatten();
+            // See the matching comment in the `WireEncode` arm above: a dead placeholder body from
+            // a generic struct's declaration-time analysis pass, never reached by a real call site.
+            if self.is_unresolved_generic_type(&target) || target.get_type() == "string" {
+                self.hir_set_last(text);
+            } else {
+                self.require_unmanaged(&target, "Bytes.fromWire", &method.position, diagnostics);
+                let named = |name: &str| -> Type {
+                    let mut t = method.clone();
+                    t.text = name.to_string();
+                    Type::from_token(t).unwrap_or(Type::Unknown)
+                };
+                self.hir_set_call(
+                    "Bytes_fromWireString",
+                    vec![text],
+                    &Type::Array(Box::new(named("byte"))),
+                );
+                let bytes = self.hir_take();
+                self.hir_set_from_bytes(&target, bytes);
+            }
+            return Ok(target);
+        }
+
         let bindings = self.infer_generic_bindings(
             template,
             generic_args,

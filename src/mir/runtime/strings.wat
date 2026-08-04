@@ -102,7 +102,8 @@
 )
 
 (func $debug_get_heap_ptr (result i32)
-    global.get $heap_ptr
+    i32.const {HEAP_PTR_ADDR}
+    i32.atomic.load
 )
 
 (func $debug_get_live_objects (result i32)
