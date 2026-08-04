@@ -148,7 +148,8 @@ impl<'a> Analyzer<'a> {
                     &parent_function.name.position,
                     diagnostics,
                 )?;
-                self.hir_return_value(value);
+                let target = self.type_ctx.lower(return_type);
+                self.hir_return_value(value, Some(target));
             }
             // A bare `return;` is allowed in a `void` function (an explicit `: void` annotation
             // parses to `Some(Type::Void)`, which is semantically the same as an unannotated

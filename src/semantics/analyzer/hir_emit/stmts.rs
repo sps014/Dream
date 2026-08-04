@@ -270,13 +270,29 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Appends `return value;`, failing the function if the value was not representable.
-    pub(in crate::semantics::analyzer) fn hir_return_value(&mut self, value: Option<HExpr>) {
+    /// Appends `return value;`, failing the function if the value was not representable. When
+    /// `target` is given (the enclosing function's declared return type), `value` is first run
+    /// through the same implicit-conversion path as a typed `let`/assignment (`coerce_to`) — most
+    /// importantly numeric widening (`return 2.5;` in a `double`-returning function), which a bare
+    /// literal's own type would otherwise leave narrower than the function's signature and desync
+    /// from every backend site that trusts the declared return type (including, for `async fun`,
+    /// the scheduler's single-width `Future.result` slot).
+    pub(in crate::semantics::analyzer) fn hir_return_value(
+        &mut self,
+        value: Option<HExpr>,
+        target: Option<TypeId>,
+    ) {
         if !self.active() {
             return;
         }
         match value {
-            Some(value) => self.push_stmt(HStmt::Return(Some(value))),
+            Some(value) => {
+                let value = match target {
+                    Some(t) => self.coerce_to(value, t),
+                    None => value,
+                };
+                self.push_stmt(HStmt::Return(Some(value)));
+            }
             None => self.hir.ok = false,
         }
     }

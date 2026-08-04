@@ -1,0 +1,25 @@
+// A bare numeric literal returned from a wider-typed function must widen to the function's
+// declared return type: `return 2.71828;` from a `fun f(): double` used to keep the literal's own
+// (narrower) inferred type, silently desyncing the value from every call site that trusts the
+// declared `double` signature.
+
+fun asDouble(): double {
+    return 2.71828;
+}
+
+fun asFloat(): float {
+    return 1.5;
+}
+
+fun asLong(): long {
+    return 42;
+}
+
+fun main(): void {
+    let d = asDouble();
+    let f = asFloat();
+    let l = asLong();
+    System.println("" + d);
+    System.println("" + f);
+    System.println("" + l);
+}

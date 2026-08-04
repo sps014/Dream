@@ -30,7 +30,20 @@ impl Emitter<'_> {
         self.emit_debug_exit();
         self.line("     (local.get $self)");
         match value {
-            Some(v) => self.emit_operand(v),
+            Some(v) => {
+                self.emit_operand(v);
+                // `Future.result` (`F_RESULT`) is a single `i32` slot: an `i32`-native value (int,
+                // bool, char, or any reference — already a heap pointer) fits directly, but a wider
+                // scalar (`long`/`float`/`double`) does not. Box it into a heap cell first so
+                // `$dream_complete` (and every await-resume site below) only ever deals in `i32`.
+                let wt = self.wasm_ty(self.operand_ty(v));
+                match wt.as_str() {
+                    "i64" => self.line("     (call $box_long)"),
+                    "f32" => self.line("     (call $box_float)"),
+                    "f64" => self.line("     (call $box_double)"),
+                    _ => {}
+                }
+            }
             None => self.line("     (i32.const 0)"),
         }
         self.line("     (call $dream_complete)");
@@ -127,13 +140,33 @@ impl Emitter<'_> {
         for i in 0..n {
             self.line(&format!("   ) ;; bb{} body", i));
             if let Some(dest) = resume_binds.get(&(i as u32)) {
-                // Resume point: bind the settled result (`awaiting.result`) before continuing.
+                // Resume point: bind the settled result (`awaiting.result`) before continuing. A
+                // wide-scalar (`long`/`float`/`double`) result was boxed by the awaited coroutine's
+                // `emit_poll_complete` (see above) since `F_RESULT` only ever holds an `i32`; unbox
+                // it back to its native representation here and release the now-consumed box cell.
+                let dest_wt = dest.map(|d| self.wasm_ty(self.func.local_ty(d)));
                 self.line("     (local.get $self)");
                 self.line(&format!("     (i32.load offset={})", F_AWAITING));
                 self.line(&format!("     (i32.load offset={})", F_RESULT));
-                match dest {
-                    Some(d) => self.line(&format!("     (local.set ${})", d.0)),
-                    None => self.line("     (drop)"),
+                match dest_wt.as_deref() {
+                    Some("i64") | Some("f32") | Some("f64") => {
+                        self.line("     (local.set $__obj)");
+                        let unbox = match dest_wt.as_deref() {
+                            Some("i64") => "$unbox_long",
+                            Some("f32") => "$unbox_float",
+                            _ => "$unbox_double",
+                        };
+                        self.line(&format!("     (call {unbox} (local.get $__obj))"));
+                        if let Some(d) = dest {
+                            self.line(&format!("     (local.set ${})", d.0));
+                        }
+                        self.line("     (local.get $__obj)");
+                        self.line("     (call $release_generic)");
+                    }
+                    _ => match dest {
+                        Some(d) => self.line(&format!("     (local.set ${})", d.0)),
+                        None => self.line("     (drop)"),
+                    },
                 }
             }
             let block = self.func.block(crate::mir::BlockId(i as u32));

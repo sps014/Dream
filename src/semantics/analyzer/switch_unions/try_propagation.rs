@@ -157,7 +157,7 @@ impl<'a> Analyzer<'a> {
             self.hir_take()
         };
         match err_value {
-            Some(v) => self.hir_return_value(Some(v)),
+            Some(v) => self.hir_return_value(Some(v), None),
             None => ok = false,
         }
         let err_body = self.hir_close_block();
