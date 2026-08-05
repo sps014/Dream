@@ -37,6 +37,7 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         &HashSet::new(),
         &empty_globals,
         false,
+        true,
         None,
     )
 }
@@ -54,6 +55,7 @@ pub(super) fn emit_function_with(
     value_glue: &HashSet<TypeId>,
     global_tys: &HashMap<u32, TypeId>,
     debug: bool,
+    locate_panics: bool,
     debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
     let mut e = Emitter::new(
@@ -70,6 +72,7 @@ pub(super) fn emit_function_with(
         None,
         0,
         debug,
+        locate_panics,
         debug_fn,
     );
     e.emit();
@@ -92,6 +95,7 @@ pub(crate) fn emit_async_poll(
     poll_sym: &str,
     user_local_count: usize,
     debug: bool,
+    locate_panics: bool,
     debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
     // Async bodies do not apply call-argument widening or value-struct shadow frames yet (both gated
@@ -114,6 +118,7 @@ pub(crate) fn emit_async_poll(
         Some(func),
         user_local_count,
         debug,
+        locate_panics,
         debug_fn,
     );
     e.emit_async_state_machine(slots, poll_sym);
@@ -146,6 +151,9 @@ struct Emitter<'a> {
     async_user_locals: usize,
     /// Generate `@name` annotations
     debug: bool,
+    /// When true, [`Self::emit_panic`] builds file:line messages matching the string table; when
+    /// false (release), it uses the shared base message only.
+    locate_panics: bool,
     /// Debug-info metadata for this function when compiled with source-level debug-info (line hooks
     /// + local spilling). `None` disables all instrumentation (release builds, async bodies).
     debug_fn: Option<&'a crate::mir::emit::debug_map::DebugFunction>,
@@ -176,6 +184,7 @@ impl<'a> Emitter<'a> {
         async_parent: Option<&'a MirFunction>,
         async_user_locals: usize,
         debug: bool,
+        locate_panics: bool,
         debug_fn: Option<&'a crate::mir::emit::debug_map::DebugFunction>,
     ) -> Self {
         let frame = ValueFrame::compute(func, interner);
@@ -195,6 +204,7 @@ impl<'a> Emitter<'a> {
             async_parent,
             async_user_locals,
             debug,
+            locate_panics,
             debug_fn,
             current_line: 0,
         }
@@ -397,12 +407,16 @@ impl Emitter<'_> {
     /// threading source spans through MIR. Always emitted inside an unconditional branch of an `if`;
     /// the caller is responsible for the guarding comparison.
     fn emit_panic(&mut self, base: &str) {
-        let msg = super::panic_msgs::located(
-            base,
-            self.func.file.as_deref(),
-            &self.func.name,
-            self.current_line,
-        );
+        let msg = if self.locate_panics {
+            super::panic_msgs::located(
+                base,
+                self.func.file.as_deref(),
+                &self.func.name,
+                self.current_line,
+            )
+        } else {
+            base.to_string()
+        };
         self.line(&format!("     (i32.const {})", self.string_addr(&msg)));
         self.line("     (call $dream_panic)");
     }

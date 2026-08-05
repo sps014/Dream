@@ -172,6 +172,7 @@ pub fn emit_async_function(
     ftable: &HashMap<(crate::types::DefId, Vec<TypeId>), usize>,
     poll_idx: usize,
     debug: bool,
+    locate_panics: bool,
     debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
     let hir = func.hir_fn.as_ref().unwrap_or_else(|| {
@@ -262,6 +263,7 @@ pub fn emit_async_function(
         &poll_symbol(func),
         user_local_count,
         debug,
+        locate_panics,
         debug_fn,
     ));
     out

@@ -241,7 +241,10 @@ pub(super) fn emit_interface_dispatch(
     used_slots: &std::collections::HashSet<(usize, usize)>,
 ) -> InterfaceDispatch {
     let ifaces = &mir.interfaces.interfaces;
-    if ifaces.is_empty() {
+    // No surviving interface call sites means nothing loads from these tables — skip emitting the
+    // dense (often all-zero) itable data segments, which would otherwise bloat the `.wasm` for
+    // free: WASM linear memory is already zero-initialized.
+    if ifaces.is_empty() || used_slots.is_empty() {
         return InterfaceDispatch {
             data: String::new(),
             trampolines: String::new(),
@@ -295,12 +298,14 @@ pub(super) fn emit_interface_dispatch(
     }
 
     // Lay the tables out consecutively (4-byte words), recording each interface's base address.
+    // Skip writing a `(data ...)` segment when every word is zero — memory is already zeroed, and
+    // embedding kilobytes of `\00` only inflates the module.
     let mut bases: Vec<u32> = Vec::with_capacity(ifaces.len());
     let mut data = String::new();
     let mut addr = itab_base;
     for table in &tables {
         bases.push(addr);
-        if !table.is_empty() {
+        if !table.is_empty() && table.iter().any(|w| *w != 0) {
             let mut bytes = String::new();
             for word in table {
                 for b in word.to_le_bytes() {

@@ -15,11 +15,14 @@ struct ModuleTables {
 }
 
 /// Derives the shared [`ModuleTables`] for `mir`.
-fn build_tables(mir: &crate::mir::Mir, interner: &TypeInterner) -> ModuleTables {
+///
+/// `locate_panics` controls whether runtime check messages include file:line (debug / debug-info)
+/// or share four compact base strings (release).
+fn build_tables(mir: &crate::mir::Mir, interner: &TypeInterner, locate_panics: bool) -> ModuleTables {
     ModuleTables {
         symbols: symbol_table(mir),
         sigs: signature_table(mir),
-        strings: string_table(mir, interner),
+        strings: string_table(mir, interner, locate_panics),
         tags: struct_tags(mir),
         ftable: func_table(mir),
         value_glue: value_glue_types(mir, interner),
@@ -36,7 +39,7 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
         tags,
         ftable,
         value_glue,
-    } = build_tables(mir, interner);
+    } = build_tables(mir, interner, true);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
     let mut out = String::new();
     for f in &mir.functions {
@@ -52,6 +55,7 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
             &value_glue,
             &global_tys,
             false,
+            true,
             None,
         ));
         out.push('\n');
@@ -75,6 +79,9 @@ pub fn emit_module_with_debug(
     debug: bool,
     debug_info: bool,
 ) -> (String, Option<crate::mir::emit::debug_map::DebugModule>) {
+    // Located (file:line) panic strings are useful while debugging; release builds (`!debug &&
+    // !debug_info`) share four compact base messages instead to keep the data section small.
+    let locate_panics = debug || debug_info;
     let ModuleTables {
         symbols,
         sigs,
@@ -82,7 +89,7 @@ pub fn emit_module_with_debug(
         tags,
         ftable,
         value_glue,
-    } = build_tables(mir, interner);
+    } = build_tables(mir, interner, locate_panics);
     let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
 
     // Debug-info metadata (file table + per-function variable tables + spill-pool width). Built up
@@ -261,6 +268,7 @@ pub fn emit_module_with_debug(
                 &ftable,
                 *polls.get(&(f.def, f.instance.clone())).unwrap_or(&0),
                 debug,
+                locate_panics,
                 debug_fn,
             ));
         } else {
@@ -277,6 +285,7 @@ pub fn emit_module_with_debug(
                 &value_glue,
                 &global_tys,
                 debug,
+                locate_panics,
                 debug_fn,
             ));
         }

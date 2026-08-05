@@ -65,36 +65,60 @@ pub(super) fn union_variant_pieces(v: &crate::hir::UnionVariant) -> (String, Vec
 /// word (block start + [`HEAP_HEADER_SIZE`]), with the utf8 bytes at `ptr+4`, so it is a valid
 /// runtime string pointer. There is no NUL terminator (the length prefix makes it redundant). Blocks
 /// are laid out consecutively, 4-byte aligned.
+///
+/// When `locate_panics` is true (debug / debug-info builds), every checked site gets a unique
+/// file:line panic message. Release builds pass false and intern only the four shared base
+/// messages — typically saving many kilobytes of data-section bloat.
 pub(super) fn string_table(
     mir: &crate::mir::Mir,
     interner: &TypeInterner,
+    locate_panics: bool,
 ) -> IndexMap<String, u32> {
     let mut found = Vec::new();
     let mut panic_msgs: Vec<String> = Vec::new();
-    for f in &mir.functions {
-        for b in &f.blocks {
-            for s in &b.stmts {
-                strings_in_stmt(s, &mut found);
+    if locate_panics {
+        for f in &mir.functions {
+            for b in &f.blocks {
+                for s in &b.stmts {
+                    strings_in_stmt(s, &mut found);
+                }
+                strings_in_terminator(&b.terminator, &mut found);
             }
-            strings_in_terminator(&b.terminator, &mut found);
-        }
-        // An async function's MIR body is a stub: the real body (with the real `SourceLine`
-        // markers and checked constructs) is rebuilt from `hir_fn` by the coroutine transform, at
-        // emission time (see `emit_async_poll`). Lower it here too — exactly like
-        // `debug_map::DebugModule::build` already does for the debug-info source map — so its
-        // string literals *and* located panic messages get pre-interned identically to a plain
-        // function's, instead of falling back to the (real-line-less) `line == 0` triple.
-        if f.is_async {
-            if let Some(hir_fn) = &f.hir_fn {
-                let mut edges = crate::mir::HirEdges::default();
-                crate::mir::hir_body_edges(&hir_fn.body, &mut edges);
-                found.extend(edges.strings);
-                let poll_body = crate::mir::lower::lower_async_poll_body(hir_fn, interner);
-                panic_msgs.extend(located_panics_in_function(&poll_body));
+            // An async function's MIR body is a stub: the real body (with the real `SourceLine`
+            // markers and checked constructs) is rebuilt from `hir_fn` by the coroutine transform, at
+            // emission time (see `emit_async_poll`). Lower it here too — exactly like
+            // `debug_map::DebugModule::build` already does for the debug-info source map — so its
+            // string literals *and* located panic messages get pre-interned identically to a plain
+            // function's, instead of falling back to the (real-line-less) `line == 0` triple.
+            if f.is_async {
+                if let Some(hir_fn) = &f.hir_fn {
+                    let mut edges = crate::mir::HirEdges::default();
+                    crate::mir::hir_body_edges(&hir_fn.body, &mut edges);
+                    found.extend(edges.strings);
+                    let poll_body = crate::mir::lower::lower_async_poll_body(hir_fn, interner);
+                    panic_msgs.extend(located_panics_in_function(&poll_body));
+                }
+            } else {
+                panic_msgs.extend(located_panics_in_function(f));
             }
-        } else {
-            panic_msgs.extend(located_panics_in_function(f));
         }
+    } else {
+        for f in &mir.functions {
+            for b in &f.blocks {
+                for s in &b.stmts {
+                    strings_in_stmt(s, &mut found);
+                }
+                strings_in_terminator(&b.terminator, &mut found);
+            }
+            if f.is_async {
+                if let Some(hir_fn) = &f.hir_fn {
+                    let mut edges = crate::mir::HirEdges::default();
+                    crate::mir::hir_body_edges(&hir_fn.body, &mut edges);
+                    found.extend(edges.strings);
+                }
+            }
+        }
+        panic_msgs.extend(panic_msgs::ALL.iter().map(|s| (*s).to_string()));
     }
     let mut map: IndexMap<String, u32> = IndexMap::new();
     let mut block = STRING_BASE;
