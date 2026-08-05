@@ -1,5 +1,6 @@
 // `private_only` is file-private (no visibility modifier); aliasing it in from another
 // file/module is always an error, regardless of module.
+import system;
 import helpers.module_private_item;
 
 import priv.mod.private_only as p;

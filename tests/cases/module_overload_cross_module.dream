@@ -1,5 +1,6 @@
 // Overloads in utils.math plus a same-named singleton in vendor.math: module qualification
 // and overload mangling compose; aliased imports resolve both sides.
+import system;
 import helpers.module_utils_math_overloads;
 import helpers.module_vendor_math;
 

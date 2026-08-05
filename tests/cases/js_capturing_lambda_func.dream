@@ -1,6 +1,7 @@
 // A capturing lambda cannot be passed to `js.func` — the bridge only forwards the funcidx half of
 // the funcbox, so the closure environment would be lost.
 
+import system;
 fun main(): void {
     let n: int = 42;
     let handler: fun(js): void = (ev) => {

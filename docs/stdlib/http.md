@@ -1,5 +1,7 @@
 # HTTP
 
+**Package:** `system.net` — `import system.net;` (typically also `import system;` for console output)
+
 `HttpClient` and `HttpResponse` are a small, instantiable HTTP client. Like [`File`](file.md), the capability is a pair of [`extern async fun`](../language/async.md) imports implemented once per host, so the same `.dream` runs unchanged everywhere. Each call performs the whole request and hands back the entire response — status, headers, and raw body — that you `await`.
 
 ## Runtime support
@@ -17,6 +19,10 @@ The API is identical across all three; only the transport differs. Unlike the dy
 Construct with a base URL (`""` for none) and, optionally, default headers applied to every request. `set_header` returns the client, so calls chain:
 
 ```dream
+import system;
+import system.net;
+import system.json;
+
 let api = HttpClient("https://api.example.com")
     .set_header("Authorization", "Bearer secret")
     .set_header("Accept", "application/json");
@@ -27,6 +33,10 @@ let api = HttpClient("https://api.example.com")
 `text(path)` resolves to the body directly. Relative paths join onto the base URL:
 
 ```dream
+import system;
+import system.net;
+import system.json;
+
 async fun main(): void {
     let api = HttpClient("https://api.example.com");
     let body = await api.text("/users/42");

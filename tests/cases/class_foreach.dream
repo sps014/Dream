@@ -2,6 +2,7 @@
 // returns an object whose `next(): Option<T>` yields elements until `None`. Exercises `break`
 // and `continue` inside the loop body.
 
+import system;
 class RangeIter {
     current: int;
     end: int;

@@ -2,6 +2,7 @@
 // dispatches dynamically to the concrete async implementation, which returns a `Future<T>` the
 // caller `await`s.
 
+import system;
 interface Fetcher {
     async fun fetch(): int;
 }

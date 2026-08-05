@@ -2,6 +2,7 @@
 // kind of container. Releasing the container runs the value struct's drop-glue in place, releasing
 // the embedded reference exactly once (proven by the `del()` prints and a zero `live_objects` delta).
 
+import system;
 class Tracked {
     public id: int;
 

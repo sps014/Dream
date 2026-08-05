@@ -1,5 +1,6 @@
 // Static methods on a generic class are dispatchable by supplying the class type arguments on the
 // receiver: `Pair<int>.of(...)`. The class is monomorphized and the concrete static method called.
+import system;
 class Pair<T> {
     public a: int;
     public b: int;

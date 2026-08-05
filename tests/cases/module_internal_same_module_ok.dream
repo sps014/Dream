@@ -1,5 +1,6 @@
 // `internal` (module_utils_math's shared_helper) is reachable from another file that declares
 // the same module, via module_internal_partner.combine().
+import system;
 import helpers.module_utils_math;
 import helpers.module_internal_partner;
 

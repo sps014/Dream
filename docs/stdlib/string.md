@@ -1,6 +1,8 @@
 # Strings
 
-`string` is a built-in reference type: heap-allocated, length-prefixed UTF-8, so `size()` is O(1). It is available in every program with no import, and every method below works on any string value.
+**Package:** `system.text` — `import system.text;` (also pulled in by `import system;`)
+
+`string` is a built-in reference type: heap-allocated, length-prefixed UTF-8, so `size()` is O(1). Basic operations (`+`, `size()`, `char_at`, interpolation) need no import. Higher-level helpers (`substring`, `split`, `trim`, `StringBuilder`, `Regex`, …) require this package.
 
 Build strings with `+` concatenation or [interpolation](../language/operators.md#string-interpolation) (`$"hi {name}"`).
 
@@ -9,13 +11,16 @@ Build strings with `+` concatenation or [interpolation](../language/operators.md
 `size()` returns the character count; `is_empty()` is `true` when there are none. Index with `s[i]` (read-only) or `char_at(i)` to get a `char`, and iterate with `for (let c in s)`:
 
 ```dream
+import system;
+import system.text;
+
 let s = "abc";
-println(s.size());      // 3
-println(s[0]);          // 'a'
-println(s.char_at(1));  // 'b'
+System.println(s.size());      // 3
+System.println(s[0]);          // 'a'
+System.println(s.char_at(1));  // 'b'
 
 for (let c in s) {
-    println(c);         // 'a', 'b', 'c'
+    System.println(c);         // 'a', 'b', 'c'
 }
 ```
 
@@ -31,8 +36,8 @@ Indexing is read-only (no `s[i] = c`). Build derived strings with `substring`, `
 - `index_of(target)` — index of the first occurrence of a character as an `Option<int>`; `None` if absent.
 
 ```dream
-println("hello world".contains("world"));         // true
-println("hello".starts_with("hel"));              // true
+System.println("hello world".contains("world"));         // true
+System.println("hello".starts_with("hel"));              // true
 let i = "hello".index_of('l').unwrap_or(0 - 1);   // 2
 let j = "hello".index_of('z').unwrap_or(0 - 1);   // -1 (absent)
 ```
@@ -47,10 +52,10 @@ Each of these returns a **new** string:
 - `repeat(times)` — the string repeated; `0` or less yields `""`.
 
 ```dream
-println("hello world".substring(6, 11));   // "world"
-println("Hello World".to_lower());         // "hello world"
-println("  hello  ".trim());               // "hello"
-println("ab".repeat(3));                   // "ababab"
+System.println("hello world".substring(6, 11));   // "world"
+System.println("Hello World".to_lower());         // "hello world"
+System.println("  hello  ".trim());               // "hello"
+System.println("ab".repeat(3));                   // "ababab"
 ```
 
 ## Comparison
@@ -58,20 +63,20 @@ println("ab".repeat(3));                   // "ababab"
 `equals(other)` returns `true` when the contents match — identical to `==`, which compares string contents (not addresses):
 
 ```dream
-println("hello".equals("hello"));   // true
-println("hello" == "hello");        // true
+System.println("hello".equals("hello"));   // true
+System.println("hello" == "hello");        // true
 ```
 
 ## Building strings incrementally: `StringBuilder`
 
-`+` concatenation is fine for a handful of pieces, but each `+` allocates a new string and copies everything accumulated so far — building up a string across a loop with `s = s + piece;` costs O(n²) overall. `StringBuilder`, available in every program with no import, appends into a single growable buffer and produces the final string with one allocation:
+`+` concatenation is fine for a handful of pieces, but each `+` allocates a new string and copies everything accumulated so far — building up a string across a loop with `s = s + piece;` costs O(n²) overall. `StringBuilder` (same `system.text` package) appends into a single growable buffer and produces the final string with one allocation:
 
 ```dream
 let sb = StringBuilder();
 sb.append("Hello, ");
 sb.append("world");
 sb.append_char('!');
-println(sb.build());   // "Hello, world!"
+System.println(sb.build());   // "Hello, world!"
 ```
 
 Methods:
@@ -83,4 +88,4 @@ Methods:
 - `.clear()` — remove everything appended, keeping the backing buffer for reuse.
 - `.build()` — materialize the accumulated characters into a new string.
 
-`StringBuilder` also overrides `to_string()`, so `print`/`println`/`+`/interpolation all use `build()`'s output automatically — `println(sb)` and `println(sb.build())` are equivalent.
+`StringBuilder` also overrides `to_string()`, so `System.print` / `System.println` / `+` / interpolation all use `build()`'s output automatically — `System.println(sb)` and `System.println(sb.build())` are equivalent.

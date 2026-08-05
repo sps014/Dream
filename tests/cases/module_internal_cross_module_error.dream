@@ -1,5 +1,6 @@
 // `shared_helper` is `internal` to module `utils.math`; this file has no `module` declaration
 // (unnamed root module), so aliasing it in is an error.
+import system;
 import helpers.module_utils_math;
 
 import utils.math.shared_helper as h;

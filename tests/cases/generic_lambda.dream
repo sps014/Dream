@@ -1,5 +1,6 @@
 // Generic lambdas declare their own type parameters and instantiate from context or use.
 
+import system;
 fun main(): void {
     let id: fun(int): int = <T>(x: T) => x;
     System.println(id(42));

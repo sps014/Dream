@@ -1,0 +1,12 @@
+module system.core;
+
+// Low-level string construction used by core/primitives (and `extend string` in system.text).
+extend string {
+    // Allocates an uninitialized string of length `n`.
+    @intrinsic("string_alloc")
+    static extern fun alloc(n: int): string;
+
+    // Writes character `c` at index `i` of string `s`.
+    @intrinsic("string_set")
+    static extern fun set(s: string, i: int, c: char): void;
+}

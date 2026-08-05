@@ -1,6 +1,8 @@
 # JSON
 
-The prelude ships a native JSON implementation: a `JsonValue` data model, `JSON.parse` / `JSON.stringify`, and a `@json` attribute that derives converters for your own types. It is pure Dream with no interop, so it runs on every host, including the `wasmtime` test harness.
+**Package:** `system.json` — `import system.json;` (also auto-loaded when any type carries `@json`)
+
+Native JSON: a `JsonValue` data model, `JSON.parse` / `JSON.stringify`, and a `@json` attribute that derives converters for your own types. It is pure Dream with no interop, so it runs on every host, including the `wasmtime` test harness.
 
 Most of the time you want `@json` auto-derive. Reach for `JsonValue` when you need to build or inspect arbitrary, untyped JSON.
 
@@ -9,6 +11,9 @@ Most of the time you want `@json` auto-derive. Reach for `JsonValue` when you ne
 Mark a class `@json` and the compiler generates its `to_json` / `from_json`, so it round-trips with no boilerplate. It works for a value [`struct`](../language/classes-structs.md) too:
 
 ```dream
+import system;
+import system.json;
+
 @json
 class Address { city: string; zip: string; }
 
@@ -20,7 +25,7 @@ fun main(): void {
 
     let text = JSON.serialize(u);              // to_json + stringify
     let back = JSON.deserialize<User>(text);   // parse + from_json
-    println(back.address.city);                // London
+    System.println(back.address.city);         // London
 }
 ```
 
@@ -86,7 +91,7 @@ enum Tags { Many(items: string[]), Empty }
 
 let text = JSON.serialize(Shape.Rect(3, 4));   // {"type":"Rect","width":3,"height":4}
 let back = JSON.deserialize<Shape>(text);       // Shape.Rect(3, 4)
-println(JSON.serialize(Shape.Empty));           // {"type":"Empty"}
+System.println(JSON.serialize(Shape.Empty));           // {"type":"Empty"}
 ```
 
 On deserialize, an unrecognized `"type"` falls back to the first variant. `@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives its own converters.
@@ -136,8 +141,8 @@ let text = JSON.stringify(user);     // {"name":"Ada","age":36,"tags":["dev"]}
 
 let v = JSON.parse(text);
 let none = JsonValue.none();
-println(v.get("name").unwrap_or(none).as_string());  // Ada
-println(v.get("age").unwrap_or(none).as_int());      // 36
+System.println(v.get("name").unwrap_or(none).as_string());  // Ada
+System.println(v.get("age").unwrap_or(none).as_int());      // 36
 ```
 
 `JSON.parse` is a recursive-descent parser. A JSON `null` reads back as a `JsonValue` whose `is_null()` is `true`; a missing object key yields `None` from `get`, so a miss is distinguishable from a present `null`.
@@ -145,7 +150,7 @@ println(v.get("age").unwrap_or(none).as_int());      // 36
 `JSON.stringify_pretty(value, indent)` formats with newlines and `indent` spaces per level; an `indent` of `0` matches compact `JSON.stringify`:
 
 ```dream
-println(JSON.stringify_pretty(v, 2));
+System.println(JSON.stringify_pretty(v, 2));
 // {
 //   "name": "Ada",
 //   "tags": [

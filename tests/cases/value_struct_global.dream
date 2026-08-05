@@ -1,3 +1,4 @@
+import system;
 struct Point {
     public x: int;
     public y: int;

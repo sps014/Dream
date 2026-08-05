@@ -1,14 +1,14 @@
 //! In-memory compilation front-end: lex -> parse -> merge the embedded standard-library
 //! prelude -> semantic analysis, collecting diagnostics for a single document. No filesystem
-//! access is involved (the prelude is embedded with `include_str!`), so it runs in the browser.
+//! access is involved for the prelude (embedded with `include_str!`), so it runs in the browser.
 
 use bumpalo::Bump;
 use dream::diagnostics::{Diagnostic, DiagnosticBag, Severity};
 use dream::driver::source_loader::collect_declarations;
 use dream::semantics::analyzer::Analyzer;
+use dream::stdlib::std_package_from_slash_path;
 use dream::syntax::lexer::Lexer;
-use dream::syntax::nodes::struct_node::StructDeclarationNode;
-use dream::syntax::nodes::{ExtendNode, FunctionNode, ProgramNode};
+use dream::syntax::nodes::ProgramNode;
 use dream::syntax::parser::Parser;
 use dream::syntax::syntax_tree::SyntaxTree;
 
@@ -19,16 +19,14 @@ pub struct DiagnosticOut {
     pub range: crate::position::Range,
     pub severity: &'static str,
     pub message: String,
+    /// Stable diagnostic code when known (e.g. `unresolved-name` for auto-import).
+    pub code: Option<&'static str>,
 }
 
 /// Synthetic file tag for the document under analysis. Diagnostics carrying this tag (or no
 /// tag, as produced by the semantic analyzer) belong to the user's code; prelude-tagged
 /// diagnostics are filtered out so library-internal spans never map onto the user's text.
 pub const MAIN_FILE: &str = "main.dream";
-
-/// The embedded standard-library prelude. Re-exported from the compiler crate so the language
-/// service and the compiler can never drift (see `dream::stdlib::PRELUDE_FILES`).
-use dream::stdlib::PRELUDE_FILES;
 
 /// Runs the full front-end over `text` and returns the diagnostics that belong to the user's
 /// document, with byte spans converted to LSP ranges.
@@ -51,6 +49,10 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
 
     if let Ok(ast) = &user_ast {
         let program = ast.get_root();
+        if let Some(module_decl) = &program.module {
+            acc.file_modules
+                .insert(MAIN_FILE.to_string(), std::rc::Rc::from(module_decl.path.text.as_str()));
+        }
         collect_declarations(
             program,
             MAIN_FILE,
@@ -62,6 +64,16 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
             &mut acc.all_globals,
         );
 
+        for import in &program.imports {
+            if import.alias.is_some() {
+                continue;
+            }
+            let module_name = import.module_name.text.as_str();
+            if let Some(pkg) = std_package_from_slash_path(module_name) {
+                acc.requested_std_packages.insert(pkg.name.to_string());
+            }
+        }
+
         if let Some(path_str) = file_path {
             let parent_dir = std::path::Path::new(path_str)
                 .parent()
@@ -70,7 +82,13 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
             acc.visited.insert(MAIN_FILE.to_string());
 
             for import in &program.imports {
+                if import.alias.is_some() {
+                    continue;
+                }
                 let module_name = import.module_name.text.as_str();
+                if std_package_from_slash_path(module_name).is_some() {
+                    continue;
+                }
                 let import_path =
                     dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
 
@@ -86,18 +104,30 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
                 }
             }
         }
+
+        if program_uses_json_attr(&acc) {
+            acc.requested_std_packages
+                .insert("system.json".to_string());
+        }
     }
 
-    merge_prelude(
+    let _ = dream::driver::prelude::merge_prelude(
         &arena,
-        file_path,
-        &mut diagnostics,
         &mut acc.all_functions,
         &mut acc.all_structs,
         &mut acc.all_interfaces,
         &mut acc.all_enums,
         &mut acc.all_extends,
+        &mut diagnostics,
+        &mut acc.file_contents,
+        &mut acc.file_modules,
+        &acc.requested_std_packages,
     );
+
+    // Skip compiled-in copies of prelude files the user is actively editing in the compiler repo.
+    if let Some(path) = file_path {
+        strip_edited_stdlib_duplicates(path, &mut acc);
+    }
 
     dream::attributes::validate_program_attributes(
         &acc.all_structs,
@@ -116,6 +146,11 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
     // the parts that did parse. The analysis is wrapped so any residual panic degrades to
     // "syntax diagnostics only" instead of taking down the language server.
     if user_ast.is_ok() {
+        let file_modules: std::collections::HashMap<std::rc::Rc<str>, std::rc::Rc<str>> = acc
+            .file_modules
+            .iter()
+            .map(|(k, v)| (std::rc::Rc::from(k.as_str()), v.clone()))
+            .collect();
         let combined = ProgramNode::new(
             vec![],
             acc.all_structs,
@@ -127,7 +162,7 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
         );
         let tree = SyntaxTree::new(combined);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut analyzer = Analyzer::new(&tree, &arena);
+            let mut analyzer = Analyzer::new(&tree, &arena).with_file_modules(file_modules);
             let _ = analyzer.analyze(&mut diagnostics);
         }));
         if let Err(payload) = result {
@@ -157,9 +192,52 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
                     Severity::Warning => "warning",
                 },
                 message: d.message.clone(),
+                code: diagnostic_code(&d.message),
             })
         })
         .collect()
+}
+
+fn diagnostic_code(message: &str) -> Option<&'static str> {
+    if message.contains("does not exist")
+        || message.contains("not found")
+        || message.contains("Function does not exist")
+    {
+        Some("unresolved-name")
+    } else {
+        None
+    }
+}
+
+fn program_uses_json_attr(acc: &dream::driver::source_loader::ProgramAccumulator<'_>) -> bool {
+    acc.all_structs.iter().any(|s| {
+        s.attributes.iter().any(|a| a.name.text == "json")
+    }) || acc.all_enums.iter().any(|e| {
+        e.attributes.iter().any(|a| a.name.text == "json")
+    })
+}
+
+/// When editing a stdlib source file in-tree, drop the embedded twin so definitions don't duplicate.
+fn strip_edited_stdlib_duplicates(
+    path: &str,
+    acc: &mut dream::driver::source_loader::ProgramAccumulator<'_>,
+) {
+    let norm = path.replace('\\', "/");
+    let Some(idx) = norm.find("/src/stdlib/") else {
+        return;
+    };
+    let bare = &norm[idx + "/src/stdlib/".len()..];
+    let tag = format!("<std>/{}", bare);
+    acc.all_functions
+        .retain(|f| f.file_path.as_deref() != Some(tag.as_str()));
+    acc.all_structs
+        .retain(|s| s.file_path.as_deref() != Some(tag.as_str()));
+    acc.all_interfaces
+        .retain(|i| i.file_path.as_deref() != Some(tag.as_str()));
+    acc.all_enums
+        .retain(|e| e.file_path.as_deref() != Some(tag.as_str()));
+    acc.all_extends
+        .retain(|e| e.file_path.as_deref() != Some(tag.as_str()));
 }
 
 /// Extracts a human-readable message from a caught panic payload (`&str`/`String`, or a fallback
@@ -204,54 +282,4 @@ fn report_analyzer_panic(diagnostics: &mut DiagnosticBag, payload: &(dyn std::an
         }),
         None,
     ));
-}
-
-/// Parses each embedded prelude file and merges its declarations, tagging them with their
-/// `<std>` path so their diagnostics can be filtered out of the user-facing list.
-// The many parameters are parallel per-declaration-kind accumulators; grouping them into a struct
-// would just move the same field list elsewhere without improving call sites.
-#[allow(clippy::too_many_arguments)]
-fn merge_prelude<'a>(
-    arena: &'a Bump,
-    file_path: Option<&str>,
-    diagnostics: &mut DiagnosticBag,
-    all_functions: &mut Vec<FunctionNode<'a>>,
-    all_structs: &mut Vec<StructDeclarationNode<'a>>,
-    all_interfaces: &mut Vec<dream::syntax::nodes::InterfaceDeclarationNode<'a>>,
-    all_enums: &mut Vec<dream::syntax::nodes::EnumDeclarationNode>,
-    all_extends: &mut Vec<ExtendNode<'a>>,
-) {
-    for &(name, src) in PRELUDE_FILES {
-        // If the user is actively editing this prelude file in the compiler repo, skip merging
-        // the compiled-in version so we don't get duplicate definition errors in the editor.
-        if let Some(path) = file_path {
-            let bare_name = name.trim_start_matches("<std>/");
-            if path
-                .replace('\\', "/")
-                .ends_with(&format!("/src/stdlib/{}", bare_name))
-            {
-                continue;
-            }
-        }
-
-        let mut prelude_bag = DiagnosticBag::new(Some(name.to_string()));
-        let lexer = Lexer::new(src.to_string());
-        let mut parser = Parser::new(lexer, arena, &mut prelude_bag);
-        let parsed = parser.parse();
-        diagnostics.extend(&prelude_bag);
-
-        if let Ok(ast) = parsed {
-            let mut globals = Vec::new();
-            collect_declarations(
-                ast.get_root(),
-                name,
-                all_functions,
-                all_structs,
-                all_interfaces,
-                all_enums,
-                all_extends,
-                &mut globals,
-            );
-        }
-    }
 }

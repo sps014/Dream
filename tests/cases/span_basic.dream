@@ -2,6 +2,7 @@
 // heap allocation of its own (it's a `ref struct`), and its own logical range is enforced
 // independently of the backing array's actual size.
 
+import system;
 fun sum(s: Span<int>): int {
     let total = 0;
     let i = 0;

@@ -1,4 +1,5 @@
 // Implicit zero-arg default constructor: Point() leaves fields at their zero value.
+import system;
 class Point {
     public x: int;
     public y: int;

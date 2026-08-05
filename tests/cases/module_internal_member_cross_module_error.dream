@@ -1,5 +1,6 @@
 // This file has no `module` declaration (unnamed root module), so accessing the `internal`
 // field `x` of a `Vector` declared in module `member.mod` is an error.
+import system;
 import helpers.module_internal_member;
 
 fun main(): void {

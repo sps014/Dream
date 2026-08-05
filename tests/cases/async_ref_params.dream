@@ -2,6 +2,7 @@
 // Prior to the fix, string params were not retained by the async frame, and
 // string locals were leaked (never released) when the task completed.
 
+import system;
 async fun greet(name: string): string {
     await Time.sleep(0);
     let msg = "Hello, " + name + "!";

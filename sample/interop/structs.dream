@@ -4,6 +4,7 @@
 //   cargo run -- sample/interop/structs.dream
 //   node sample/interop/structs.mjs sample/interop/structs.wasm
 
+import system;
 class Point {
     public x: int;
     public y: int;

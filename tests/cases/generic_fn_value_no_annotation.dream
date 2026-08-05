@@ -1,6 +1,7 @@
 // A generic function used as a first-class value can be bound without a fun(...) annotation;
 // each later use instantiates from context or call-argument types.
 
+import system;
 fun natural_order<T : Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }

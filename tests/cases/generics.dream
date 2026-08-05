@@ -1,3 +1,4 @@
+import system;
 fun Test<T>(data: T) {
     if (data is int) {
         System.println(data);

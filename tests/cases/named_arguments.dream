@@ -2,6 +2,7 @@
 // declaration order, out of order, mixed with leading positional args, and skipping a middle
 // optional parameter by naming a later one (the gap is filled from its own default).
 
+import system;
 fun greet(name: string, greeting: string = "Hello", punctuation: string = "!"): string {
     return greeting + ", " + name + punctuation;
 }

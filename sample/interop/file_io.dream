@@ -1,6 +1,8 @@
 // Demonstrates the File / FileStream API. Runs natively (`cargo run -- run sample/interop/file_io.dream`)
 // and under Node via runtime/dream.js, using one code path on both.
 
+import system;
+import system.io;
 async fun main(): void {
     let path = "scratch_file_io.txt";
 

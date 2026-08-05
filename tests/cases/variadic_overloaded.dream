@@ -1,5 +1,6 @@
 // Variadic parameters work on overloaded functions.
 
+import system;
 fun h(x: int, ...rest: int[]): int {
     let total = x;
     for (let n in rest) {

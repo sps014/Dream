@@ -1,4 +1,5 @@
 // A variadic parameter must be the last parameter -> error.
+import system;
 fun f(...nums: int[], extra: int): int {
     return extra;
 }

@@ -1,6 +1,25 @@
 # Imports & Modules
 
-A Dream program can span several `.dream` files. `import` at the top of a file pulls in the public declarations — functions, classes, enums — of another file.
+A Dream program can span several `.dream` files. `import` at the top of a file pulls in the public declarations — functions, classes, enums — of another file (or of an embedded stdlib package).
+
+## Standard library packages
+
+Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain import loads that package (and its dependencies) into the program; public names are then usable unqualified:
+
+```dream
+import system;                 // System, DateTime, Stopwatch, …
+import system.collections;     // List, Map, Set
+import system.text;            // string methods, StringBuilder, Regex
+import system.json;            // JSON, JsonValue
+import system.net;             // HttpClient, HttpResponse
+import system.io;              // File, FileStream
+```
+
+Always available without an import (bootstrap): `Option`, `Result`, `Buffer`, `Bytes`, `Span`, `Pointer`, `Promise`, `WebWorker`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).
+
+There is no `import system.*;` wildcard — import each package you need (the editor offers an auto-import quick fix when you type an unresolved stdlib name).
+
+Reserved `system` / `system.*` paths always resolve to the embedded stdlib, not a local `system/…` file.
 
 ## Importing a file
 
@@ -14,6 +33,7 @@ import math_lib;
 - If no matching file exists relative to the importing file, resolution falls back to a
   `dream_packages/` dependency directory installed by the [`dreamer` package manager](../tooling/package-manager.md) — so `import json_tools;` can resolve to a project dependency
   once `dreamer install` has run, with no different syntax required.
+- Names that match a stdlib package (`system`, `system.net`, …) never fall through to the filesystem.
 
 ```dream
 // math_lib.dream
@@ -25,9 +45,10 @@ public fun add_numbers(a: int, b: int): int {
 ```dream
 // main.dream
 import math_lib;
+import system;
 
 fun main() {
-    println(add_numbers(10, 20));   // 30
+    System.println(add_numbers(10, 20));   // 30
 }
 ```
 
@@ -71,6 +92,7 @@ public fun add(a: float, b: float): float {
 
 ```dream
 // main.dream
+import system;
 import utils.math_lib;               // file import, unchanged: loads utils/math_lib.dream
 import vendor.math_lib;              // loads vendor/math_lib.dream
 
@@ -78,8 +100,8 @@ import utils.math.add as add_int;    // aliases the `add` declared in module `ut
 import vendor.math.add as add_float; // aliases the `add` declared in module `vendor.math`
 
 fun main() {
-    println(add_int(1, 2));           // 3
-    println(add_float(1.5, 2.5));     // 4.0
+    System.println(add_int(1, 2));           // 3
+    System.println(add_float(1.5, 2.5));     // 4.0
 }
 ```
 

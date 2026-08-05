@@ -1,5 +1,6 @@
 // Two different modules can declare the same name (`add`); aliased imports resolve the
 // duplicate-name collision without either declaration being renamed.
+import system;
 import helpers.module_utils_math;
 import helpers.module_vendor_math;
 

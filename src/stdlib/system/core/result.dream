@@ -1,0 +1,34 @@
+module system.core;
+
+// `Result<T, E>` - the outcome of an operation that may fail.
+public enum Result<T, E> {
+    Ok(value: T),
+    Err(error: E),
+}
+
+// Ergonomic accessors.
+extend Result<T, E> {
+    // True when this is `Ok`.
+    public fun is_ok(): bool {
+        return switch (this) {
+            Ok(v)  => true,
+            Err(e) => false,
+        };
+    }
+
+    // True when this is `Err`.
+    public fun is_err(): bool {
+        return switch (this) {
+            Ok(v)  => false,
+            Err(e) => true,
+        };
+    }
+
+    // The success value when `Ok`, otherwise `fallback`.
+    public fun unwrap_or(fallback: T): T {
+        return switch (this) {
+            Ok(v)  => v,
+            Err(e) => fallback,
+        };
+    }
+}

@@ -1,5 +1,6 @@
 // Naming the variadic parameter itself is an error — trailing args are always positional.
 
+import system;
 fun sum(...nums: int[]): int {
     let total = 0;
     for (let n in nums) {

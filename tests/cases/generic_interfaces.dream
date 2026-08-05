@@ -2,6 +2,7 @@
 // together. Dynamic dispatch works through the monomorphized interface type (`Container<int>`),
 // including an implicit upcast at a call site and an explicit interface cast.
 
+import system;
 interface Container<T> {
     fun get(): T;
     fun size(): int;

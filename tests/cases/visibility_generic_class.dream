@@ -1,5 +1,6 @@
 // Calling a static method on a non-public generic class from another file is a compile error:
 // the class itself is not visible across files (Axis 2), regardless of the method being public.
+import system;
 import helpers.vis_lib;
 
 fun main(): void {

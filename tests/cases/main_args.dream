@@ -1,3 +1,4 @@
+import system;
 fun main(args: string[]): void {
     System.println("args length:");
     System.println(args.size());

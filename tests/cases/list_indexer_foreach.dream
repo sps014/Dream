@@ -1,6 +1,8 @@
 // The standard `List<T>` is indexable (`get`/`set`) and iterable (`iterator()`), so `list[i]`,
 // `list[i] = v`, and `for (let x in list)` all work out of the box.
 
+import system;
+import system.collections;
 fun main() {
     let xs = List<int>();
     xs.push(1);

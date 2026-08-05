@@ -1,3 +1,4 @@
+import system;
 fun parse_or_propagate(s: string): Result<int, string> {
     let n = int.parse(s)?;
     return Result.Ok(n);

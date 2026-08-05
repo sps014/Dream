@@ -1,6 +1,7 @@
 // The generic two-parameter discriminated union `Result<T, E>` (from the standard library prelude),
 // monomorphized to `Result<int, string>`, matched in both expression and statement position.
 
+import system;
 fun safe_div(a: int, b: int): Result<int, string> {
     if (b == 0) {
         return Result.Err("divide by zero");

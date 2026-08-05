@@ -4,6 +4,9 @@
 
 // Sums any collection through the interface: exercises dynamic dispatch of `size()` and the
 // value-returning `get()` (an sret `Option<int>`) through the itable trampoline.
+import system;
+import system.collections;
+import system.text;
 fun sum(xs: Collection<int>): int {
     let total = 0;
     let i = 0;

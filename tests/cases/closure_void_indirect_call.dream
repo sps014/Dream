@@ -3,6 +3,7 @@
 // materialize a "result" for the call — there is none. See `Statement::IndirectCall` in
 // `src/mir/mod.rs`.
 
+import system;
 class Counter {
     public value: int;
 

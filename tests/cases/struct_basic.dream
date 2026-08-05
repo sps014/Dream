@@ -1,6 +1,7 @@
 // A value `struct` has copy-on-assignment semantics: assigning one value struct to another (or
 // passing it as an argument) copies its bytes, so mutating the copy leaves the original untouched.
 
+import system;
 struct Vec2 {
     public x: int;
     public y: int;

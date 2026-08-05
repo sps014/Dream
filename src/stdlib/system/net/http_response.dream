@@ -1,0 +1,124 @@
+module system.net;
+
+// A parsed view over HTTP response bytes.
+public class HttpResponse {
+    data: char[];
+    boundary: int;
+    scanned: bool;
+
+    constructor(data: char[]) {
+        this.data = data;
+        this.boundary = 0 - 1;
+        this.scanned = false;
+    }
+
+    fun scan(): void {
+        if (this.scanned == false) {
+            this.scanned = true;
+            let n = this.data.size();
+            let i = 0;
+            let found = false;
+            while ((i + 1 < n) && (found == false)) {
+                if ((this.data[i] == '\n') && (this.data[i + 1] == '\n')) {
+                    this.boundary = i;
+                    found = true;
+                }
+                i = i + 1;
+            }
+            if (found == false) {
+                this.boundary = n;
+            }
+        }
+    }
+
+    fun slice_text(start: int, end: int): string {
+        let len = end - start;
+        if (len < 0) {
+            len = 0;
+        }
+        let result = string.alloc(len);
+        let i = 0;
+        while (i < len) {
+            string.set(result, i, this.data[start + i]);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    fun head_text(): string {
+        this.scan();
+        return this.slice_text(0, this.boundary);
+    }
+
+    // The HTTP status code.
+    public fun status(): int {
+        let n = this.data.size();
+        let i = 0;
+        let value = 0;
+        let going = true;
+        while ((i < n) && (going == true)) {
+            let c = this.data[i];
+            if (c.is_digit() == true) {
+                value = value * 10 + (c.to_int() - 48);
+                i = i + 1;
+            } else {
+                going = false;
+            }
+        }
+        return value;
+    }
+
+    // True for a 2xx status.
+    public fun ok(): bool {
+        let s = this.status();
+        return (s >= 200) && (s < 300);
+    }
+
+    // The value of response header `name`.
+    public fun header(name: string): string {
+        let lines = this.head_text().split('\n');
+        let want = name.to_lower();
+        let i = 1;
+        while (i < lines.size()) {
+            let line = lines[i];
+            let colon = line.index_of(':').unwrap_or(0 - 1);
+            if (colon >= 0) {
+                let key = line.substring(0, colon).trim().to_lower();
+                if (key == want) {
+                    return line.substring(colon + 1, line.size()).trim();
+                }
+            }
+            i = i + 1;
+        }
+        return "";
+    }
+
+    // The response body as UTF-8 text.
+    public fun text(): string {
+        this.scan();
+        return this.slice_text(this.boundary + 2, this.data.size());
+    }
+
+    // The response body as raw bytes.
+    public fun bytes(): byte[] {
+        this.scan();
+        let n = this.data.size();
+        let start = this.boundary + 2;
+        if (start > n) {
+            start = n;
+        }
+        let count = n - start;
+        let out = Buffer.alloc<byte>(count);
+        let i = 0;
+        while (i < count) {
+            out[i] = (byte)this.data[start + i];
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // The response body parsed as JSON.
+    public fun json(): JsonValue {
+        return JSON.parse(this.text());
+    }
+}

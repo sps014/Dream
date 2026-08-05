@@ -1,5 +1,7 @@
 # Async / Await
 
+**Packages:** `Promise` / `Future` are bootstrap (`system.core`). `Time.sleep` needs `import system;`. HTTP examples need `import system.net;`.
+
 Dream has cooperative concurrency with `async`/`await`. The execution model is **eager**, like JavaScript: calling an `async fun` starts the work immediately and hands you a `Future<T>` handle; `await` retrieves the result.
 
 ## Declaring and awaiting
@@ -7,6 +9,8 @@ Dream has cooperative concurrency with `async`/`await`. The execution model is *
 Prefix a function with `async`. Its declared return type `T` becomes `Future<T>` at the call site. `await e` suspends the current task until `e`'s future resolves, then yields its value:
 
 ```dream
+import system;
+
 async fun fetchData(): string {
     await Time.sleep(100);   // suspends this task; the event loop keeps running
     return "data";
@@ -14,7 +18,7 @@ async fun fetchData(): string {
 
 async fun main(): void {
     let x = await fetchData();   // x : string
-    println(x);
+    System.println(x);
 }
 ```
 
@@ -40,6 +44,8 @@ let z = flag && await ready();                  // right side of && / || / ??
 Because calls are eager, you can start several before the first `await` and let them run concurrently, then combine them:
 
 ```dream
+import system;
+
 async fun work(id: int): int {
     await Time.sleep(50);
     return id * id;
@@ -74,6 +80,9 @@ let first = await Promise.any([work(10), work(20)]);
 Instance and `static` class methods can be `async`, so a type can own its asynchronous behavior. The call types as `Future<T>` just like a free async call:
 
 ```dream
+import system;
+import system.net;
+
 class Downloader {
     url: string;
     async fun fetch(): string {
@@ -85,7 +94,7 @@ class Downloader {
 async fun main(): void {
     let d = Downloader("https://example.com");
     let body = await d.fetch();   // d.fetch() : Future<string>
-    println(body);
+    System.println(body);
 }
 ```
 
@@ -123,7 +132,7 @@ extern async fun getUser(id: int): string;
 
 async fun main(): void {
     let name = await getUser(42);   // suspends until the JS promise resolves
-    println("user = " + name);
+    System.println("user = " + name);
 }
 ```
 

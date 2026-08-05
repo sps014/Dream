@@ -1,3 +1,5 @@
+import system;
+import system.json;
 fun main(): void {
     let user = JsonValue.dict();
     user.set("name", JsonValue.from_string("Ada"));

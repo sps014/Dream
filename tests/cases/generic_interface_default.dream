@@ -4,6 +4,7 @@
 // it to `int`. `firstOr`'s signature uses the type parameter (`fallback: T`), so it exercises the
 // signature substitution; `count` does not.
 
+import system;
 interface Container<T> {
     fun get(): T;
     public fun firstOr(fallback: T): T {

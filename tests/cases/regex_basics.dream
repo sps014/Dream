@@ -1,3 +1,5 @@
+import system;
+import system.text;
 fun main(): void {
     let digits = Regex("\\d+", "g");
     System.println(digits.test("abc123"));

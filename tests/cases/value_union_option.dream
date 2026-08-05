@@ -2,6 +2,7 @@
 // lives inline (no heap allocation, RC balance unchanged), while `Option<string>` keeps a reference
 // payload and stays on the heap. Matching, accessors, and copies work identically for both.
 
+import system;
 fun classify(o: Option<int>): int {
     return switch (o) {
         Some(v) => v,

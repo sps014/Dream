@@ -2,6 +2,8 @@
 // the wire as a dynamic-length raw byte-blit of the array's elements (never the array pointer, so
 // the two sides never alias the same heap block), reconstructed as a fresh array on the other side.
 
+import system;
+import system.text;
 struct Point {
     public x: int;
     public y: int;

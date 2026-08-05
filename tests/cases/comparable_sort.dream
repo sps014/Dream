@@ -2,6 +2,8 @@
 // built-in interfaces. `==` routes to `equals`, `List.sort()` uses `compare` (dispatched statically,
 // no boxing), and `sort_by` takes an explicit comparator. The value-struct path allocates nothing.
 
+import system;
+import system.collections;
 class Money : Comparable<Money>, Equatable<Money> {
     public cents: int;
 

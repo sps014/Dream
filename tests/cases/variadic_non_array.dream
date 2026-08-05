@@ -1,4 +1,5 @@
 // A variadic parameter must have an array type -> error.
+import system;
 fun f(...n: int): int {
     return n;
 }

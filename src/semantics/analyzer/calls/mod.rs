@@ -582,7 +582,7 @@ impl<'a> Analyzer<'a> {
     }
     /// True while analyzing a function/method declared in the embedded stdlib prelude (its
     /// `current_file` starts with the `<std>/` marker `driver::prelude` gives every prelude file —
-    /// see `PRELUDE_FILES` in `src/stdlib/mod.rs`). The prelude is compiler-authored and reviewed
+    /// see `STD_PACKAGES` in `src/stdlib/mod.rs`). The prelude is compiler-authored and reviewed
     /// like the compiler itself, so it may call `@unsafe` primitives internally (e.g. `List<T>.grow`
     /// using `Buffer.realloc`) without forcing its own public, ordinarily-safe API to become
     /// `@unsafe` too — mirroring how `unsafe` blocks inside `std`/`core` don't make `Vec::push`

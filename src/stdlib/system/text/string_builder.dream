@@ -1,0 +1,88 @@
+module system.text;
+
+// `StringBuilder` — growable string construction (`import system.text;`).
+
+public class StringBuilder {
+    chars: char[];
+    count: int;
+
+    // Allocates an empty builder with an initial backing buffer capacity (defaults to 16).
+    constructor(capacity: int = 16) {
+        let c = capacity;
+        if (c < sequence_min_capacity()) {
+            c = sequence_min_capacity();
+        }
+        this.chars = Buffer.alloc<char>(c);
+        this.count = 0;
+    }
+
+    // Number of characters appended so far.
+    public fun size(): int {
+        return this.count;
+    }
+
+    // True when nothing has been appended yet.
+    public fun is_empty(): bool {
+        return this.count == 0;
+    }
+
+    // Grows the backing buffer to at least `min_capacity` via in-place realloc when possible.
+    fun grow(min_capacity: int): void {
+        let new_cap = this.chars.size() * 2;
+        if (new_cap < min_capacity) {
+            new_cap = min_capacity;
+        }
+        this.chars = Buffer.realloc<char>(this.chars, new_cap);
+    }
+
+    // Appends a single character.
+    public fun append_char(c: char): void {
+        if (this.count == this.chars.size()) {
+            this.grow(this.count + 1);
+        }
+        this.chars[this.count] = c;
+        this.count = this.count + 1;
+    }
+
+    // Appends every character of `text`, growing at most once regardless of `text`'s length.
+    public fun append(text: string): void {
+        let n = text.size();
+        if ((this.count + n) > this.chars.size()) {
+            this.grow(this.count + n);
+        }
+        let i = 0;
+        while (i < n) {
+            this.chars[this.count] = text.char_at(i);
+            this.count = this.count + 1;
+            i = i + 1;
+        }
+    }
+
+    // Appends `text` followed by a newline character.
+    public fun append_line(text: string): void {
+        this.append(text);
+        this.append_char('\n');
+    }
+
+    // Removes every appended character, keeping the backing buffer for reuse.
+    public fun clear(): void {
+        this.count = 0;
+    }
+
+    // Materializes the accumulated characters into a single new string.
+    public fun build(): string {
+        let result = string.alloc(this.count);
+        let i = 0;
+        while (i < this.count) {
+            string.set(result, i, this.chars[i]);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // Object-protocol override, so `print`/`println`/`+`/interpolation all use `build()`'s output
+    // automatically, without an explicit `.build()` call.
+    @override public fun to_string(): string {
+        return this.build();
+    }
+}

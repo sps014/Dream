@@ -3,6 +3,7 @@
 // difference is the compiler additionally rejects any use that would let it escape the current
 // stack frame (see `ref_struct_*_escape.dream`).
 
+import system;
 ref struct Pair {
     public a: int;
     public b: int;

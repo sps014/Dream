@@ -7,6 +7,9 @@
 // copied across the boundary as strings. Use `JSON.serialize`/`JSON.deserialize` at the call site
 // for structured payloads.
 
+import system;
+import system.text;
+import system.json;
 fun greet(name: string): string {
     return "hello, " + name + "!";
 }

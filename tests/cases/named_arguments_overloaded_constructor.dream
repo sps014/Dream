@@ -1,5 +1,6 @@
 // Named arguments work on overloaded constructors.
 
+import system;
 class Point {
     public x: int;
     public y: int;

@@ -1,6 +1,7 @@
 // `await` may appear in unconditionally-evaluated sub-expressions: call arguments, operands, array
 // literals, etc. The compiler hoists each nested await into a top-level temporary before the async
 // coroutine transform, preserving left-to-right evaluation order.
+import system;
 async fun val(n: int): int {
     await Time.sleep(5);
     return n;

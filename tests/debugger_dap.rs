@@ -11,7 +11,9 @@ use std::time::Duration;
 
 /// A tiny two-function program so the call stack has depth: a breakpoint inside `add` should show
 /// both `add` and `main`.
-const PROGRAM: &str = r#"fun add(a: int, b: int): int {
+const PROGRAM: &str = r#"import system;
+
+fun add(a: int, b: int): int {
     let sum = a + b;
     return sum;
 }
@@ -156,12 +158,12 @@ fn dap_breakpoint_stack_variables_step_continue() {
     client.request("launch", serde_json::json!({ "program": source_path }));
     client.wait_response("launch");
 
-    // Breakpoint on `return sum;` (line 3), inside `add`.
+    // Breakpoint on `return sum;` (line 5), inside `add`.
     client.request(
         "setBreakpoints",
         serde_json::json!({
             "source": { "path": source_path },
-            "breakpoints": [ { "line": 3 } ],
+            "breakpoints": [ { "line": 5 } ],
         }),
     );
     let bp = client.wait_response("setBreakpoints");
@@ -174,12 +176,12 @@ fn dap_breakpoint_stack_variables_step_continue() {
     let stopped = client.wait_event("stopped");
     assert_eq!(stopped["body"]["reason"], "breakpoint");
 
-    // The call stack must show `add` (innermost, line 3) over `main`.
+    // The call stack must show `add` (innermost, line 5) over `main`.
     client.request("stackTrace", serde_json::json!({ "threadId": 1 }));
     let st = client.wait_response("stackTrace");
     let frames = st["body"]["stackFrames"].as_array().unwrap();
     assert_eq!(frames[0]["name"], "add");
-    assert_eq!(frames[0]["line"], 3);
+    assert_eq!(frames[0]["line"], 5);
     assert_eq!(frames[1]["name"], "main");
     // Frame ids are namespaced per thread; a real client uses the id returned by `stackTrace`.
     let frame_id = frames[0]["id"].clone();
@@ -266,7 +268,9 @@ fn run_to_breakpoint(source_path: &str, line: u32) -> DapClient {
 
 /// An `async fun main` whose body has a branch/loop; a breakpoint on the `if` header line must hit,
 /// with a clean user-only call stack and live locals decoded from the coroutine frame.
-const ASYNC_PROGRAM: &str = r#"fun compute(n: int): int {
+const ASYNC_PROGRAM: &str = r#"import system;
+
+fun compute(n: int): int {
     let total = 0;
     let i = 0;
     while (i < n) {
@@ -289,8 +293,8 @@ async fun main(): void {
 fn dap_async_breakpoint_on_branch_with_locals() {
     let (dir, source_path) = write_temp_program("async", ASYNC_PROGRAM);
 
-    // Line 14 is the `if (sum > 5)` header inside the async `main`.
-    let mut client = run_to_breakpoint(&source_path, 14);
+    // Line 16 is the `if (sum > 5)` header inside the async `main`.
+    let mut client = run_to_breakpoint(&source_path, 16);
 
     let stopped = client.wait_event("stopped");
     assert_eq!(stopped["body"]["reason"], "breakpoint");
@@ -306,10 +310,10 @@ fn dap_async_breakpoint_on_branch_with_locals() {
         "async call stack should contain only `main`"
     );
     assert_eq!(frames[0]["name"], "main");
-    assert_eq!(frames[0]["line"], 14);
+    assert_eq!(frames[0]["line"], 16);
     let frame_id = frames[0]["id"].clone();
 
-    // Locals decode from the coroutine frame: base=10 and sum=45 (compute(10) = 0+..+9) by line 14.
+    // Locals decode from the coroutine frame: base=10 and sum=45 (compute(10) = 0+..+9) by line 16.
     client.request("scopes", serde_json::json!({ "frameId": frame_id }));
     let scopes = client.wait_response("scopes");
     let reference = scopes["body"]["scopes"][0]["variablesReference"].clone();
@@ -336,7 +340,9 @@ fn dap_async_breakpoint_on_branch_with_locals() {
 
 /// A program that offloads `work` to a `WebWorker`; `work` runs only on the worker thread, so a
 /// breakpoint in its body must stop that worker's DAP thread (id 2), not the main thread.
-const WORKER_PROGRAM: &str = r#"fun work(input: string): string {
+const WORKER_PROGRAM: &str = r#"import system;
+
+fun work(input: string): string {
     let n = input.size();
     let acc = 0;
     let i = 0;
@@ -360,8 +366,8 @@ async fun main(): void {
 fn dap_worker_breakpoint_stops_worker_thread() {
     let (dir, source_path) = write_temp_program("worker", WORKER_PROGRAM);
 
-    // Line 6 (`acc = acc + i;`) is inside `work`, which executes only on the worker thread.
-    let mut client = run_to_breakpoint(&source_path, 6);
+    // Line 8 (`acc = acc + i;`) is inside `work`, which executes only on the worker thread.
+    let mut client = run_to_breakpoint(&source_path, 8);
 
     // The worker registers as its own DAP thread before it stops.
     let started = client.wait_for(|m| {
@@ -389,7 +395,7 @@ fn dap_worker_breakpoint_stops_worker_thread() {
     let st = client.wait_response("stackTrace");
     let frames = st["body"]["stackFrames"].as_array().unwrap();
     assert_eq!(frames[0]["name"], "work");
-    assert_eq!(frames[0]["line"], 6);
+    assert_eq!(frames[0]["line"], 8);
     let frame_id = frames[0]["id"].clone();
 
     // Variables decode from the worker instance's own linear memory: input="hello", n=5.

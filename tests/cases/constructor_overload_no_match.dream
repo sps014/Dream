@@ -1,5 +1,6 @@
 // Calling an overloaded constructor with an argument list that matches none of its overloads is a
 // compile-time error, not a runtime one.
+import system;
 class Point {
     x: int;
     y: int;

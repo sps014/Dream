@@ -1,3 +1,4 @@
+import system;
 fun main() {
     System.print(123);
     System.print("\n");

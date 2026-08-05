@@ -1,3 +1,5 @@
+import system;
+import system.text;
 fun main(): void {
     let date = Regex("(\\d{4})-(\\d{2})-(\\d{2})", "");
     let caps = date.match("2026-08-04");

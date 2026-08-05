@@ -3,6 +3,7 @@
 // omitted trailing arguments fall back to their defaults. An exact-arity call is preferred over a
 // defaulted one.
 
+import system;
 fun scale(n: int, by: int = 2): int {
     return n * by;
 }

@@ -1,6 +1,8 @@
 // @json on a generic discriminated union: the derive attaches to the template `Opt<T>` and each
 // concrete instantiation gets its own converters. Type-parameter payloads round-trip through
 // `JSON.serialize`/`JSON.deserialize`, resolved per instance by the monomorphizer.
+import system;
+import system.json;
 @json
 struct Point { public x: int; public y: int; constructor(x: int, y: int) { this.x = x; this.y = y; } }
 

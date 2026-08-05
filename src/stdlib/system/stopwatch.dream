@@ -1,3 +1,5 @@
+module system;
+
 // A high-resolution timer for measuring elapsed time, useful for benchmarking.
 public class Stopwatch {
     public is_running: bool;

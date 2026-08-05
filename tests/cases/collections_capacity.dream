@@ -1,3 +1,5 @@
+import system;
+import system.collections;
 fun main(): void {
     // List with default capacity
     let l1 = List<int>();

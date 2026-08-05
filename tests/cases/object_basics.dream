@@ -1,5 +1,6 @@
 // Object type: boxing primitives, to_string, unboxing via cast, runtime `is`,
 // and reference (pointer) equality.
+import system;
 fun main() {
     let o: object = 42;
     System.print(o);

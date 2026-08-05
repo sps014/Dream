@@ -1,4 +1,5 @@
 // `Option<T>` comes from the standard library prelude.
+import system;
 enum Shape {
     Circle(radius: int),
     Rect(width: int, height: int),

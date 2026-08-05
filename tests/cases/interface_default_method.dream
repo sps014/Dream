@@ -2,6 +2,7 @@
 // The default calls another interface method (`name`) on `this`, which dispatches to the concrete
 // implementation. `Robot` overrides the default; `Person` inherits it.
 
+import system;
 interface Greeter {
     fun name(): string;
     fun greet(): string {

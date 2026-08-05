@@ -1,6 +1,7 @@
 // `@stack` allows any number of non-self-referential reference-typed payload fields inline:
 // refs across different variants (Either) and multiple refs in one variant (Pair).
 
+import system;
 @stack
 enum Either {
     Left(value: string),

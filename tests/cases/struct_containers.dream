@@ -2,6 +2,7 @@
 // fields embedded directly inside a heap `class`, and as union payloads. Each is read/written and
 // mutated in place.
 
+import system;
 struct Pair {
     public a: int;
     public b: int;

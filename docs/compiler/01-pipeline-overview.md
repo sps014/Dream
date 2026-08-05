@@ -8,7 +8,7 @@ This chapter is the map. It walks the whole compilation pipeline stage by stage:
 flowchart TD
     src["source files (.dream)"]
     src --> load["source_loader: resolve imports,\nparse each file, merge declarations"]
-    load --> prelude["prelude::merge_prelude\n(inject stdlib)"]
+    load --> prelude["prelude::merge_prelude\n(selective system.* packages)"]
     prelude --> ast["AST (SyntaxTree / ProgramNode)"]
 
     ast --> analyze["semantics::Analyzer::analyze\ntype-check, scopes, async rules,\ngeneric instantiation"]
@@ -32,7 +32,7 @@ The `hir → mir → emit` pipeline is the **only** backend.
 ### 1. Source loading — `src/driver/source_loader.rs`, `src/driver/prelude.rs`
 
 - **In:** an entry file path.
-- **Out:** one merged `ProgramNode` (all imported files' declarations plus the prelude).
+- **Out:** one merged `ProgramNode` (all imported files' declarations plus the selectively merged stdlib packages).
 - **Key types:** `ProgramAccumulator` collects `all_functions`, `all_structs`, `all_enums`, `all_extends`, `all_globals`, and `visited` (the cycle guard).
 - **Guarantees:** import cycles are broken; every referenced module is parsed once.
 

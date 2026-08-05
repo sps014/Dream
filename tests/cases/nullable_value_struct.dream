@@ -2,6 +2,7 @@
 // `Some`/`None` make the "no value" case explicit, and `unwrap_or` (the `??` sugar) hands back an
 // inline `Point` either way.
 
+import system;
 struct Point {
     public x: int;
     public y: int;

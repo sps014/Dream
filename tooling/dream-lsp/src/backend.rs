@@ -128,9 +128,42 @@ fn compute_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnostic> {
                 _ => Some(DiagnosticSeverity::INFORMATION),
             },
             message: d.message,
+            code: d.code.map(|c| NumberOrString::String(c.to_string())),
             ..Default::default()
         })
         .collect()
+}
+
+/// Identifier under / at `offset` (ASCII letters, digits, `_`).
+fn word_at(text: &str, offset: usize) -> Option<String> {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut i = offset.min(bytes.len().saturating_sub(1));
+    if !bytes[i].is_ascii_alphanumeric() && bytes[i] != b'_' {
+        if i == 0 {
+            return None;
+        }
+        i -= 1;
+    }
+    if !bytes[i].is_ascii_alphanumeric() && bytes[i] != b'_' {
+        return None;
+    }
+    let mut start = i;
+    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+        start -= 1;
+    }
+    let mut end = i + 1;
+    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+        end += 1;
+    }
+    let name = &text[start..end];
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
 }
 
 /// Applies a single content change to `text`. A change with no range is a full-document
@@ -197,6 +230,7 @@ impl LanguageServer for Backend {
                 code_lens_provider: Some(CodeLensOptions {
                     resolve_provider: Some(false),
                 }),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -486,22 +520,82 @@ impl LanguageServer for Backend {
         };
         let completions = idx.completions(file_path.as_deref(), &text, offset);
 
-        let items: Vec<CompletionItem> = completions
-            .into_iter()
-            .map(|(label, kind, detail, doc_comment)| CompletionItem {
-                label,
-                kind: Some(completion_kind(kind)),
-                detail: Some(detail),
-                documentation: doc_comment.map(|doc| {
-                    Documentation::MarkupContent(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: doc,
-                    })
-                }),
-                ..Default::default()
-            })
-            .collect();
+        let items: Vec<CompletionItem> = {
+            let mut items: Vec<CompletionItem> = completions
+                .into_iter()
+                .map(|(label, kind, detail, doc_comment)| CompletionItem {
+                    label,
+                    kind: Some(completion_kind(kind)),
+                    detail: Some(detail),
+                    documentation: doc_comment.map(|doc| {
+                        Documentation::MarkupContent(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: doc,
+                        })
+                    }),
+                    ..Default::default()
+                })
+                .collect();
+
+            // Offer not-yet-imported stdlib exports with an import edit on accept.
+            let existing: std::collections::HashSet<String> =
+                items.iter().map(|i| i.label.clone()).collect();
+            for (label, package, detail) in crate::code_actions::unloaded_stdlib_completions(&text) {
+                if existing.contains(&label) {
+                    continue;
+                }
+                let additional = crate::code_actions::import_text_edits(&text, package);
+                items.push(CompletionItem {
+                    label,
+                    kind: Some(CompletionItemKind::CLASS),
+                    detail: Some(detail),
+                    additional_text_edits: additional,
+                    ..Default::default()
+                });
+            }
+            items
+        };
         Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri.clone();
+        let key = uri.to_string();
+        let Some(text) = self.document_text(&key) else {
+            return Ok(None);
+        };
+        let mut actions = Vec::new();
+        for diag in &params.context.diagnostics {
+            let is_unresolved = diag
+                .code
+                .as_ref()
+                .map(|c| matches!(c, NumberOrString::String(s) if s == "unresolved-name"))
+                .unwrap_or(false)
+                || diag.message.contains("does not exist")
+                || diag.message.contains("not found");
+            if !is_unresolved {
+                continue;
+            }
+            if let Some(name) = crate::code_actions::unresolved_name_from_message(&diag.message) {
+                actions.extend(crate::code_actions::auto_import_actions(&uri, &text, &name));
+            }
+        }
+        // Also offer based on the word under the selection range when diagnostics are empty.
+        if actions.is_empty() {
+            let line_index = LineIndex::new(&text);
+            let offset = line_index.offset(
+                params.range.start.line,
+                params.range.start.character,
+            );
+            if let Some(name) = word_at(&text, offset) {
+                actions.extend(crate::code_actions::auto_import_actions(&uri, &text, &name));
+            }
+        }
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
     }
 
     async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {

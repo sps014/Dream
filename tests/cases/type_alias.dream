@@ -1,3 +1,4 @@
+import system;
 type Number = int;
 type Text = string;
 

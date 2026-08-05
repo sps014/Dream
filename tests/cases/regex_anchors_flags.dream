@@ -1,3 +1,5 @@
+import system;
+import system.text;
 fun main(): void {
     let anchored = Regex("^abc$", "");
     System.println(anchored.test("abc"));

@@ -1,6 +1,7 @@
 // A `ref struct` cannot be captured by a lambda: the lambda's closure environment is a
 // heap-allocated `__Cell<T>`, which would force the captured stack-only value onto the heap.
 
+import system;
 ref struct Pair {
     public a: int;
     public b: int;

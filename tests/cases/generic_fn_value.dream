@@ -2,6 +2,7 @@
 // expected function type at the use site, and the instance is monomorphized like any other generic
 // call. Constraints (`T : Comparable<T>`) are enforced against the inferred type.
 
+import system;
 fun natural_order<T : Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }

@@ -1,6 +1,7 @@
 // The object protocol: compile-time generated default to_string/hash_code for a class,
 // and @override public implementations for another class, plus runtime dispatch through
 // an `object`.
+import system;
 class Point {
     x: int;
     y: int;

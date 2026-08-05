@@ -1,0 +1,97 @@
+module system.io;
+
+// FileStream: a buffered, seekable cursor over a file's bytes.
+public class FileStream {
+    data: byte[];
+    pos: int;
+
+    constructor(data: byte[]) {
+        this.data = data;
+        this.pos = 0;
+    }
+
+    // Clamps `end` to the buffer length and returns it (helper for the read methods).
+    fun _clamp(end: int): int {
+        if (end > this.data.size()) {
+            return this.data.size();
+        }
+        return end;
+    }
+
+    // Reads up to `n` raw bytes from the current position, advancing the cursor. No conversion.
+    public fun read_bytes(n: int): byte[] {
+        let end = this._clamp(this.pos + n);
+        let count = end - this.pos;
+        if (count < 0) {
+            count = 0;
+        }
+        let out = Buffer.alloc<byte>(count);
+        let i = 0;
+        while (i < count) {
+            out[i] = this.data[this.pos + i];
+            i = i + 1;
+        }
+        this.pos = end;
+        return out;
+    }
+
+    // Reads up to `n` bytes from the current position as text, advancing the cursor. Each raw
+    // byte is widened to a `char` code point for the string view.
+    public fun read(n: int): string {
+        let end = this._clamp(this.pos + n);
+        let count = end - this.pos;
+        if (count < 0) {
+            count = 0;
+        }
+        let out = string.alloc(count);
+        let i = 0;
+        while (i < count) {
+            string.set(out, i, (char)this.data[this.pos + i]);
+            i = i + 1;
+        }
+        this.pos = end;
+        return out;
+    }
+
+    // Reads everything remaining from the current position as text.
+    public fun read_all(): string {
+        return this.read(this.data.size() - this.pos);
+    }
+
+    // True while there are unread bytes.
+    public fun has_more(): bool {
+        return this.pos < this.data.size();
+    }
+
+    // Current cursor offset (bytes from the start).
+    public fun position(): int {
+        return this.pos;
+    }
+
+    // Total number of buffered bytes (the same `size()` every collection answers to).
+    public fun size(): int {
+        return this.data.size();
+    }
+
+    // Moves the cursor to an absolute offset (clamped to [0, length]).
+    public fun seek(offset: int): void {
+        let target = offset;
+        if (target < 0) {
+            target = 0;
+        }
+        if (target > this.data.size()) {
+            target = this.data.size();
+        }
+        this.pos = target;
+    }
+
+    // Rewinds the cursor to the start.
+    public fun reset(): void {
+        this.pos = 0;
+    }
+
+    // Releases the buffer (no-op for the buffered stream; present for API symmetry).
+    public fun close(): void {
+        this.pos = this.data.size();
+    }
+}

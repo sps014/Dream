@@ -3,6 +3,7 @@
 // the boundary as copied strings. `send` is post+await; `post`/`receive` let several workers run
 // concurrently.
 
+import system;
 fun shout(msg: string): string {
     return msg + "!";
 }

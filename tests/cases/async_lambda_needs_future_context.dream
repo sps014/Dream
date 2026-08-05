@@ -1,3 +1,4 @@
+import system;
 async fun main(): void {
     // Async lambdas are `fun(...): Future<T>` values — a plain `fun(...): T` context is wrong.
     let f: fun(int): int = async (x) => x * 2;

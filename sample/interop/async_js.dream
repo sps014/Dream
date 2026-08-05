@@ -7,6 +7,7 @@
 // `js` (the Promise handle). `await` on a `js` value desugars to the async `jsAwait` bridge,
 // suspending the task until the Promise settles and yielding the resolved value as another `js`.
 
+import system;
 async fun main(): void {
     System.println("fetching...");
 

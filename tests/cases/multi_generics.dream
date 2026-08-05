@@ -1,6 +1,7 @@
 // Multiple generic parameters: two-parameter class (with a method using both params),
 // two-parameter functions, and a mangling-collision check between Pair<int, float> and
 // Pair<int, double> (which previously both collapsed to "Pair_int").
+import system;
 class Pair<K, V> {
     public key: K;
     public value: V;

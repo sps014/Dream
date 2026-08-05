@@ -54,18 +54,16 @@ impl Index {
 
             let mut acc = dream::driver::source_loader::ProgramAccumulator::default();
 
-            // Inject standard library (prelude) symbols
-            let mut file_contents = std::collections::HashMap::new();
-            let _ = dream::driver::prelude::merge_prelude(
-                &arena,
-                &mut acc.all_functions,
-                &mut acc.all_structs,
-                &mut acc.all_interfaces,
-                &mut acc.all_enums,
-                &mut acc.all_extends,
-                &mut scratch,
-                &mut file_contents,
-            );
+            // Collect std + file imports before prelude merge so opt-in packages load.
+            for import in &program.imports {
+                if import.alias.is_some() {
+                    continue;
+                }
+                let module_name = import.module_name.text.as_str();
+                if let Some(pkg) = dream::stdlib::std_package_from_slash_path(module_name) {
+                    acc.requested_std_packages.insert(pkg.name.to_string());
+                }
+            }
 
             if let Some(path_str) = file_path {
                 let parent_dir = std::path::Path::new(path_str)
@@ -75,7 +73,13 @@ impl Index {
                 acc.visited.insert(path_str.to_string());
 
                 for import in &program.imports {
+                    if import.alias.is_some() {
+                        continue;
+                    }
                     let module_name = import.module_name.text.as_str();
+                    if dream::stdlib::std_package_from_slash_path(module_name).is_some() {
+                        continue;
+                    }
                     let import_path =
                         dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
 
@@ -91,6 +95,28 @@ impl Index {
                     }
                 }
             }
+
+            if acc.all_structs.iter().any(|s| {
+                s.attributes.iter().any(|a| a.name.text == "json")
+            }) || acc.all_enums.iter().any(|e| {
+                e.attributes.iter().any(|a| a.name.text == "json")
+            }) {
+                acc.requested_std_packages
+                    .insert("system.json".to_string());
+            }
+
+            let _ = dream::driver::prelude::merge_prelude(
+                &arena,
+                &mut acc.all_functions,
+                &mut acc.all_structs,
+                &mut acc.all_interfaces,
+                &mut acc.all_enums,
+                &mut acc.all_extends,
+                &mut scratch,
+                &mut acc.file_contents,
+                &mut acc.file_modules,
+                &acc.requested_std_packages,
+            );
 
             let combined = dream::syntax::nodes::ProgramNode::new(
                 vec![],

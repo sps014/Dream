@@ -3,6 +3,7 @@
 // The coroutine transform lowers the whole body to a CFG state machine where each `await` is a
 // suspend point, so each of these resumes correctly (including a loop that suspends every iteration).
 
+import system;
 async fun g(n: int): int { return n; }
 async fun ready(): bool { return true; }
 

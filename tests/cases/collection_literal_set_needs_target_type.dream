@@ -1,5 +1,7 @@
 // A Set literal has no bare-element fallback type (unlike `[...]`, which falls back to `T[]`), so
 // it requires a `Set<T>`-typed context -> error.
+import system;
+import system.collections;
 fun main(): void {
     let s = {1, 2, 3};
     System.println(s);

@@ -1,6 +1,8 @@
 // A value `struct` supports `@json` exactly like a `class`: the derive emits `to_json`/`from_json`
 // via an `extend` block, so value types round-trip through `JSON.serialize` / `JSON.deserialize`.
 
+import system;
+import system.json;
 @json
 struct Point {
     public x: int;

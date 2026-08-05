@@ -2,6 +2,7 @@
 // literal guard inside the nesting.
 
 // `Option<T>` comes from the standard library prelude.
+import system;
 enum Pair {
     Both(left: Option<int>, right: Option<int>),
     Neither,

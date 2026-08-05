@@ -2,6 +2,7 @@
 // (int/long/uint/ulong/byte). `>>` is arithmetic (sign-extending) on the signed types and logical
 // (zero-filling) on the unsigned types; `byte` results wrap into `0..255`.
 
+import system;
 fun main(): void {
     // int
     let a = 12;

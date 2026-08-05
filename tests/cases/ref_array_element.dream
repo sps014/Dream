@@ -1,3 +1,4 @@
+import system;
 fun increment(ref x: int): void {
     x = x + 1;
 }

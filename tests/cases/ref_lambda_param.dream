@@ -1,4 +1,5 @@
 // Lambda `ref` parameters: surface type `fun(ref T): R`, call with `f(ref x)`.
+import system;
 fun main(): void {
     let inc: fun(ref int): void = (ref n: int) => {
         n = n + 1;

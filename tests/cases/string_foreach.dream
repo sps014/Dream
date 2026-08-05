@@ -1,5 +1,6 @@
 // A string is indexable (`s[i]` -> char) and iterable (`for (let c in s)`), mirroring the
 // collection protocol used by List and Map.
+import system;
 fun main(): void {
     let s = "abc";
     System.print(s[0]);   // a

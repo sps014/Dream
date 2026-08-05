@@ -1,4 +1,5 @@
 // Async lambda as a `WebWorker` body via the `fun(TIn): Future<TOut>` constructor overload.
+import system;
 async fun main(): void {
     let w = WebWorker<string, string>(async (msg) => {
         await Time.sleep(1);

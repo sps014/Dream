@@ -1,5 +1,6 @@
 // Named arguments work on overloaded functions: the name set filters candidates, then types pick.
 
+import system;
 fun h(x: int): int { return x; }
 fun h(x: string): int { return 1; }
 

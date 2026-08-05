@@ -1,6 +1,7 @@
 // `Buffer.realloc<T>`/`Buffer.free<T>` (`@unsafe`): manual, non-ARC control over an array's backing
 // block via the allocator's `$realloc`/`$free`.
 
+import system;
 @unsafe
 fun grow_and_shrink(): void {
     let xs = Buffer.alloc<int>(3);

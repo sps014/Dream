@@ -5,6 +5,7 @@
 //   cargo run -- sample/interop/callback_multi.dream
 //   node sample/interop/callback_multi.mjs sample/interop/callback_multi.wasm
 
+import system;
 fun each(value: js, index: js): void {
     System.println(index.to_str() + ": " + value.to_str());
 }

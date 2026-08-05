@@ -1,5 +1,6 @@
 // Top-level `let`/`const` variables become WASM globals. Initializers run once at module
 // start (in declaration order) and may reference earlier globals.
+import system;
 let counter: int = 10;
 const FACTOR: int = 3;
 let derived: int = counter * FACTOR;

@@ -2,6 +2,7 @@
 // arithmetic (signed vs unsigned), implicit widening, explicit narrowing casts, boxing into
 // object, string conversion, byte arrays, and the prelude extension methods.
 
+import system;
 fun main() {
     let b: byte = 200b;
     let u: uint = 4000000000u;

@@ -1,5 +1,6 @@
 // Regression test: a semantic error in an imported file must be reported with the
 // imported file's name and line number (multi-file diagnostics).
+import system;
 import helpers.broken;
 
 fun main() {

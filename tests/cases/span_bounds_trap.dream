@@ -2,6 +2,7 @@
 // actual size: a slice narrower than its backing array still traps on an index that would be
 // in-bounds for the array but out-of-bounds for the span.
 
+import system;
 fun main(): void {
     let xs = [1, 2, 3, 4, 5];
     let mid = Span<int>.of(xs).slice(1, 2); // covers xs[1..3), i.e. indices 0..2 of the span

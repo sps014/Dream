@@ -85,9 +85,12 @@ impl Compiler {
 
         parse_file_recursive(main_file_path, &mut acc, &arena, &mut diagnostics)?;
 
-        // The standard collections (List<T>, Map<K, V>) are embedded in the compiler and merged
-        // into every program as a prelude. They are generic templates, so they emit no code unless
-        // the program actually instantiates them.
+        // Opt-in stdlib packages (`import system.net;`, etc.) plus always-on bootstrap
+        // (`system.core` / `system.primitives`). `@json` types need `system.json` for derives.
+        if program_uses_json_attr(&acc) {
+            acc.requested_std_packages
+                .insert("system.json".to_string());
+        }
         merge_prelude(
             &arena,
             &mut acc.all_functions,
@@ -97,6 +100,8 @@ impl Compiler {
             &mut acc.all_extends,
             &mut diagnostics,
             &mut acc.file_contents,
+            &mut acc.file_modules,
+            &acc.requested_std_packages,
         )?;
 
         // Validate every attribute in the merged program (unknown names, disallowed placements,
@@ -301,4 +306,17 @@ fn debug_map_path(out_path: &str) -> String {
         .join(format!("{}.dbg.json", stem))
         .to_string_lossy()
         .into_owned()
+}
+
+/// True when any collected user type carries `@json` (derived converters need `system.json`).
+fn program_uses_json_attr(acc: &ProgramAccumulator<'_>) -> bool {
+    acc.all_structs.iter().any(|s| {
+        s.attributes
+            .iter()
+            .any(|a| a.name.text == "json")
+    }) || acc.all_enums.iter().any(|e| {
+        e.attributes
+            .iter()
+            .any(|a| a.name.text == "json")
+    })
 }

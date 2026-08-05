@@ -1,4 +1,5 @@
 // Two methods on the same type cannot both claim the binary `+` operator.
+import system;
 class Vector2 {
     public x: int;
 

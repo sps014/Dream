@@ -2,6 +2,7 @@
 // the coroutine's own `Future` frame, not aliased to the caller's (possibly transient) storage -
 // same by-value contract `emit_value_frame_prologue` gives an ordinary function's value params.
 
+import system;
 struct Point {
     public x: int;
     public y: int;

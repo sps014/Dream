@@ -1,10 +1,14 @@
 # DateTime
 
-`DateTime` represents an instant in time, rendered either in UTC or a fixed local offset. It is auto-imported into every program — no `import` needed, like `Math`, `File`, and `Time`.
+**Package:** `system` — `import system;`
+
+`DateTime` represents an instant in time, rendered either in UTC or a fixed local offset. The same package also provides `System`, `Time`, `Stopwatch`, `ConsoleColor`, and `Debug`.
 
 Only two operations genuinely need the host: reading the wall clock and resolving the local timezone's UTC offset (including DST). Everything else — calendar math, arithmetic, comparison, and ISO-8601 formatting/parsing — is pure Dream, so it behaves identically on the native CLI, Node.js, and the browser.
 
 ```dream
+import system;
+
 fun main(): void {
     let now = DateTime.now();                            // local time
     System.println(now.to_iso8601());

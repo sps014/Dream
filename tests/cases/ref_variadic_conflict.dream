@@ -1,3 +1,4 @@
+import system;
 fun bad(ref ...xs: int[]): void {
     System.println(xs.len());
 }

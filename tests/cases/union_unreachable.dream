@@ -1,5 +1,6 @@
 // Unreachable arm: a `_` catch-all precedes a concrete arm, so the trailing arm can never be reached.
 
+import system;
 enum Light {
     Red(brightness: int),
     Green,

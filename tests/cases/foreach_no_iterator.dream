@@ -1,6 +1,7 @@
 // A class without an `iterator()` method cannot be used in `for (let x in obj)`. Compilation must
 // fail with a targeted diagnostic.
 
+import system;
 class NoIter {
     x: int;
     constructor() { this.x = 0; }

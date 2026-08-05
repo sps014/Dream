@@ -1,0 +1,204 @@
+module system.collections;
+
+// A generic open-addressing hash set.
+public class Set<T> {
+    keys: T[];
+    states: int[];
+    count: int;
+    used: int;
+    cap: int;
+
+    // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
+    constructor(capacity: int = 8) {
+        let c = hash_min_capacity();
+        while (c < capacity) {
+            c = c * 2;
+        }
+        this.cap = c;
+        this.keys = Buffer.alloc<T>(c);
+        this.states = Buffer.alloc<int>(c);
+        this.count = 0;
+        this.used = 0;
+    }
+
+    // Number of elements currently stored.
+    public fun size(): int {
+        return this.count;
+    }
+
+    // Current capacity of the backing buffer.
+    public fun capacity(): int {
+        return this.cap;
+    }
+
+    // Initial probe index for a value.
+    public fun home(value: T): int {
+        let h = value.hash_code();
+        return h & (this.cap - 1);
+    }
+
+    // Index of an occupied slot holding a value, or -1.
+    public fun find(value: T): int {
+        let idx = this.home(value);
+        let result = -1;
+        let searching = true;
+        while (searching == true) {
+            let s = this.states[idx];
+            if (s == hash_slot_empty()) {
+                searching = false;
+            } else {
+                if (s == hash_slot_occupied()) {
+                    if (this.keys[idx] == value) {
+                        result = idx;
+                        searching = false;
+                    }
+                }
+                if (searching == true) {
+                    idx = idx + 1;
+                    if (idx == this.cap) {
+                        idx = 0;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    // Grows and rehashes the set when it gets too full.
+    fun rehash(): void {
+        let old_keys = this.keys;
+        let old_states = this.states;
+        let old_cap = this.cap;
+        let new_cap = old_cap * 2;
+        if (new_cap < hash_min_capacity()) {
+            new_cap = hash_min_capacity();
+        }
+        this.keys = Buffer.alloc<T>(new_cap);
+        this.states = Buffer.alloc<int>(new_cap);
+        this.cap = new_cap;
+        this.count = 0;
+        this.used = 0;
+        let i = 0;
+        while (i < old_cap) {
+            if (old_states[i] == hash_slot_occupied()) {
+                this.add(old_keys[i]);
+            }
+            i = i + 1;
+        }
+    }
+
+    // Inserts a value into the set. Returns true if it was newly added, false if already present.
+    public fun add(value: T): bool {
+        if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
+            this.rehash();
+        }
+        let idx = this.home(value);
+        let first_tomb = -1;
+        let placed = false;
+        let added = false;
+        while (placed == false) {
+            let s = this.states[idx];
+            if (s == hash_slot_empty()) {
+                let target = idx;
+                if (first_tomb >= 0) {
+                    target = first_tomb;
+                }
+                this.keys[target] = value;
+                this.states[target] = hash_slot_occupied();
+                this.count = this.count + 1;
+                if (first_tomb < 0) {
+                    this.used = this.used + 1;
+                }
+                placed = true;
+                added = true;
+            } else {
+                if (s == hash_slot_tombstone()) {
+                    if (first_tomb < 0) {
+                        first_tomb = idx;
+                    }
+                } else {
+                    if (this.keys[idx] == value) {
+                        placed = true;
+                        added = false;
+                    }
+                }
+                if (placed == false) {
+                    idx = idx + 1;
+                    if (idx == this.cap) {
+                        idx = 0;
+                    }
+                }
+            }
+        }
+        return added;
+    }
+
+    // True if the set contains the value.
+    public fun contains(value: T): bool {
+        return this.find(value) >= 0;
+    }
+
+    // Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls).
+    // Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal
+    // with N elements costs one call, not N.
+    public fun add_all(items: T[]): void {
+        let i = 0;
+        while (i < items.size()) {
+            this.add(items[i]);
+            i = i + 1;
+        }
+    }
+
+    // Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}`
+    // set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.
+    public static fun from_array(items: T[]): Set<T> {
+        let result = Set<T>(items.size());
+        result.add_all(items);
+        return result;
+    }
+
+    // Removes a value and returns true if it was removed.
+    public fun remove(value: T): bool {
+        let i = this.find(value);
+        if (i >= 0) {
+            this.states[i] = hash_slot_tombstone();
+            this.count = this.count - 1;
+            return true;
+        }
+        return false;
+    }
+
+    // True if the set is empty.
+    public fun is_empty(): bool {
+        return this.count == 0;
+    }
+
+    // Removes all elements.
+    public fun clear(): void {
+        this.keys = Buffer.alloc<T>(hash_min_capacity());
+        this.states = Buffer.alloc<int>(hash_min_capacity());
+        this.count = 0;
+        this.used = 0;
+        this.cap = hash_min_capacity();
+    }
+
+    // Gets all elements as an array.
+    public fun to_array(): T[] {
+        let result = Buffer.alloc<T>(this.count);
+        let i = 0;
+        let j = 0;
+        while (i < this.cap) {
+            if (this.states[i] == hash_slot_occupied()) {
+                result[j] = this.keys[i];
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // Gets an iterator for the set.
+    public fun iterator(): SetIterator<T> {
+        return SetIterator<T>(this.to_array());
+    }
+}

@@ -1,3 +1,5 @@
+import system;
+import system.json;
 fun main(): void {
     let v = JSON.parse("{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}");
     let none = JsonValue.none();

@@ -2,6 +2,7 @@
 // implicit class->interface upcasts at call sites, and `is`-with-binding for both a reference
 // (interface) value and a boxed primitive.
 
+import system;
 interface Animal {
     fun speak(): string;
     fun legs(): int;

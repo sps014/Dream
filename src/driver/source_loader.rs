@@ -3,6 +3,7 @@
 //! analysis and codegen run over.
 
 use bumpalo::Bump;
+use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read};
@@ -10,6 +11,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use crate::diagnostics::DiagnosticBag;
+use crate::stdlib::std_package_from_slash_path;
 use crate::syntax::lexer::Lexer;
 use crate::syntax::nodes::struct_node::StructDeclarationNode;
 use crate::syntax::nodes::{
@@ -43,6 +45,9 @@ pub struct ProgramAccumulator<'a> {
     /// pass, after every file (and its `module` declaration) is loaded, since the referenced module
     /// may be declared by a file loaded later in the recursive walk.
     pub aliased_imports: Vec<(String, String, SyntaxToken, String)>,
+    /// Dotted stdlib package names requested via plain `import system.net;` (etc.). Fed to
+    /// selective prelude merge together with bootstrap packages.
+    pub requested_std_packages: IndexSet<String>,
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
@@ -247,6 +252,11 @@ pub fn parse_file_recursive<'a>(
             continue;
         }
         let module_name = import.module_name.text.as_str();
+        // Reserved `system` / `system.*` packages resolve to the embedded stdlib, not the filesystem.
+        if let Some(pkg) = std_package_from_slash_path(module_name) {
+            acc.requested_std_packages.insert(pkg.name.to_string());
+            continue;
+        }
         let import_path = resolve_import_path(parent_dir, module_name);
 
         let import_path_str = match import_path.to_str() {

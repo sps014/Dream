@@ -1,3 +1,4 @@
+import system;
 fun main(): void {
     let i: int = 7;
     let d: double = (double)i;

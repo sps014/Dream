@@ -184,7 +184,7 @@ Interface calls use **tag-indexed itables**, like the JVM's `invokeinterface`. E
 
 ### Built-in `Equatable` and `Comparable`
 
-Two generic interfaces are built into the prelude:
+Two generic interfaces ship in bootstrap `system.core` (no import):
 
 ```dream
 interface Equatable<T> { fun equals(other: T): bool; }
@@ -193,7 +193,7 @@ interface Comparable<T> { fun compare(other: T): int; }
 
 A type implements them against itself (`class Money : Comparable<Money>, Equatable<Money>`). By convention `compare` returns a negative number, zero, or a positive number when `this` is ordered before, equal to, or after `other`.
 
-Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude `extend` blocks), so `List<int>().sort()`, `binary_search`, and comparisons in generic code work with no extra code.
+Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude `extend` blocks), so with `import system.collections;` — `List<int>().sort()`, `binary_search`, and comparisons in generic code work with no extra code.
 
 - **`==` / `!=` route to `equals`** when both operands are the same user type implementing `Equatable<Self>`. Primitives and strings keep built-in equality.
 - **`<` / `<=` / `>` / `>=` route to `compare`** when the left operand's type implements `Comparable<Self>`: `a < b` lowers to `a.compare(b) < 0`, and likewise for the other three. A type with a more specific [`@operator("...")`](operators.md#operator-overloading) overload for a *different* symbol is unaffected — ordering has no separate attribute, it always goes through `compare`.

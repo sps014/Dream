@@ -1,5 +1,6 @@
 // Runtime semantics of `weak`: a `weak` field does not keep its referent alive, and is reset to
 // `None` once the referent's last strong reference is released — see `docs/language/memory.md`.
+import system;
 class Node {
     public value: int;
     public weak parent: Option<Node>;

@@ -1,0 +1,290 @@
+module system.text;
+
+// Pike-VM thread-list NFA simulation, ported from RE2's `NFA::Search`/`AddToThreadq`/`Step`
+// (re2/nfa.cc) — the same "run every live thread through the program in lock-step, one input
+// character at a time" algorithm as `re1`'s `pike.c` before it, but with `AddToThreadq`'s
+// epsilon-closure walk done iteratively over an explicit stack (matching nfa.cc, not the older
+// recursive `addthread`), so it can't blow the call stack on a pathological program.
+//
+// Capture-array sharing: RE2's `Thread` shares a single reference-counted `capture` array across
+// threads and only copies it when a `Capture` instruction needs to write a new offset
+// (`nfa.cc`'s `Incref`/`Decref`/freelist). Dream classes are already ARC-managed, so this port
+// gets the same "share until mutated" behavior for free by simply copying the `int[]` capture
+// array on a `Capture` write and otherwise passing the same array reference along — no manual
+// refcounting needed.
+
+class RegexThread {
+    public pc: int;
+    public caps: int[];
+
+    constructor(pc: int, caps: int[]) {
+        this.pc = pc;
+        this.caps = caps;
+    }
+}
+
+// One entry of `add_to_threadq`'s explicit epsilon-closure stack: an instruction to visit, plus
+// the capture state that would be in effect on arrival.
+class RegexAddFrame {
+    public pc: int;
+    public caps: int[];
+
+    constructor(pc: int, caps: int[]) {
+        this.pc = pc;
+        this.caps = caps;
+    }
+}
+
+// The result of a successful `RegexVM.find`: every capturing group's `[start, end)` offsets, flat
+// pairs indexed `2*i`/`2*i + 1` (group 0 is the overall match). `-1` marks a group that never
+// participated in the match (e.g. an alternative that wasn't taken).
+public class RegexMatch {
+    public groups: int[];
+    public ngroup: int;
+
+    constructor(groups: int[], ngroup: int) {
+        this.groups = groups;
+        this.ngroup = ngroup;
+    }
+
+    public fun start(): int {
+        return this.groups[0];
+    }
+
+    public fun end(): int {
+        return this.groups[1];
+    }
+
+    public fun group_start(i: int): int {
+        let idx = 2 * i;
+        if ((idx < 0) || (idx + 1 >= this.groups.size())) {
+            return 0 - 1;
+        }
+        return this.groups[idx];
+    }
+
+    public fun group_end(i: int): int {
+        let idx = (2 * i) + 1;
+        if ((idx < 0) || (idx >= this.groups.size())) {
+            return 0 - 1;
+        }
+        return this.groups[idx];
+    }
+
+    // The text captured by group `i` (0 is the whole match), or "" if it didn't participate.
+    public fun group_text(input: string, i: int): string {
+        let s = this.group_start(i);
+        let e = this.group_end(i);
+        if ((s < 0) || (e < 0)) {
+            return "";
+        }
+        return input.substring(s, e);
+    }
+}
+
+public class RegexVM {
+    prog: RegexInst[];
+    ngroup: int;
+    multiline: bool;
+
+    constructor(prog: RegexInst[], ngroup: int, multiline: bool) {
+        this.prog = prog;
+        this.ngroup = ngroup;
+        this.multiline = multiline;
+    }
+
+    fun copy_caps(src: int[]): int[] {
+        let n = src.size();
+        let dst = Buffer.alloc<int>(n);
+        let i = 0;
+        while (i < n) {
+            dst[i] = src[i];
+            i = i + 1;
+        }
+        return dst;
+    }
+
+    fun is_word_char(c: char): bool {
+        if (c.is_alpha()) {
+            return true;
+        }
+        if (c.is_digit()) {
+            return true;
+        }
+        return c == '_';
+    }
+
+    // Whether the zero-width assertion `kind` holds at `pos` in `input` (length `len`). Mirrors
+    // `Prog::EmptyFlags`, with `^`/`$` (`BeginLine`/`EndLine`) folding in the multiline flag here
+    // at match time rather than needing two compile-time node variants.
+    fun empty_ok(kind: RegexEmptyKind, pos: int, input: string, len: int): bool {
+        if (kind == RegexEmptyKind.BeginText) {
+            return pos == 0;
+        }
+        if (kind == RegexEmptyKind.EndText) {
+            return pos == len;
+        }
+        if (kind == RegexEmptyKind.BeginLine) {
+            if (pos == 0) {
+                return true;
+            }
+            if (this.multiline == false) {
+                return false;
+            }
+            return input.char_at(pos - 1) == '\n';
+        }
+        if (kind == RegexEmptyKind.EndLine) {
+            if (pos == len) {
+                return true;
+            }
+            if (this.multiline == false) {
+                return false;
+            }
+            return input.char_at(pos) == '\n';
+        }
+        let before = (pos > 0) && this.is_word_char(input.char_at(pos - 1));
+        let after = (pos < len) && this.is_word_char(input.char_at(pos));
+        let boundary = before != after;
+        if (kind == RegexEmptyKind.WordBoundary) {
+            return boundary;
+        }
+        return boundary == false; // NonWordBoundary
+    }
+
+    fun range_hit(ranges: List<char>, c: char, foldcase: bool): bool {
+        let i = 0;
+        while (i < ranges.size()) {
+            let lo = ranges.get(i).unwrap_or(' ');
+            let hi = ranges.get(i + 1).unwrap_or(' ');
+            if (foldcase) {
+                let cl = c.to_lower();
+                if ((cl >= lo.to_lower()) && (cl <= hi.to_lower())) {
+                    return true;
+                }
+            } else if ((c >= lo) && (c <= hi)) {
+                return true;
+            }
+            i = i + 2;
+        }
+        return false;
+    }
+
+    fun char_matches(inst: RegexInst, c: char): bool {
+        let hit = this.range_hit(inst.ranges, c, inst.foldcase);
+        if (inst.negate) {
+            return hit == false;
+        }
+        return hit;
+    }
+
+    // Follows every epsilon transition (Nop/Alt/Capture/EmptyWidth) reachable from `start_pc`
+    // without consuming input, appending the real (CharClass/Match) instructions it reaches to
+    // `threads`, in priority order (earlier alternatives first — the same order a backtracker
+    // would explore them in). `on_list`/`gen` deduplicate: an instruction already added during
+    // this generation is skipped, so a cyclic epsilon graph (e.g. `(a*)*`) can't loop forever and
+    // a lower-priority path never overrides a higher-priority one that reached the same state.
+    fun add_to_threadq(threads: List<RegexThread>, on_list: int[], gen: int, start_pc: int, pos: int, input: string, len: int, start_caps: int[]): void {
+        let stack = List<RegexAddFrame>();
+        stack.push(RegexAddFrame(start_pc, start_caps));
+        while (stack.size() > 0) {
+            let frame = stack.pop().unwrap_or(RegexAddFrame(0 - 1, start_caps));
+            let pc = frame.pc;
+            if (pc < 0) {
+                // Never actually hit: only the pop-on-empty fallback above produces pc < 0.
+            } else if (on_list[pc] == gen) {
+                // Already visited this instruction during this generation.
+            } else {
+                on_list[pc] = gen;
+                let inst = this.prog[pc];
+                if (inst.opcode == RegexOp.Nop) {
+                    stack.push(RegexAddFrame(inst.out, frame.caps));
+                } else if (inst.opcode == RegexOp.Alt) {
+                    // Push the lower-priority branch first so the higher-priority one (`out`) is
+                    // popped — and its whole epsilon-closure explored — first, matching the order
+                    // a recursive depth-first walk would visit them in.
+                    stack.push(RegexAddFrame(inst.out1, frame.caps));
+                    stack.push(RegexAddFrame(inst.out, frame.caps));
+                } else if (inst.opcode == RegexOp.Capture) {
+                    let updated = this.copy_caps(frame.caps);
+                    if ((inst.cap >= 0) && (inst.cap < updated.size())) {
+                        updated[inst.cap] = pos;
+                    }
+                    stack.push(RegexAddFrame(inst.out, updated));
+                } else if (inst.opcode == RegexOp.EmptyWidth) {
+                    if (this.empty_ok(inst.empty_kind, pos, input, len)) {
+                        stack.push(RegexAddFrame(inst.out, frame.caps));
+                    }
+                } else {
+                    // CharClass or Match: a real thread, recorded in priority order.
+                    threads.push(RegexThread(pc, frame.caps));
+                }
+            }
+        }
+    }
+
+    // Searches for a match starting exactly at `start` (the caller loops over start offsets, or
+    // relies on the compiled program's own leading `.*?` — see `RegexParser.parse` — for an
+    // unanchored search from position 0). Returns the leftmost, Perl-style ("leftmost-first" by
+    // thread priority, not POSIX leftmost-longest) match.
+    public fun find(input: string, start: int): Option<RegexMatch> {
+        let len = input.size();
+        let ncap = 2 * (this.ngroup + 1);
+        let on_list = Buffer.alloc<int>(this.prog.size());
+        let i0 = 0;
+        while (i0 < on_list.size()) {
+            on_list[i0] = 0 - 1;
+            i0 = i0 + 1;
+        }
+        let init_caps = Buffer.alloc<int>(ncap);
+        let j0 = 0;
+        while (j0 < ncap) {
+            init_caps[j0] = 0 - 1;
+            j0 = j0 + 1;
+        }
+
+        let gen = 1;
+        let clist = List<RegexThread>();
+        this.add_to_threadq(clist, on_list, gen, 0, start, input, len, init_caps);
+
+        let matched: Option<int[]> = Option.None;
+        let pos = start;
+        let going = true;
+        while (going) {
+            if (clist.size() == 0) {
+                going = false;
+            } else {
+                let nlist = List<RegexThread>();
+                gen = gen + 1;
+                let k = 0;
+                let stop = false;
+                while ((k < clist.size()) && (stop == false)) {
+                    let t = clist.get(k).unwrap_or(RegexThread(0, init_caps));
+                    let inst = this.prog[t.pc];
+                    if (inst.opcode == RegexOp.CharClass) {
+                        if (pos < len) {
+                            let c = input.char_at(pos);
+                            if (this.char_matches(inst, c)) {
+                                this.add_to_threadq(nlist, on_list, gen, inst.out, pos + 1, input, len, t.caps);
+                            }
+                        }
+                    } else if (inst.opcode == RegexOp.Match) {
+                        matched = Option.Some(t.caps);
+                        stop = true; // lower-priority threads still queued this round can't beat it
+                    }
+                    k = k + 1;
+                }
+                clist = nlist;
+                if (pos >= len) {
+                    going = false;
+                } else {
+                    pos = pos + 1;
+                }
+            }
+        }
+
+        return switch (matched) {
+            Some(caps) => Option.Some(RegexMatch(caps, this.ngroup)),
+            None => Option.None,
+        };
+    }
+}

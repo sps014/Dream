@@ -2,6 +2,7 @@
 // catch-all: the subject value is copied into the local, so the arm body can use it (here, passed to
 // another match). Previously this crashed codegen; now it lowers as the switch `default` with an
 // injected binding.
+import system;
 enum E { A(v: int), B(v: int) }
 
 fun tag(e: E): int {

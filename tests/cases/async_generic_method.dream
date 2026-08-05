@@ -1,5 +1,6 @@
 // Async methods on a generic class: each monomorphization (`Cell<int>`, `Cell<string>`) regenerates
 // its own async state machine, so awaiting a generic method resolves with the concrete type.
+import system;
 class Cell<T> {
     public value: T;
     constructor(value: T) { this.value = value; }

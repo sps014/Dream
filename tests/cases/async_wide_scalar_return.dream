@@ -1,6 +1,7 @@
 // An `async fun` returning a `long`/`float`/`double` used to fail WASM validation because the
 // scheduler's `Future.result` slot is a single `i32`. Wide scalars are boxed on completion and
 // unboxed at the `await` resume site so any return type flows through the same slot.
+import system;
 async fun bigNumber(): long {
     await Time.sleep(1);
     return 9000000000;

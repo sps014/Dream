@@ -1,0 +1,21 @@
+module system.collections;
+
+// Cursor produced by `List.iterator()`.
+public class ListIterator<T> {
+    list: List<T>;
+    idx: int;
+
+    constructor(list: List<T>) {
+        this.list = list;
+        this.idx = 0;
+    }
+
+    public fun next(): Option<T> {
+        if (this.idx >= this.list.size()) {
+            return Option.None;
+        }
+        let value = this.list.get(this.idx);
+        this.idx = this.idx + 1;
+        return value;
+    }
+}

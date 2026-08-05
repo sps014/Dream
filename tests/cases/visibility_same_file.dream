@@ -1,4 +1,5 @@
 // A non-public function and class may be freely used from anywhere in their OWN file.
+import system;
 fun helper(x: int): int {
     return x * 2;
 }

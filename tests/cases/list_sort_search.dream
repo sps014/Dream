@@ -1,6 +1,8 @@
 // `List<T>.sort()` works for any primitive out of the box (primitives ship a `Comparable` impl),
 // `sort_by` takes an explicit comparator, and `binary_search` finds elements in a sorted list.
 
+import system;
+import system.collections;
 fun desc(a: int, b: int): int {
     return b - a;
 }

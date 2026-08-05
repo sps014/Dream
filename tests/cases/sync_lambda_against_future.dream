@@ -1,3 +1,4 @@
+import system;
 async fun main(): void {
     let f: fun(int): Future<int> = (x) => x * 2;
     System.println(await f(21));

@@ -1,3 +1,4 @@
+import system;
 fun sum_array(arr: int[], len: int): int {
     let sum = 0;
     for (let i = 0; i < len; i = i + 1 ) {

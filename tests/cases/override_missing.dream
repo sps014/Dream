@@ -1,4 +1,5 @@
 // A class method that shadows an object-protocol method must be marked `@override`.
+import system;
 class Foo {
     x: int;
 

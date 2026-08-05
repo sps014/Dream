@@ -3,6 +3,7 @@
 // releases it. The `Debug.live_objects()` delta proves nothing leaks, and the destructor prints show
 // the embedded `Tracked` is freed exactly once.
 
+import system;
 class Tracked {
     public id: int;
 

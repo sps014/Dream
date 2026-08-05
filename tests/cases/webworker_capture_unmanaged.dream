@@ -1,6 +1,7 @@
 // Capturing plain unmanaged/value locals (not an `@shared class`) into a `WebWorker` body is
 // allowed — it is safe to snapshot by value.
 
+import system;
 async fun main(): void {
     let scale = 3;
     let offset = 3;

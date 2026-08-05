@@ -8,6 +8,7 @@
 
 // A deliberately CPU-bound body: a long arithmetic loop. Returns the accumulator so the loop can't
 // be optimized away. `input` seeds the work so each call is real.
+import system;
 fun heavy(input: string): string {
     let seed = input.size();
     let acc = 0;

@@ -1,5 +1,6 @@
 // Named arguments work on overloaded instance methods.
 
+import system;
 class Calc {
     public fun add(x: int): int {
         return x;

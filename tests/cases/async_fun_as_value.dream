@@ -1,3 +1,4 @@
+import system;
 async fun delayed_triple(n: int): int {
     await Time.sleep(1);
     return n * 3;

@@ -1,3 +1,4 @@
+import system;
 extend int {
     public fun doubled(): int { return this * 2; }
 }

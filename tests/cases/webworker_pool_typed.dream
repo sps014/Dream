@@ -1,5 +1,6 @@
 // Typed instance `WebWorkerPool.dispatch` / `dispatch_async`.
 
+import system;
 fun square(n: int): int {
     return n * n;
 }

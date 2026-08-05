@@ -1,6 +1,8 @@
 // Exercises `DateTime` construction, calendar accessors, arithmetic, comparison, and ISO-8601
 // formatting/conversion end-to-end. Deliberately avoids `DateTime.now()`/`utc_now()` since those
 // are non-deterministic; everything here is built from fixed instants so the output is stable.
+import system;
+import system.text;
 fun main(): void {
     let dt = DateTime.of(2026, 7, 2, 10, 35, 0, 250);
     System.println(dt.to_iso8601());

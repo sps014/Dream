@@ -2,6 +2,7 @@
 // type parameter. Because Dream monomorphizes generics, the constrained call binds to the concrete
 // type's method (static dispatch, no boxing).
 
+import system;
 class Money : Comparable<Money> {
     public cents: int;
 

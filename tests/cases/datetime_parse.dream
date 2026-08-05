@@ -2,6 +2,7 @@
 // fractional-second value with more than 3 digits (truncated to milliseconds), and malformed
 // input (`Err`). Round-trips parsed values back through `to_iso8601()` to confirm both directions
 // agree.
+import system;
 fun main(): void {
     let a = DateTime.parse_iso8601("2026-07-02T10:35:00.250Z");
     System.println(a.is_ok());

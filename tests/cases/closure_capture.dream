@@ -2,6 +2,7 @@
 // immediately enclosing function). A captured name (parameter or `let`) is boxed into a shared
 // `__Cell<T>` so both the closure and the enclosing function see each other's writes.
 
+import system;
 fun make_adder(n: int): fun(int): int {
     return (x) => x + n; // captures parameter `n`
 }

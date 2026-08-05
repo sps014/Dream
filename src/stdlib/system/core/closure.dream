@@ -1,0 +1,50 @@
+module system.core;
+
+// Compiler-internal support for arrow-lambda closures (Milestone B: capturing closures). Not a
+// user-facing API — every call site is emitted directly by the analyzer's closure-lowering code,
+// never reached through ordinary name resolution.
+//
+// A `fun(...)`-typed value is represented at runtime as a 2-word heap box `[funcidx][env]`
+// (`env` is 0 for a non-capturing function/lambda). `__funcbox_new` allocates the box;
+// `__funcbox_funcidx`/`__funcbox_env` read it back apart at an indirect-call site.
+class __Closure {
+    @intrinsic("funcbox_new")
+    static extern fun funcbox_new(funcidx: int, env: int): int;
+
+    @intrinsic("funcbox_funcidx")
+    static extern fun funcbox_funcidx(box: int): int;
+
+    @intrinsic("funcbox_env")
+    static extern fun funcbox_env(box: int): int;
+
+    // Bumps a heap value's reference count with no matching release: used to keep a capturing
+    // lambda's environment object alive for the process lifetime once boxed (see
+    // `analyze_lambda`/`hir_set_closure_value`). A deliberate, documented v1 tradeoff — capturing
+    // closures leak their environment rather than risk a use-after-free from a scope-exit release
+    // racing the closure's escape from its creating function. See `docs/language/functions.md`.
+    @intrinsic("retain")
+    static extern fun retain(v: object): void;
+}
+
+// The shared mutable cell a captured local is boxed into, so every reader (the enclosing
+// function and every closure that captures it) sees the same storage and each other's writes.
+class __Cell<T> {
+    public value: T;
+    constructor(v: T) {
+        this.value = v;
+    }
+}
+
+// The address-taken box a `ref` parameter/argument (not also closure-captured — see `__Cell<T>`
+// above for that case) is backed by. Unlike `__Cell<T>`, this is a `struct` (value type): a `ref`
+// parameter's slot is `Borrow`-classified (see `mir::emit::valuetype::ValueFrame`) so the caller's
+// box is aliased in place with no heap allocation, ARC bookkeeping, or copy — the caller's shadow-
+// frame slot for it is simply passed by address. A plain local/parameter that is only ever
+// `ref`-passed (never captured) gets its own private shadow-frame slot for this box, so its address
+// is stable for the duration of the call.
+struct __RefBox<T> {
+    public value: T;
+    constructor(v: T) {
+        this.value = v;
+    }
+}

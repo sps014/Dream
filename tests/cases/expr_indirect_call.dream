@@ -1,3 +1,4 @@
+import system;
 fun make_adder(n: int): fun(int): int {
     return (x: int) => x + n;
 }

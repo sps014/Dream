@@ -1,6 +1,7 @@
 // Exercises `@operator`/`@cast`-driven overloading: binary/unary arithmetic, user `==`/`!=`,
 // `Comparable`-backed ordering, and explicit/implicit user-defined casts.
 
+import system;
 class Vector2 {
     public x: int;
     public y: int;

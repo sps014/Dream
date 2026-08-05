@@ -1,6 +1,7 @@
 // A bare `return;` exits a `void` function early (an explicit `: void` return annotation is
 // semantically the same as an unannotated function).
 
+import system;
 fun log_positive(n: int): void {
     if (n < 0) {
         return;

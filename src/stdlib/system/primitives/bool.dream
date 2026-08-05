@@ -1,0 +1,12 @@
+module system.primitives;
+
+// The `bool` primitive.
+extend bool {
+    // 1 for true, 0 for false.
+    public fun to_int(): int {
+        if (this == true) {
+            return 1;
+        }
+        return 0;
+    }
+}

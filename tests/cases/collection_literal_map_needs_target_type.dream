@@ -1,4 +1,6 @@
 // A Map literal requires a `Map<K, V>`-typed context -> error.
+import system;
+import system.collections;
 fun main(): void {
     let m = {"a": 1, "b": 2};
     System.println(m);

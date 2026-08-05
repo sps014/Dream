@@ -2,6 +2,7 @@
 // C-style enum that means the variant *name*, matching `Color.Green.to_string()`, not the raw
 // discriminant. Other types keep their normal rendering.
 
+import system;
 enum Color { Red, Green, Blue }
 
 class P { public x: int; constructor(x: int) { this.x = x; } }

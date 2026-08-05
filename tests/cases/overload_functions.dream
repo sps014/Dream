@@ -1,4 +1,5 @@
 // Overloaded free functions resolve by argument type.
+import system;
 fun kind(x: int): int { return 1; }
 fun kind(x: string): int { return 2; }
 

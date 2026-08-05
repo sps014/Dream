@@ -211,9 +211,9 @@ impl DebugModule {
         // these are hidden from the debugger so the call stack shows only user frames and stepping
         // never descends into stdlib. Async functions ARE instrumented (their poll body carries the
         // same line markers), so `is_async` is deliberately not a skip condition here.
-        let prelude_files: std::collections::HashSet<&str> = crate::stdlib::PRELUDE_FILES
-            .iter()
-            .map(|(n, _)| *n)
+        let prelude_files: std::collections::HashSet<String> = crate::stdlib::all_prelude_files()
+            .into_iter()
+            .map(|(n, _)| n.to_string())
             .collect();
 
         let mut registry = TypeRegistry::new(interner, &mir.layouts);

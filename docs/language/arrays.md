@@ -108,14 +108,17 @@ Prefer `Span<T>` unless a value specifically needs to outlive the callee's stack
 
 ### `List<T>`
 
-[`List<T>`](../stdlib/collections.md) is a class wrapping a `T[]` buffer that doubles on demand:
+[`List<T>`](../stdlib/collections.md) (**package:** `system.collections` — `import system.collections;`) is a class wrapping a `T[]` buffer that doubles on demand:
 
 ```dream
+import system;
+import system.collections;
+
 let xs = List<int>();
 xs.push(10);
 xs.push(20);
-println(xs.size());                // 2
-println(xs.get(0).unwrap_or(-1));  // 10
+System.println(xs.size());                // 2
+System.println(xs.get(0).unwrap_or(-1));  // 10
 ```
 
 It offers `push`, `pop`, `get`/`set` (and the `xs[i]` indexer), `contains`, `index_of`, `remove_at`, `clear`, `iterator` (so `for (let x in xs)` works). When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
@@ -124,7 +127,7 @@ It offers `push`, `pop`, `get`/`set` (and the `xs[i]` indexer), `contains`, `ind
 let ys = List<int>();
 ys.push(3); ys.push(1); ys.push(2);
 ys.sort();                                   // 1, 2, 3
-println(ys.binary_search(2).unwrap_or(-1));  // 1
+System.println(ys.binary_search(2).unwrap_or(-1));  // 1
 ```
 
 ### The `Collection<T>` interface

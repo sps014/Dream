@@ -1,4 +1,5 @@
 // A top-level `const` is immutable; reassigning it is a compile-time error.
+import system;
 const LIMIT: int = 5;
 
 fun main(): void {

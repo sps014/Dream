@@ -1,4 +1,5 @@
 // `@operator` requires a symbol recognized for the tagged method's arity — `&&` is not overloadable.
+import system;
 class Flag {
     public value: bool;
 

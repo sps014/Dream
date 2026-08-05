@@ -5,6 +5,9 @@
 //   cargo run -- sample/interop/http.dream
 //   node sample/interop/http.mjs sample/interop/http.wasm
 
+import system;
+import system.json;
+import system.net;
 async fun main(): void {
     // A configured client: base URL + a default header applied to every request.
     let api = HttpClient("https://example.com").set_header("Accept", "application/json");

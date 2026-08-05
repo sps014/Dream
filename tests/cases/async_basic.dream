@@ -1,3 +1,4 @@
+import system;
 async fun delayedDouble(n: int): int {
     await Time.sleep(100);
     return n * 2;

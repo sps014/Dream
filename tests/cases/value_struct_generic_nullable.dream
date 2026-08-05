@@ -2,6 +2,7 @@
 // is supported per instantiation: `Option<T>` makes "no value" explicit regardless of whether `T`
 // is a value or reference type.
 
+import system;
 struct Point {
     public x: int;
 

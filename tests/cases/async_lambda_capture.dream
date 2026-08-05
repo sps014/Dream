@@ -1,3 +1,4 @@
+import system;
 fun make_async_adder(n: int): fun(int): Future<int> {
     return async (x) => {
         await Time.sleep(1);

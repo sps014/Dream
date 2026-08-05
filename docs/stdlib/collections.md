@@ -1,6 +1,13 @@
 # Collections
 
-The standard library ships three growable collection types, available in every program with no import: `List<T>`, `Map<K, V>`, and `Set<T>`. All three support `for..in` iteration and share the common `size()` method.
+**Package:** `system.collections` — `import system.collections;`
+
+The standard library ships three growable collection types: `List<T>`, `Map<K, V>`, and `Set<T>`. All three support `for..in` iteration and share the common `size()` method.
+
+```dream
+import system;
+import system.collections;
+```
 
 ## Literal syntax
 
@@ -24,10 +31,13 @@ Each literal lowers to a single bulk call — `List<T>.from_array(...)`, `Set<T>
 A growable sequence with O(1) random access and amortized O(1) append:
 
 ```dream
+import system;
+import system.collections;
+
 let nums = List<int>();
 nums.push(10);
 nums.push(20);
-println(nums.size());   // 2
+System.println(nums.size());   // 2
 ```
 
 Lists support bracket indexing and `for..in`. Indexed reads return an `Option<T>`:
@@ -37,7 +47,7 @@ nums[1] = 99;             // set index 1
 let first = nums[0];      // Option<int>
 
 for (let n in nums) {
-    println(n);
+    System.println(n);
 }
 ```
 
@@ -75,8 +85,8 @@ scores["dave"] = 60;
 let val = scores["dave"];   // Option<int>
 
 for (let pair in scores) {
-    println(pair.key);
-    println(pair.value);
+    System.println(pair.key);
+    System.println(pair.value);
 }
 ```
 

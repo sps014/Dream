@@ -1,4 +1,7 @@
 // Temporary native smoke check: exercises the wasmtime HTTP future bridge end to end.
+import system;
+import system.text;
+import system.net;
 async fun main(): void {
     let http = HttpClient("");
     let res = await http.get("https://example.com");

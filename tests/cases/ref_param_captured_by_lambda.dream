@@ -2,6 +2,7 @@
 // only valid for the duration of this call. Capturing it in a lambda (which could escape past the
 // call's return) is rejected, mirroring C#'s rule against capturing `ref`/`out` parameters.
 
+import system;
 fun makeReader(ref x: int): fun(): int {
     let read: fun(): int = () => x;
     return read;

@@ -1,3 +1,4 @@
+import system;
 fun notAsync(): void {
     let x = await Time.sleep(10);
 }

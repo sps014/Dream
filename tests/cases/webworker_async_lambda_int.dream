@@ -1,5 +1,6 @@
 // Async lambda body with a non-string `TOut` — the Future-body overload awaits then wire-encodes,
 // so any unmanaged `TOut` works (the old sync-constructor trampoline path was string-only).
+import system;
 async fun main(): void {
     let w = WebWorker<int, int>(async (n) => {
         await Time.sleep(1);

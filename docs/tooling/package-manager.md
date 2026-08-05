@@ -190,6 +190,7 @@ dreamer install
 // src/main.dream
 import json_tools;
 import local_lib;
+import system;
 
 fun main(): void {
     System.println(hello());   // from json_tools/src/json_tools.dream

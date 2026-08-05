@@ -1,3 +1,4 @@
+import system;
 enum Shape { Circle(radius: float), Square, Triangle, Empty }
 
 fun grade(score: int): string {

@@ -3,6 +3,9 @@
 // `set` calls. Covers `let` bindings, function arguments, return positions, nested literals, and
 // empty literals (whose element type is inferred entirely from the target/context type).
 
+import system;
+import system.collections;
+import system.text;
 fun take_list(xs: List<int>): int {
     return xs.size();
 }

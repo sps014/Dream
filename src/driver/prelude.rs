@@ -1,20 +1,22 @@
 //! Standard-library prelude merging. Each built-in type lives in its own embedded prelude file
-//! (`crate::stdlib::PRELUDE_FILES`); their declarations are parsed with the user's arena and
-//! merged into the program so the built-in types are real, extensible classes.
+//! (`crate::stdlib`); their declarations are parsed with the user's arena and merged into the
+//! program so the built-in types are real, extensible classes.
 
 use bumpalo::Bump;
+use indexmap::IndexSet;
 use std::collections::HashMap;
 use std::io::Error;
+use std::rc::Rc;
 
 use crate::diagnostics::DiagnosticBag;
 use crate::driver::source_loader::collect_declarations;
+use crate::stdlib::{resolve_packages_to_load, StdPackage};
 use crate::syntax::lexer::Lexer;
 use crate::syntax::parser::Parser;
 
-/// Parses the embedded standard-collections prelude and merges its declarations into the
-/// program. Uses the same arena as the user's files so all AST nodes share a lifetime.
-// The many parameters are parallel per-declaration-kind accumulators; grouping them into a struct
-// would just move the same field list elsewhere without improving call sites.
+/// Parses the requested embedded stdlib packages (bootstrap + `requested` + transitive deps) and
+/// merges their declarations into the program. Uses the same arena as the user's files so all AST
+/// nodes share a lifetime.
 #[allow(clippy::too_many_arguments)]
 pub fn merge_prelude<'a>(
     arena: &'a Bump,
@@ -25,11 +27,73 @@ pub fn merge_prelude<'a>(
     all_extends: &mut Vec<crate::syntax::nodes::ExtendNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
+    file_modules: &mut HashMap<String, Rc<str>>,
+    requested_packages: &IndexSet<String>,
 ) -> Result<(), Error> {
-    // Each standard type lives in its own prelude file. The primitive files (int/char/string/...)
-    // make the built-in types real, extensible classes via `extend` blocks. The list itself lives
-    // in `crate::stdlib::PRELUDE_FILES` so the analyzer language service shares the same manifest.
-    for &(prelude_name, prelude_src) in crate::stdlib::PRELUDE_FILES {
+    let packages = resolve_packages_to_load(requested_packages);
+    for pkg in packages {
+        merge_package(
+            pkg,
+            arena,
+            all_functions,
+            all_structs,
+            all_interfaces,
+            all_enums,
+            all_extends,
+            diagnostics,
+            file_contents,
+            file_modules,
+        )?;
+    }
+    Ok(())
+}
+
+/// Merges every stdlib package (full surface). Used by host scans and callers that need the
+/// complete prelude regardless of user imports.
+#[allow(clippy::too_many_arguments)]
+pub fn merge_full_prelude<'a>(
+    arena: &'a Bump,
+    all_functions: &mut Vec<crate::syntax::nodes::FunctionNode<'a>>,
+    all_structs: &mut Vec<crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
+    all_interfaces: &mut Vec<crate::syntax::nodes::InterfaceDeclarationNode<'a>>,
+    all_enums: &mut Vec<crate::syntax::nodes::EnumDeclarationNode>,
+    all_extends: &mut Vec<crate::syntax::nodes::ExtendNode<'a>>,
+    diagnostics: &mut DiagnosticBag,
+    file_contents: &mut HashMap<String, String>,
+    file_modules: &mut HashMap<String, Rc<str>>,
+) -> Result<(), Error> {
+    let all: IndexSet<String> = crate::stdlib::STD_PACKAGES
+        .iter()
+        .map(|p| p.name.to_string())
+        .collect();
+    merge_prelude(
+        arena,
+        all_functions,
+        all_structs,
+        all_interfaces,
+        all_enums,
+        all_extends,
+        diagnostics,
+        file_contents,
+        file_modules,
+        &all,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn merge_package<'a>(
+    pkg: &StdPackage,
+    arena: &'a Bump,
+    all_functions: &mut Vec<crate::syntax::nodes::FunctionNode<'a>>,
+    all_structs: &mut Vec<crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
+    all_interfaces: &mut Vec<crate::syntax::nodes::InterfaceDeclarationNode<'a>>,
+    all_enums: &mut Vec<crate::syntax::nodes::EnumDeclarationNode>,
+    all_extends: &mut Vec<crate::syntax::nodes::ExtendNode<'a>>,
+    diagnostics: &mut DiagnosticBag,
+    file_contents: &mut HashMap<String, String>,
+    file_modules: &mut HashMap<String, Rc<str>>,
+) -> Result<(), Error> {
+    for &(prelude_name, prelude_src) in pkg.files {
         let prelude_name = prelude_name.to_string();
         file_contents.insert(prelude_name.clone(), prelude_src.to_string());
 
@@ -45,10 +109,17 @@ pub fn merge_prelude<'a>(
         };
         diagnostics.extend(&prelude_diagnostics);
 
-        // Preludes declare no globals; a throwaway sink keeps the shared collector signature.
+        let program = ast.get_root();
+        if let Some(module_decl) = &program.module {
+            file_modules.insert(
+                prelude_name.clone(),
+                Rc::from(module_decl.path.text.as_str()),
+            );
+        }
+
         let mut globals = Vec::new();
         collect_declarations(
-            ast.get_root(),
+            program,
             &prelude_name,
             all_functions,
             all_structs,
@@ -58,6 +129,5 @@ pub fn merge_prelude<'a>(
             &mut globals,
         );
     }
-
     Ok(())
 }

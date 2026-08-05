@@ -1,5 +1,6 @@
 // Runtime semantics of `unowned`: an `unowned` field does not keep its referent alive; reading it
 // after the referent has been freed traps — see `docs/language/memory.md`.
+import system;
 class Manager {
     public name: string;
 

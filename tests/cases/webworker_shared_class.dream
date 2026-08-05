@@ -1,6 +1,7 @@
 // `WebWorker` body may capture an `@shared class` instance directly (no wrapper/handle): the
 // worker thread mutates it through the same `lock`/atomic-refcount machinery as any other thread.
 
+import system;
 @shared
 class Counter {
     public value: int;

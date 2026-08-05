@@ -1,4 +1,5 @@
 // Two overloads match (int,int) equally well via `object` widening -> ambiguous call error.
+import system;
 fun g(a: object, b: int): int { return 1; }
 fun g(a: int, b: object): int { return 2; }
 

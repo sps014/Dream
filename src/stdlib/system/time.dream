@@ -1,3 +1,5 @@
+module system;
+
 // Timing utilities.
 public class Time {
     // Sleeps for `ms` milliseconds.

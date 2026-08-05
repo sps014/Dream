@@ -2,6 +2,8 @@
 
 Variables hold values. In Dream you declare them with `let` (mutable) or `const` (immutable), and the compiler usually figures out the type for you.
 
+Console examples elsewhere use `System.println` after `import system;` — see [Imports](imports.md#standard-library-packages). Short language snippets sometimes omit that import for brevity.
+
 ## Declaring a variable
 
 Use `let`. The type is inferred from the value on the right:

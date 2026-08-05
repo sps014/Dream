@@ -1,5 +1,7 @@
 # File I/O
 
+**Package:** `system.io` — `import system.io;`
+
 `File` and `FileStream` are the filesystem API. Operations are [`async`](../language/async.md) and return a `Future<T>` you `await`; the same `.dream` runs unchanged on every host.
 
 ## Runtime support
@@ -17,6 +19,9 @@ The API is identical everywhere; only the browser differs in that writes live in
 `File.read` returns the whole file as a UTF-8 string; `File.write` replaces its contents and `File.append` adds to the end. Each resolves a `Future`, so `await` them in an `async fun`. Fallible operations resolve with a `Result`, so failure is explicit — read the value with `unwrap_or` or `switch`:
 
 ```dream
+import system;
+import system.io;
+
 async fun main(): void {
     await File.write("notes.txt", "hello\n");
     await File.append("notes.txt", "world\n");

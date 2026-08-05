@@ -1,4 +1,6 @@
 // `@json` only applies to classes, structs, and discriminated unions, not free functions.
+import system;
+import system.json;
 @json
 fun greet(): string {
     return "hi";

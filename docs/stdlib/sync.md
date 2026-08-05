@@ -1,5 +1,7 @@
 # Lock & Semaphore
 
+**Package:** `system.core` (bootstrap — no import required)
+
 Standalone synchronization primitives for coordinating [`WebWorker`](../language/webworkers.md) threads over shared state. Both are `@shared class` themselves, so they can be captured directly by a `WebWorker` body like any other shared object — see [Sharing state safely](../language/webworkers.md#sharing-state-safely).
 
 Prefer the built-in `lock (obj) { ... }` statement directly on an `@shared class` instance when you can — it needs no separate `Lock` object and cannot be left unreleased. Reach for a standalone `Lock`/`Semaphore` when the critical section doesn't map to a single block (e.g. it spans a `WebWorker` closure boundary) or you need semaphore-style counting rather than mutual exclusion.

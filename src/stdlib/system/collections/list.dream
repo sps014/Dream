@@ -1,0 +1,243 @@
+module system.collections;
+
+// Dream standard `List<T>` (`import system.collections;`).
+
+// Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
+// so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
+// `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
+fun __compare_ascending<T : Comparable<T>>(a: T, b: T): int {
+    return a.compare(b);
+}
+
+public class List<T> : Collection<T> {
+    items: T[];
+    count: int;
+
+    // Allocates an empty list with an initial backing buffer capacity (defaults to 8).
+    constructor(capacity: int = 8) {
+        let c = capacity;
+        if (c < sequence_min_capacity()) {
+            c = sequence_min_capacity();
+        }
+        this.items = Buffer.alloc<T>(c);
+        this.count = 0;
+    }
+
+    // Number of elements currently stored.
+    public fun size(): int {
+        return this.count;
+    }
+
+    // Current capacity of the backing buffer.
+    public fun capacity(): int {
+        return this.items.size();
+    }
+
+    // Doubles the backing buffer, resizing in place via `Buffer.realloc` when possible.
+    fun grow(): void {
+        let old_cap = this.items.size();
+        let new_cap = old_cap * 2;
+        if (new_cap < sequence_min_capacity()) {
+            new_cap = sequence_min_capacity();
+        }
+        this.items = Buffer.realloc<T>(this.items, new_cap);
+    }
+
+    // Appends a value to the end, growing if necessary.
+    public fun push(value: T): void {
+        if (this.count == this.items.size()) {
+            this.grow();
+        }
+        this.items[this.count] = value;
+        this.count = this.count + 1;
+    }
+
+    // Appends every element of `items`, ensuring capacity once then copying.
+    public fun push_all(items: T[]): void {
+        let n = items.size();
+        let need = this.count + n;
+        while (need > this.items.size()) {
+            this.grow();
+        }
+        let i = 0;
+        while (i < n) {
+            this.items[this.count] = items[i];
+            this.count = this.count + 1;
+            i = i + 1;
+        }
+    }
+
+    // Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]`
+    // list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
+    public static fun from_array(items: T[]): List<T> {
+        let result = List<T>(items.size());
+        result.push_all(items);
+        return result;
+    }
+
+    // Returns the element at `index`, or `None` if `index` is out of range.
+    public fun get(index: int): Option<T> {
+        if ((index < 0) || (index >= this.count)) {
+            return Option.None;
+        }
+        return Option.Some(this.items[index]);
+    }
+
+    // Overwrites the element at `index`, returning true on success or false if `index` is out of
+    // range (no value is written in that case).
+    public fun set(index: int, value: T): bool {
+        if ((index < 0) || (index >= this.count)) {
+            return false;
+        }
+        this.items[index] = value;
+        return true;
+    }
+
+    // Removes and returns the last element, or `None` if the list is empty.
+    public fun pop(): Option<T> {
+        if (this.count == 0) {
+            return Option.None;
+        }
+        let last = this.items[this.count - 1];
+        this.count = this.count - 1;
+        return Option.Some(last);
+    }
+
+    // True if `value` is present (uses value equality, including string contents).
+    public fun contains(value: T): bool {
+        let i = 0;
+        let found = false;
+        while (i < this.count) {
+            if (this.items[i] == value) {
+                found = true;
+            }
+            i = i + 1;
+        }
+        return found;
+    }
+
+    // Index of the first matching element (by value equality), or `None` if absent.
+    public fun index_of(value: T): Option<int> {
+        let i = 0;
+        while (i < this.count) {
+            if (this.items[i] == value) {
+                return Option.Some(i);
+            }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
+    // Logically empties the list.
+    public fun clear(): void {
+        this.count = 0;
+    }
+
+    // Removes the element at `index`, shifting later elements left. Returns true on success, or
+    // false if `index` is out of range (the list is left unchanged in that case).
+    public fun remove_at(index: int): bool {
+        if ((index < 0) || (index >= this.count)) {
+            return false;
+        }
+        let i = index;
+        while (i < this.count - 1) {
+            this.items[i] = this.items[i + 1];
+            i = i + 1;
+        }
+        this.count = this.count - 1;
+        return true;
+    }
+
+    // Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.
+    public fun iterator(): ListIterator<T> {
+        return ListIterator<T>(this);
+    }
+
+    // Sorts the list in place with the supplied comparator.
+    public fun sort_by(cmp: fun(T, T): int): void {
+        let n = this.count;
+        if (n < 2) {
+            return;
+        }
+        let buf = Buffer.alloc<T>(n);
+        let width = 1;
+        while (width < n) {
+            let i = 0;
+            while (i < n) {
+                let mid = i + width;
+                if (mid > n) {
+                    mid = n;
+                }
+                let right = mid + width;
+                if (right > n) {
+                    right = n;
+                }
+                let a = i;
+                let b = mid;
+                let k = i;
+                while ((a < mid) && (b < right)) {
+                    if (cmp(this.items[a], this.items[b]) <= 0) {
+                        buf[k] = this.items[a];
+                        a = a + 1;
+                    } else {
+                        buf[k] = this.items[b];
+                        b = b + 1;
+                    }
+                    k = k + 1;
+                }
+                while (a < mid) {
+                    buf[k] = this.items[a];
+                    a = a + 1;
+                    k = k + 1;
+                }
+                while (b < right) {
+                    buf[k] = this.items[b];
+                    b = b + 1;
+                    k = k + 1;
+                }
+                i = right;
+            }
+            let j = 0;
+            while (j < n) {
+                this.items[j] = buf[j];
+                j = j + 1;
+            }
+            width = width + width;
+        }
+    }
+}
+
+// `sort()` is available only when the element type is `Comparable`: this constrained extension
+// attaches to `List<C>` exactly when `C : Comparable<C>`, so `List<int>.sort()` is a compile error
+// unless `int` is made `Comparable`, while `List<Money>.sort()` (with `Money : Comparable<Money>`)
+// works and dispatches `compare` statically (no boxing).
+extend List<T : Comparable<T>> {
+    // Sorts the list in place into ascending order using each element's `compare` method. This just
+    // hands the natural-order comparator to `sort_by`, so there is a single merge-sort
+    // implementation. This is why primitives ship a `Comparable` impl: `List<int>().sort()`,
+    // `List<string>().sort()`, etc. work out of the box.
+    public fun sort(): void {
+        let cmp: fun(T, T): int = __compare_ascending;
+        this.sort_by(cmp);
+    }
+
+    // Binary search over a list that is already sorted ascending (by `compare`). Returns the index
+    // of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n).
+    public fun binary_search(value: T): Option<int> {
+        let lo = 0;
+        let hi = this.count - 1;
+        while (lo <= hi) {
+            let mid = lo + (hi - lo) / 2;
+            let c = this.items[mid].compare(value);
+            if (c == 0) {
+                return Option.Some(mid);
+            }
+            if (c < 0) {
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return Option.None;
+    }
+}

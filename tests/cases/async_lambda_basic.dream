@@ -1,3 +1,4 @@
+import system;
 async fun apply_async(f: fun(int): Future<int>, v: int): int {
     return await f(v);
 }

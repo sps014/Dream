@@ -1,5 +1,6 @@
 // Named async fun returning non-string: uses the Future-body constructor overload
 // (`fun(int): Future<int>`), which awaits then wire-encodes.
+import system;
 async fun computeInt(n: int): int {
     await Time.sleep(1);
     return n * 2;

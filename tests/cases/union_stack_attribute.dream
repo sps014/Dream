@@ -6,6 +6,7 @@
 // declaration site instead of silently forcing the union onto the heap. With a reference payload
 // (as below), `@stack` is what opts the union into the inline representation.
 
+import system;
 @stack
 enum Outcome {
     Success(code: int),

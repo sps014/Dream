@@ -1,3 +1,4 @@
+import system;
 struct Counter {
     public value: int;
     constructor() { this.value = 0; }

@@ -2,6 +2,7 @@
 // complete the async task: each poll segment's natural fall-through hands control to the suspend,
 // while an explicit `return` still completes. Regression for segments whose plain code has an `if`.
 
+import system;
 async fun g(n: int): int { return n; }
 
 async fun pick(early: bool): int {

@@ -1,6 +1,7 @@
 // Every integer primitive wraps on overflow (two's-complement modulo its bit width), matching the
 // policy documented in docs/language/primitives.md. `byte` shares WASM's `i32` register width, so
 // it additionally exercises the compiler's explicit post-op masking (see `emit/emitter/rvalue`).
+import system;
 fun main(): void {
     let b: byte = 250b;
     let b2: byte = b + 10b;        // 260 mod 256 = 4

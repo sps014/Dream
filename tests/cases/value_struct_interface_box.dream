@@ -2,6 +2,7 @@
 // participates in dynamic dispatch just like a class. `Rect` and `Sq` both implement `Shape`; an
 // interface-typed local dispatches `area`/`name` dynamically to the boxed value's concrete method.
 
+import system;
 interface Shape {
     fun area(): int;
     fun name(): string;

@@ -1,6 +1,8 @@
 // A @json class field whose type is a user class/struct/union that is not itself @json must be
 // rejected at compile time with an actionable diagnostic (the field cannot be serialized).
 
+import system;
+import system.json;
 class Plain { public v: int; constructor(v: int) { this.v = v; } }
 
 @json

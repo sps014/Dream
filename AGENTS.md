@@ -67,15 +67,9 @@ Dream/
 │   │   └── print.rs                Textual MIR dump (debugging)
 │   ├── stdlib/                    Prelude .dream files + host function registration (single source of truth,
 │   │   │                          embedded into the binary; both the compiler and dream-lsp reuse the exact files)
-│   │   ├── mod.rs                 Registers host + inline functions; defines prelude module ordering
-│   │   ├── primitives/             int, long, uint, ulong, float, double, byte, bool, char .dream extensions
-│   │   ├── collections/            List, Map, Set (+ iterators), KeyValuePair
-│   │   ├── core/                   Option, Result, Compare, Buffer, Bytes, Collection(+tuning), Promise, WebWorker, js
-│   │   ├── text/                    string, string_iterator, regex
-│   │   ├── io/                      file, file_stream
-│   │   ├── net/                     http_client, http_response
-│   │   ├── json/                    json, json_parser, json_value
-│   │   └── system/                  console_color, datetime, debug, stopwatch, system, time
+│   │   ├── mod.rs                 STD_PACKAGES / BOOTSTRAP_PACKAGES registry + host function registration
+│   │   └── system/                Package tree: core/, collections/, primitives/, text/, json/, net/, io/,
+│   │                               plus system.dream / datetime / debug / … (`import system;`)
 │   ├── execution/                 (feature "native") wasmtime-backed runner + host functions
 │   │   ├── wasm_runner.rs           Native executor entry point
 │   │   ├── host/                    console, file, http, math, memory, datetime, regex, worker — host fn impls
@@ -149,7 +143,7 @@ dream-text ← dream-diagnostics ← dream-syntax ← dream (root) ← dream-lsp
 
 - **Intrinsics** (`src/intrinsics.rs`): all builtin/`@intrinsic` stdlib ops. Classify via `IntrinsicOp::from_key`/`from_attributes`. Never bare-string-match `"print"`/`"len"`/`"promise_all"` in analyzer or codegen.
 - **Reserved names** (`crates/dream-syntax/src/nodes/types.rs`): special member names (`constructor`/`del` via `is_special_member_name`), `@intrinsic` attribute name, synthetic for-each locals. Defined once, reused by parser/semantics/codegen.
-- **Stdlib prelude** (`src/stdlib/*.dream`): single source of truth for stdlib signatures, embedded in the binary. Both the compiler and `dream-lsp` load the exact same files via `PRELUDE_FILES`. New stdlib API → define signature in the `.dream` file, wire host/inline impl in `src/stdlib/mod.rs` + codegen.
+- **Stdlib prelude** (`src/stdlib/system/*.dream`): single source of truth for stdlib signatures, embedded in the binary. Packages are registered in `STD_PACKAGES` / `BOOTSTRAP_PACKAGES` (`src/stdlib/mod.rs`); both the compiler and `dream-lsp` load the same files. User code imports opt-in packages (`import system.net;`, etc.); bootstrap (`system.core`, `system.primitives`) is always merged. New stdlib API → define signature in the `.dream` file, register the package file in `mod.rs`, wire host/inline impl if needed.
 
 ## Building, running, testing
 
@@ -205,7 +199,7 @@ cargo test --workspace
 5. `src/mir/lower/`: lower the new HIR shape into MIR.
 6. `src/mir/emit/`: emit WAT if new runtime behavior is needed; extend `src/mir/runtime/*.wat` for new intrinsics.
 7. `tests/cases/`: add a golden test (`.dream` + `.expected`/`.expected_error`).
-8. If it's a stdlib API: define the signature in `src/stdlib/*.dream`, wire any host/inline logic in `src/stdlib/mod.rs`.
+8. If it's a stdlib API: define the signature under `src/stdlib/system/…`, register the file in `STD_PACKAGES` in `src/stdlib/mod.rs`, wire any host/inline logic there too.
 9. Run the full pre-commit gate above. See `docs/compiler/07-adding-a-language-feature.md` for a worked example.
 
 ## Misc conventions

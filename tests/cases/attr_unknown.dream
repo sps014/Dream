@@ -1,4 +1,5 @@
 // An attribute name the compiler doesn't recognize must be rejected, not silently ignored.
+import system;
 @bogus
 class Foo {
     public x: int;

@@ -1,5 +1,7 @@
 # WebWorkers
 
+**Package:** `system.core` (bootstrap — no import required for `WebWorker` / `WebWorkerPool`). Console examples below also use `import system;`.
+
 Dream's [`async`/`await`](async.md) is a *single-threaded* scheduler: tasks interleave at `await` points but never run at the same instant. When you need more than one core — CPU-bound work or parallel pipelines — use a **`WebWorker`**.
 
 A `WebWorker<TIn, TOut>` runs a `fun(TIn): TOut` body on its own OS thread (native, via a fresh `wasmtime` instance) or its own Web Worker (browser). Each worker instantiates its *own copy* of the module, so it has its own private globals and shadow stack — but on native, every worker instance **shares the same linear memory** as the owner. That means anything already on the heap (an `@shared class` instance, a `Lock`/`Semaphore`, a plain unmanaged value) is visible to every worker, not copied — this is real parallelism with real shared state, guarded explicitly by `@shared`/`lock` rather than implicitly.
@@ -45,6 +47,8 @@ public class WebWorker<TIn, TOut> {
 The simplest use is a strongly-ordered RPC — `send` posts and awaits the matching reply. Replies pair with sends by FIFO order (one message at a time), so there is no correlation-id boilerplate:
 
 ```dream
+import system;
+
 fun greet(name: string): string {
     return "hello, " + name + "!";
 }

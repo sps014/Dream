@@ -1,6 +1,7 @@
 // `@shared class` + `lock (obj) { ... }`: basic single-threaded sanity check (acquire, mutate,
 // release; reentrancy; and that `Lock`/`Semaphore` work as standalone primitives).
 
+import system;
 @shared
 class Counter {
     public value: int;

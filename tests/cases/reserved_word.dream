@@ -1,3 +1,4 @@
+import system;
 fun main(): void {
     let string: int = 5;
     System.println(string);

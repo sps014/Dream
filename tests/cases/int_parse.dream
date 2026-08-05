@@ -1,3 +1,4 @@
+import system;
 fun main(): void {
     System.println(int.parse("123").unwrap_or(0));
     System.println(int.parse("-45").unwrap_or(0));

@@ -1,3 +1,5 @@
+module system;
+
 // System utilities for console I/O, process control, and terminal colors.
 public class System {
     // Prints a value to standard output.

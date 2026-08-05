@@ -3,6 +3,7 @@
 // (narrower) inferred type, silently desyncing the value from every call site that trusts the
 // declared `double` signature.
 
+import system;
 fun asDouble(): double {
     return 2.71828;
 }

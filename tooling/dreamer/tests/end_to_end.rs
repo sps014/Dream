@@ -190,7 +190,7 @@ fn build_compiles_a_project_using_an_installed_dependency() {
 
     std::fs::write(
         project_dir.join("src").join("main.dream"),
-        "import greeter2;\n\nfun main(): void {\n    System.println(hello());\n}\n",
+        "import greeter2;\nimport system;\n\nfun main(): void {\n    System.println(hello());\n}\n",
     )
     .unwrap();
 

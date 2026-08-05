@@ -494,6 +494,7 @@ public fun main() {
 #[test]
 fn hover_on_builtin_list_push() {
     let src = "
+import system.collections;
 fun main(): void {
     let xs = List<int>();
     xs.pu|sh(1);
@@ -606,6 +607,7 @@ fun main(): void {
 fn parameter_inlay_hints_on_method_calls() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "
+import system.collections;
 fun main(): void {
     let nums = List<int>();
     nums.push(42);
@@ -1109,4 +1111,64 @@ fun main(): void {
     let has_new = index2.decls.iter().any(|d| d.name == "new_var");
     assert!(!has_old, "Expected old_var to be removed");
     assert!(has_new, "Expected new_var to be indexed");
+}
+
+#[test]
+fn auto_import_code_action_for_http_client() {
+    use dream_lsp::code_actions::{auto_import_actions, already_imports};
+    use tower_lsp::lsp_types::Url;
+
+    let src = r#"
+fun main(): void {
+    let c = HttpClient("");
+}
+"#;
+    let uri = Url::parse("file:///tmp/main.dream").unwrap();
+    let actions = auto_import_actions(&uri, src, "HttpClient");
+    assert_eq!(actions.len(), 1);
+    // Apply conceptually: insert should mention system.net
+    assert!(!already_imports(src, "system.net"));
+    let edited = {
+        let (_, pos) = dream_lsp::code_actions::import_insert_point(src);
+        assert_eq!(pos.line, 0);
+        format!("import system.net;\n{}", src)
+    };
+    assert!(already_imports(&edited, "system.net"));
+}
+
+#[test]
+fn auto_import_skipped_when_already_imported() {
+    use dream_lsp::code_actions::auto_import_actions;
+    use tower_lsp::lsp_types::Url;
+
+    let src = "import system.net;\nfun main(): void { let c = HttpClient(\"\"); }\n";
+    let uri = Url::parse("file:///tmp/main.dream").unwrap();
+    let actions = auto_import_actions(&uri, src, "HttpClient");
+    assert!(actions.is_empty());
+}
+
+#[test]
+fn bootstrap_symbol_has_no_auto_import() {
+    use dream_lsp::code_actions::auto_import_actions;
+    use tower_lsp::lsp_types::Url;
+
+    let src = "fun main(): void { let o = Option.None; }\n";
+    let uri = Url::parse("file:///tmp/main.dream").unwrap();
+    let actions = auto_import_actions(&uri, src, "Option");
+    assert!(actions.is_empty(), "Option is bootstrap — no import quick fix");
+}
+
+#[test]
+fn completion_additional_edits_for_list() {
+    use dream_lsp::code_actions::{import_text_edits, unloaded_stdlib_completions};
+
+    let src = "fun main(): void {\n    \n}\n";
+    let comps = unloaded_stdlib_completions(src);
+    assert!(
+        comps.iter().any(|(n, pkg, _)| n == "List" && *pkg == "system.collections"),
+        "expected List -> system.collections among unloaded completions"
+    );
+    let edits = import_text_edits(src, "system.collections").expect("edits");
+    assert_eq!(edits.len(), 1);
+    assert!(edits[0].new_text.contains("import system.collections;"));
 }

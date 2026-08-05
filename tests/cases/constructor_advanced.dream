@@ -1,4 +1,5 @@
 // Generic class built via the implicit zero-arg default constructor.
+import system;
 class Box<T> {
     public value: T;
 }

@@ -1,3 +1,4 @@
+import system;
 interface Animal {
     fun speak(): int;
 }

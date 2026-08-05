@@ -1,5 +1,6 @@
 // Reading past an array's length must halt with a diagnosable message, not silently read
 // adjacent heap memory.
+import system;
 fun main(): void {
     let arr: int[] = [1, 2, 3];
     System.println("before");

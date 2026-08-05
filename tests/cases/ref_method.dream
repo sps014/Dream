@@ -1,6 +1,7 @@
 // `ref` on instance/static method parameters: the implicit `this` is unaffected, `ref` applies to
 // the explicit parameter list exactly like a free function.
 
+import system;
 struct Doubler {
     constructor() {}
 

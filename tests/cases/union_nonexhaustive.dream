@@ -1,6 +1,7 @@
 // Non-exhaustive switch: the `Blue` variant is neither covered nor caught by a `_` arm, so the
 // analyzer must reject this at compile time.
 
+import system;
 enum Light {
     Red(brightness: int),
     Green,

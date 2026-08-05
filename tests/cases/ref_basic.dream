@@ -3,6 +3,7 @@
 // its own private stack slot via the shadow-stack frame value-struct locals already use — no heap
 // allocation, no reference counting.
 
+import system;
 fun swap(ref a: int, ref b: int): void {
     let tmp: int = a;
     a = b;

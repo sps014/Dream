@@ -1,5 +1,6 @@
 // TypeScript-style property accessors: `obj.prop` calls the getter, `obj.prop = v` calls the
 // setter. Distinct from bracket-indexer `get(i)`/`set(i, v)`.
+import system;
 class Temperature {
     celsius: float;
 

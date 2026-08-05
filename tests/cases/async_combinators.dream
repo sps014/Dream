@@ -1,3 +1,4 @@
+import system;
 async fun work(id: int): int {
     await Time.sleep(50);
     return id * id;

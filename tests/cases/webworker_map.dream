@@ -1,6 +1,7 @@
 // `WebWorker.map` fans a `body` out over `items`, one worker per element, computed in parallel,
 // and collects the results back in input order.
 
+import system;
 fun square(x: string): string {
     let n = int.parse(x).unwrap_or(0);
     return (n * n).to_string();

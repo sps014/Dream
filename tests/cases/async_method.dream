@@ -1,3 +1,4 @@
+import system;
 class Worker {
     public base: int;
 

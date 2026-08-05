@@ -1,6 +1,7 @@
 // A bare `import <pkg>;` (no dot) resolves through dream_packages/<pkg>/src/<pkg>.dream — the
 // package's self-named entry file — once no local file matches, exercising the `dreamer`
 // package-manager integration in `resolve_import_path` (see dream_packages/greeter/).
+import system;
 import greeter;
 
 fun main(): void {

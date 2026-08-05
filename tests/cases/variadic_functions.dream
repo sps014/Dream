@@ -1,6 +1,7 @@
 // Variadic parameters (`...name: T[]`): zero, one, and several trailing arguments collected into
 // an array, across a free function and an instance method.
 
+import system;
 fun sum(...nums: int[]): int {
     let total = 0;
     for (let n in nums) {

@@ -1,6 +1,7 @@
 // Calling a non-public (class-private) generic static method from outside the class is a compile
 // error. This is the case that previously slipped through because the generic static-call path
 // skipped the privacy check.
+import system;
 import helpers.vis_lib;
 
 fun main(): void {

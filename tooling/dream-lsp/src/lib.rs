@@ -1,5 +1,6 @@
 pub mod analysis;
 pub mod backend;
+pub mod code_actions;
 pub mod conversions;
 pub mod format;
 pub mod index;

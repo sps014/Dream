@@ -1,3 +1,4 @@
+import system;
 fun takes_value(x: int): void {
     System.println(x);
 }

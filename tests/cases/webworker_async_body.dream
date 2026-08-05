@@ -4,6 +4,7 @@
 // the async constructor's untagged `Future` result and drives it to completion in place before
 // handing back the reply, so `await`ing another async call (or an extern host op like
 // `Time.sleep`) inside the body works correctly.
+import system;
 async fun tick(): void {
     await Time.sleep(1);
 }

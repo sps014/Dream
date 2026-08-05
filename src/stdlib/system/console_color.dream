@@ -1,3 +1,5 @@
+module system;
+
 // Standard console colors.
 public enum ConsoleColor {
     Black,

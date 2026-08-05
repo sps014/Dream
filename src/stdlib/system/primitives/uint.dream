@@ -1,0 +1,61 @@
+module system.primitives;
+
+// The `uint` primitive.
+extend uint : Comparable<uint> {
+    // Orders this value against `other`.
+    public fun compare(other: uint): int {
+        if (this < other) {
+            return 0 - 1;
+        }
+        if (this > other) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // The smaller of this and `other`.
+    public fun min(other: uint): uint {
+        if (this < other) {
+            return this;
+        }
+        return other;
+    }
+
+    // The larger of this and `other`.
+    public fun max(other: uint): uint {
+        if (this > other) {
+            return this;
+        }
+        return other;
+    }
+
+    // This value constrained to the inclusive range [lo, hi].
+    public fun clamp(lo: uint, hi: uint): uint {
+        if (this < lo) {
+            return lo;
+        }
+        if (this > hi) {
+            return hi;
+        }
+        return this;
+    }
+
+    // Parses an unsigned decimal integer from `text`.
+    public static fun parse(text: string): Result<uint, string> {
+        let n = text.size();
+        if (n == 0) {
+            return Result.Err("cannot parse uint from empty string");
+        }
+        let result = 0u;
+        let i = 0;
+        while (i < n) {
+            let c = text.char_at(i);
+            if ((c < '0') || (c > '9')) {
+                return Result.Err("cannot parse uint: invalid digit");
+            }
+            result = result * 10u + (uint)((int)c - 48);
+            i = i + 1;
+        }
+        return Result.Ok(result);
+    }
+}

@@ -1,3 +1,4 @@
+import system;
 enum Color { Red, Green, Blue }
 enum Status { Active = 10, Inactive = 20 }
 

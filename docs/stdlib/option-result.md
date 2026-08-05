@@ -1,6 +1,8 @@
 # Option & Result
 
-Two built-in generic unions handle absence and failure safely, without null. Both are imported into every program automatically. They are ordinary [discriminated unions](../language/enums-unions.md), so you take them apart with a pattern-matching `switch`.
+**Package:** `system.core` (bootstrap — no import required)
+
+Two built-in generic unions handle absence and failure safely, without null. They are ordinary [discriminated unions](../language/enums-unions.md), so you take them apart with a pattern-matching `switch`. Console snippets below also need `import system;`.
 
 ## `Option<T>`
 
@@ -28,7 +30,7 @@ Helpers:
 - `.unwrap_or(fallback)` — the contained value, or `fallback`.
 
 ```dream
-println(some.unwrap_or(0));   // 42
+System.println(some.unwrap_or(0));   // 42
 ```
 
 ## `Result<T, E>`
@@ -48,8 +50,8 @@ fun safe_div(a: int, b: int): Result<int, string> {
 }
 
 switch (safe_div(10, 2)) {
-    Ok(v)  => println(v),
-    Err(e) => println(e),
+    Ok(v)  => System.println(v),
+    Err(e) => System.println(e),
 }
 ```
 

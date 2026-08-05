@@ -1,3 +1,4 @@
+import system;
 async fun main(): void {
     let pool = WebWorkerPool(2);
     let a = pool.dispatch_async<string, string>("x", async (url) => {

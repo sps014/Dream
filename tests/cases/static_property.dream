@@ -1,5 +1,6 @@
 // Static TypeScript-style property accessors: read/written through the type itself
 // (`Type.prop` / `Type.prop = v`) with no instance receiver. Distinct from instance accessors.
+import system;
 class Settings {
     // A static getter computes a value on read of `Settings.version`.
     public static get version(): int {

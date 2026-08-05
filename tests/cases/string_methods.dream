@@ -1,3 +1,5 @@
+import system;
+import system.text;
 fun main(): void {
     let s = "Hello, World";
     System.println(s.size());

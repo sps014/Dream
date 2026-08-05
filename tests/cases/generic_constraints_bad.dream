@@ -3,6 +3,8 @@
 // constraint violation. (Primitives like `int` now ship a `Comparable` impl, so `List<int>.sort()`
 // works — this checks the failure path for a type that does not.)
 
+import system;
+import system.collections;
 class Widget {
     public id: int;
     constructor(id: int) { this.id = id; }

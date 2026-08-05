@@ -1,6 +1,7 @@
 // A `ref struct` cannot be used as a generic type argument: a container like `List<T>` stores its
 // elements in a heap-allocated backing array, which would let a stack-only value escape its frame.
 
+import system.collections;
 ref struct Pair {
     public a: int;
     public b: int;

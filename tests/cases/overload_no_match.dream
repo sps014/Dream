@@ -1,4 +1,5 @@
 // No overload accepts a bool argument -> no-match error.
+import system;
 fun h(x: int): int { return 1; }
 fun h(x: string): int { return 2; }
 

@@ -2,6 +2,7 @@
 // shared `__Cell<T>`s), and capture is transitive/multi-level — a doubly-nested lambda may reach
 // past its immediate parent to a grandparent's local, forwarded one hop at a time.
 
+import system;
 fun make(a: int, b: int): fun(): fun(): int {
     let c: int = 100;
     // The outer lambda doesn't reference `a`/`b`/`c` itself, but forwards all three to the inner

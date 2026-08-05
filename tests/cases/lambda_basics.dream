@@ -4,6 +4,8 @@
 // directly as a method-call argument (`List.sort_by`), and parameter-type inference from context
 // (an untyped `(a, b) => ...` infers its parameter types from the expected `fun(...)` signature).
 
+import system;
+import system.collections;
 fun apply(f: fun(int): int, v: int): int {
     return f(v);
 }

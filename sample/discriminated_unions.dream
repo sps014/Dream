@@ -3,6 +3,7 @@
 // Run with:  cargo run -- run sample/discriminated_unions.dream
 
 // `Option<T>` and `Result<T, E>` come from the standard library prelude.
+import system;
 enum Shape {
     Circle(radius: int),
     Rect(width: int, height: int),

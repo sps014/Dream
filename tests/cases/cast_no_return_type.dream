@@ -1,4 +1,5 @@
 // `@cast` requires a declared return type (the cast's target type).
+import system;
 class Wrapper {
     public value: int;
 

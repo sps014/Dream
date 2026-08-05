@@ -1,3 +1,4 @@
+import system;
 async fun main(): void {
     let urls = ["a", "b"];
     let results = await WebWorker<string, string>.map(urls, async (url) => {

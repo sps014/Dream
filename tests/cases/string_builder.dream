@@ -2,6 +2,8 @@
 // the initial capacity, and the `@override to_string()` that makes `print`/`+`/interpolation use
 // it automatically.
 
+import system;
+import system.text;
 fun main(): void {
     let sb = StringBuilder();
     System.println(sb.is_empty());

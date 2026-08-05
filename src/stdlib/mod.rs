@@ -1,205 +1,403 @@
 use crate::syntax::nodes::Type;
+use indexmap::IndexSet;
 
-/// The embedded standard-library prelude, in the exact order it must be merged. This is the
-/// single source of truth shared by the compiler's source manager and the `dream-analyzer`
-/// language service, so the two can never drift. The primitive files (int/char/string/...)
-/// only attach methods to built-in types, so their relative order does not matter.
-pub const PRELUDE_FILES: &[(&str, &str)] = &[
-    // Core intrinsic-backed types: raw arrays, `Option`/`Result`, futures, JS interop, math.
-    // `Buffer` (the raw `array_new` intrinsic) is merged first; `List<T>` wraps it, so it must be
-    // defined before the collection classes that construct backing storage.
-    ("<std>/core/buffer.dream", include_str!("core/buffer.dream")),
-    ("<std>/core/bytes.dream", include_str!("core/bytes.dream")),
-    // `Span<T>` only needs `Buffer.alloc` (for `to_array`), so it merges right after `buffer.dream`.
-    ("<std>/core/span.dream", include_str!("core/span.dream")),
-    // `Pointer<T>` needs `Buffer.alloc`/`realloc`/`free`, so it merges right after `buffer.dream` too.
-    (
-        "<std>/core/pointer.dream",
-        include_str!("core/pointer.dream"),
-    ),
-    // The closure ABI (`__Closure.funcbox_*`/`retain`) and the `__Cell<T>` capture box: needed by
-    // any `fun(...)`-typed value or arrow-lambda, so merged early, before anything that uses them.
-    (
-        "<std>/core/closure.dream",
-        include_str!("core/closure.dream"),
-    ),
-    // Named tuning constants (hash-table slot states/load factor, sequence growth floor) shared by
-    // the collection classes below; no dependencies of its own, so it can merge anywhere before them.
-    (
-        "<std>/core/collection_tuning.dream",
-        include_str!("core/collection_tuning.dream"),
-    ),
-    // Comparison interfaces (`Equatable`/`Comparable`) come before types that implement them.
-    (
-        "<std>/core/compare.dream",
-        include_str!("core/compare.dream"),
-    ),
-    ("<std>/core/option.dream", include_str!("core/option.dream")),
-    // The `Collection<T>` interface precedes `List<T>` (which implements it) and uses
-    // `Option<T>`, so it is merged after `option.dream`.
-    (
-        "<std>/core/collection.dream",
-        include_str!("core/collection.dream"),
-    ),
-    ("<std>/core/result.dream", include_str!("core/result.dream")),
-    (
-        "<std>/core/promise.dream",
-        include_str!("core/promise.dream"),
-    ),
-    // Real OS-parallel workers (needs `Future`, hence after `promise.dream`).
-    (
-        "<std>/core/webworker.dream",
-        include_str!("core/webworker.dream"),
-    ),
-    ("<std>/core/sync.dream", include_str!("core/sync.dream")),
-    ("<std>/core/js.dream", include_str!("core/js.dream")),
-    ("<std>/core/math.dream", include_str!("core/math.dream")),
-    // Collections (`List`/`Map` and their cursors), one class per file under `collections/`.
-    (
-        "<std>/collections/list.dream",
-        include_str!("collections/list.dream"),
-    ),
-    (
-        "<std>/collections/list_iterator.dream",
-        include_str!("collections/list_iterator.dream"),
-    ),
-    (
-        "<std>/collections/map.dream",
-        include_str!("collections/map.dream"),
-    ),
-    (
-        "<std>/collections/key_value_pair.dream",
-        include_str!("collections/key_value_pair.dream"),
-    ),
-    (
-        "<std>/collections/map_iterator.dream",
-        include_str!("collections/map_iterator.dream"),
-    ),
-    (
-        "<std>/collections/set.dream",
-        include_str!("collections/set.dream"),
-    ),
-    (
-        "<std>/collections/set_iterator.dream",
-        include_str!("collections/set_iterator.dream"),
-    ),
-    // Scalar primitives: each attaches methods to a built-in numeric/bool/char type.
-    (
-        "<std>/primitives/int.dream",
-        include_str!("primitives/int.dream"),
-    ),
-    (
-        "<std>/primitives/long.dream",
-        include_str!("primitives/long.dream"),
-    ),
-    (
-        "<std>/primitives/uint.dream",
-        include_str!("primitives/uint.dream"),
-    ),
-    (
-        "<std>/primitives/ulong.dream",
-        include_str!("primitives/ulong.dream"),
-    ),
-    (
-        "<std>/primitives/byte.dream",
-        include_str!("primitives/byte.dream"),
-    ),
-    (
-        "<std>/primitives/char.dream",
-        include_str!("primitives/char.dream"),
-    ),
-    (
-        "<std>/primitives/bool.dream",
-        include_str!("primitives/bool.dream"),
-    ),
-    (
-        "<std>/primitives/float.dream",
-        include_str!("primitives/float.dream"),
-    ),
-    (
-        "<std>/primitives/double.dream",
-        include_str!("primitives/double.dream"),
-    ),
-    // Text: the `string` type, its character cursor, and regular expressions.
-    ("<std>/text/string.dream", include_str!("text/string.dream")),
-    (
-        "<std>/text/string_iterator.dream",
-        include_str!("text/string_iterator.dream"),
-    ),
-    // Needs `Buffer` (core/buffer.dream) and `sequence_min_capacity` (core/collection_tuning.dream),
-    // both merged well before this point.
-    (
-        "<std>/text/string_builder.dream",
-        include_str!("text/string_builder.dream"),
-    ),
-    // Regex engine: AST, then the compiler and parser (both depend only on the AST), then the VM
-    // (needs the AST's `RegexEmptyKind` and the compiler's `RegexInst`/`RegexOp`), then the public
-    // `Regex` class (needs all four).
-    (
-        "<std>/text/regex_ast.dream",
-        include_str!("text/regex_ast.dream"),
-    ),
-    (
-        "<std>/text/regex_program.dream",
-        include_str!("text/regex_program.dream"),
-    ),
-    (
-        "<std>/text/regex_parser.dream",
-        include_str!("text/regex_parser.dream"),
-    ),
-    (
-        "<std>/text/regex_vm.dream",
-        include_str!("text/regex_vm.dream"),
-    ),
-    ("<std>/text/regex.dream", include_str!("text/regex.dream")),
-    // JSON: value tree, parser, and the public `JSON` API (one class per file).
-    (
-        "<std>/json/json_value.dream",
-        include_str!("json/json_value.dream"),
-    ),
-    (
-        "<std>/json/json_parser.dream",
-        include_str!("json/json_parser.dream"),
-    ),
-    ("<std>/json/json.dream", include_str!("json/json.dream")),
-    // Networking: HTTP client and its response type (one class per file).
-    (
-        "<std>/net/http_response.dream",
-        include_str!("net/http_response.dream"),
-    ),
-    (
-        "<std>/net/http_client.dream",
-        include_str!("net/http_client.dream"),
-    ),
-    // Filesystem I/O: static `File` API and the buffered `FileStream` (one class per file).
-    ("<std>/io/file.dream", include_str!("io/file.dream")),
-    (
-        "<std>/io/file_stream.dream",
-        include_str!("io/file_stream.dream"),
-    ),
-    // System services: console output/input, the `ConsoleColor` enum, timing, and debug helpers.
-    (
-        "<std>/system/system.dream",
-        include_str!("system/system.dream"),
-    ),
-    (
-        "<std>/system/console_color.dream",
-        include_str!("system/console_color.dream"),
-    ),
-    ("<std>/system/time.dream", include_str!("system/time.dream")),
-    (
-        "<std>/system/stopwatch.dream",
-        include_str!("system/stopwatch.dream"),
-    ),
-    (
-        "<std>/system/datetime.dream",
-        include_str!("system/datetime.dream"),
-    ),
-    (
-        "<std>/system/debug.dream",
-        include_str!("system/debug.dream"),
-    ),
+/// One embedded stdlib package: dotted import name, ordered source files, and package deps.
+pub struct StdPackage {
+    /// Dotted path users write in `import system.net;`.
+    pub name: &'static str,
+    /// `(virtual path, source)` pairs in merge order within this package.
+    pub files: &'static [(&'static str, &'static str)],
+    /// Other packages that must be loaded before this one.
+    pub deps: &'static [&'static str],
+}
+
+/// Bootstrap packages always merged into every program (no user `import` required).
+pub const BOOTSTRAP_PACKAGES: &[&str] = &["system.core", "system.primitives"];
+
+/// All stdlib packages. Order is the global merge order when loading the full prelude.
+pub const STD_PACKAGES: &[StdPackage] = &[
+    StdPackage {
+        name: "system.core",
+        deps: &[],
+        files: &[
+            (
+                "<std>/system/core/buffer.dream",
+                include_str!("system/core/buffer.dream"),
+            ),
+            (
+                "<std>/system/core/bytes.dream",
+                include_str!("system/core/bytes.dream"),
+            ),
+            (
+                "<std>/system/core/span.dream",
+                include_str!("system/core/span.dream"),
+            ),
+            (
+                "<std>/system/core/pointer.dream",
+                include_str!("system/core/pointer.dream"),
+            ),
+            (
+                "<std>/system/core/closure.dream",
+                include_str!("system/core/closure.dream"),
+            ),
+            (
+                "<std>/system/core/string_abi.dream",
+                include_str!("system/core/string_abi.dream"),
+            ),
+            (
+                "<std>/system/core/collection_tuning.dream",
+                include_str!("system/core/collection_tuning.dream"),
+            ),
+            (
+                "<std>/system/core/compare.dream",
+                include_str!("system/core/compare.dream"),
+            ),
+            (
+                "<std>/system/core/option.dream",
+                include_str!("system/core/option.dream"),
+            ),
+            (
+                "<std>/system/core/collection.dream",
+                include_str!("system/core/collection.dream"),
+            ),
+            (
+                "<std>/system/core/result.dream",
+                include_str!("system/core/result.dream"),
+            ),
+            (
+                "<std>/system/core/promise.dream",
+                include_str!("system/core/promise.dream"),
+            ),
+            (
+                "<std>/system/core/webworker.dream",
+                include_str!("system/core/webworker.dream"),
+            ),
+            (
+                "<std>/system/core/sync.dream",
+                include_str!("system/core/sync.dream"),
+            ),
+            (
+                "<std>/system/core/js.dream",
+                include_str!("system/core/js.dream"),
+            ),
+            (
+                "<std>/system/core/math.dream",
+                include_str!("system/core/math.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.primitives",
+        deps: &["system.core"],
+        files: &[
+            (
+                "<std>/system/primitives/int.dream",
+                include_str!("system/primitives/int.dream"),
+            ),
+            (
+                "<std>/system/primitives/long.dream",
+                include_str!("system/primitives/long.dream"),
+            ),
+            (
+                "<std>/system/primitives/uint.dream",
+                include_str!("system/primitives/uint.dream"),
+            ),
+            (
+                "<std>/system/primitives/ulong.dream",
+                include_str!("system/primitives/ulong.dream"),
+            ),
+            (
+                "<std>/system/primitives/byte.dream",
+                include_str!("system/primitives/byte.dream"),
+            ),
+            (
+                "<std>/system/primitives/char.dream",
+                include_str!("system/primitives/char.dream"),
+            ),
+            (
+                "<std>/system/primitives/bool.dream",
+                include_str!("system/primitives/bool.dream"),
+            ),
+            (
+                "<std>/system/primitives/float.dream",
+                include_str!("system/primitives/float.dream"),
+            ),
+            (
+                "<std>/system/primitives/double.dream",
+                include_str!("system/primitives/double.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.collections",
+        deps: &["system.core", "system.primitives"],
+        files: &[
+            (
+                "<std>/system/collections/list.dream",
+                include_str!("system/collections/list.dream"),
+            ),
+            (
+                "<std>/system/collections/list_iterator.dream",
+                include_str!("system/collections/list_iterator.dream"),
+            ),
+            (
+                "<std>/system/collections/map.dream",
+                include_str!("system/collections/map.dream"),
+            ),
+            (
+                "<std>/system/collections/key_value_pair.dream",
+                include_str!("system/collections/key_value_pair.dream"),
+            ),
+            (
+                "<std>/system/collections/map_iterator.dream",
+                include_str!("system/collections/map_iterator.dream"),
+            ),
+            (
+                "<std>/system/collections/set.dream",
+                include_str!("system/collections/set.dream"),
+            ),
+            (
+                "<std>/system/collections/set_iterator.dream",
+                include_str!("system/collections/set_iterator.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.text",
+        deps: &["system.core", "system.primitives", "system.collections"],
+        files: &[
+            (
+                "<std>/system/text/string.dream",
+                include_str!("system/text/string.dream"),
+            ),
+            (
+                "<std>/system/text/string_iterator.dream",
+                include_str!("system/text/string_iterator.dream"),
+            ),
+            (
+                "<std>/system/text/string_builder.dream",
+                include_str!("system/text/string_builder.dream"),
+            ),
+            (
+                "<std>/system/text/regex_ast.dream",
+                include_str!("system/text/regex_ast.dream"),
+            ),
+            (
+                "<std>/system/text/regex_program.dream",
+                include_str!("system/text/regex_program.dream"),
+            ),
+            (
+                "<std>/system/text/regex_parser.dream",
+                include_str!("system/text/regex_parser.dream"),
+            ),
+            (
+                "<std>/system/text/regex_vm.dream",
+                include_str!("system/text/regex_vm.dream"),
+            ),
+            (
+                "<std>/system/text/regex.dream",
+                include_str!("system/text/regex.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.json",
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.collections",
+            "system.text",
+        ],
+        files: &[
+            (
+                "<std>/system/json/json_value.dream",
+                include_str!("system/json/json_value.dream"),
+            ),
+            (
+                "<std>/system/json/json_parser.dream",
+                include_str!("system/json/json_parser.dream"),
+            ),
+            (
+                "<std>/system/json/json.dream",
+                include_str!("system/json/json.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.net",
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.collections",
+            "system.text",
+            "system.json",
+        ],
+        files: &[
+            (
+                "<std>/system/net/http_response.dream",
+                include_str!("system/net/http_response.dream"),
+            ),
+            (
+                "<std>/system/net/http_client.dream",
+                include_str!("system/net/http_client.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.io",
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.collections",
+            "system.text",
+        ],
+        files: &[
+            (
+                "<std>/system/io/file.dream",
+                include_str!("system/io/file.dream"),
+            ),
+            (
+                "<std>/system/io/file_stream.dream",
+                include_str!("system/io/file_stream.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system",
+        deps: &["system.core", "system.primitives", "system.text"],
+        files: &[
+            (
+                "<std>/system/system.dream",
+                include_str!("system/system.dream"),
+            ),
+            (
+                "<std>/system/console_color.dream",
+                include_str!("system/console_color.dream"),
+            ),
+            (
+                "<std>/system/time.dream",
+                include_str!("system/time.dream"),
+            ),
+            (
+                "<std>/system/stopwatch.dream",
+                include_str!("system/stopwatch.dream"),
+            ),
+            (
+                "<std>/system/datetime.dream",
+                include_str!("system/datetime.dream"),
+            ),
+            (
+                "<std>/system/debug.dream",
+                include_str!("system/debug.dream"),
+            ),
+        ],
+    },
 ];
+
+/// Returns every `(virtual_path, source)` across all packages in deterministic registry order.
+pub fn all_prelude_files() -> Vec<(&'static str, &'static str)> {
+    let mut out = Vec::new();
+    for pkg in STD_PACKAGES {
+        out.extend_from_slice(pkg.files);
+    }
+    out
+}
+
+/// Looks up a package by dotted name (`system.net`).
+pub fn find_package(name: &str) -> Option<&'static StdPackage> {
+    STD_PACKAGES.iter().find(|p| p.name == name)
+}
+
+/// True when `slash_path` (parser form of a plain import, e.g. `system/net`) names a std package.
+pub fn std_package_from_slash_path(slash_path: &str) -> Option<&'static StdPackage> {
+    let dotted = slash_path.replace('/', ".");
+    find_package(&dotted)
+}
+
+/// Expands `requested` package names with bootstrap + transitive deps, in registry merge order.
+pub fn resolve_packages_to_load(requested: &IndexSet<String>) -> Vec<&'static StdPackage> {
+    let mut needed: IndexSet<&'static str> = IndexSet::new();
+    for &boot in BOOTSTRAP_PACKAGES {
+        needed.insert(boot);
+    }
+    for name in requested {
+        collect_deps(name, &mut needed);
+    }
+    STD_PACKAGES
+        .iter()
+        .filter(|p| needed.contains(p.name))
+        .collect()
+}
+
+fn collect_deps(name: &str, needed: &mut IndexSet<&'static str>) {
+    let Some(pkg) = find_package(name) else {
+        return;
+    };
+    if !needed.insert(pkg.name) {
+        return;
+    }
+    for &dep in pkg.deps {
+        collect_deps(dep, needed);
+    }
+}
+
+/// Maps a public top-level stdlib symbol name to the package that exports it (for LSP auto-import).
+/// Built by scanning package sources for `public class|enum|interface|fun|extend` at file top-level.
+pub fn symbol_to_package() -> std::collections::HashMap<String, &'static str> {
+    let mut map = std::collections::HashMap::new();
+    for pkg in STD_PACKAGES {
+        // Bootstrap packages need no user import — skip so auto-import won't suggest them.
+        if BOOTSTRAP_PACKAGES.contains(&pkg.name) {
+            continue;
+        }
+        for &(_, src) in pkg.files {
+            for name in public_top_level_names(src) {
+                map.entry(name).or_insert(pkg.name);
+            }
+        }
+    }
+    map
+}
+
+fn public_top_level_names(src: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in src.lines() {
+        let t = line.trim_start();
+        if t.starts_with("//") || t.starts_with("module ") || t.starts_with("import ") {
+            continue;
+        }
+        // Nested members are indented; only look at column-0 public decls (approx).
+        if line.starts_with(' ') || line.starts_with('\t') {
+            continue;
+        }
+        let rest = if let Some(r) = t.strip_prefix("public ") {
+            r.trim_start()
+        } else {
+            continue;
+        };
+        let rest = rest
+            .strip_prefix("sealed ")
+            .unwrap_or(rest)
+            .strip_prefix("static ")
+            .unwrap_or(rest)
+            .strip_prefix("async ")
+            .unwrap_or(rest)
+            .trim_start();
+        for kind in ["class ", "enum ", "interface ", "fun ", "extend ", "struct ", "union "] {
+            if let Some(after) = rest.strip_prefix(kind) {
+                let name: String = after
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !name.is_empty() {
+                    names.push(name);
+                }
+                break;
+            }
+        }
+    }
+    names
+}
 
 pub struct StdlibFunction {
     pub name: String,

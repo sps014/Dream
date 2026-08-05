@@ -1,4 +1,5 @@
 // A named argument that doesn't match any declared parameter -> error.
+import system;
 fun greet(name: string): string {
     return "Hello, " + name;
 }

@@ -1,5 +1,6 @@
 // A user class opting into `obj[i]` / `obj[i] = v` via convention-named `get`/`set` methods.
 
+import system;
 class Grid {
     cells: int[];
 

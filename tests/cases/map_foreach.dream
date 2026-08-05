@@ -2,6 +2,8 @@
 // `Option<V>`), and `for (let pair in m)` yielding `KeyValuePair<K, V>`. Map order is
 // unspecified, so this case only checks order-independent aggregates.
 
+import system;
+import system.collections;
 fun main() {
     let m = Map<string, int>();
     m["a"] = 1;

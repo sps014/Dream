@@ -4,6 +4,7 @@
 // value-struct temporaries in the same async body - including every element past the first in a
 // value-struct array literal - silently collapsed onto the last one written.
 
+import system;
 struct Point {
     public x: int;
     public y: int;

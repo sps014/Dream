@@ -3,16 +3,20 @@
 Dream is a fast, statically typed language that compiles straight to WebAssembly. It has a clean, C-like syntax and manages memory for you with automatic reference counting (ARC) — no garbage collector pauses, no manual frees.
 
 ```dream
+import system;
+
 fun greet(name: string): string {
     return "Hello, " + name;
 }
 
 fun main() {
-    println(greet("world"));
+    System.println(greet("world"));
 }
 ```
 
 New here? Start with [Getting Started](getting-started.md), then work through the Basics. Already comfortable? Jump to the [language reference](language/variables.md) or the [standard library](stdlib/builtins.md).
+
+Stdlib APIs are organized as `system.*` packages (`import system.collections;`, `import system.net;`, …). See [Imports](language/imports.md#standard-library-packages).
 
 ## Why Dream
 
@@ -46,7 +50,7 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
     ---
 
-    `List`, `Map`, `Set`, strings, JSON, files, HTTP, and dates ship in the standard library.
+    `List`, `Map`, `Set`, strings, JSON, files, HTTP, and dates via `import system…;`.
 
 </div>
 
@@ -92,23 +96,23 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
 <div class="grid cards" markdown>
 
--   :material-code-braces: **Built-ins**
+-   :material-code-braces: **Built-ins** · `system` / bootstrap
 
     ---
 
-    Core utilities: `print`, `println`, `to_string`, `hash_code`, `List<T>`, `Buffer`, `Math`.
+    Console I/O (`System`), `to_string`/`hash_code`, `Buffer`, `Math`.
 
     [:octicons-arrow-right-24: Built-ins](stdlib/builtins.md)
 
--   :material-format-text: **Strings**
+-   :material-format-text: **Strings** · `system.text`
 
     ---
 
-    Slicing, searching, casing, splitting, and formatting.
+    Slicing, searching, casing, splitting, `StringBuilder`, and regex.
 
     [:octicons-arrow-right-24: Strings](stdlib/string.md)
 
--   :material-alert-circle-outline: **Option & Result**
+-   :material-alert-circle-outline: **Option & Result** · bootstrap
 
     ---
 
@@ -116,7 +120,7 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
     [:octicons-arrow-right-24: Option & Result](stdlib/option-result.md)
 
--   :material-layers: **Collections**
+-   :material-layers: **Collections** · `system.collections`
 
     ---
 
@@ -124,7 +128,7 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
     [:octicons-arrow-right-24: Collections](stdlib/collections.md)
 
--   :material-code-json: **JSON**
+-   :material-code-json: **JSON** · `system.json`
 
     ---
 
@@ -132,7 +136,7 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
     [:octicons-arrow-right-24: JSON](stdlib/json.md)
 
--   :material-file-document: **File I/O**
+-   :material-file-document: **File I/O** · `system.io`
 
     ---
 
@@ -140,7 +144,7 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
     [:octicons-arrow-right-24: File I/O](stdlib/file.md)
 
--   :material-swap-horizontal: **HTTP**
+-   :material-swap-horizontal: **HTTP** · `system.net`
 
     ---
 
@@ -148,7 +152,7 @@ New here? Start with [Getting Started](getting-started.md), then work through th
 
     [:octicons-arrow-right-24: HTTP](stdlib/http.md)
 
--   :material-calendar-clock: **DateTime**
+-   :material-calendar-clock: **DateTime** · `system`
 
     ---
 

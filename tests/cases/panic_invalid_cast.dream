@@ -1,5 +1,6 @@
 // Unboxing an `object` as the wrong primitive type must halt with a diagnosable message rather
 // than silently reinterpreting the wrong bytes.
+import system;
 fun main(): void {
     let o: object = "hello";
     System.println("before");

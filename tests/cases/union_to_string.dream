@@ -1,3 +1,4 @@
+import system;
 enum Shape {
     Circle(radius: int),
     Rect(width: int, height: int),

@@ -79,7 +79,7 @@ mod contract_tests {
     fn every_native_dream_host_fn_is_declared_in_the_prelude() {
         // Names declared by the prelude via `@js("Dream", "name")`.
         let mut declared: HashSet<String> = HashSet::new();
-        for (_, src) in crate::stdlib::PRELUDE_FILES {
+        for (_, src) in crate::stdlib::all_prelude_files() {
             for name in names_after_module(src, HOST_MODULE) {
                 declared.insert(name);
             }

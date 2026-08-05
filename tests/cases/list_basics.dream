@@ -1,3 +1,6 @@
+import system;
+import system.collections;
+import system.text;
 fun main(): void {
     let xs = List<int>();
     xs.push(10);

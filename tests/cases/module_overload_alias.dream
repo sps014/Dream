@@ -1,4 +1,5 @@
 // Aliased import of an overloaded module item binds the whole overload set under the alias.
+import system;
 import helpers.module_utils_math_overloads;
 
 import utils.math.add as add_u;

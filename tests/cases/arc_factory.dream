@@ -2,6 +2,7 @@
 // constructor calls: factory-function results, loop reassignment, method results, reference
 // fields, and owned temporaries passed as call arguments.
 
+import system;
 class Tracked {
     public id: int;
 

@@ -1,4 +1,5 @@
 // A destructor must not declare parameters.
+import system;
 class Bad {
     id: int;
 

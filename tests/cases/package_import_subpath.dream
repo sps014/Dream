@@ -1,5 +1,6 @@
 // A dotted `import <pkg>.<item-file>;` resolves through dream_packages/<pkg>/src/<item-file>.dream,
 // exercising the non-bare form of the `dreamer` package-manager integration in `resolve_import_path`.
+import system;
 import mathpkg.ops;
 
 fun main(): void {

@@ -6,6 +6,7 @@
 //   cargo run -- sample/interop/js.dream
 //   node sample/interop/js.mjs sample/interop/js.wasm
 
+import system;
 fun main(): void {
     // `appConfig` is a plain JS object provided by the host (see js.mjs / interop.html).
     let config = js.global.appConfig;

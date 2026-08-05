@@ -1,6 +1,7 @@
 // A capturing lambda stashed in a `fun(js): void` local cannot be passed to a dynamic `js` call:
 // FUNC slots strip the closure env word, so the environment would be lost.
 
+import system;
 fun main(): void {
     let prefix: string = "hi ";
     let handler: fun(js): void = (ev) => {

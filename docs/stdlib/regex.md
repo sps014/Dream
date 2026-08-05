@@ -1,5 +1,7 @@
 # Regex
 
+**Package:** `system.text` — `import system.text;`
+
 `Regex` is a regular-expression class implemented entirely in Dream — a Thompson-NFA/Pike-VM
 engine (the same family of algorithm as RE2, Go's `regexp`, and Rust's `regex` crate), not a
 binding to a host library. Construct one with a pattern and flags, then `test`, `replace`, or
@@ -9,6 +11,9 @@ wasmtime, Node, and the browser, and these calls are synchronous — no `await`.
 ## Usage
 
 ```dream
+import system;
+import system.text;
+
 fun main(): void {
     let digits = Regex("\\d+", "g");
 

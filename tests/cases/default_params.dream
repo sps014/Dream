@@ -1,6 +1,7 @@
 // Default parameter values (literal-only) across a free function, a constructor, and a method.
 // Each optional trailing parameter is exercised both omitted (default substituted) and supplied.
 
+import system;
 fun add(base: int, delta: int = 10): int {
     return base + delta;
 }

@@ -7,6 +7,9 @@ A fast, statically typed language that compiles straight to WebAssembly. Clean C
 ## A taste
 
 ```dream
+import system;
+import system.collections;
+
 fun greet(name: string): string {
     return "Hello, " + name;
 }
@@ -25,17 +28,19 @@ fun area(s: Shape): float {
 }
 
 fun main() {
-    println(greet("world"));
+    System.println(greet("world"));
 
     let shapes = List<Shape>();
     shapes.push(Shape.Circle(2.0));
     shapes.push(Shape.Rect(3.0, 4.0));
 
     for (let s in shapes) {
-        println(area(s));
+        System.println(area(s));
     }
 }
 ```
+
+Stdlib APIs live under `system.*` packages — `import system;` for console I/O, `import system.collections;` for `List`/`Map`/`Set`, and so on. Bootstrap types like `Option` and `Result` need no import. See [Imports](https://sps014.github.io/Dream/language/imports/).
 
 ## Features
 
@@ -46,7 +51,7 @@ fun main() {
 - **Rich type system** — classes, value structs, interfaces, enums, discriminated unions, `Option`/`Result`.
 - **`async`/`await`** — a cooperative scheduler that runs entirely inside the WASM module, plus `WebWorker` for real multi-core parallelism.
 - **Seamless JS interop** — call JavaScript with the `js` type and `extern`, pass callbacks in both directions.
-- **Batteries included** — `List`, `Map`, `Set`, strings, JSON (with `@json` auto-derive), files, HTTP, regex, and dates.
+- **Batteries included** — import what you need: `system.collections`, `system.text`, `system.json`, `system.io`, `system.net`, `system` (console, dates, …). The editor offers auto-import quick fixes.
 
 ## Build
 

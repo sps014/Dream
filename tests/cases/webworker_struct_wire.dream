@@ -2,6 +2,7 @@
 // `TIn`/`TOut`, not just `string`/scalar primitives: it crosses the wire as a raw byte-blit
 // (`Bytes.of`/`Bytes.to` under the hood), reconstructed on the other side with the same layout.
 
+import system;
 struct Point {
     public x: int;
     public y: int;

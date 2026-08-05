@@ -1,3 +1,4 @@
+import system;
 fun main(): void {
     let p = Math.pow(2.0d, 3.0d);
     System.println(p);

@@ -1,12 +1,18 @@
 # Built-ins
 
-These functions and types are available in every Dream program with no import. They cover console I/O, the universal `to_string`/`hash_code` methods, `Math`, and low-level buffers.
+**Packages:** bootstrap (`system.core` / `system.primitives` — no import) · console & probes via `import system;`
+
+Bootstrap types (`Option`, `Result`, `Buffer`, `Math`, …) are available in every Dream program with no import. Console I/O and most higher-level APIs require an explicit stdlib import — see [Imports](../language/imports.md#standard-library-packages).
 
 ## Console output
+
+**Package:** `system` — `import system;`
 
 `System.print(value)` writes any value to stdout with no trailing newline; `System.println(value)` adds one. Both are generic over the value type — you never convert first, and classes with an overridden `to_string` are handled automatically.
 
 ```dream
+import system;
+
 System.print(42);         // "42"
 System.println("hello");  // "hello\n"
 System.println(true);     // "true\n"

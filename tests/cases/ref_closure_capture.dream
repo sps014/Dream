@@ -2,6 +2,7 @@
 // itself reads/writes through (rather than getting its own separate stack slot) — no double
 // boxing, and mutations through either path stay visible to both.
 
+import system;
 fun increment(ref x: int): void {
     x = x + 1;
 }

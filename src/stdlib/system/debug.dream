@@ -1,3 +1,5 @@
+module system;
+
 // Allocator introspection for tests and diagnostics.
 public class Debug {
     // Head pointer of the allocator's free list.

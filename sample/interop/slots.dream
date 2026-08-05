@@ -4,6 +4,7 @@
 //   cargo run -- sample/interop/slots.dream
 //   node sample/interop/slots.mjs sample/interop/slots.wasm
 
+import system;
 fun handle(ev: js): void {
     System.println("  handler saw: " + ev.to_str());
 }

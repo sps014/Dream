@@ -2,6 +2,8 @@
 // instantiation gets its own `to_json`/`from_json`. Type-parameter fields round-trip through
 // `JSON.serialize`/`JSON.deserialize`, which the analyzer resolves per instance, so `Box<Point>`
 // delegates to `Point`'s (also `@json`) converters.
+import system;
+import system.json;
 @json
 struct Point { public x: int; public y: int; constructor(x: int, y: int) { this.x = x; this.y = y; } }
 

@@ -1,5 +1,6 @@
 // `Pointer<T>` - manual alloc/realloc/free via `Buffer.alloc`/`realloc`/`free`, bypassing ARC.
 
+import system;
 @unsafe
 fun main(): void {
     let p = Pointer<int>.alloc(3);

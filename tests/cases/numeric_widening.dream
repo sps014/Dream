@@ -2,6 +2,7 @@
 // for codegen failing to promote a narrower numeric on the WASM operand stack (e.g. passing a
 // `float`/`int` literal to a `double` parameter), which previously produced an invalid module.
 
+import system;
 class Calc {
     public static fun identity(x: double): double {
         return x;

@@ -1,0 +1,62 @@
+module system.core;
+
+// Cross-thread synchronization primitives for `@shared class` instances shared across `WebWorker`
+// threads. See `docs/language` concurrency notes and `src/mir/runtime/sync.wat` for the underlying
+// atomic reentrant-lock-word / semaphore mechanism.
+
+// A reentrant mutual-exclusion lock. `Lock` is itself `@shared` (so its embedded lock word can be
+// captured/retained across threads like any other `@shared` instance) and carries no fields of its
+// own — `lock (myLock) { ... }` works directly on a `Lock` instance, equivalent to bracketing the
+// block with `acquire()`/`release()`. Prefer the `lock` statement; use `acquire`/`release` directly
+// only when the critical section cannot be expressed as a single block (e.g. it spans a
+// `WebWorker` closure boundary).
+@shared
+public class Lock {
+    @intrinsic("shared_lock_acquire")
+    static extern fun __acquire(target: Lock): void;
+
+    @intrinsic("shared_lock_release")
+    static extern fun __release(target: Lock): void;
+
+    // Acquires the lock, blocking (busy-waiting) until available. Reentrant: the same thread may
+    // call `acquire` again before releasing (matching `lock (obj) { ... }`'s own semantics), and
+    // must call `release` the same number of times to fully release it.
+    public fun acquire(): void {
+        Lock.__acquire(this);
+    }
+
+    // Releases one level of a lock acquired via `acquire()`. Undefined if called by a thread that
+    // does not currently hold the lock.
+    public fun release(): void {
+        Lock.__release(this);
+    }
+}
+
+// A classic counting semaphore: `initial` permits are available up front; `acquire()` blocks
+// (busy-waits) until a permit is available then takes one; `release()` returns a permit. Unlike
+// `Lock`, a semaphore has no notion of ownership — any thread may `release()`, and the same thread
+// may hold more than one permit.
+@shared
+public class Semaphore {
+    permits: int;
+
+    constructor(initial: int) {
+        this.permits = initial;
+    }
+
+    @intrinsic("shared_semaphore_acquire")
+    static extern fun __acquire(target: Semaphore): void;
+
+    @intrinsic("shared_semaphore_release")
+    static extern fun __release(target: Semaphore): void;
+
+    // Blocks (busy-waiting) until a permit is available, then takes one.
+    public fun acquire(): void {
+        Semaphore.__acquire(this);
+    }
+
+    // Returns one permit.
+    public fun release(): void {
+        Semaphore.__release(this);
+    }
+}

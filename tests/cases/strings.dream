@@ -1,3 +1,4 @@
+import system;
 fun print_greeting(name: string): void {
     let greeting = "Hello, " + name;
     System.print(greeting);

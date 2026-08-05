@@ -1,4 +1,5 @@
 // A non-repeatable attribute may not be written twice on the same declaration.
+import system;
 class Foo {
     x: int;
 

@@ -1,3 +1,4 @@
+import system;
 fun main() {
     let grid: int[][] = [[1, 2, 3], [4, 5, 6]];
     System.println(grid.size());

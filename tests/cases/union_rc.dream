@@ -1,6 +1,7 @@
 // A discriminated union with a reference-typed payload: releasing the union must release only the
 // active variant's reference fields (so `Box.Full` frees its `Tracked`, `Box.Empty` frees nothing).
 
+import system;
 class Tracked {
     public id: int;
 

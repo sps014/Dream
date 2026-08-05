@@ -2,6 +2,7 @@
 // of the same variant, re-boxed into the enclosing function's own `Result`/`Option` return type),
 // or yields the success payload as the expression's value.
 
+import system;
 fun half(n: int): Result<int, string> {
     if (n % 2 != 0) {
         return Result.Err("odd");

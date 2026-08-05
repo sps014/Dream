@@ -1,6 +1,7 @@
 // Regression test: passing a reference (class) into a function must not invalidate
 // the caller's binding. The callee now retains its parameter on entry so the matching
 // release at exit keeps the reference count balanced.
+import system;
 class Box {
     public value: int;
 
