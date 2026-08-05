@@ -107,9 +107,7 @@ impl<'a> Analyzer<'a> {
                 symbol_table,
                 diagnostics,
                 template_param_types,
-                template_body_ret,
-                box_ret,
-                true,
+                (template_body_ret, box_ret),
             );
         }
 
@@ -144,9 +142,7 @@ impl<'a> Analyzer<'a> {
                     symbol_table,
                     diagnostics,
                     param_types,
-                    body_ret,
-                    box_ret,
-                    false,
+                    (body_ret, box_ret),
                 );
             }
             _ => {
@@ -233,9 +229,7 @@ impl<'a> Analyzer<'a> {
             symbol_table,
             diagnostics,
             param_types,
-            body_ret,
-            box_ret,
-            false,
+            (body_ret, box_ret),
         )
     }
 
@@ -419,10 +413,14 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
         param_types: Vec<Type>,
-        body_ret: Type,
-        box_ret: Type,
-        is_generic_lambda: bool,
+        returns: (Type, Type),
     ) -> Result<Type, SemanticError> {
+        let (body_ret, box_ret) = returns;
+        let is_generic_lambda = lambda
+            .generic_parameters
+            .as_ref()
+            .map(|ps| !ps.is_empty())
+            .unwrap_or(false);
         let parameters: Vec<ParameterNode> = lambda
             .parameters
             .iter()
