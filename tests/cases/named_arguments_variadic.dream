@@ -1,4 +1,4 @@
-// Named arguments cannot be combined with a variadic call — trailing args are always positional.
+// Naming the variadic parameter itself is an error — trailing args are always positional.
 
 fun sum(...nums: int[]): int {
     let total = 0;

@@ -116,10 +116,10 @@ Rules:
 - Naming an argument doesn't require naming every argument after it — any parameter left unfilled
   once positional and named arguments are assigned falls back to its default value (an error if it
   has none).
-- Named arguments work for **free functions, constructors, and instance methods** whose target is
-  unambiguous. They are **not supported for overloaded functions/methods** (multiple declarations
-  sharing a name) — name-based resolution against a specific overload is deferred; use positional
-  arguments for an overloaded call.
+- Named arguments work for **free functions, constructors, and instance methods**, including
+  overloaded callees: each overload's parameter names are tried, then argument types pick among
+  the survivors (an ambiguous name layout across overloads is an error). Use positional arguments
+  when you prefer not to involve names.
 
 Named arguments and defaults compose: they're the mechanism that lets a call skip a *middle*
 optional parameter while still supplying a later one, which trailing-only default omission alone
@@ -178,11 +178,13 @@ Rules:
 - Only the **last** parameter may be variadic; a required or defaulted parameter cannot follow it.
 - Its declared type must be an array type (`T[]`); the caller passes bare `T` values, not an
   already-built array — there is exactly one calling convention, not two.
-- Variadic parameters work for **free functions, constructors, and instance methods** whose target
-  is unambiguous, mirroring [named arguments](#named-arguments)' scope. They are **not supported
-  for overloaded functions/methods**.
-- Variadic and named arguments don't combine in the same call: a variadic function's arguments are
-  always supplied positionally.
+- Variadic parameters work for **free functions, constructors, and instance methods**, including
+  overloaded callees: trailing arguments are matched against the variadic element type during
+  overload resolution, then packed into the `T[]` parameter.
+- Named arguments and variadic parameters compose in one call: name the **fixed** parameters, then
+  supply any trailing variadic elements positionally — e.g. `sum_with_base(base: 10, 1, 2, 3)`.
+  The variadic parameter itself cannot be passed by name (there is one calling convention: bare
+  `T` values, not a pre-built array).
 
 ## Pass by reference (`ref`)
 

@@ -1,1 +1,1 @@
-named arguments are not supported for variadic function 'sum'
+variadic parameter 'nums' cannot be passed by name

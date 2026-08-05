@@ -1,4 +1,4 @@
-// Named arguments are not supported for overloaded instance methods.
+// Named arguments work on overloaded instance methods.
 
 class Calc {
     public fun add(x: int): int {
@@ -13,4 +13,5 @@ class Calc {
 fun main(): void {
     let c = Calc();
     System.println(c.add(x: 5));
+    System.println(c.add(x: 2, y: 3));
 }

@@ -1,7 +1,11 @@
-// Variadic parameters are not supported on overloaded functions.
+// Variadic parameters work on overloaded functions.
 
 fun h(x: int, ...rest: int[]): int {
-    return x;
+    let total = x;
+    for (let n in rest) {
+        total = total + n;
+    }
+    return total;
 }
 
 fun h(x: string, ...rest: string[]): int {

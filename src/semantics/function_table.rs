@@ -354,20 +354,6 @@ impl FunctionTable {
             .unwrap_or(false)
     }
 
-    /// Whether `base` is an overloaded set that includes at least one variadic declaration.
-    /// Variadic parameters are not supported on overloaded functions/methods (named-argument and
-    /// packing resolution need a single known signature up front).
-    pub fn overload_set_has_variadic(&self, base: &str) -> bool {
-        let Some(keys) = self.overloads.get(base) else {
-            return false;
-        };
-        if keys.len() <= 1 {
-            return false;
-        }
-        keys.iter()
-            .any(|k| self.functions.get(k).is_some_and(|info| info.is_variadic))
-    }
-
     /// The emitted name of the declaration of `base` whose parameter list is `parameter_types`:
     /// the bare base when `base` is not overloaded, otherwise the signature-mangled key.
     pub fn resolve_emitted_name(
@@ -404,6 +390,11 @@ impl FunctionTable {
     /// `compat` supplies the fallback compatibility (object widening, enum/int, numeric, nullable).
     /// A single best candidate wins; ties yield `Ambiguous`; no viable candidate yields `None`.
     /// When `base` is not an overload set, falls back to the plain function keyed by `base`.
+    ///
+    /// Variadic overloads (`...name: T[]`) accept any argument count from the fixed-prefix minimum
+    /// upward: trailing args are matched against the array element type. A call that already packed
+    /// the variadic slot into a single `T[]` argument (named-arg path) also matches via the normal
+    /// fixed-arity zip against the full parameter list.
     pub fn select_overload(
         &self,
         base: &str,
@@ -426,33 +417,10 @@ impl FunctionTable {
                 Some(info) => info,
                 None => continue,
             };
-            // A defaulted overload matches any argument count from its required count up to its
-            // full arity; the omitted trailing parameters are filled from their defaults later.
-            if args.len() < info.required_params() || args.len() > info.parameters.len() {
+            let Some(score) = Self::score_overload_candidate(info, args, &mut compat) else {
                 continue;
-            }
-            let mut score = 0i32;
-            let mut viable = true;
-            // Only the supplied arguments are type-checked against their parameters; defaulted
-            // trailing parameters are guaranteed to match their own literal defaults.
-            for (param, arg) in info.parameters.iter().zip(args.iter()) {
-                if param == arg {
-                    score += 1;
-                } else if compat(param, arg) {
-                    // Viable via fallback (e.g. object widening); contributes no exactness score.
-                } else {
-                    viable = false;
-                    break;
-                }
-            }
-            // Prefer an overload whose arity exactly matches the call (no defaults filled) over one
-            // that relies on defaults, so `f(int)` beats `f(int, int = 0)` for a one-argument call.
-            if viable && args.len() == info.parameters.len() {
-                score += 1;
-            }
-            if viable {
-                scored.push((score, key));
-            }
+            };
+            scored.push((score, key));
         }
         let max_score = match scored.iter().map(|(s, _)| *s).max() {
             Some(max) => max,
@@ -468,6 +436,90 @@ impl FunctionTable {
         } else {
             OverloadResolution::Ambiguous(best)
         }
+    }
+
+    /// Scores one overload against `args`, or `None` if it is not viable.
+    fn score_overload_candidate(
+        info: &FunctionTableInfo,
+        args: &[String],
+        compat: &mut impl FnMut(&str, &str) -> bool,
+    ) -> Option<i32> {
+        if info.is_variadic {
+            let fixed = info.parameters.len().saturating_sub(1);
+            let min_args = info
+                .defaults
+                .iter()
+                .take(fixed)
+                .position(|d| d.is_some())
+                .unwrap_or(fixed);
+            if args.len() < min_args {
+                return None;
+            }
+            // Already-packed form: last argument is the `T[]` variadic slot itself.
+            if args.len() == info.parameters.len() {
+                let mut score = 0i32;
+                for (param, arg) in info.parameters.iter().zip(args.iter()) {
+                    if param == arg {
+                        score += 1;
+                    } else if compat(param, arg) {
+                    } else {
+                        return None;
+                    }
+                }
+                score += 1;
+                return Some(score);
+            }
+            let elem = crate::syntax::nodes::types::strip_array(
+                info.parameters.get(fixed).map(|s| s.as_str()).unwrap_or(""),
+            );
+            if fixed < info.parameters.len() && elem.is_empty() {
+                return None;
+            }
+            let mut score = 0i32;
+            for i in 0..fixed {
+                let Some(arg) = args.get(i) else {
+                    break;
+                };
+                let param = &info.parameters[i];
+                if param == arg {
+                    score += 1;
+                } else if compat(param, arg) {
+                } else {
+                    return None;
+                }
+            }
+            for arg in args.iter().skip(fixed) {
+                if arg == elem {
+                    score += 1;
+                } else if compat(elem, arg) {
+                } else {
+                    return None;
+                }
+            }
+            if args.len() == fixed {
+                score += 1;
+            }
+            return Some(score);
+        }
+
+        // A defaulted overload matches any argument count from its required count up to its
+        // full arity; the omitted trailing parameters are filled from their defaults later.
+        if args.len() < info.required_params() || args.len() > info.parameters.len() {
+            return None;
+        }
+        let mut score = 0i32;
+        for (param, arg) in info.parameters.iter().zip(args.iter()) {
+            if param == arg {
+                score += 1;
+            } else if compat(param, arg) {
+            } else {
+                return None;
+            }
+        }
+        if args.len() == info.parameters.len() {
+            score += 1;
+        }
+        Some(score)
     }
 
     pub fn get_function(&self, name: &String) -> Result<FunctionTableInfo, SymbolError> {

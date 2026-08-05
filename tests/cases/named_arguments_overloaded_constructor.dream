@@ -1,4 +1,4 @@
-// Named arguments are not supported for overloaded constructors.
+// Named arguments work on overloaded constructors.
 
 class Point {
     public x: int;
@@ -17,4 +17,6 @@ class Point {
 
 fun main(): void {
     let p = Point(x: 3, y: 4);
+    System.println(p.x);
+    System.println(p.y);
 }

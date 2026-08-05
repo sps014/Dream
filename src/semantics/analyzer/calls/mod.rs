@@ -167,15 +167,15 @@ impl<'a> Analyzer<'a> {
     /// argument is a [`ExpressionNode::NamedArg`] — the overwhelmingly common case.
     ///
     /// Rules (reported as diagnostics, never a panic, on violation):
-    /// - every positional argument must precede every named argument;
-    /// - a name must match one of `param_names`, and each name may be supplied at most once;
-    /// - any parameter left unfilled after positional+named assignment must have a default in
-    ///   `defaults` at that index, which is spliced in as a literal (identical to what an omitted
-    ///   trailing default already produces via [`Self::substitute_default_args`]).
+    /// - a name must match one of the nameable parameters, and each name may be supplied at most once;
+    /// - when `is_variadic` is false, every positional argument must precede every named argument;
+    /// - when `is_variadic` is true, the last parameter cannot be named; positionals after named
+    ///   arguments are collected into the variadic `T[]` slot; fixed-parameter holes use defaults;
+    /// - any fixed parameter left unfilled after positional+named assignment must have a default.
     ///
-    /// The result may be shorter than `param_names` (any further trailing, wholly-omitted optional
-    /// parameters are left for the existing trailing-default substitution to fill), but never has
-    /// an internal gap — every hole up to the highest supplied/named index is resolved here.
+    /// The result may be shorter than `param_names` for non-variadic calls (trailing wholly-omitted
+    /// optional parameters are left for trailing-default substitution), but never has an internal
+    /// gap. Variadic calls always end with an `ArrayLiteral` for the variadic slot.
     pub(crate) fn normalize_named_arguments(
         &mut self,
         param_names: &[String],
@@ -183,30 +183,71 @@ impl<'a> Analyzer<'a> {
         raw_args: &[ExpressionNode<'a>],
         call_position: TextSpan,
         diagnostics: &mut DiagnosticBag,
+        is_variadic: bool,
     ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
+        match Self::try_normalize_named_arguments(
+            param_names,
+            defaults,
+            raw_args,
+            call_position,
+            is_variadic,
+        ) {
+            Ok(args) => Ok(args),
+            Err((message, span)) => Err(report(diagnostics, message, span)),
+        }
+    }
+
+    /// Dry-run counterpart of [`Self::normalize_named_arguments`]: returns the normalized argument
+    /// list or `(message, span)` without touching diagnostics — used to filter overload candidates
+    /// by named-argument binding before committing to one signature.
+    pub(crate) fn try_normalize_named_arguments(
+        param_names: &[String],
+        defaults: &[Option<Type>],
+        raw_args: &[ExpressionNode<'a>],
+        call_position: TextSpan,
+        is_variadic: bool,
+    ) -> Result<Vec<ExpressionNode<'a>>, (String, Option<TextSpan>)> {
         if !raw_args
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)))
         {
             return Ok(raw_args.to_vec());
         }
-        let mut slots: Vec<Option<ExpressionNode<'a>>> =
-            vec![None; param_names.len().max(raw_args.len())];
+        let fixed_len = if is_variadic {
+            param_names.len().saturating_sub(1)
+        } else {
+            param_names.len()
+        };
+        let nameable = &param_names[..fixed_len];
+        let mut slots: Vec<Option<ExpressionNode<'a>>> = vec![None; fixed_len];
+        let mut variadic_tail: Vec<ExpressionNode<'a>> = Vec::new();
         let mut seen_named = false;
-        for (i, arg) in raw_args.iter().enumerate() {
+        let mut next_positional = 0usize;
+        for arg in raw_args.iter() {
             match arg {
                 ExpressionNode::NamedArg(name_tok, value) => {
+                    if is_variadic
+                        && param_names
+                            .last()
+                            .is_some_and(|n| n == &name_tok.text)
+                    {
+                        return Err((
+                            format!(
+                                "variadic parameter '{}' cannot be passed by name",
+                                name_tok.text
+                            ),
+                            Some(name_tok.position),
+                        ));
+                    }
                     seen_named = true;
-                    let Some(idx) = param_names.iter().position(|p| p == &name_tok.text) else {
-                        return Err(report(
-                            diagnostics,
+                    let Some(idx) = nameable.iter().position(|p| p == &name_tok.text) else {
+                        return Err((
                             format!("no parameter named '{}'", name_tok.text),
                             Some(name_tok.position),
                         ));
                     };
                     if slots[idx].is_some() {
-                        return Err(report(
-                            diagnostics,
+                        return Err((
                             format!("argument '{}' was already supplied", name_tok.text),
                             Some(name_tok.position),
                         ));
@@ -215,16 +256,65 @@ impl<'a> Analyzer<'a> {
                 }
                 other => {
                     if seen_named {
-                        return Err(report(
-                            diagnostics,
+                        if is_variadic {
+                            variadic_tail.push(other.clone());
+                            continue;
+                        }
+                        return Err((
                             "a positional argument cannot follow a named argument".to_string(),
                             other.position().or(Some(call_position)),
                         ));
                     }
-                    slots[i] = Some(other.clone());
+                    if next_positional < fixed_len {
+                        if slots[next_positional].is_some() {
+                            return Err((
+                                format!(
+                                    "argument '{}' was already supplied",
+                                    nameable
+                                        .get(next_positional)
+                                        .cloned()
+                                        .unwrap_or_else(|| format!("#{}", next_positional + 1))
+                                ),
+                                other.position().or(Some(call_position)),
+                            ));
+                        }
+                        slots[next_positional] = Some(other.clone());
+                        next_positional += 1;
+                    } else if is_variadic {
+                        variadic_tail.push(other.clone());
+                    } else {
+                        // Extra positional — leave for arity checking later by preserving as-is
+                        // beyond fixed slots (non-variadic normalize historically sized slots to
+                        // max(param_names, raw_args); keep trailing extras for the arity diagnostic).
+                        slots.push(Some(other.clone()));
+                    }
                 }
             }
         }
+        if is_variadic {
+            for (i, slot) in slots.iter_mut().enumerate() {
+                if slot.is_none() {
+                    match defaults.get(i).and_then(|d| d.clone()) {
+                        Some(default_lit) => *slot = Some(ExpressionNode::Literal(default_lit)),
+                        None => {
+                            let pname = nameable
+                                .get(i)
+                                .cloned()
+                                .unwrap_or_else(|| format!("#{}", i + 1));
+                            return Err((
+                                format!("missing required argument '{}'", pname),
+                                Some(call_position),
+                            ));
+                        }
+                    }
+                }
+            }
+            let mut result: Vec<ExpressionNode<'a>> =
+                slots.into_iter().map(|s| s.unwrap()).collect();
+            result.push(ExpressionNode::ArrayLiteral(variadic_tail));
+            return Ok(result);
+        }
+
         while matches!(slots.last(), Some(None)) {
             slots.pop();
         }
@@ -237,8 +327,7 @@ impl<'a> Analyzer<'a> {
                             .get(i)
                             .cloned()
                             .unwrap_or_else(|| format!("#{}", i + 1));
-                        return Err(report(
-                            diagnostics,
+                        return Err((
                             format!("missing required argument '{}'", pname),
                             Some(call_position),
                         ));
@@ -247,6 +336,117 @@ impl<'a> Analyzer<'a> {
             }
         }
         Ok(slots.into_iter().map(|s| s.unwrap()).collect())
+    }
+
+    /// After overload selection, packs trailing analyzed arguments into a single array for a
+    /// variadic parameter. No-ops when the args are already packed (`len == parameters.len()`).
+    pub(crate) fn pack_variadic_analyzed_args(
+        &mut self,
+        sig: &crate::semantics::function_table::FunctionTableInfo,
+        params_types: &mut Vec<String>,
+        arg_hirs: &mut Vec<Option<HExpr>>,
+        arg_is_ref: &mut Vec<bool>,
+        skip: usize,
+    ) {
+        if !sig.is_variadic {
+            return;
+        }
+        let total_user = sig.parameters.len().saturating_sub(skip);
+        let fixed_user = total_user.saturating_sub(1);
+        if params_types.len() == total_user {
+            return;
+        }
+        if params_types.len() < fixed_user {
+            return;
+        }
+        let array_ty_name = sig
+            .parameters
+            .get(skip + fixed_user)
+            .cloned()
+            .unwrap_or_default();
+        let array_ty = Self::type_from_name(&array_ty_name);
+        let tail_hirs: Vec<Option<HExpr>> = arg_hirs.drain(fixed_user..).collect();
+        params_types.truncate(fixed_user);
+        arg_is_ref.truncate(fixed_user);
+        self.hir_set_array_lit(tail_hirs, &array_ty);
+        arg_hirs.push(self.hir_take());
+        params_types.push(array_ty.get_type());
+        arg_is_ref.push(false);
+    }
+
+    /// Tries each overload's parameter names for a named-argument call and returns one shared
+    /// normalized argument list when every successful candidate agrees. `user_param_offset` skips
+    /// the implicit `this` for methods/constructors (`1`) or nothing for free functions (`0`).
+    pub(crate) fn normalize_named_for_overloads(
+        &self,
+        base: &str,
+        raw_args: &[ExpressionNode<'a>],
+        call_position: TextSpan,
+        user_param_offset: usize,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
+        let keys: Vec<String> = if let Some(keys) = self.function_table.overloads.get(base) {
+            keys.clone()
+        } else if self.function_table.functions.contains_key(base) {
+            vec![base.to_string()]
+        } else {
+            return Err(report(
+                diagnostics,
+                format!("named arguments are not supported for '{}'", base),
+                Some(call_position),
+            ));
+        };
+        let mut successes: Vec<Vec<ExpressionNode<'a>>> = Vec::new();
+        let mut last_err: Option<(String, Option<TextSpan>)> = None;
+        for key in &keys {
+            let Ok(info) = self.function_table.get_function(key) else {
+                continue;
+            };
+            let param_names: Vec<String> = info
+                .param_names
+                .iter()
+                .skip(user_param_offset)
+                .cloned()
+                .collect();
+            let defaults: Vec<Option<Type>> =
+                info.defaults.iter().skip(user_param_offset).cloned().collect();
+            match Self::try_normalize_named_arguments(
+                &param_names,
+                &defaults,
+                raw_args,
+                call_position,
+                info.is_variadic,
+            ) {
+                Ok(norm) => successes.push(norm),
+                Err(e) => last_err = Some(e),
+            }
+        }
+        if successes.is_empty() {
+            let (message, span) = last_err.unwrap_or_else(|| {
+                (
+                    format!(
+                        "no overload of '{}' accepts these named arguments",
+                        base
+                    ),
+                    Some(call_position),
+                )
+            });
+            return Err(report(diagnostics, message, span));
+        }
+        let first = successes[0].clone();
+        for other in successes.iter().skip(1) {
+            if other.len() != first.len() {
+                return Err(report(
+                    diagnostics,
+                    format!(
+                        "Ambiguous named-argument call to '{}': overloads disagree on argument layout",
+                        base
+                    ),
+                    Some(call_position),
+                ));
+            }
+        }
+        Ok(first)
     }
 
     /// Resolves a `ref` call argument's inner place (`f(ref x)` -> `x`) to its declared type and

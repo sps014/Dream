@@ -178,60 +178,49 @@ impl<'a> Analyzer<'a> {
 
         let mangled_name = method_fn(&struct_name, &method.text);
 
-        // Reorder named arguments (`obj.method(x, y: 2)`) to positional and collect a variadic
-        // call's trailing arguments into an array, both before anything below analyzes the
-        // argument list by index. Only possible when the method resolves to exactly one known
-        // parameter-name list (not overloaded); an overloaded method's parameter names aren't known
-        // until argument types themselves pick an overload, so named/variadic args are rejected
-        // there.
+        // Reorder named arguments (`obj.method(x, y: 2)`) to positional and collect a
+        // non-overloaded variadic call's trailing arguments into an array before index-driven
+        // analysis. Overloaded positional variadic calls stay unpacked until after selection.
         let has_named_arg = params
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
         let method_info = self.function_table.get_function(&mangled_name).ok();
         let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
+        let is_overloaded = self.function_table.is_overloaded(&mangled_name);
         let normalized_params: Vec<ExpressionNode<'a>>;
-        let params: &[ExpressionNode<'a>] = if has_named_arg || is_variadic {
-            if self.function_table.is_overloaded(&mangled_name) {
-                return Err(report(
+        let params: &[ExpressionNode<'a>] = if has_named_arg {
+            if is_overloaded {
+                normalized_params = self.normalize_named_for_overloads(
+                    &mangled_name,
+                    params,
+                    method.position,
+                    1,
                     diagnostics,
-                    format!(
-                        "named/variadic arguments are not supported for overloaded method '{}'",
-                        method.text
-                    ),
-                    Some(method.position),
-                ));
-            }
-            let Some(info) = method_info else {
-                return Err(report(
-                    diagnostics,
-                    format!("Type '{}' has no method '{}'", struct_name, method.text),
-                    Some(method.position),
-                ));
-            };
-            if has_named_arg && is_variadic {
-                return Err(report(
-                    diagnostics,
-                    format!(
-                        "named arguments are not supported for variadic method '{}'",
-                        method.text
-                    ),
-                    Some(method.position),
-                ));
-            }
-            // Skip the implicit `this` at index 0, which never appears in a call's argument list.
-            let param_names: Vec<String> = info.param_names.iter().skip(1).cloned().collect();
-            let defaults: Vec<Option<Type>> = info.defaults.iter().skip(1).cloned().collect();
-            normalized_params = if has_named_arg {
-                self.normalize_named_arguments(
+                )?;
+            } else {
+                let Some(info) = method_info else {
+                    return Err(report(
+                        diagnostics,
+                        format!("Type '{}' has no method '{}'", struct_name, method.text),
+                        Some(method.position),
+                    ));
+                };
+                let param_names: Vec<String> = info.param_names.iter().skip(1).cloned().collect();
+                let defaults: Vec<Option<Type>> = info.defaults.iter().skip(1).cloned().collect();
+                normalized_params = self.normalize_named_arguments(
                     &param_names,
                     &defaults,
                     params,
                     method.position,
                     diagnostics,
-                )?
-            } else {
-                self.collect_variadic_args(param_names.len(), params)
-            };
+                    info.is_variadic,
+                )?;
+            }
+            &normalized_params
+        } else if is_variadic && !is_overloaded {
+            let info = method_info.unwrap();
+            let param_names_len = info.param_names.len().saturating_sub(1);
+            normalized_params = self.collect_variadic_args(param_names_len, params);
             &normalized_params
         } else {
             params.as_slice()
@@ -265,7 +254,7 @@ impl<'a> Analyzer<'a> {
 
         // Analyze the explicit arguments once, then resolve the method (overloaded methods select
         // by argument types, with the receiver supplied as the implicit `this` argument).
-        let (mut arg_types, mut arg_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self.analyze_call_arguments_expecting_ref(
             params,
             expected_params.as_deref(),
             ctx.parent_function,
@@ -297,6 +286,14 @@ impl<'a> Analyzer<'a> {
                 }
             }
         };
+
+        self.pack_variadic_analyzed_args(
+            &store_sig,
+            &mut arg_types,
+            &mut arg_hirs,
+            &mut arg_is_ref,
+            1,
+        );
 
         // Private methods (the default) may only be called from within the declaring type's own
         // methods; `internal` from anywhere in the same module; `public` exposes them everywhere.

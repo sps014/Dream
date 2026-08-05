@@ -19,6 +19,50 @@ impl<'a> Analyzer<'a> {
         let base = method_fn(type_name, &method.text);
         let is_overloaded = self.function_table.is_overloaded(&base);
 
+        let has_named_arg = params
+            .iter()
+            .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
+        let method_info = self.function_table.get_function(&base).ok();
+        let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
+        let normalized_params: Vec<ExpressionNode<'a>>;
+        let params: &[ExpressionNode<'a>] = if has_named_arg {
+            if is_overloaded {
+                normalized_params = self.normalize_named_for_overloads(
+                    &base,
+                    params,
+                    method.position,
+                    0,
+                    diagnostics,
+                )?;
+            } else {
+                let Some(info) = method_info.as_ref() else {
+                    return Err(report(
+                        diagnostics,
+                        format!(
+                            "Type '{}' has no static method '{}'",
+                            type_name, method.text
+                        ),
+                        Some(method.position),
+                    ));
+                };
+                normalized_params = self.normalize_named_arguments(
+                    &info.param_names,
+                    &info.defaults,
+                    params,
+                    method.position,
+                    diagnostics,
+                    info.is_variadic,
+                )?;
+            }
+            &normalized_params
+        } else if is_variadic && !is_overloaded {
+            let info = method_info.as_ref().unwrap();
+            normalized_params = self.collect_variadic_args(info.param_names.len(), params);
+            &normalized_params
+        } else {
+            params.as_slice()
+        };
+
         // When the callee isn't overloaded, its declared parameter types are already known before
         // the arguments are analyzed, so publish them as `current_expected_type` per argument
         // (mirroring the free-function call path) — needed, e.g., for an empty array-literal
@@ -38,7 +82,7 @@ impl<'a> Analyzer<'a> {
         let saved_call_target = self.current_call_target_name.take();
         self.current_call_target_name = Some(call_target);
 
-        let (arg_types, arg_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self.analyze_call_arguments_expecting_ref(
             params,
             expected_params.as_deref(),
             parent_function,
@@ -70,6 +114,14 @@ impl<'a> Analyzer<'a> {
                 }
             }
         };
+
+        self.pack_variadic_analyzed_args(
+            &store_sig,
+            &mut arg_types,
+            &mut arg_hirs,
+            &mut arg_is_ref,
+            0,
+        );
 
         if !self.member_accessible(
             store_sig.visibility,

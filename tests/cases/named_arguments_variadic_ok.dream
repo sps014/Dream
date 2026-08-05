@@ -1,0 +1,14 @@
+// Named args for fixed parameters may mix with trailing positional variadic args.
+
+fun sum_with_base(base: int, ...nums: int[]): int {
+    let total = base;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun main(): void {
+    System.println(sum_with_base(base: 10, 1, 2, 3));
+    System.println(sum_with_base(base: 5));
+}

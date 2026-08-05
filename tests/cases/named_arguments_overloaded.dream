@@ -1,4 +1,5 @@
-// Named arguments are not supported for overloaded functions -> error.
+// Named arguments work on overloaded functions: the name set filters candidates, then types pick.
+
 fun h(x: int): int { return x; }
 fun h(x: string): int { return 1; }
 

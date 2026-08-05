@@ -32,24 +32,25 @@ impl<'a> Analyzer<'a> {
             .unwrap_or_else(|| name.text.clone());
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
-        // A named argument (`f(x, y: 2)`) must be reordered to its positional slot, and a variadic
-        // call's trailing loose arguments collected into an array, *before* any argument is
-        // analyzed below (analysis is index-driven). Both are only possible when the callee
-        // resolves to exactly one known parameter-name list up front: a non-overloaded free
-        // function, or a plain (non-generic-base) constructor call. Overloaded/indirect/
-        // unresolvable callees report a clear diagnostic instead of guessing.
+        // A named argument (`f(x, y: 2)`) must be reordered to its positional slot, and a
+        // non-overloaded variadic call's trailing loose arguments collected into an array, *before*
+        // any argument is analyzed below (analysis is index-driven). Overloaded positional
+        // variadic calls stay unpacked until after overload selection (see
+        // `pack_variadic_analyzed_args`).
         let has_named_arg = params
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)));
+        let is_ctor_call = self.function_table.get_function(&function_name).is_err()
+            && generic_args.is_none()
+            && self.struct_table.get_struct(&function_name).is_some();
+        let ctor_key = constructor_fn(&function_name);
         let callee_signature = |analyzer: &Self| -> Option<(Vec<String>, Vec<Option<Type>>, bool)> {
             if let Ok(info) = analyzer.function_table.get_function(&function_name) {
                 Some((info.param_names, info.defaults, info.is_variadic))
-            } else if generic_args.is_none()
-                && analyzer.struct_table.get_struct(&function_name).is_some()
-            {
+            } else if is_ctor_call {
                 analyzer
                     .function_table
-                    .get_function(&constructor_fn(&function_name))
+                    .get_function(&ctor_key)
                     .ok()
                     .map(|info| {
                         (
@@ -63,24 +64,24 @@ impl<'a> Analyzer<'a> {
             }
         };
         let normalized_params: Vec<ExpressionNode<'a>>;
-        let params: &[ExpressionNode<'a>] =
-            if has_named_arg || { callee_signature(self).is_some_and(|(_, _, variadic)| variadic) }
-            {
-                // Constructors live under `Point_constructor`, not the bare type name — check both.
-                let ctor_key = constructor_fn(&function_name);
-                let is_overloaded = self.function_table.is_overloaded(&function_name)
-                    || (self.struct_table.get_struct(&function_name).is_some()
-                        && self.function_table.is_overloaded(&ctor_key));
-                if is_overloaded {
-                    return Err(report(
-                        diagnostics,
-                        format!(
-                        "named/variadic arguments are not supported for overloaded function '{}'",
-                        function_name
-                    ),
-                        Some(name.position),
-                    ));
-                }
+        let params: &[ExpressionNode<'a>] = if has_named_arg {
+            if is_ctor_call && self.function_table.is_overloaded(&ctor_key) {
+                normalized_params = self.normalize_named_for_overloads(
+                    &ctor_key,
+                    params,
+                    name.position,
+                    1,
+                    diagnostics,
+                )?;
+            } else if self.function_table.is_overloaded(&function_name) {
+                normalized_params = self.normalize_named_for_overloads(
+                    &function_name,
+                    params,
+                    name.position,
+                    0,
+                    diagnostics,
+                )?;
+            } else {
                 let Some((param_names, defaults, is_variadic)) = callee_signature(self) else {
                     return Err(report(
                         diagnostics,
@@ -88,31 +89,28 @@ impl<'a> Analyzer<'a> {
                         Some(name.position),
                     ));
                 };
-                if has_named_arg && is_variadic {
-                    return Err(report(
-                        diagnostics,
-                        format!(
-                            "named arguments are not supported for variadic function '{}'",
-                            function_name
-                        ),
-                        Some(name.position),
-                    ));
-                }
-                normalized_params = if has_named_arg {
-                    self.normalize_named_arguments(
-                        &param_names,
-                        &defaults,
-                        params,
-                        name.position,
-                        diagnostics,
-                    )?
-                } else {
-                    self.collect_variadic_args(param_names.len(), params)
-                };
+                normalized_params = self.normalize_named_arguments(
+                    &param_names,
+                    &defaults,
+                    params,
+                    name.position,
+                    diagnostics,
+                    is_variadic,
+                )?;
+            }
+            &normalized_params
+        } else if !(self.function_table.is_overloaded(&function_name)
+            || (is_ctor_call && self.function_table.is_overloaded(&ctor_key)))
+        {
+            if let Some((param_names, _, true)) = callee_signature(self) {
+                normalized_params = self.collect_variadic_args(param_names.len(), params);
                 &normalized_params
             } else {
                 params.as_slice()
-            };
+            }
+        } else {
+            params.as_slice()
+        };
         // When the callee is an unambiguous (non-overloaded) free function, publish each parameter's
         // declared type as the expected type while analyzing the matching argument, so untyped
         // literals such as an empty array `[]` infer their element type from the signature. A plain
@@ -385,6 +383,14 @@ impl<'a> Analyzer<'a> {
                 }
             }
         };
+
+        self.pack_variadic_analyzed_args(
+            &store_sig,
+            &mut params_types,
+            &mut arg_hirs,
+            &mut arg_is_ref,
+            0,
+        );
 
         // File/module-level visibility (Axis 2): a non-public free function is only callable from
         // its own file. Static methods dispatched here (mangled `Type_method`) keep their own
