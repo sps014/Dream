@@ -1,7 +1,8 @@
-//! Opt-in `.wasm` post-processing via Binaryen's `wasm-opt` (the `wasm-opt` crate), driven by the
-//! CLI's `-O`/`--optimize` flag. This runs *after* the MIR pass pipeline and structural WAT DCE
-//! (`src/mir/emit/wat_dce.rs`) already applied — it is an independent, coarser-grained shrink/speed
-//! pass over the assembled binary, not a replacement for either.
+//! `.wasm` post-processing via Binaryen's `wasm-opt` (the `wasm-opt` crate), driven by `--release`
+//! (default level [`OptLevel::RELEASE_DEFAULT`]) and/or an explicit `-O`/`--optimize` level. This
+//! runs *after* the MIR pass pipeline and structural WAT DCE (`src/mir/emit/wat_dce.rs`) already
+//! applied — it is an independent, coarser-grained shrink/speed pass over the assembled binary, not
+//! a replacement for either.
 
 use std::path::Path;
 use std::str::FromStr;
@@ -19,6 +20,12 @@ pub enum OptLevel {
     Size,
     /// `-Oz`: optimize aggressively for size.
     SizeAggressive,
+}
+
+impl OptLevel {
+    /// Default wasm-opt level for `--release` when no `-O`/`--optimize` is given. Size (`-Os`)
+    /// matches the prior bare-`-O` default and favors smaller downloadable modules.
+    pub const RELEASE_DEFAULT: OptLevel = OptLevel::Size;
 }
 
 impl FromStr for OptLevel {
@@ -100,7 +107,7 @@ pub fn optimize_wasm_file(path: &Path, level: OptLevel) -> Result<(), String> {
 pub fn optimize_wasm_file(_path: &Path, _level: OptLevel) -> Result<(), String> {
     Err(
         "this build of the compiler was built without the `wasm-opt` feature; rebuild with \
-         `--features wasm-opt` (enabled by default) to use -O/--optimize"
+         `--features wasm-opt` (enabled by default) to use --release / -O/--optimize"
             .to_string(),
     )
 }
@@ -123,5 +130,10 @@ mod tests {
     #[test]
     fn rejects_unknown_level() {
         assert!("bogus".parse::<OptLevel>().is_err());
+    }
+
+    #[test]
+    fn release_default_is_size() {
+        assert_eq!(OptLevel::RELEASE_DEFAULT, OptLevel::Size);
     }
 }

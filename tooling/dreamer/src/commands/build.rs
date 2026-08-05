@@ -10,7 +10,7 @@ pub fn run(start_dir: &Path, release: bool) -> Result<()> {
 
     let mut cmd = Command::new(&dream_bin);
     if release {
-        cmd.arg("-O");
+        cmd.arg("--release");
     }
     cmd.arg(workspace.entry_path());
 

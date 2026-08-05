@@ -218,8 +218,9 @@ function registerShowWatCommand(context: vscode.ExtensionContext, isRelease: boo
             const watPath = watPathFor(filePath);
             const fileLabel = path.basename(filePath);
 
-            const args = isRelease ? '' : '--debug';
-            const command = `${dreamCmd} ${args} ${quotePath(filePath)}`;
+            const command = isRelease
+                ? `${dreamCmd} --release ${quotePath(filePath)}`
+                : `${dreamCmd} ${quotePath(filePath)}`;
             exec(command, { cwd: path.dirname(filePath) }, (error, stdout, stderr) => {
                 if (error) {
                     const details = [stderr, stdout].filter(Boolean).join('\n');

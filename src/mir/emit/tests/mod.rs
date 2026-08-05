@@ -385,8 +385,9 @@ fn to_string_runtime_has_no_unsubstituted_placeholders() {
     );
 }
 
-/// `--debug` must actually instrument the allocator under the MIR backend: with it on, `$malloc`
-/// bumps the live/total counters; with it off the hot path stays clean.
+/// Debug builds (the default) must actually instrument the allocator under the MIR backend: with
+/// `debug` on, `$malloc` bumps the live/total counters; under `--release` (`debug` off) the hot
+/// path stays clean.
 #[test]
 fn debug_toggles_allocator_instrumentation() {
     assert!(runtime_prelude(true).contains("global.set $live_objects"));

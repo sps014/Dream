@@ -51,7 +51,7 @@ const WASM_PAGE_SIZE: u32 = super::abi::WASM_PAGE_SIZE;
 
 /// The fixed allocator runtime (`$malloc`/`$free`/`$retain`/`$release_generic`/`$object_tag`), the
 /// single source of truth for the heap ABI. Its debug-counter placeholders are filled in by
-/// [`runtime_prelude`] (instrumentation on only under `--debug`).
+/// [`runtime_prelude`] (instrumentation on in debug builds, the default; off under `--release`).
 const RUNTIME_ALLOCATOR: &str = include_str!("../runtime/allocator.wat");
 
 /// The fixed string runtime (`$strlen`/`$char_at`/`$string_eq`/`$concat_strings`/`$string_alloc`/…).

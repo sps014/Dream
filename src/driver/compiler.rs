@@ -22,17 +22,19 @@ pub enum Target {
 /// rendering is delegated to the `diagnostics` module.
 pub struct Compiler {
     target: Target,
-    /// When `true`, codegen emits allocator instrumentation so the `Debug.live_objects()` /
-    /// `Debug.total_allocations()` probes report real values. Off by default (release builds pay
-    /// no per-allocation cost); enabled via the CLI `--debug` flag or [`Compiler::with_debug`].
+    /// When `true` (the default), codegen emits allocator instrumentation so the
+    /// `Debug.live_objects()` / `Debug.total_allocations()` probes report real values, and keeps
+    /// every runtime helper in the WAT (skips structural dead-function elimination). Release builds
+    /// (`--release` / [`Compiler::with_release`]) turn this off for a trimmed, uninstrumented module.
     debug: bool,
     /// When `true`, the compiler threads source-line info through HIR/MIR and the backend emits
     /// source-line hooks + a `.dbg.json` source map for the interactive debugger. Off by default;
     /// enabled via the CLI `-g`/`--debug-info` flag or [`Compiler::with_debug_info`].
     debug_info: bool,
     /// When set, the emitted `.wasm` is post-processed in place with Binaryen's `wasm-opt` at this
-    /// level. Off by default (opt-in only); enabled via the CLI `-O`/`--optimize` flag or
-    /// [`Compiler::with_optimize`].
+    /// level. [`Compiler::with_release`] enables [`OptLevel::RELEASE_DEFAULT`] when no level was
+    /// set yet; an explicit [`Compiler::with_optimize`] (or CLI `-O`) overrides that default.
+    /// Debug builds leave this `None` unless the caller opts in.
     optimize: Option<OptLevel>,
 }
 
@@ -40,15 +42,22 @@ impl Compiler {
     pub fn new(target: Target) -> Self {
         Self {
             target,
-            debug: false,
+            debug: true,
             debug_info: false,
             optimize: None,
         }
     }
 
-    /// Builder: enable allocator instrumentation for this compilation.
-    pub fn with_debug(mut self, on: bool) -> Self {
-        self.debug = on;
+    /// Builder: when `on` is `true`, produce a release module — uninstrumented allocator, structural
+    /// WAT dead-function elimination (`strip_dead_functions`), and wasm-opt at
+    /// [`OptLevel::RELEASE_DEFAULT`] unless a level was already set via [`Compiler::with_optimize`].
+    /// When `false` (the default from [`Compiler::new`]), keep allocator probes and the full runtime
+    /// (does not clear a previously configured optimize level).
+    pub fn with_release(mut self, on: bool) -> Self {
+        self.debug = !on;
+        if on && self.optimize.is_none() {
+            self.optimize = Some(OptLevel::RELEASE_DEFAULT);
+        }
         self
     }
 
@@ -60,7 +69,8 @@ impl Compiler {
     }
 
     /// Builder: post-process the emitted `.wasm` with Binaryen's `wasm-opt` at the given level.
-    /// `None` (the default) skips post-processing entirely.
+    /// `Some(level)` sets/overrides (including the [`OptLevel::RELEASE_DEFAULT`] from
+    /// [`Compiler::with_release`]); `None` clears post-processing entirely.
     pub fn with_optimize(mut self, level: Option<OptLevel>) -> Self {
         self.optimize = level;
         self

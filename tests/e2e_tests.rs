@@ -29,9 +29,9 @@ impl TestEnv {
 }
 
 /// Cases that read `Debug.live_objects()` / `total_allocations()`. Those probes only return real
-/// counts when the allocator is instrumented (`--debug`), so they only produce correct output in
-/// debug. The release suite runs these in debug (bypassing release) rather than release, so their
-/// full output stays asserted.
+/// counts when the allocator is instrumented (the default debug build), so they only produce
+/// correct output in debug. The release suite runs these in debug (bypassing `--release`) rather
+/// than release, so their full output stays asserted.
 const DEBUG_ONLY_CASES: &[&str] = &[
     "struct_rc",
     "memory_advanced",
@@ -40,15 +40,15 @@ const DEBUG_ONLY_CASES: &[&str] = &[
     "gc_complete",
 ];
 
-fn run_test_case(dream_file: &Path, debug: bool, wat_ext: &str) {
+fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     let expected_file = dream_file.with_extension("expected");
     let expected_error_file = dream_file.with_extension("expected_error");
     let expected_trap_file = dream_file.with_extension("expected_trap");
 
-    // Debug enables allocator instrumentation (so GC/leak probes report real counts) and keeps every
-    // runtime helper; release runs the same program through `strip_dead_functions` and the
-    // uninstrumented hot path, so this second mode is what actually exercises structural WAT DCE.
-    let compiler = Compiler::new(Target::Wasm).with_debug(debug);
+    // Debug (default) enables allocator instrumentation and keeps every runtime helper; release
+    // runs the same program through `strip_dead_functions` and the uninstrumented hot path, so this
+    // second mode is what actually exercises structural WAT DCE.
+    let compiler = Compiler::new(Target::Wasm).with_release(release);
     // Suite-scoped output path (passed in by the caller) so the debug and release suites never race
     // on the same file — crucial because both suites compile `DEBUG_ONLY_CASES` in debug mode, and
     // each suite additionally runs its corpus in parallel across cores.
@@ -257,11 +257,11 @@ fn collect_case_paths() -> Vec<PathBuf> {
         .collect()
 }
 
-/// Run the whole corpus in parallel across all CPU cores. `debug_for` decides, per fixture stem,
-/// whether the case runs through the debug or release backend. `wat_ext` scopes this suite's
+/// Run the whole corpus in parallel across all CPU cores. `release_for` decides, per fixture stem,
+/// whether the case runs through the release or debug backend. `wat_ext` scopes this suite's
 /// generated output files so concurrent suites never collide. Each fixture's failure is captured
 /// (rather than aborting the run at the first panic) so one invocation reports every broken case.
-fn run_corpus(wat_ext: &str, debug_for: impl Fn(&str) -> bool + Sync) {
+fn run_corpus(wat_ext: &str, release_for: impl Fn(&str) -> bool + Sync) {
     let paths = collect_case_paths();
     if paths.is_empty() {
         println!("No .dream files found in tests/cases/");
@@ -272,10 +272,10 @@ fn run_corpus(wat_ext: &str, debug_for: impl Fn(&str) -> bool + Sync) {
         .par_iter()
         .filter_map(|path| {
             let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-            let debug = debug_for(stem);
+            let release = release_for(stem);
             // `run_test_case` signals failure via panic/assert; catch it so rayon aggregates rather
             // than tearing down the whole run on the first failure.
-            match catch_unwind(AssertUnwindSafe(|| run_test_case(path, debug, wat_ext))) {
+            match catch_unwind(AssertUnwindSafe(|| run_test_case(path, release, wat_ext))) {
                 Ok(()) => None,
                 Err(payload) => {
                     let msg = payload
@@ -299,10 +299,11 @@ fn run_corpus(wat_ext: &str, debug_for: impl Fn(&str) -> bool + Sync) {
 
 #[test]
 fn run_all_e2e_cases() {
-    run_corpus("wat", |_| true);
+    // Default debug backend (`with_release(false)`).
+    run_corpus("wat", |_| false);
 }
 
-/// The whole suite run through the *release* backend (`with_debug(false)`), the only path that
+/// The whole suite run through the *release* backend (`with_release(true)`), the only path that
 /// enables structural WAT dead-function elimination and the uninstrumented allocator. This guards
 /// against a case that passes in debug but breaks in release because DCE trimmed a live function or
 /// the hot path diverged. EVERY case runs here with full output asserted: instrumentation-probe
@@ -312,13 +313,14 @@ fn run_all_e2e_cases_release() {
     // The instrumentation-probe cases only produce correct output with the debug allocator, so
     // bypass release for them and run them in debug with the full output assertion — they are
     // important and must stay fully checked, not relaxed to a smoke test.
-    run_corpus("release.wat", |stem| DEBUG_ONLY_CASES.contains(&stem));
+    run_corpus("release.wat", |stem| !DEBUG_ONLY_CASES.contains(&stem));
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
 /// independently-seeded `HashMap`s within this process) must yield byte-identical `.wat`. This
 /// guards the `IndexMap` conversion of the emission-driving tables against regressions that would
-/// reintroduce `HashMap`-iteration nondeterminism.
+/// reintroduce `HashMap`-iteration nondeterminism. Uses release mode so the check covers the
+/// production emit path (`strip_dead_functions`).
 #[test]
 fn codegen_is_deterministic() {
     let cases_dir = Path::new("tests/cases");
@@ -344,6 +346,7 @@ fn codegen_is_deterministic() {
             let out = std::env::temp_dir().join(format!("dream_det_{}_{}.wat", name, run));
             let out_str = out.to_str().unwrap().to_string();
             Compiler::new(Target::Wasm)
+                .with_release(true)
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
             let wat = fs::read_to_string(&out).unwrap();

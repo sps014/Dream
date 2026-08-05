@@ -1,9 +1,9 @@
 use super::*;
 
-/// The allocator + string runtime. When `debug` is on, `$malloc` bumps
+/// The allocator + string runtime. When `debug` is on (the default compiler mode), `$malloc` bumps
 /// `$live_objects`/`$total_allocations` and `$free` decrements `$live_objects` (backing the
-/// `Debug.*` probes); otherwise the placeholders expand to nothing so the hot allocation path
-/// carries no extra instructions.
+/// `Debug.*` probes); under `--release` the placeholders expand to nothing so the hot allocation
+/// path carries no extra instructions.
 pub(super) fn runtime_prelude(debug: bool) -> String {
     let (malloc_count, free_count) = if debug {
         (

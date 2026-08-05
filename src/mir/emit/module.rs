@@ -416,8 +416,9 @@ pub fn emit_module_with_debug(
     }
     out.push_str(")\n");
     // Whole-module dead-function elimination: drop embedded runtime helpers (and any other funcs)
-    // not reachable from the module's exports / start / function table. Skipped in debug and
-    // debug-info builds (which prioritize keeping the full module for inspection/debugging).
+    // not reachable from the module's exports / start / function table. Runs under `--release`
+    // (and any other uninstrumented build); skipped in debug and debug-info builds (which keep the
+    // full module for inspection/debugging).
     let wat = if !debug && !debug_info {
         strip_dead_functions(&out)
     } else {

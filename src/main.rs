@@ -19,7 +19,7 @@ fn main() -> ExitCode {
 
     let mut verbose = false;
     let mut run_after_compile = false;
-    let mut debug = false;
+    let mut release = false;
     let mut debug_info = false;
     let mut debug_adapter = false;
     let mut show_help = false;
@@ -29,14 +29,16 @@ fn main() -> ExitCode {
     for arg in args.iter().skip(1) {
         if arg == "-v" || arg == "--verbose" {
             verbose = true;
-        } else if arg == "-d" || arg == "--debug" {
-            // Enable allocator instrumentation so the `Debug.live_objects()` /
-            // `Debug.total_allocations()` probes report real values. Off by default so normal
-            // builds carry zero per-allocation overhead.
-            debug = true;
+        } else if arg == "--release" {
+            // Trimmed release build: uninstrumented allocator + structural WAT dead-function
+            // elimination + wasm-opt at OptLevel::RELEASE_DEFAULT (-Os) unless -O overrides.
+            // Default (no flag) keeps allocator probes and the full runtime.
+            release = true;
         } else if arg == "-g" || arg == "--debug-info" {
             // Enable source-level debug-info: line hooks + a `.dbg.json` source map for the
-            // interactive debugger. Off by default (zero overhead in normal builds).
+            // interactive debugger. Off by default (zero overhead in normal builds). Combined with
+            // `--release`, allocator instrumentation is still off, but WAT DCE stays disabled
+            // because the debugger needs the full module.
             debug_info = true;
         } else if arg == "-h" || arg == "--help" {
             show_help = true;
@@ -49,7 +51,7 @@ fn main() -> ExitCode {
             debug_info = true;
         } else if arg == "-O" || arg == "--optimize" {
             // No level given: default to `-Os` (optimize for size), matching the "smaller binary"
-            // intent most users reach for this flag with.
+            // intent most users reach for this flag with. Also overrides `--release`'s default.
             optimize = Some(OptLevel::Size);
         } else if let Some(level_str) = arg.strip_prefix("--optimize=") {
             match level_str.parse::<OptLevel>() {
@@ -73,9 +75,9 @@ fn main() -> ExitCode {
         }
     }
 
-    if optimize.is_some() && !cfg!(feature = "wasm-opt") {
+    if (release || optimize.is_some()) && !cfg!(feature = "wasm-opt") {
         error!(
-            "-O/--optimize requires the compiler to be built with the `wasm-opt` feature \
+            "--release / -O/--optimize requires the compiler to be built with the `wasm-opt` feature \
              (enabled by default); this build was compiled without it"
         );
         return ExitCode::FAILURE;
@@ -109,10 +111,14 @@ fn main() -> ExitCode {
     info!("========================");
     info!("Compiling file: {}", file_name);
 
-    let compiler = Compiler::new(Target::Wasm)
-        .with_debug(debug)
-        .with_debug_info(debug_info)
-        .with_optimize(optimize);
+    // `with_release` installs RELEASE_DEFAULT wasm-opt; an explicit `-O` overrides. Do not call
+    // `with_optimize(None)` after release — that would clear the default.
+    let mut compiler = Compiler::new(Target::Wasm)
+        .with_release(release)
+        .with_debug_info(debug_info);
+    if let Some(level) = optimize {
+        compiler = compiler.with_optimize(Some(level));
+    }
     let out_path = match get_path_from_file_path(file_name) {
         Some(path) => path,
         None => {
@@ -154,22 +160,25 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [-d|--debug] [-g|--debug-info] [-O|--optimize[=LEVEL]] [run|debug-adapter] <file>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [run|debug-adapter] <file>",
         program
     );
     error!("  -v, --verbose         Print progress information");
-    error!("  -d, --debug           Enable allocator instrumentation for Debug probes");
+    error!(
+        "  --release             Trimmed build + wasm-opt (-Os); override level with -O"
+    );
     error!(
         "  -g, --debug-info      Emit source-level debug info (line hooks + .dbg.json source map)"
     );
     error!(
-        "  -O, --optimize[=LVL]  Post-process the emitted .wasm with wasm-opt (LVL: 0-4, s, z; default: s)"
+        "  -O, --optimize[=LVL]  wasm-opt level (LVL: 0-4, s, z; default: s); overrides --release"
     );
     error!("  -h, --help            Show this help message");
     error!("  run                   Execute the compiled module after a successful build");
     error!("  debug-adapter         Run the Debug Adapter Protocol server over stdio (implies -g)");
     error!(r"Example: {} run src/sample/test_arrays.dream", program);
-    error!(r"Example: {} -O run src/sample/test_arrays.dream", program);
+    error!(r"Example: {} --release run src/sample/test_arrays.dream", program);
+    error!(r"Example: {} --release -O3 run src/sample/test_arrays.dream", program);
 }
 
 /// Derives the output `.wat` path that sits next to the given source file.

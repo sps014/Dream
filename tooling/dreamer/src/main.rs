@@ -54,7 +54,8 @@ enum Cmd {
     },
     /// Install dependencies, then compile the project's entry point.
     Build {
-        /// Post-process the emitted .wasm with wasm-opt (passed through as `-O` to `dream`).
+        /// Produce a trimmed release build with wasm-opt (passed through as `--release` to `dream`;
+        /// override the default `-Os` level with dream's `-O` flags if needed).
         #[arg(long)]
         release: bool,
     },

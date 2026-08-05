@@ -1,6 +1,6 @@
-//! Exercises the opt-in `-O`/`--optimize` post-processing path end-to-end: compiling with
-//! [`Compiler::with_optimize`] must still produce a valid, loadable, *runnable* `.wasm` module at
-//! every level, and the optimized artifact must not grow relative to the unoptimized one.
+//! Exercises wasm-opt post-processing end-to-end: compiling with [`Compiler::with_optimize`] must
+//! still produce a valid, loadable, *runnable* `.wasm` module at every level, and the optimized
+//! artifact must not grow relative to a release module *without* Binaryen post-processing.
 //!
 //! This loops over every [`OptLevel`] (not just one) and actually instantiates + calls `main`
 //! (not just `Module::validate`s the bytes): an earlier version of `optimize_wasm_file` enabled
@@ -64,7 +64,10 @@ fn optimized_wasm_runs_and_is_not_larger_at_every_level() {
     let plain_wasm = plain_wat.with_extension("wasm");
     let plain_wat_str = plain_wat.to_str().unwrap().to_string();
 
+    // Release trimming without Binaryen — size baseline for each `-O` level below.
     Compiler::new(Target::Wasm)
+        .with_release(true)
+        .with_optimize(None)
         .compile(&dream_file, &plain_wat_str)
         .expect("unoptimized compile should succeed");
     let plain_bytes = fs::read(&plain_wasm).expect("unoptimized .wasm should exist");
@@ -82,6 +85,7 @@ fn optimized_wasm_runs_and_is_not_larger_at_every_level() {
         let opt_wat_str = opt_wat.to_str().unwrap().to_string();
 
         Compiler::new(Target::Wasm)
+            .with_release(true)
             .with_optimize(Some(level))
             .compile(&dream_file, &opt_wat_str)
             .unwrap_or_else(|e| panic!("optimized compile at {:?} should succeed: {:?}", level, e));
