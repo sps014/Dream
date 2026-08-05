@@ -108,7 +108,7 @@ impl<'a> Analyzer<'a> {
         for arm in arms {
             match &arm.pattern {
                 PatternNode::Or(alts)
-                    if !alts.iter().any(|a| Self::pattern_needs_chain(a)) =>
+                    if !alts.iter().any(Self::pattern_needs_chain) =>
                 {
                     for alt in alts {
                         out.push(SwitchArm {
@@ -206,7 +206,7 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .any(|s| !matches!(s, PatternNode::Binding(_) | PatternNode::Wildcard(_))),
             PatternNode::Range(..) => true,
-            PatternNode::Or(alts) => alts.iter().any(|a| Self::pattern_needs_chain(a)),
+            PatternNode::Or(alts) => alts.iter().any(Self::pattern_needs_chain),
             _ => false,
         }
     }

@@ -200,6 +200,7 @@ impl<'a> Analyzer<'a> {
             .difference(&self.boxed_locals)
             .cloned()
             .collect();
+        self.capturing_fun_locals.clear();
         self.hir.locals.clear();
         self.hir.boxed.clear();
         self.hir.next_local = 0;
@@ -519,6 +520,16 @@ impl<'a> Analyzer<'a> {
     /// Takes the HIR recorded for the most-recently-analyzed expression.
     pub(in crate::semantics::analyzer) fn hir_take(&mut self) -> Option<HExpr> {
         self.hir.last.take()
+    }
+
+    /// Resolves a [`LocalId`] back to its source name in the current function (parameters and
+    /// `let`s). Used by JS-boundary capture checks to consult [`Analyzer::capturing_fun_locals`].
+    pub(in crate::semantics::analyzer) fn hir_local_name(&self, id: LocalId) -> Option<&str> {
+        self.hir
+            .locals
+            .iter()
+            .find(|(_, (lid, _))| *lid == id)
+            .map(|(name, _)| name.as_str())
     }
 
     /// Marks the most-recent expression as not representable in HIR (clears `last`).

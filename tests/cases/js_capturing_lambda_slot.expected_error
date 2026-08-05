@@ -1,0 +1,1 @@
+capturing lambdas cannot be passed to JS APIs (the closure environment would be lost); pass a non-capturing top-level function, or wrap only a captureless `fun(...)` via `js.func` / `js.func0`

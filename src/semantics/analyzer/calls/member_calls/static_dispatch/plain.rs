@@ -93,6 +93,26 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
+        // `js.func` / `js.func0` / `js.__funcN` strip the closure env host-side — reject capturing
+        // handlers here (static dispatch, not the dynamic `js` member-call path).
+        if type_name == crate::mir::js_abi::JS_TYPE
+            && matches!(method.text.as_str(), "func" | "func0" | "__funcN")
+        {
+            for arg in arg_hirs.iter().flatten() {
+                if matches!(
+                    self.type_ctx.interner.kind(arg.ty),
+                    crate::types::TyKind::Func(..)
+                ) && !self.ensure_captureless_js_callback(
+                    arg,
+                    Some(method.position),
+                    diagnostics,
+                ) {
+                    self.hir_none();
+                    return Ok(Type::Unknown);
+                }
+            }
+        }
+
         let expected_params = store_sig.parameters.clone();
         if expected_params.len() != arg_types.len() {
             diagnostics.report_error(

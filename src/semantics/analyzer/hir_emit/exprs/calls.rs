@@ -138,7 +138,7 @@ impl<'a> Analyzer<'a> {
     /// `src/stdlib/core/closure.dream`) by its bare method name. These back the `fun(...)` closure
     /// ABI (a boxed `[funcidx][env]` heap value); every call site is built directly here rather than
     /// through ordinary name resolution, so the stdlib class is never referenced by user code.
-    fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
+    pub(in crate::semantics::analyzer) fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
         self.type_ctx.defs.lookup(
             DefKind::Function,
             &crate::types::method_fn("__Closure", method),

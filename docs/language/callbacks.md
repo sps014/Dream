@@ -2,6 +2,8 @@
 
 Functions cross the Dream/JavaScript boundary in both directions: hand a Dream function to JS, or call a JS function from Dream. A Dream function value (`fun(params): ret`) is an index into the module's function table, and the runtime wraps that index as a real, callable JS function.
 
+**Only non-capturing functions may cross into JS.** The host bridges (`js.func` / `js.func0` / `js.__funcN`, and the automatic FUNC-slot wrap on a dynamic `js` call) pass only the function-table index — the closure environment word is discarded — so a capturing lambda would lose its captured state. Passing one is a compile-time error. Use a top-level `fun`, a captureless lambda, or module-level state instead of captures (see the [music player sample](https://github.com/sps014/Dream/blob/main/sample/music_player/music_player.dream)).
+
 ## Dream to JS
 
 Declare an `extern` parameter with a function type, then pass a Dream function where it is expected:
@@ -47,7 +49,7 @@ fun main(): void {
 }
 ```
 
-The wrapper has **stable identity per function** — the runtime caches it by function-table index — so a handler registered with `addEventListener` can later be removed by passing the *same* Dream function to `removeEventListener`. If you need an explicit `js` callable up front (to store, compare, or pass around first), build one with `js.func(handler)` / `js.func0(handler)`.
+The wrapper has **stable identity per function** — the runtime caches it by function-table index — so a handler registered with `addEventListener` can later be removed by passing the *same* Dream function to `removeEventListener`. If you need an explicit `js` callable up front (to store, compare, or pass around first), build one with `js.func(handler)` / `js.func0(handler)` (still only with a captureless `fun(...)`).
 
 ## JS to Dream
 

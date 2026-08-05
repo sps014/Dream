@@ -12,14 +12,14 @@
 
 use super::synthetic_token;
 use crate::diagnostics::DiagnosticBag;
-use crate::hir::{Callee, HExpr, HExprKind};
+use crate::hir::{Binding, Callee, HExpr, HExprKind};
 use crate::semantics::analyzer::Analyzer;
 use crate::semantics::errors::SemanticError;
 use crate::syntax::nodes::{ExpressionNode, Type};
 use crate::syntax::token::syntax_token::SyntaxToken;
 use crate::syntax::token::token_kind::TokenKind;
 use crate::text::text_span::TextSpan;
-use crate::types::{method_fn, DefKind, PrimTy, TyKind, TypeId};
+use crate::types::{method_fn, DefId, DefKind, PrimTy, TyKind, TypeId};
 
 impl<'a> Analyzer<'a> {
     /// The legacy AST `Type` for the dynamic `js` type (a bare nominal name the type context lowers
@@ -37,6 +37,82 @@ impl<'a> Analyzer<'a> {
     /// bridge-mangling side, and the exact match excludes `js[]` / `js?`.
     pub(super) fn is_js_type(&self, ty: &Type) -> bool {
         ty.get_type() == crate::mir::js_abi::JS_TYPE
+    }
+
+    /// Diagnostic when a capturing `fun(...)` value is handed to a JS API. The host bridges
+    /// (`func0`/`func`/`__funcN`, FUNC slots) only take the funcidx half of a funcbox — the env
+    /// word is discarded — so a capturing lambda would lose its environment.
+    const JS_CAPTURING_CALLBACK_MSG: &'static str = "capturing lambdas cannot be passed to JS APIs (the closure environment would be lost); pass a non-capturing top-level function, or wrap only a captureless `fun(...)` via `js.func` / `js.func0`";
+
+    /// True when `e` is a known-capturing `fun(...)` value: a `funcbox_new` with a non-zero env,
+    /// a `Binding::Func` whose def is a capturing lambda/method-group, or a fun-typed local marked
+    /// capturing in [`Self::capturing_fun_locals`].
+    pub(in crate::semantics::analyzer) fn func_expr_is_capturing(&self, e: &HExpr) -> bool {
+        match &e.kind {
+            HExprKind::Cast(inner) => self.func_expr_is_capturing(inner),
+            HExprKind::Call { callee, args } => {
+                if self.closure_intrinsic("funcbox_new") == Some(callee.def) && args.len() >= 2 {
+                    let env_nonzero = !matches!(args[1].kind, HExprKind::IntLit(0));
+                    if env_nonzero {
+                        return true;
+                    }
+                    return self.func_raw_is_capturing_def(&args[0]);
+                }
+                false
+            }
+            HExprKind::Var(Binding::Func(c)) => self.def_is_capturing_fun(c.def),
+            HExprKind::Var(Binding::Local(id)) => self
+                .hir_local_name(*id)
+                .and_then(|n| self.capturing_fun_locals.get(n).copied())
+                .unwrap_or(false),
+            _ => false,
+        }
+    }
+
+    fn func_raw_is_capturing_def(&self, e: &HExpr) -> bool {
+        match &e.kind {
+            HExprKind::Cast(inner) => self.func_raw_is_capturing_def(inner),
+            HExprKind::Var(Binding::Func(c)) => self.def_is_capturing_fun(c.def),
+            _ => false,
+        }
+    }
+
+    fn def_is_capturing_fun(&self, def: DefId) -> bool {
+        let name = self.type_ctx.defs.name(def);
+        self.closure_captures
+            .get(name)
+            .is_some_and(|caps| !caps.is_empty())
+    }
+
+    /// Records whether a fun-typed local's current value is capturing, for later JS-boundary checks.
+    pub(in crate::semantics::analyzer) fn record_capturing_fun_local(
+        &mut self,
+        name: &str,
+        ty: &Type,
+        value: Option<&HExpr>,
+    ) {
+        if !matches!(ty, Type::Function(_, _)) {
+            return;
+        }
+        let capturing = value.is_some_and(|v| self.func_expr_is_capturing(v));
+        self.capturing_fun_locals
+            .insert(name.to_string(), capturing);
+    }
+
+    /// Reports [`Self::JS_CAPTURING_CALLBACK_MSG`] and returns `false` when `e` is a capturing
+    /// callback; otherwise returns `true`.
+    pub(in crate::semantics::analyzer) fn ensure_captureless_js_callback(
+        &self,
+        e: &HExpr,
+        pos: Option<TextSpan>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> bool {
+        if self.func_expr_is_capturing(e) {
+            diagnostics.report_error(Self::JS_CAPTURING_CALLBACK_MSG.to_string(), pos);
+            false
+        } else {
+            true
+        }
     }
 
     /// Builds a call to a `js` bridge extern (`js.__something`), resolved by its mangled def name.
@@ -68,7 +144,15 @@ impl<'a> Analyzer<'a> {
     /// through the matching `__box_*` bridge; a `fun(js): void` / `fun(): void` is wrapped as a JS
     /// callable. Any other type (struct/class/union/array/list) yields `None` (a compile error at the
     /// call site, pointing at `js.object()` / `js.array()`).
-    pub(super) fn box_to_js(&mut self, e: HExpr) -> Option<HExpr> {
+    ///
+    /// A capturing `fun(...)` yields `None` after reporting via `diagnostics` when provided — the
+    /// host bridges strip the closure env word, so only captureless functions are marshalable.
+    pub(super) fn box_to_js(
+        &mut self,
+        e: HExpr,
+        pos: Option<TextSpan>,
+        diagnostics: Option<&mut DiagnosticBag>,
+    ) -> Option<HExpr> {
         let js = self.type_ctx.interner.js();
         let stripped = e.ty;
         let kind = self.type_ctx.interner.kind(stripped).clone();
@@ -93,13 +177,19 @@ impl<'a> Analyzer<'a> {
             TyKind::Func(params, _ret) => {
                 // A Dream function handed to a JS API as a persistent handle. `e` is a boxed
                 // `fun(...)` value (see `hir_set_func_value`); the host has no env-restoring
-                // prologue of its own, so only the funcidx half is meaningful here — a *capturing*
-                // lambda handed to a JS API would lose its environment (not yet supported; matches
-                // the pre-closures reality, where an env never existed at all). Arity 0/1 use the
-                // documented `func0`/`func` convenience bridges; any higher arity routes through the
-                // generalized `__funcN` bridge, which receives the raw funcref-table index plus the
-                // parameter count and wraps it host-side as `fun(js, …): void`. Each parameter is
-                // marshaled as a `js` handle and the result is discarded.
+                // prologue of its own, so only the funcidx half is meaningful — a *capturing*
+                // lambda would lose its environment and is rejected at compile time. Arity 0/1 use
+                // the documented `func0`/`func` convenience bridges; any higher arity routes through
+                // the generalized `__funcN` bridge, which receives the raw funcref-table index plus
+                // the parameter count and wraps it host-side as `fun(js, …): void`. Each parameter
+                // is marshaled as a `js` handle and the result is discarded.
+                if self.func_expr_is_capturing(&e) {
+                    if let Some(diagnostics) = diagnostics {
+                        diagnostics
+                            .report_error(Self::JS_CAPTURING_CALLBACK_MSG.to_string(), pos);
+                    }
+                    return None;
+                }
                 let funcidx = self.hir_funcbox_funcidx(e)?;
                 match params.len() {
                     0 => self.js_bridge_call("func0", vec![funcidx], js),
@@ -171,6 +261,8 @@ impl<'a> Analyzer<'a> {
     /// `float` is widened to `double` so its slot payload is an `f64`. `js`, `string`, primitive,
     /// `enum`, a `fun(js)`/`fun()` callback, and a primitive/`string`/`js` array are all accepted as
     /// they are; any other type returns `None` (a compile error pointing at `js.object()`/`js.array()`).
+    ///
+    /// Capturing callbacks are rejected by the caller ([`js_slot_args`]) before this runs.
     fn js_slot_arg(&mut self, e: HExpr) -> Option<HExpr> {
         let stripped = e.ty;
         let kind = self.type_ctx.interner.kind(stripped).clone();
@@ -180,7 +272,7 @@ impl<'a> Analyzer<'a> {
             TyKind::Prim(_) => Some(e),
             // A callback slot carries its arity in the slot `aux` word (see `js_abi::slot_desc`), so
             // the host wraps the funcref as `fun(js, …): void` with the right number of `js`
-            // parameters. Any arity is marshalable through the slot buffer.
+            // parameters. Any arity is marshalable through the slot buffer (env is stripped at emit).
             TyKind::Func(..) => Some(e),
             TyKind::Array(elem) => {
                 let ek = self.type_ctx.interner.kind(elem).clone();
@@ -190,7 +282,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             // A struct/class argument deep-copies into a JS object handle (a JS slot).
-            TyKind::Struct(..) => self.box_to_js(e),
+            TyKind::Struct(..) => self.box_to_js(e, None, None),
             _ => None,
         }
     }
@@ -206,6 +298,11 @@ impl<'a> Analyzer<'a> {
         let mut out = Vec::with_capacity(args.len());
         for arg in args {
             let arg = arg?;
+            if matches!(self.type_ctx.interner.kind(arg.ty), TyKind::Func(..))
+                && !self.ensure_captureless_js_callback(&arg, pos, diagnostics)
+            {
+                return None;
+            }
             let arg_display =
                 crate::types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, arg.ty);
             match self.js_slot_arg(arg) {
@@ -270,13 +367,34 @@ impl<'a> Analyzer<'a> {
         let known_sig = self.function_table.get_function(&mangled).ok();
 
         let mut arg_hirs = Vec::with_capacity(params.len());
-        for param in params.iter() {
+        for (i, param) in params.iter().enumerate() {
+            let saved_expected = self.current_expected_type.take();
+            if let Some(ref sig) = known_sig {
+                self.current_expected_type = sig.parameter_types.get(i).cloned();
+            }
             let _ =
                 self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
+            self.current_expected_type = saved_expected;
             arg_hirs.push(self.hir_take());
         }
 
         if let Some(sig) = known_sig {
+            // Explicit `js.func` / `js.func0` / `js.__funcN` also strip the env word host-side —
+            // reject capturing handlers here (they skip `box_to_js` / FUNC-slot checks).
+            if matches!(method.text.as_str(), "func" | "func0" | "__funcN") {
+                for arg in arg_hirs.iter().flatten() {
+                    if matches!(self.type_ctx.interner.kind(arg.ty), TyKind::Func(..))
+                        && !self.ensure_captureless_js_callback(
+                            arg,
+                            Some(method.position),
+                            diagnostics,
+                        )
+                    {
+                        self.hir_none();
+                        return Ok(Type::Unknown);
+                    }
+                }
+            }
             let ret = sig.return_type.clone().unwrap_or(Type::Void);
             self.hir_set_method_call(recv, &sig.name, arg_hirs, &ret);
             return Ok(ret);
@@ -325,11 +443,14 @@ impl<'a> Analyzer<'a> {
             self.hir_fail();
             return;
         };
-        let Some(value) = self.box_to_js(value) else {
-            diagnostics.report_error(
-                "cannot assign this value to a js property; build a JS value with js.object() / js.array()".to_string(),
-                pos,
-            );
+        let Some(value) = self.box_to_js(value, pos, Some(diagnostics)) else {
+            // `box_to_js` already reported the capturing-callback diagnostic when applicable.
+            if !diagnostics.has_errors() {
+                diagnostics.report_error(
+                    "cannot assign this value to a js property; build a JS value with js.object() / js.array()".to_string(),
+                    pos,
+                );
+            }
             self.hir_fail();
             return;
         };
@@ -438,8 +559,10 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return;
         };
-        let Some(key) = self.box_to_js(key) else {
-            diagnostics.report_error("cannot use this value as a js index key".to_string(), pos);
+        let Some(key) = self.box_to_js(key, pos, Some(diagnostics)) else {
+            if !diagnostics.has_errors() {
+                diagnostics.report_error("cannot use this value as a js index key".to_string(), pos);
+            }
             self.hir_none();
             return;
         };
@@ -464,11 +587,15 @@ impl<'a> Analyzer<'a> {
             self.hir_fail();
             return;
         };
-        let (Some(key), Some(value)) = (self.box_to_js(key), self.box_to_js(value)) else {
-            diagnostics.report_error(
-                "cannot use this value as a js index key/value".to_string(),
-                pos,
-            );
+        let key = self.box_to_js(key, pos, Some(diagnostics));
+        let value = self.box_to_js(value, pos, Some(diagnostics));
+        let (Some(key), Some(value)) = (key, value) else {
+            if !diagnostics.has_errors() {
+                diagnostics.report_error(
+                    "cannot use this value as a js index key/value".to_string(),
+                    pos,
+                );
+            }
             self.hir_fail();
             return;
         };

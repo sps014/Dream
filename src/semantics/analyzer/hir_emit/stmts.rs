@@ -195,7 +195,7 @@ impl<'a> Analyzer<'a> {
         // `let n: int = el.count` work without an explicit conversion).
         if matches!(target_k, TyKind::Js) && matches!(val_k, TyKind::Prim(_) | TyKind::Struct(..)) {
             return self
-                .box_to_js(value)
+                .box_to_js(value, None, None)
                 .unwrap_or_else(|| HExpr::new(target, HExprKind::IntLit(0)));
         }
         if matches!(val_k, TyKind::Js) && matches!(target_k, TyKind::Prim(_) | TyKind::Struct(..)) {

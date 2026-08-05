@@ -71,6 +71,7 @@ impl<'a> Analyzer<'a> {
             right_type.clone()
         };
 
+        self.record_capturing_fun_local(&left.text, &var_type, value.as_ref());
         self.hir_declare_local(&left.text, &var_type, value);
 
         if let Err(e) = (*ctx.symbol_table)
@@ -123,6 +124,7 @@ impl<'a> Analyzer<'a> {
         let value = self.hir_take();
         self.current_expected_type = saved_expected;
         self.compare_data_type(&l, &r, &left.position, diagnostics)?;
+        self.record_capturing_fun_local(&left.text, &l, value.as_ref());
         self.hir_assign_local(&left.text, value);
         Ok(())
     }

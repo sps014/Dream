@@ -1,0 +1,10 @@
+// A capturing lambda cannot be passed to `js.func` — the bridge only forwards the funcidx half of
+// the funcbox, so the closure environment would be lost.
+
+fun main(): void {
+    let n: int = 42;
+    let handler: fun(js): void = (ev) => {
+        System.println(n + ev.to_int());
+    };
+    let _wrapped: js = js.func(handler);
+}

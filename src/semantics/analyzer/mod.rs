@@ -306,6 +306,12 @@ pub struct Analyzer<'a> {
     /// `identifiers::resolve_identifier`/`bindings::analyze_assignment`), and by
     /// `expressions::lambda` to build the matching `__Closure_env_<n>` class + construction site.
     closure_captures: HashMap<String, Vec<(String, Type)>>,
+    /// Fun-typed locals whose initializer/last assignment was a *capturing* `fun(...)` value
+    /// (`true`) or a known captureless one (`false`). Used at the JS boundary to reject stashed
+    /// capturing lambdas (`let h: fun(js): void = (e) => { use(x); }; el.addEventListener(..., h)`)
+    /// after the construction site is no longer visible in the HExpr. Cleared per function in
+    /// `hir_begin_function`. Params are intentionally absent (higher-order wrappers stay allowed).
+    capturing_fun_locals: HashMap<String, bool>,
     /// Stack of `is`-with-binding aliases visible while analyzing a later conjunct of the same
     /// top-level `&&` chain (`if (x is T t && t.ok())`): each entry is `(bound name, target type,
     /// original operand expression)`. Pushed by `analyze_binary_expression` before analyzing the
@@ -427,6 +433,7 @@ impl<'a> Analyzer<'a> {
             boxed_locals: std::collections::HashSet::new(),
             ref_boxed_locals: std::collections::HashSet::new(),
             closure_captures: HashMap::new(),
+            capturing_fun_locals: HashMap::new(),
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
             generic_struct_instances: Vec::new(),
