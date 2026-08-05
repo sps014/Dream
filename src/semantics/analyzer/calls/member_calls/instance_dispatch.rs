@@ -245,7 +245,7 @@ impl<'a> Analyzer<'a> {
         // themselves are typed, so it falls back to no expected-type context (unchanged behavior).
         let expected_params: Option<Vec<Type>> = if self.function_table.is_overloaded(&mangled_name)
         {
-            None
+            self.expected_params_preferring_fun_overload(&mangled_name, params, 1)
         } else {
             self.function_table
                 .get_function(&mangled_name)

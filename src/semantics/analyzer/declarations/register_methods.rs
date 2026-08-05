@@ -37,7 +37,7 @@ impl<'a> Analyzer<'a> {
         // Collect the mangled name + full parameter list (with the implicit `this`) of each method so
         // overloaded methods can be registered under their signature-mangled *emitted* names in a
         // second pass, once the whole overload set for this target is known.
-        let mut registered: Vec<(String, Vec<String>)> = Vec::new();
+        let mut registered: Vec<(String, Vec<Type>)> = Vec::new();
         for method in methods {
             // Validate object-protocol overrides once (on the non-monomorphized declaration).
             if bindings.is_empty() {
@@ -90,10 +90,10 @@ impl<'a> Analyzer<'a> {
                     .insert(mangled_name.clone(), renamed_template);
             }
 
-            let param_types: Vec<String> = new_method
+            let param_types: Vec<Type> = new_method
                 .parameters
                 .iter()
-                .map(|p| p.type_.get_type())
+                .map(|p| p.type_.clone())
                 .collect();
             let method_ref = self.arena.alloc(new_method);
             self.struct_methods.push((method_ref, bindings.clone()));

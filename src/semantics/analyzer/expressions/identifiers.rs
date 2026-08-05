@@ -22,49 +22,51 @@ impl<'a> Analyzer<'a> {
             Err(e) => {
                 // A bare identifier that names a top-level function is a first-class function value.
                 if let Ok(sig) = self.function_table.get_function(&id.text) {
-                    // A boxed `fun(...)`-typed value is invoked through a plain synchronous
-                    // `call_indirect` (no coroutine driver at the call site), so an `async fun`
-                    // can never be soundly boxed this way in general — it would return before
-                    // its body's awaits actually resolve. `WebWorker`/`.map`/`.dispatch`'s own
-                    // body-invocation trampoline (`$__dream_worker_invoke`, `src/mir/emit/module.rs`)
-                    // is the one exception: it recognizes an async constructor's untagged `Future`
-                    // result and drives it to completion before returning, so a non-capturing
-                    // top-level `async fun` is sound to pass there — reject it everywhere else,
-                    // where no such driver exists and it would yield an unfinished/garbage result.
-                    if sig.is_async {
-                        // The trampoline's Future-tag check (see `src/mir/emit/module.rs`) only
-                        // stays sound through `Bytes.toWire<TOut>`'s wrapping if `TOut` is `string`:
-                        // that is the one case where `toWire` is a literal identity passthrough
-                        // (`static_dispatch/intrinsics.rs`'s `WireEncode` arm), so the untagged
-                        // `Future` pointer an async body's `call_indirect` actually returns reaches
-                        // the trampoline unchanged. Any other `TOut` would instead byte-blit that
-                        // raw pointer value as if it were already the real result — silent
-                        // corruption, not a clean error - so require a `string`-returning body.
-                        let returns_string = matches!(&sig.return_type, Some(t) if t.get_type() == "string");
-                        if !self.is_webworker_body_call() || !returns_string {
-                            return Err(report(
-                                diagnostics,
-                                format!(
-                                    "'{}' is an async function and cannot be used as a first-class \
-                                     `fun(...)` value - only a `WebWorker`/`WebWorker.map`/\
-                                     `WebWorkerPool.dispatch` body may be async, and only if it is a \
-                                     non-capturing top-level function returning `string` (not a \
-                                     lambda, and not any other return type)",
-                                    id.text
-                                ),
-                                Some(id.position),
-                            ));
-                        }
+                // A boxed `fun(...)` value is invoked through synchronous `call_indirect`. An
+                // `async fun`'s constructor returns an untagged `Future` frame pointer, so boxing
+                // it as `fun(...): Future<T>` matches the WASM result and lets the caller
+                // `await f(...)` like a direct async call.
+                //
+                // `WebWorker`/`map`/`dispatch` have two body shapes:
+                // - `fun(...): T` — including a string-returning top-level `async fun` boxed as
+                //   `fun(string): string` so the sync wire-wrapper + trampoline identity-`toWire`
+                //   path can drive the Future (string-only).
+                // - `fun(...): Future<T>` — named async funs (any `T`) and `async` lambdas; the
+                //   Future-body constructor awaits then wire-encodes, so any `TOut` works.
+                if sig.is_async {
+                    let returns_string =
+                        matches!(&sig.return_type, Some(t) if t.get_type() == "string");
+                    if self.is_webworker_body_call() && returns_string {
+                        let params = sig
+                            .parameters
+                            .iter()
+                            .map(|p| Self::type_from_name(p))
+                            .collect();
+                        let ret = sig.return_type.clone().unwrap_or(Type::Void);
+                        let func_ty = Type::Function(params, Box::new(ret.clone()));
+                        self.hir_set_func_value(&id.text, &func_ty, &ret);
+                        return Ok(func_ty);
                     }
                     let params = sig
                         .parameters
                         .iter()
                         .map(|p| Self::type_from_name(p))
                         .collect();
-                    let ret = sig.return_type.clone().unwrap_or(Type::Void);
-                    let func_ty = Type::Function(params, Box::new(ret.clone()));
-                    self.hir_set_func_value(&id.text, &func_ty, &ret);
+                    let box_ret =
+                        Self::async_return_type(true, sig.return_type.clone());
+                    let func_ty = Type::Function(params, Box::new(box_ret.clone()));
+                    self.hir_set_func_value(&id.text, &func_ty, &box_ret);
                     return Ok(func_ty);
+                }
+                let params = sig
+                    .parameters
+                    .iter()
+                    .map(|p| Self::type_from_name(p))
+                    .collect();
+                let ret = sig.return_type.clone().unwrap_or(Type::Void);
+                let func_ty = Type::Function(params, Box::new(ret.clone()));
+                self.hir_set_func_value(&id.text, &func_ty, &ret);
+                return Ok(func_ty);
                 }
                 // A generic function used as a value (`let cmp: fun(T, T): int = natural_order;`):
                 // infer its type arguments from the expected function type and instantiate it.

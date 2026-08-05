@@ -1,1 +1,0 @@
-'computeInt' is an async function and cannot be used as a first-class `fun(...)` value - only a `WebWorker`/`WebWorker.map`/`WebWorkerPool.dispatch` body may be async, and only if it is a non-capturing top-level function returning `string` (not a lambda, and not any other return type)

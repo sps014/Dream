@@ -26,6 +26,120 @@ use std::rc::Rc;
 type CallArgAnalysis = (Vec<String>, Vec<Option<HExpr>>, Vec<bool>);
 
 impl<'a> Analyzer<'a> {
+    /// True when `expr` is an `async (params) => …` lambda literal (possibly nested in parens).
+    /// Used to pick between sync/`Future`-returning `fun(...)` overloads before arguments are typed.
+    pub(super) fn is_async_lambda_expr(expr: &ExpressionNode<'_>) -> bool {
+        match expr {
+            ExpressionNode::Lambda(l) => l.is_async,
+            ExpressionNode::Parenthesized(inner) => Self::is_async_lambda_expr(inner),
+            _ => false,
+        }
+    }
+
+    /// True when `ty` is `fun(...): Future<T>` for some `T`.
+    pub(super) fn is_future_returning_fun(ty: &Type) -> bool {
+        match ty {
+            Type::Function(_, ret) => Self::future_inner_type(ret).is_some(),
+            _ => false,
+        }
+    }
+
+    /// Soft expected-param hint for an overloaded callee whose overloads differ by
+    /// `fun(...): T` vs `fun(...): Future<T>`: pick the overload matching whether each argument is
+    /// an async lambda. `skip` drops leading parameters (e.g. implicit `this` for instance methods).
+    pub(super) fn expected_params_preferring_fun_overload(
+        &self,
+        base: &str,
+        args: &[ExpressionNode<'_>],
+        skip: usize,
+    ) -> Option<Vec<Type>> {
+        let keys = self.function_table.overloads.get(base)?;
+        let mut matching: Vec<crate::semantics::function_table::FunctionTableInfo> = Vec::new();
+        for key in keys {
+            let Ok(info) = self.function_table.get_function(key) else {
+                continue;
+            };
+            let user_params = info.parameters.len().saturating_sub(skip);
+            if user_params != args.len() {
+                continue;
+            }
+            matching.push(info);
+        }
+        if matching.is_empty() {
+            return None;
+        }
+        if matching.len() == 1 {
+            return Some(Self::expected_param_types(&matching[0])[skip..].to_vec());
+        }
+        let mut best_idx: Option<usize> = None;
+        let mut best_score = -1i32;
+        for (idx, info) in matching.iter().enumerate() {
+            let types = Self::expected_param_types(info);
+            let user = &types[skip..];
+            let mut score = 0i32;
+            for (i, arg) in args.iter().enumerate() {
+                let Some(param_ty) = user.get(i) else {
+                    continue;
+                };
+                let wants_future = Self::is_async_lambda_expr(arg);
+                if Self::is_future_returning_fun(param_ty) == wants_future {
+                    score += 1;
+                }
+            }
+            if score > best_score {
+                best_score = score;
+                best_idx = Some(idx);
+            } else if score == best_score {
+                best_idx = None;
+            }
+        }
+        let chosen = best_idx
+            .and_then(|i| matching.get(i))
+            .or_else(|| matching.first())?;
+        Some(Self::expected_param_types(chosen)[skip..].to_vec())
+    }
+
+    /// Among same-arity `fun(...)`-typed parameter candidates, prefer the one whose parameter
+    /// matches whether the corresponding argument is an async lambda (`Future`-returning fun) or
+    /// not. Used when soft expected-type hints must be published before overload resolution.
+    pub(super) fn prefer_fun_overload_for_args<'b, I>(
+        candidates: I,
+        args: &[ExpressionNode<'_>],
+    ) -> Option<&'b FunctionNode<'b>>
+    where
+        I: IntoIterator<Item = &'b FunctionNode<'b>>,
+    {
+        let cands: Vec<&'b FunctionNode<'b>> = candidates.into_iter().collect();
+        if cands.is_empty() {
+            return None;
+        }
+        if cands.len() == 1 {
+            return Some(cands[0]);
+        }
+        // Score each candidate by how many argument slots agree on async-lambda ↔ Future-fun.
+        let mut best: Option<&'b FunctionNode<'b>> = None;
+        let mut best_score = -1i32;
+        for c in &cands {
+            let mut score = 0i32;
+            for (i, arg) in args.iter().enumerate() {
+                let Some(param) = c.parameters.get(i) else {
+                    continue;
+                };
+                let wants_future = Self::is_async_lambda_expr(arg);
+                if Self::is_future_returning_fun(&param.type_) == wants_future {
+                    score += 1;
+                }
+            }
+            if score > best_score {
+                best_score = score;
+                best = Some(c);
+            } else if score == best_score {
+                best = None; // tie
+            }
+        }
+        best.or_else(|| cands.first().copied())
+    }
+
     /// The structured (never string-mangled) parameter types of `sig`, suitable for publishing as
     /// `current_expected_type` while analyzing a non-overloaded callee's arguments. Prefers
     /// `sig.parameter_types` (populated by `FunctionTableInfo::from`, so a generic-struct-typed

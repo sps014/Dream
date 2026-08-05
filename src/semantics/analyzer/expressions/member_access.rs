@@ -261,9 +261,9 @@ impl<'a> Analyzer<'a> {
         if !sig.is_static {
             return None;
         }
-        let ret = sig.return_type.clone().unwrap_or(Type::Void);
-        let func_ty = Type::Function(sig.parameter_types.clone(), Box::new(ret.clone()));
-        self.hir_set_func_value(&mangled, &func_ty, &ret);
+        let box_ret = Self::async_return_type(sig.is_async, sig.return_type.clone());
+        let func_ty = Type::Function(sig.parameter_types.clone(), Box::new(box_ret.clone()));
+        self.hir_set_func_value(&mangled, &func_ty, &box_ret);
         Some(func_ty)
     }
 
@@ -312,10 +312,13 @@ impl<'a> Analyzer<'a> {
         let receiver_hir = receiver_hir?;
 
         // `parameter_types[0]` is the implicit `this` (see `register_methods_for`); the value's
-        // own `fun(...)` signature is everything declared after it.
+        // own `fun(...)` signature is everything declared after it. An async method's call yields
+        // `Future<T>`, so the bound method-group value is `fun(...): Future<T>` — the synthesized
+        // wrapper stays synchronous and simply returns that Future handle (same as boxing a named
+        // async function as a `fun(...): Future<T>` value).
         let param_types: Vec<Type> = sig.parameter_types.iter().skip(1).cloned().collect();
-        let ret_type = sig.return_type.clone().unwrap_or(Type::Void);
-        let func_ty = Type::Function(param_types.clone(), Box::new(ret_type.clone()));
+        let box_ret = Self::async_return_type(sig.is_async, sig.return_type.clone());
+        let func_ty = Type::Function(param_types.clone(), Box::new(box_ret.clone()));
 
         let name = format!("__method_group_{}", self.lambda_counter);
         self.lambda_counter += 1;
@@ -334,7 +337,7 @@ impl<'a> Analyzer<'a> {
         }
 
         let member_tok = member.clone();
-        let call_stmt = if matches!(ret_type, Type::Void) {
+        let call_stmt = if matches!(box_ret, Type::Void) {
             StatementNode::MethodInvocation(recv_expr, member_tok, None, arg_exprs)
         } else {
             StatementNode::Return(Some(ExpressionNode::MethodCall(
@@ -348,7 +351,7 @@ impl<'a> Analyzer<'a> {
             name: synthetic_token(TokenKind::IdentifierToken, &name),
             generic_parameters: None,
             generic_constraints: Vec::new(),
-            return_type: Some(ret_type.clone()),
+            return_type: Some(box_ret.clone()),
             parameters,
             body,
             visibility: crate::syntax::nodes::Visibility::Private,
@@ -373,7 +376,7 @@ impl<'a> Analyzer<'a> {
 
         let cell = self.hir_build_cell_new(receiver_ty, receiver_hir)?;
         self.hir_retain_env(cell.clone());
-        self.hir_set_capturing_func_value(&name, cell, &func_ty, &ret_type);
+        self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
         Some(func_ty)
     }
 

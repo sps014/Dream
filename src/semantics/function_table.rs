@@ -48,16 +48,21 @@ pub enum OverloadResolution {
 /// collide. E.g. namespace `add` with two params whose TypeIds are 0 and 0 becomes `add.0.0`; a
 /// zero-parameter overload becomes `add.`. When the namespace is already module-qualified the
 /// same rule composes: `utils.math::add.0.0`.
+///
+/// Uses structured [`Type`]s (via [`TypeCtx::lower`]) rather than `get_type()` strings: string
+/// lowering does not round-trip `fun(...)` / `Future<T>` spellings, so two overloads that differ
+/// only in a nested function return type (e.g. `fun(T): U` vs `fun(T): Future<U>`) would otherwise
+/// collide on the poison `Error` id.
 pub fn overload_key(
     base: &str,
-    parameters: &[String],
+    parameter_types: &[Type],
     type_ctx: &mut crate::types::TypeCtx,
 ) -> String {
     let mut key = String::from(base);
     key.push('.');
     let mut parts = Vec::new();
-    for p in parameters {
-        parts.push(type_ctx.lower_str(p).0.to_string());
+    for p in parameter_types {
+        parts.push(type_ctx.lower(p).0.to_string());
     }
     key.push_str(&parts.join("."));
     key
@@ -248,7 +253,7 @@ impl FunctionTable {
         }
         let mut keys = Vec::with_capacity(group.len());
         for mut info in group {
-            let key = overload_key(ns, &info.parameters, type_ctx);
+            let key = overload_key(ns, &info.parameter_types, type_ctx);
             if self.functions.contains_key(&key) {
                 return Err(SymbolError::new(format!(
                     "Duplicate overload: '{}' with the same parameter types is already defined",
@@ -289,13 +294,13 @@ impl FunctionTable {
         // Promote a lone singleton to its mangled key the moment a second overload appears.
         if existing.len() == 1 && existing[0] == ns {
             if let Some(mut first) = self.functions.remove(ns) {
-                let first_key = overload_key(ns, &first.parameters, type_ctx);
+                let first_key = overload_key(ns, &first.parameter_types, type_ctx);
                 first.name = first_key.clone();
                 self.functions.insert(first_key.clone(), first);
                 existing[0] = first_key;
             }
         }
-        let key = overload_key(ns, &info.parameters, type_ctx);
+        let key = overload_key(ns, &info.parameter_types, type_ctx);
         if self.functions.contains_key(&key) {
             return Err(SymbolError::new(format!(
                 "Duplicate overload: '{}' with the same parameter types is already defined",
@@ -349,16 +354,16 @@ impl FunctionTable {
             .unwrap_or(false)
     }
 
-    /// The emitted name of the declaration of `base` whose parameter list is `parameters`: the
-    /// bare base when `base` is not overloaded, otherwise the signature-mangled key.
+    /// The emitted name of the declaration of `base` whose parameter list is `parameter_types`:
+    /// the bare base when `base` is not overloaded, otherwise the signature-mangled key.
     pub fn resolve_emitted_name(
         &self,
         base: &str,
-        parameters: &[String],
+        parameter_types: &[Type],
         type_ctx: &mut crate::types::TypeCtx,
     ) -> String {
         if self.is_overloaded(base) {
-            overload_key(base, parameters, type_ctx)
+            overload_key(base, parameter_types, type_ctx)
         } else {
             base.to_string()
         }
@@ -372,13 +377,13 @@ impl FunctionTable {
         &self,
         base: &str,
         module: Option<&Rc<str>>,
-        parameters: &[String],
+        parameter_types: &[Type],
         type_ctx: &mut crate::types::TypeCtx,
     ) -> String {
         if let Some(ns) = self.resolve_in_module(module, base) {
-            return self.resolve_emitted_name(ns, parameters, type_ctx);
+            return self.resolve_emitted_name(ns, parameter_types, type_ctx);
         }
-        self.resolve_emitted_name(base, parameters, type_ctx)
+        self.resolve_emitted_name(base, parameter_types, type_ctx)
     }
 
     /// Selects the overload of `base` that best matches `args`. Exact type matches are preferred;

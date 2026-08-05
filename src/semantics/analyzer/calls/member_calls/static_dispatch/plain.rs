@@ -26,7 +26,7 @@ impl<'a> Analyzer<'a> {
         // annotation. An overloaded callee can't do this (the signature isn't known until the
         // arguments are typed), so it falls back to no expected-type context, as before.
         let expected_params: Option<Vec<Type>> = if is_overloaded {
-            None
+            self.expected_params_preferring_fun_overload(&base, params, 0)
         } else {
             self.function_table
                 .get_function(&base)
@@ -132,13 +132,10 @@ impl<'a> Analyzer<'a> {
         // An async static method (e.g. `File.read`) eagerly starts a task; the call yields a
         // `Future<T>` that must be `await`ed, just like any other async call.
         let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
-        // A static method is implemented as an unbound function under its mangled `{Type}_{method}` name (no receiver);
-        // overloaded names are ambiguous for a single `DefId` lookup, so defer those.
-        if self.function_table.is_overloaded(&base) {
-            self.hir_none();
-        } else {
-            self.hir_set_call(&base, arg_hirs, &ret_type);
-        }
+        // A static method is an unbound function under its mangled `{Type}_{method}` name (no
+        // receiver). Overloaded names resolve to the selected overload's emitted key (each a
+        // distinct `DefId`), matching free-function / instance-method overload emission.
+        self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
         Ok(ret_type)
     }
 }

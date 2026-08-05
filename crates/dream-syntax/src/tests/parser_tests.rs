@@ -413,7 +413,42 @@ fn test_parse_lambda_expr_body() {
     assert_eq!(lambda.parameters.len(), 2);
     assert_eq!(lambda.parameters[0].name.text, "x");
     assert_eq!(lambda.parameters[1].name.text, "y");
+    assert!(!lambda.is_async);
     assert!(matches!(lambda.body, crate::nodes::LambdaBody::Expr(_)));
+}
+
+#[test]
+fn test_parse_async_lambda_expr_body() {
+    let code = "fun f(): void { let g = async (x: int) => x; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+        panic!(
+            "expected a `let` binding of a Lambda expression, got {:?}",
+            func.body[0]
+        );
+    };
+    assert!(lambda.is_async);
+    assert_eq!(lambda.parameters.len(), 1);
+    assert!(matches!(lambda.body, crate::nodes::LambdaBody::Expr(_)));
+}
+
+#[test]
+fn test_parse_async_lambda_block_body() {
+    let code = "async fun f(): void { let g = async (x: int) => { await Time.sleep(1); return x; }; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+        panic!("expected a `let` binding of an async Lambda expression");
+    };
+    assert!(lambda.is_async);
+    assert!(matches!(lambda.body, crate::nodes::LambdaBody::Block(_)));
 }
 
 #[test]

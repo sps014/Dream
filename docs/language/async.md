@@ -91,6 +91,10 @@ async fun main(): void {
 
 Async methods work on **generic** classes too: each instantiation is monomorphized to its own concrete async state machine.
 
+### Async lambdas and `fun(...): Future<T>` values
+
+An `async (params) => …` arrow lambda is typed as `fun(...): Future<T>` — see [Functions](functions.md#async-lambdas). Calling the boxed value returns a `Future` just like calling a named `async fun`; `await` unwraps it. Named async functions used as first-class values (`let f: fun(int): Future<int> = delayed;`) use the same shape.
+
 ## Advanced
 
 ### How it works

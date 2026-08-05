@@ -341,6 +341,23 @@ nums.sort_by((a, b) => a - b);   // `a`/`b` inferred as `int` from `sort_by`'s `
 
 A lambda written with no surrounding `fun(...)` context (e.g. passed to `println` directly, or with an untyped parameter and no context at all) cannot have its type inferred and is rejected with a diagnostic asking for one.
 
+#### Async lambdas
+
+Prefix an arrow lambda with `async` to allow `await` in its body. An async lambda is a first-class value of type `fun(...): Future<T>` — calling it eagerly starts the task and returns a `Future` handle, same as calling a named `async fun`:
+
+```dream
+async fun main(): void {
+    let twice: fun(int): Future<int> = async (x) => {
+        await Time.sleep(1);
+        return x * 2;
+    };
+    let n = await twice(21);   // twice(21) : Future<int>
+    println(n);                // 42
+}
+```
+
+The expected context must be `fun(...): Future<T>` (not `fun(...): T`). A sync lambda against a `Future`-returning `fun` type, or an async lambda against a non-`Future` return, is a compile-time error. Named `async fun` values work the same way — `let f: fun(int): Future<int> = delayed_triple;` boxes the function as a `Future`-returning `fun` value.
+
 #### Capturing closures
 
 A lambda's body may also reference variables from an enclosing function; this is a *capture*. A captured name is captured **by reference**, not by value: the closure and the enclosing function share the same storage, so a write from either side is visible to the other, and the closure keeps working after the enclosing function has returned. A lambda may capture more than one name, and capture is transitive: a lambda nested inside another lambda may reach past its immediate parent to a grandparent's (or higher) local — each level forwards what the level below it needs, one hop at a time.

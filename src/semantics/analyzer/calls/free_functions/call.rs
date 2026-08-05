@@ -151,10 +151,9 @@ impl<'a> Analyzer<'a> {
                 if type_params.len() != concrete_generic_args.len() {
                     return None;
                 }
-                // If the template declares more than one `constructor` overload, only use this
-                // (soft, best-effort) expected-type hint when exactly one of them matches the call's
-                // own argument count — otherwise leave the hint off rather than guessing which
-                // overload's parameter types to publish.
+                // If the template declares more than one `constructor` overload, prefer the one
+                // whose `fun(...)` parameter matches an async vs sync lambda argument (Future-
+                // returning vs plain). Same-arity sync/`Future` pairs are common (`WebWorker`).
                 let ctors: Vec<_> = template
                     .methods
                     .iter()
@@ -164,14 +163,11 @@ impl<'a> Analyzer<'a> {
                     0 => return None,
                     1 => ctors[0],
                     _ => {
-                        let mut matching = ctors
+                        let matching: Vec<_> = ctors
                             .into_iter()
-                            .filter(|c| c.parameters.len() == params.len());
-                        let first = matching.next()?;
-                        if matching.next().is_some() {
-                            return None;
-                        }
-                        first
+                            .filter(|c| c.parameters.len() == params.len())
+                            .collect();
+                        Self::prefer_fun_overload_for_args(matching, params)?
                     }
                 };
                 let bindings = generic_bindings(type_params, &concrete_generic_args);

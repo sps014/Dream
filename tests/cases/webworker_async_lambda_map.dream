@@ -1,0 +1,10 @@
+async fun main(): void {
+    let urls = ["a", "b"];
+    let results = await WebWorker<string, string>.map(urls, async (url) => {
+        await Time.sleep(1);
+        return "resp:" + url;
+    });
+    for (let r in results) {
+        System.println(r);
+    }
+}

@@ -146,10 +146,10 @@ impl<'a> Analyzer<'a> {
         // `this` is simply parameter 0. Static methods have no receiver. Both are emittable. A free
         // function is registered under its *emitted* name (signature-mangled when overloaded), so an
         // overloaded declaration resolves to its own distinct `DefId` rather than a shared base def.
-        let param_types: Vec<String> = function
+        let param_types: Vec<Type> = function
             .parameters
             .iter()
-            .map(|p| p.type_.get_type())
+            .map(|p| p.type_.clone())
             .collect();
         let module = self.module_of(function.file_path.as_ref());
         let lookup_name = self.function_table.resolve_emitted_name_scoped(

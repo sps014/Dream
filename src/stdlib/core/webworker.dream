@@ -9,13 +9,13 @@
 // `TIn`/`TOut` each must be `string`, an `unmanaged` (blittable) value type, or a `T[]` of one:
 // every message is copied across the wire (`Bytes.toWire`/`fromWire` under the hood - a `string`
 // crosses as-is, an unmanaged value as a raw byte-blit, an array as a dynamic-length raw byte-blit
-// of its elements), never a live pointer into memory the other thread might mutate. `body` may
-// additionally be a capturing lambda, as long as everything it captures is
-// either an `@shared class` instance or an unmanaged/value type — capturing an ordinary
-// (non-`@shared`) managed object reference is a compile error, since handing a worker a live
-// pointer into memory the creating thread may keep mutating non-atomically is exactly the bug
-// `@shared`/`lock` exist to prevent. The body's funcref index is portable across instances because
-// every worker loads the same module.
+// of its elements), never a live pointer into memory the other thread might mutate. `body` may be
+// `fun(TIn): TOut` or `fun(TIn): Future<TOut>` (named `async fun` / `async` lambda); capturing
+// lambdas are allowed when everything captured is either an `@shared class` instance or an
+// unmanaged/value type — capturing an ordinary (non-`@shared`) managed object reference is a
+// compile error, since handing a worker a live pointer into memory the creating thread may keep
+// mutating non-atomically is exactly the bug `@shared`/`lock` exist to prevent. The body's
+// funcref index is portable across instances because every worker loads the same module.
 //
 //   fun echo(msg: string): string { return msg + "!"; }
 //
@@ -50,11 +50,15 @@ public class WebWorker<TIn, TOut> {
     @intrinsic("funcbox_funcidx")
     static extern fun __funcidx(body: fun(string): string): int;
 
-    // Unboxes the wrapper to its closure environment word (0 for a non-capturing body). Safe to
-    // hand to another thread only because `analyze_lambda`'s `WebWorker` capture check already
-    // rejected anything that wouldn't be (see the class doc comment).
+    // Future-body wrapper unbox (same runtime intrinsic as `__funcidx`).
+    @intrinsic("funcbox_funcidx")
+    static extern fun __funcidx_async(body: fun(string): Future<string>): int;
+
     @intrinsic("funcbox_env")
     static extern fun __env(body: fun(string): string): int;
+
+    @intrinsic("funcbox_env")
+    static extern fun __env_async(body: fun(string): Future<string>): int;
 
     // Enqueue `msg` to the worker's inbox (does not wait for a reply).
     @js("Dream", "workerPost")
@@ -77,6 +81,18 @@ public class WebWorker<TIn, TOut> {
     constructor(body: fun(TIn): TOut) {
         let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
         this.id = WebWorker<TIn, TOut>.__spawn(WebWorker<TIn, TOut>.__funcidx(wrapped), WebWorker<TIn, TOut>.__env(wrapped));
+    }
+
+    // Async-body overload: `body` returns `Future<TOut>` (a named `async fun`, or an
+    // `async (x) => …` lambda). The wrapper awaits the Future, then wire-encodes — so the
+    // trampoline always sees a `Future<string>` whose settled result is already the wire form.
+    // Unlike the sync-constructor + identity-`toWire` path used for a bare string-returning
+    // `async fun`, this works for any `TOut` (int, unmanaged structs, arrays, …).
+    constructor(body: fun(TIn): Future<TOut>) {
+        let wrapped: fun(string): Future<string> = async (raw: string) => {
+            return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
+        };
+        this.id = WebWorker<TIn, TOut>.__spawn(WebWorker<TIn, TOut>.__funcidx_async(wrapped), WebWorker<TIn, TOut>.__env_async(wrapped));
     }
 
     // Post a message to the worker without waiting for its reply. Pair with `receive()` to collect
@@ -113,6 +129,25 @@ public class WebWorker<TIn, TOut> {
     // the same capture rules as the plain constructor: a non-capturing top-level function, or a
     // lambda capturing only `@shared class`/unmanaged state. Called as `WebWorker<T, R>.map(...)`.
     public static async fun map(items: TIn[], body: fun(TIn): TOut): TOut[] {
+        let n = items.size();
+        let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            workers[i] = WebWorker<TIn, TOut>(body);
+        }
+        for (let i = 0; i < n; i = i + 1) {
+            workers[i].post(items[i]);
+        }
+        let results = Buffer.alloc<TOut>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            results[i] = await workers[i].receive();
+            workers[i].terminate();
+        }
+        return results;
+    }
+
+    // Async-body `map`: same shape as the sync overload, but `body` returns `Future<TOut>`
+    // (named `async fun` or `async (…) => …`). Each worker drives its own awaits to completion.
+    public static async fun map(items: TIn[], body: fun(TIn): Future<TOut>): TOut[] {
         let n = items.size();
         let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
@@ -176,6 +211,16 @@ public class WebWorkerPool {
         this.next = (this.next + 1) % this.ids.size();
         let funcidx = WebWorker<string, string>.__funcidx(body);
         let env = WebWorker<string, string>.__env(body);
+        return await WebWorkerPool.__dispatch(id, funcidx, env, msg);
+    }
+
+    // Async-body `dispatch`: `body` returns `Future<string>` (named `async fun` or
+    // `async (msg) => …`). The trampoline drives the Future to completion on the pool member.
+    public async fun dispatch(msg: string, body: fun(string): Future<string>): string {
+        let id = this.ids[this.next];
+        this.next = (this.next + 1) % this.ids.size();
+        let funcidx = WebWorker<string, string>.__funcidx_async(body);
+        let env = WebWorker<string, string>.__env_async(body);
         return await WebWorkerPool.__dispatch(id, funcidx, env, msg);
     }
 

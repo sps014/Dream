@@ -1,10 +1,13 @@
-//! Arrow-lambda literals (`(params) => expr` / `(params) => { stmts }`). A lambda is lowered to an
-//! ordinary synthesized top-level function (`__lambda_<n>`); non-capturing, it behaves exactly like
-//! any other free function. A *capturing* one (Milestone B — see `capture_scan`'s module doc
-//! comment for how a capture is found, including transitively through further-nested lambdas)
-//! additionally receives its captured names through the `fun(...)` value's environment word: one
-//! capture as a direct `__Cell<T>` pointer, two or more as an `object[]` array of them (see
-//! `hir_set_capturing_func_value`/`hir_set_multi_capturing_func_value`).
+//! Arrow-lambda literals (`(params) => expr` / `(params) => { stmts }`, optionally prefixed with
+//! `async`). A lambda is lowered to an ordinary synthesized top-level function (`__lambda_<n>`);
+//! non-capturing, it behaves exactly like any other free function. An `async` lambda sets
+//! `is_async` on that synthesized function and is typed as a `fun(...): Future<T>` value (the
+//! boxed `call_indirect` returns the async constructor's Future frame). A *capturing* one
+//! (Milestone B — see `capture_scan`'s module doc comment for how a capture is found, including
+//! transitively through further-nested lambdas) additionally receives its captured names through
+//! the `fun(...)` value's environment word: one capture as a direct `__Cell<T>` pointer, two or
+//! more as an `object[]` array of them (see `hir_set_capturing_func_value`/
+//! `hir_set_multi_capturing_func_value`).
 //!
 //! Because Dream requires a function's return type up front (to type-check its body and to build
 //! its function-table signature) and the synthesized function's body cannot be analyzed until a
@@ -12,7 +15,8 @@
 //! must be knowable *immediately*, at the lambda literal's own use site. It is taken from the
 //! expected `fun(...)` type of the surrounding context (a `let` annotation, a typed call argument,
 //! etc.) — the same context used by `instantiate_generic_function_value` for generic function
-//! values. A lambda used where no such context exists is rejected with a diagnostic asking for one.
+//! values. For an async lambda that expected return must be `Future<T>` (body declares `T`). A
+//! lambda used where no such context exists is rejected with a diagnostic asking for one.
 
 use super::capture_scan::lambda_free_names;
 use super::*;
@@ -58,11 +62,15 @@ impl<'a> Analyzer<'a> {
         // `fun(...)` context at this use site: the return type can't be inferred by analyzing the
         // body eagerly (see the module doc comment), and an untyped parameter has nothing else to
         // infer from in v1 (no unification/generalization over the body).
+        //
+        // An `async` lambda is a `fun(...): Future<T>` value: the expected return must be
+        // `Future<T>`, the synthesized body's declared return is `T`, and the boxed value's
+        // `call_indirect` result type is `Future<T>` (the async constructor's frame pointer).
         let expected = self
             .current_expected_type
             .as_ref()
             .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
-        let (exp_params, ret_type) = match expected {
+        let (exp_params, exp_ret) = match expected {
             Some(Type::Function(exp_params, exp_ret))
                 if exp_params.len() == lambda.parameters.len() =>
             {
@@ -76,6 +84,32 @@ impl<'a> Analyzer<'a> {
                     Some(lambda.open_paren_position),
                 ));
             }
+        };
+
+        let (body_ret, box_ret) = if lambda.is_async {
+            match Self::future_inner_type(&exp_ret) {
+                Some(inner) => (inner, exp_ret.clone()),
+                None => {
+                    self.hir_none();
+                    return Err(report(
+                        diagnostics,
+                        format!(
+                            "async lambda requires a `fun(...): Future<T>` context, but the expected type returns '{}'",
+                            exp_ret.get_type()
+                        ),
+                        Some(lambda.open_paren_position),
+                    ));
+                }
+            }
+        } else if Self::future_inner_type(&exp_ret).is_some() {
+            self.hir_none();
+                    return Err(report(
+                        diagnostics,
+                        "sync lambda cannot be used where `fun(...): Future<T>` is expected; write `async (params) => ...` for an async lambda".to_string(),
+                        Some(lambda.open_paren_position),
+                    ));
+        } else {
+            (exp_ret.clone(), exp_ret)
         };
 
         // Resolve each parameter: an explicit annotation is checked against the expected type;
@@ -224,13 +258,13 @@ impl<'a> Analyzer<'a> {
             name: synthetic_token(TokenKind::IdentifierToken, &name),
             generic_parameters: None,
             generic_constraints: Vec::new(),
-            return_type: Some(ret_type.clone()),
+            return_type: Some(body_ret),
             parameters,
             body,
             visibility: crate::syntax::nodes::Visibility::Private,
             is_extern: false,
             is_static: false,
-            is_async: false,
+            is_async: lambda.is_async,
             file_path: parent_function.file_path.clone(),
             accessor: None,
             is_default_impl: false,
@@ -245,9 +279,9 @@ impl<'a> Analyzer<'a> {
         self.pending_lambdas
             .insert(name.clone(), (func_ref, self.current_generic_bindings.clone()));
 
-        let func_ty = Type::Function(param_types, Box::new(ret_type.clone()));
+        let func_ty = Type::Function(param_types, Box::new(box_ret.clone()));
         match captures.len() {
-            0 => self.hir_set_func_value(&name, &func_ty, &ret_type),
+            0 => self.hir_set_func_value(&name, &func_ty, &box_ret),
             1 => {
                 let (cap_name, cap_ty) = captures[0].clone();
                 // Registered *before* `analyze_pending_instantiations` reaches this lambda's own
@@ -259,7 +293,7 @@ impl<'a> Analyzer<'a> {
                 match self.hir_read_cell_ref(&cap_name) {
                     Some(cell) => {
                         self.hir_retain_env(cell.clone());
-                        self.hir_set_capturing_func_value(&name, cell, &func_ty, &ret_type);
+                        self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
                     }
                     None => self.hir_none(),
                 }
@@ -278,7 +312,7 @@ impl<'a> Analyzer<'a> {
                     }
                 }
                 if ok {
-                    self.hir_set_multi_capturing_func_value(&name, cells, &func_ty, &ret_type);
+                    self.hir_set_multi_capturing_func_value(&name, cells, &func_ty, &box_ret);
                 } else {
                     self.hir_none();
                 }

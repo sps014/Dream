@@ -1,0 +1,1 @@
+sync lambda cannot be used where `fun(...): Future<T>` is expected; write `async (params) => ...` for an async lambda

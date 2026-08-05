@@ -44,10 +44,10 @@ impl<'a> Analyzer<'a> {
             if function.generic_parameters.is_some() {
                 continue;
             }
-            let param_types: Vec<String> = function
+            let param_types: Vec<Type> = function
                 .parameters
                 .iter()
-                .map(|p| p.type_.get_type())
+                .map(|p| p.type_.clone())
                 .collect();
             let module = self.module_of(function.file_path.as_ref());
             let emitted = self.function_table.resolve_emitted_name_scoped(
@@ -121,10 +121,10 @@ impl<'a> Analyzer<'a> {
             // Key the symbol table by the emitted name so overloaded functions (which share a
             // base name but emit distinct mangled names) each get their own entry, matching the
             // name codegen uses.
-            let param_types: Vec<String> = function
+            let param_types: Vec<Type> = function
                 .parameters
                 .iter()
-                .map(|p| p.type_.get_type())
+                .map(|p| p.type_.clone())
                 .collect();
             let module = self.module_of(function.file_path.as_ref());
             let key = self.function_table.resolve_emitted_name_scoped(
@@ -210,10 +210,10 @@ impl<'a> Analyzer<'a> {
                     .with_generic_bindings(bindings, |s| s.analyze_function(method, diagnostics))?;
                 // Key by the emitted name so overloaded methods each get a distinct entry (the
                 // parameter list includes the implicit `this`).
-                let param_types: Vec<String> = method
+                let param_types: Vec<Type> = method
                     .parameters
                     .iter()
-                    .map(|p| p.type_.get_type())
+                    .map(|p| p.type_.clone())
                     .collect();
                 let key = self.function_table.resolve_emitted_name(
                     &method.name.text,

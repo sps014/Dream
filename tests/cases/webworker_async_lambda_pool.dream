@@ -1,0 +1,14 @@
+async fun main(): void {
+    let pool = WebWorkerPool(2);
+    let a = pool.dispatch("x", async (url) => {
+        await Time.sleep(1);
+        return "resp:" + url;
+    });
+    let b = pool.dispatch("y", async (url) => {
+        await Time.sleep(1);
+        return "resp:" + url;
+    });
+    System.println(await a);
+    System.println(await b);
+    pool.shutdown();
+}

@@ -181,10 +181,10 @@ An `@shared class`'s fields must themselves be unmanaged/value types or other `@
 
 ## Async worker bodies
 
-A worker body may `await` — including a real host call like `Time.sleep`, an HTTP request, or another `async fun` — as long as it is:
+A worker body may `await` — including a real host call like `Time.sleep`, an HTTP request, or another `async fun` — in either of two shapes:
 
-- a **non-capturing top-level `async fun`** (not a lambda: `async` lambdas are not supported at all), and
-- **returns `string`**.
+- a **named top-level `async fun`**, or an **`async (params) => …` lambda**, typed as `fun(TIn): Future<TOut>` (the Future-body constructor / `map` / `dispatch` overloads), or
+- a **string-returning top-level `async fun`** passed where `fun(string): string` is expected (the original trampoline path: identity `toWire`, string-only).
 
 ```dream
 async fun fetchAndSummarize(url: string): string {
@@ -196,12 +196,20 @@ async fun main(): void {
     let w = WebWorker<string, string>(fetchAndSummarize);
     System.println(await w.send("https://example.com"));
     w.terminate();
+
+    // Async lambda — same Future-body overload; `TOut` need not be `string`.
+    let squarer = WebWorker<int, int>(async (n) => {
+        await Time.sleep(1);
+        return n * n;
+    });
+    System.println((await squarer.send(6)).to_string()); // 36
+    squarer.terminate();
 }
 ```
 
 This works with `WebWorker.map` and `WebWorkerPool.dispatch` too — each worker drives its own body's awaits to completion independently, so `map`'s parallelism still holds even when every element's work involves a real await.
 
-**Why `TOut` must be `string`.** The worker-invoke trampoline distinguishes "the body already finished" from "the body is an async task still running" by checking the raw `call_indirect` result's heap tag: an `async fun`'s constructor returns an untagged `Future` frame pointer rather than the real value, and every *other* Dream heap value carries a tag, so an untagged, non-null result unambiguously means "drive this to completion, then unwrap its result" (`Future.result`) in place of the constructor's own return. That check only stays sound if nothing rewrites the pointer in between — `Bytes.toWire<TOut>` (the wire encoding every `WebWorker` message goes through) is a true identity passthrough only for `TOut = string`; for any other `TOut` it would instead byte-blit the *raw, unresolved* future pointer as if it were already the final value, silently corrupting the result. Boxing an async function whose return type isn't `string` as a `WebWorker`/`.map`/`.dispatch` body is therefore a compile-time error, not a runtime one.
+**Why the Future-body overload exists.** The worker-invoke trampoline distinguishes "the body already finished" from "the body is an async task still running" by checking the raw `call_indirect` result's heap tag: an async constructor returns an untagged `Future` frame pointer. The Future-body overload wraps the user's `fun(TIn): Future<TOut>` in an async `fun(string): Future<string>` that `await`s the body and then `Bytes.toWire`s the result — so the trampoline always unwraps a settled wire `string`, and any unmanaged `TOut` is sound. The older string-only path (boxing a top-level `async fun` as `fun(string): string` and relying on identity `toWire`) remains for compatibility with existing string async bodies.
 
 **Native vs. browser.** On native (`wasmtime`), every host `async` op resolves synchronously before `call_indirect` returns, so driving the task to completion is a single, immediate pass. In the browser, a real `extern async` host call (a genuine `fetch`, a real-time timer) instead settles later via a JS Promise callback — `runtime/dream.js`'s worker driver accounts for this by polling the `Future`'s status on the macrotask queue (not synchronously) until some pending Promise resolves it, rather than assuming one pass is enough. Both backends produce the same result; the browser path just genuinely waits for real time to pass instead of finishing in one call.
 
@@ -240,9 +248,9 @@ Under the hood the module exports a trampoline, `__dream_worker_invoke(fn_idx, e
 
 ## Notes and limits
 
-- The worker body's type is `fun(TIn): TOut` — a top-level function or a lambda (see [Sharing state safely](#sharing-state-safely) for what a lambda may capture).
+- The worker body's type is `fun(TIn): TOut` or `fun(TIn): Future<TOut>` — a top-level function or a (possibly `async`) lambda (see [Sharing state safely](#sharing-state-safely) for what a lambda may capture).
 - `TIn`/`TOut` must be `string`, an `unmanaged` (blittable) value type, or a `T[]` of one; a message is always a copy across the wire (never a shared array/struct pointer), so keep it small or chunk large payloads. `@shared class` is deliberately not supported here — capture it in the body lambda instead (see [Sharing state safely](#sharing-state-safely)).
-- A worker body may `await` (see [Async worker bodies](#async-worker-bodies)) only if it is a non-capturing top-level `async fun` returning `string` — an async *lambda* is not supported (there is no `async (x) => ...` syntax at all), and an async body returning anything other than `string` is a compile-time error, not just a stylistic restriction.
+- A worker body may `await` (see [Async worker bodies](#async-worker-bodies)) via the `fun(...): Future<T>` overloads (named `async fun` or `async` lambda, any valid `TOut`) or via a string-returning top-level `async fun` on the legacy `fun(string): string` path. See [Functions](functions.md#async-lambdas) for async lambda syntax.
 - `terminate()` is idempotent and also runs automatically when the handle is destroyed.
 - The coarse allocator lock (guarding every `malloc`/`free` on the shared heap, not just `@shared`-object access) serializes heap-touching operations across all workers under heavy concurrent allocation — a known v1 limitation, not a correctness issue.
 

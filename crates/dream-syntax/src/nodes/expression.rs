@@ -57,6 +57,7 @@ pub enum ExpressionNode<'a> {
     /// early-`return`s the failure/absence variant, so no dedicated HIR/MIR node exists for it.
     Try(&'a ExpressionNode<'a>),
     /// `(params) => expr` / `(params) => { stmts }` — an arrow-lambda literal.
+    /// May be prefixed with `async` (`async (params) => …`); see [`LambdaNode::is_async`].
     Lambda(&'a LambdaNode<'a>),
     /// `name: value` — a named call argument, produced only inside a call's argument list
     /// (`f(a, name: value)`) by the shared call-argument parser. The analyzer resolves `name`
@@ -73,11 +74,15 @@ pub enum ExpressionNode<'a> {
 }
 
 /// An arrow-lambda literal: `(x: int, y: int) => x + y` or `(x: int) => { ...; return x; }`.
+/// An `async` prefix (`async (x) => …`) sets [`is_async`](Self::is_async); the analyzer types
+/// those as `fun(...): Future<T>` values.
 #[derive(Debug, Clone)]
 pub struct LambdaNode<'a> {
     /// Span of the lambda's opening `(`, used when no inner token is available for diagnostics
     /// (e.g. a zero-parameter lambda `() => 0`).
     pub open_paren_position: TextSpan,
+    /// True when the literal was written `async (params) => …`.
+    pub is_async: bool,
     pub parameters: Vec<ParameterNode>,
     pub body: LambdaBody<'a>,
 }

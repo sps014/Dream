@@ -1,0 +1,12 @@
+fun make_async_adder(n: int): fun(int): Future<int> {
+    return async (x) => {
+        await Time.sleep(1);
+        return x + n;
+    };
+}
+
+async fun main(): void {
+    let add5: fun(int): Future<int> = make_async_adder(5);
+    System.println(await add5(10));
+    System.println(await add5(20));
+}
