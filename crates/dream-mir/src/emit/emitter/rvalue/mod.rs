@@ -145,10 +145,11 @@ impl Emitter<'_> {
             Rvalue::JsCall {
                 callee,
                 target,
+                via,
                 method,
                 args,
             } => {
-                self.emit_js_call(callee, target, method.as_ref(), args);
+                self.emit_js_call(callee, target, via.as_ref(), method.as_ref(), args);
             }
             Rvalue::FuncRef(callee) => {
                 // A function value is its slot index in the module function table. The table is

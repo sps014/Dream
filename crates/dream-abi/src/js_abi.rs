@@ -4,8 +4,11 @@
 //! and which is specific to `js` interop rather than to any one compiler stage — lives here so there
 //! is a single source of truth: the tagged argument-slot layout used by dynamic `js` calls
 //! (`Emitter::emit_js_call`), the symbol names of the generated struct/array
-//! marshalers (`mir::emit::js_marshal`), and the host bridge set those marshalers
-//! call ([`marshal_bridge_defs`], consumed by `dream_mir::prune`).
+//! marshalers (`mir::emit::js_marshal`), and the host bridge set those marshalers call.
+//!
+//! Fused bridges (`get_as_*`, `call_as_*`, `get_call`, `get_call_as_*`, `set_slot`,
+//! `index_set_slot`) share the same module (`Dream`) and slot layout; they are named via
+//! [`bridge_sym`] like every other `js.*` stdlib method.
 
 use dream_types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
 

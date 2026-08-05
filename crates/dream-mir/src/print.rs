@@ -32,6 +32,35 @@ fn stmt(s: &Statement) -> String {
         Statement::Call { callee, args } => {
             format!("call def{}({})", callee.def.0, ops(args))
         }
+        Statement::JsCall {
+            callee,
+            target,
+            via,
+            method,
+            args,
+        } => {
+            let v = via
+                .as_ref()
+                .map(|p| format!("{}.", operand(p)))
+                .unwrap_or_default();
+            let m = method
+                .as_ref()
+                .map(operand)
+                .unwrap_or_else(|| "*".to_string());
+            let a = args
+                .iter()
+                .map(|(o, _)| operand(o))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "js_call def{} {}[{}{}]({})",
+                callee.def.0,
+                operand(target),
+                v,
+                m,
+                a
+            )
+        }
         Statement::InterfaceCall {
             receiver,
             iface_id,
@@ -197,9 +226,14 @@ fn rvalue(r: &Rvalue) -> String {
         Rvalue::JsCall {
             callee,
             target,
+            via,
             method,
             args,
         } => {
+            let v = via
+                .as_ref()
+                .map(|p| format!("{}.", operand(p)))
+                .unwrap_or_default();
             let m = method
                 .as_ref()
                 .map(operand)
@@ -210,9 +244,10 @@ fn rvalue(r: &Rvalue) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!(
-                "js_call def{} {}[{}]({})",
+                "js_call def{} {}[{}{}]({})",
                 callee.def.0,
                 operand(target),
+                v,
                 m,
                 a
             )

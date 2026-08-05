@@ -317,13 +317,17 @@ pub enum HExprKind {
     },
     /// A dynamic `js` call whose variadic arguments are marshaled through the shadow stack in a
     /// single host crossing (no per-argument boxing, no heap array). `callee` is the bridge import
-    /// (`js.__call` for a method call, `js.__invoke` for calling the value); `target` is the JS
-    /// receiver/callee handle; `method` is the method-name string for `target[name](...)` (or `None`
-    /// to call `target(...)`); `args` are the raw arguments (each with its type, which selects the
-    /// tagged-slot layout). Result is `js`.
+    /// (`js.call` / `js.invoke` / fused `js.get_call` / typed `*_as_*` / slot set bridges);
+    /// `target` is the JS receiver/callee handle; `via` is an optional property name for fused
+    /// `target[via][method](...)` (`get_call`); `method` is the method/property-name string for
+    /// `target[name](...)` / `set_slot` (or `None` to call `target(...)` / `index_set_slot`);
+    /// `args` are the raw arguments (each with its type, which selects the tagged-slot layout).
+    /// Result type is `callee.ret` (usually `js`, or a primitive/`string` for fused unbox bridges,
+    /// or `void` for slot sets).
     JsCall {
         callee: Callee,
         target: Box<HExpr>,
+        via: Option<Box<HExpr>>,
         method: Option<Box<HExpr>>,
         args: Vec<HExpr>,
     },

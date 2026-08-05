@@ -8,7 +8,10 @@ use super::*;
 impl Emitter<'_> {
     /// Emits a call's arguments, applying implicit numeric widening to each so a narrower argument
     /// (e.g. an `int`/`float` passed to a `double` parameter) matches the callee's WASM signature.
-    /// Falls back to a plain push when the callee's parameter types are unknown (imports/intrinsics).
+    /// A `fun(...)`-typed parameter is unboxed to its raw funcidx (`i32.load` of the funcbox) because
+    /// host imports have no env-restoring prologue — only the table index is meaningful across the
+    /// boundary (see [`signature_table`](crate::emit::tables::signature_table)). Falls back to a
+    /// plain push when the callee's parameter types are unknown (intrinsics without a sig entry).
     pub(in crate::emit::emitter) fn emit_call_args(
         &mut self,
         callee: &crate::Callee,
@@ -18,7 +21,12 @@ impl Emitter<'_> {
         for (i, a) in args.iter().enumerate() {
             self.emit_operand(a);
             if let Some(pty) = params.as_ref().and_then(|p| p.get(i)) {
-                self.emit_numeric_conv(self.operand_ty(a), *pty);
+                if matches!(self.interner.kind(*pty), TyKind::Func(..)) {
+                    // Boxed `fun(...)` value → raw funcref-table index the host's `callback()` expects.
+                    self.line("     (i32.load)");
+                } else {
+                    self.emit_numeric_conv(self.operand_ty(a), *pty);
+                }
             }
         }
     }

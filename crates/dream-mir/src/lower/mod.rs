@@ -306,6 +306,25 @@ impl Lowerer<'_> {
                         args: lowered,
                     });
                 }
+                HExprKind::JsCall {
+                    callee,
+                    target,
+                    via,
+                    method,
+                    args,
+                } if !self.interner.is_reference(e.ty) => {
+                    let target = self.lower_operand(target);
+                    let via = via.as_ref().map(|v| self.lower_operand(v));
+                    let method = method.as_ref().map(|m| self.lower_operand(m));
+                    let args = args.iter().map(|a| (self.lower_operand(a), a.ty)).collect();
+                    self.b.push(Statement::JsCall {
+                        callee: self.lower_callee(callee),
+                        target,
+                        via,
+                        method,
+                        args,
+                    });
+                }
                 HExprKind::MethodCall {
                     receiver,
                     callee,

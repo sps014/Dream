@@ -198,11 +198,15 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         K::JsCall {
             callee,
             target,
+            via,
             method,
             args,
         } => {
             out.callees.push((callee.def, callee.instance.clone()));
             hir_expr_edges(target, out);
+            if let Some(v) = via {
+                hir_expr_edges(v, out);
+            }
             if let Some(m) = method {
                 hir_expr_edges(m, out);
             }

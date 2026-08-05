@@ -118,6 +118,22 @@ fn read_stmt(stmt: &Statement, read: &mut HashSet<Local>) {
         }
         Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => read_operand(o, read),
         Statement::Call { args, .. } => args.iter().for_each(|a| read_operand(a, read)),
+        Statement::JsCall {
+            target,
+            via,
+            method,
+            args,
+            ..
+        } => {
+            read_operand(target, read);
+            if let Some(v) = via {
+                read_operand(v, read);
+            }
+            if let Some(m) = method {
+                read_operand(m, read);
+            }
+            args.iter().for_each(|(a, _)| read_operand(a, read));
+        }
         Statement::InterfaceCall { receiver, args, .. } => {
             read_operand(receiver, read);
             args.iter().for_each(|a| read_operand(a, read));
@@ -197,11 +213,15 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         }
         Rvalue::JsCall {
             target,
+            via,
             method,
             args,
             ..
         } => {
             read_operand(target, read);
+            if let Some(v) = via {
+                read_operand(v, read);
+            }
             if let Some(m) = method {
                 read_operand(m, read);
             }

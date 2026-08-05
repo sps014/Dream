@@ -1850,10 +1850,87 @@ fn test_js_desugars_to_host_bridges() {
     let (wat, _count) = emit_hir_to_wat(&code);
     assert!(wat.contains("$js_global"), "js.global:\n{}", wat);
     assert!(wat.contains("$js_call"), "js.call:\n{}", wat);
-    assert!(wat.contains("$js_set"), "js.set:\n{}", wat);
+    assert!(
+        wat.contains("$js_set_slot"),
+        "js.set_slot (slot write):\n{}",
+        wat
+    );
+    assert!(
+        !wat.contains("$js_box_string"),
+        "set_slot should not pre-box string:\n{}",
+        wat
+    );
     assert!(
         wat.contains("$__jsp") && wat.contains("global.set $__sp"),
         "shadow-stack slots:\n{}",
+        wat
+    );
+}
+
+#[test]
+fn test_js_fuses_get_as_string_at_typed_boundary() {
+    let code = format!(
+        "{JS_STUB}
+        fun entry(): void {{
+            let config = js.global(\"appConfig\");
+            let title: string = config.title;
+        }}"
+    );
+    let (wat, _count) = emit_hir_to_wat(&code);
+    assert!(
+        wat.contains("(call $js_get_as_string)"),
+        "fused get+unbox:\n{}",
+        wat
+    );
+    assert!(
+        !wat.contains("(call $js_get)"),
+        "should not emit plain js.get:\n{}",
+        wat
+    );
+    // `js_to_str` in the stub still calls `as_string`; only the binding site must be fused.
+    let entry = wat.split("(func $js_to_").next().unwrap_or(&wat);
+    assert!(
+        !entry.contains("(call $js_as_string)"),
+        "entry should not emit separate as_string:\n{}",
+        entry
+    );
+}
+
+#[test]
+fn test_js_fuses_get_call_chain() {
+    let code = format!(
+        "{JS_STUB}
+        fun entry(): void {{
+            let config = js.global(\"appConfig\");
+            let shout = config.title.toUpperCase();
+        }}"
+    );
+    let (wat, _count) = emit_hir_to_wat(&code);
+    assert!(
+        wat.contains("(call $js_get_call)"),
+        "fused get+call:\n{}",
+        wat
+    );
+    assert!(
+        !wat.contains("(call $js_get)"),
+        "should not emit separate js.get:\n{}",
+        wat
+    );
+}
+
+#[test]
+fn test_js_fuses_get_call_as_string() {
+    let code = format!(
+        "{JS_STUB}
+        fun entry(): void {{
+            let config = js.global(\"appConfig\");
+            let shout: string = config.title.toUpperCase();
+        }}"
+    );
+    let (wat, _count) = emit_hir_to_wat(&code);
+    assert!(
+        wat.contains("(call $js_get_call_as_string)"),
+        "fused get+call+unbox:\n{}",
         wat
     );
 }

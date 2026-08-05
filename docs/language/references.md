@@ -155,6 +155,19 @@ A dynamic call's arguments never touch the heap. The compiler writes each into a
 api.log("row", 42, true, 3.5);   // string + int + bool + double, one crossing
 ```
 
+## Advanced: specialized lowering
+
+The **language surface stays fully dynamic** — any member name still type-checks, and missing members still fail at runtime on the JS host. The compiler specializes hot shapes so they approach a typed `extern` crossing count:
+
+| Dream shape | Specialized bridge |
+| --- | --- |
+| `let s: string = obj.title` | `get_as_string` (get + unbox in one crossing; no intermediate handle) |
+| `obj.child.method(args…)` when `child` is only used as the call receiver | `get_call` (get + call in one crossing) |
+| `let s: string = obj.title.toUpperCase()` | `get_call_as_string` |
+| `obj.flag = true` | `set_slot` (value in a shadow-stack slot; no pre-box bridge) |
+
+Non-fusible cases (a `js` intermediate stored in a local, dynamic index keys that need boxing, struct deep-copies) keep the generic `get` / `set` / `call` path.
+
 ## Where it runs
 
 `js` is backed by the `Dream` host module in `runtime/dream.js`, so it only works under a real JS runtime (browser or Node) — not the standalone `wasmtime` test harness, where interop imports are stubbed as traps.

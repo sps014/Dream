@@ -238,11 +238,15 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         }
         Rvalue::JsCall {
             target,
+            via,
             method,
             args,
             ..
         } => {
             check(target);
+            if let Some(v) = via {
+                check(v);
+            }
             if let Some(m) = method {
                 check(m);
             }

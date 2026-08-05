@@ -203,11 +203,15 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         }
         Rvalue::JsCall {
             target,
+            via,
             method,
             args,
             ..
         } => {
             strings_in_operand(target, out);
+            if let Some(v) = via {
+                strings_in_operand(v, out);
+            }
             if let Some(m) = method {
                 strings_in_operand(m, out);
             }
@@ -229,6 +233,22 @@ pub(super) fn strings_in_stmt(s: &Statement, out: &mut Vec<String>) {
             strings_in_operand(o, out)
         }
         Statement::Call { args, .. } => args.iter().for_each(|a| strings_in_operand(a, out)),
+        Statement::JsCall {
+            target,
+            via,
+            method,
+            args,
+            ..
+        } => {
+            strings_in_operand(target, out);
+            if let Some(v) = via {
+                strings_in_operand(v, out);
+            }
+            if let Some(m) = method {
+                strings_in_operand(m, out);
+            }
+            args.iter().for_each(|(a, _)| strings_in_operand(a, out));
+        }
         Statement::InterfaceCall { receiver, args, .. } => {
             strings_in_operand(receiver, out);
             args.iter().for_each(|a| strings_in_operand(a, out));
@@ -334,8 +354,20 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
                 in_operand(receiver, out);
                 args.iter().for_each(|a| in_operand(a, out));
             }
-            Rvalue::JsCall { target, args, .. } => {
+            Rvalue::JsCall {
+                target,
+                via,
+                method,
+                args,
+                ..
+            } => {
                 in_operand(target, out);
+                if let Some(v) = via {
+                    in_operand(v, out);
+                }
+                if let Some(m) = method {
+                    in_operand(m, out);
+                }
                 args.iter().for_each(|(a, _)| in_operand(a, out));
             }
             Rvalue::FuncRef(_) => {}
@@ -350,6 +382,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
         | Statement::Release(_)
         | Statement::Panic(_)
         | Statement::Call { .. }
+        | Statement::JsCall { .. }
         | Statement::InterfaceCall { .. }
         | Statement::IndirectCall { .. }
         | Statement::Print { .. }

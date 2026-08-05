@@ -154,6 +154,18 @@ pub enum Statement {
     Panic(Operand),
     /// A call evaluated for its effect only (return value discarded).
     Call { callee: Callee, args: Vec<Operand> },
+    /// A dynamic `js` call (shadow-stack slots) evaluated for effect only — used for void bridges
+    /// such as `set_slot` / `index_set_slot`. Same calling convention as [`Rvalue::JsCall`]; the
+    /// emitter drops a non-void result when present. Exists as a statement so a void-returning
+    /// `JsCall` at expression-statement position does not materialize into a temp `local.set`
+    /// with nothing on the stack (see [`Statement::Call`]/ [`Statement::IndirectCall`]).
+    JsCall {
+        callee: Callee,
+        target: Operand,
+        via: Option<Operand>,
+        method: Option<Operand>,
+        args: Vec<(Operand, TypeId)>,
+    },
     /// An interface method call evaluated for effect only (result dropped if any). See
     /// [`Rvalue::InterfaceCall`].
     InterfaceCall {
@@ -450,13 +462,15 @@ pub enum Rvalue {
     IsType(Operand, TypeId),
     /// A dynamic `js` call marshaled through the shadow stack: the emitter reserves `argc * 16` bytes
     /// below `$__sp`, writes one tagged 16-byte slot per argument (tag + aux + 8-byte payload),
-    /// invokes `callee` (the `jsCallV`/`jsInvokeV` bridge import) with `(target, [namePtr,] argsPtr,
-    /// argc)`, then restores `$__sp`. `method` is `Some(namePtr)` for `target[name](...)` and `None`
-    /// for calling `target(...)`; each argument carries its `TypeId` so emit can pick the slot tag.
-    /// One boundary crossing, no per-arg boxing, no heap allocation.
+    /// invokes `callee` with `(target, [viaPtr,] [namePtr,] argsPtr, argc)`, then restores `$__sp`.
+    /// `via` is `Some(propPtr)` for fused `target[prop][method](...)`; `method` is `Some(namePtr)`
+    /// for `target[name](...)` / property slot-set and `None` for calling `target(...)` / index
+    /// slot-set; each argument carries its `TypeId` so emit can pick the slot tag. One boundary
+    /// crossing, no per-arg boxing, no heap allocation.
     JsCall {
         callee: Callee,
         target: Operand,
+        via: Option<Operand>,
         method: Option<Operand>,
         args: Vec<(Operand, TypeId)>,
     },

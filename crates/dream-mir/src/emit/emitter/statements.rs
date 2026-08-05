@@ -69,6 +69,18 @@ impl Emitter<'_> {
                     self.line("     (drop)");
                 }
             }
+            Statement::JsCall {
+                callee,
+                target,
+                via,
+                method,
+                args,
+            } => {
+                self.emit_js_call(callee, target, via.as_ref(), method.as_ref(), args);
+                if !matches!(self.interner.kind(callee.ret), TyKind::Void) {
+                    self.line("     (drop)");
+                }
+            }
             Statement::InterfaceCall {
                 receiver,
                 iface_id,

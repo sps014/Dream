@@ -100,13 +100,14 @@ impl Emitter<'_> {
     /// Emits a dynamic `js` call marshaling its arguments through the shadow stack in one host
     /// crossing (no per-argument boxing, no heap array): save `$__sp`, carve `argc * 16` bytes,
     /// write one 16-byte tagged slot per argument (`[tag][aux][payload]`), call the bridge with
-    /// `(target, [namePtr,] argsPtr, argc)`, and restore `$__sp` (the `i32` result handle stays on
+    /// `(target, [viaPtr,] [namePtr,] argsPtr, argc)`, and restore `$__sp` (the result stays on
     /// the WASM stack). The buffer lives below the value-struct frame and is released immediately, so
     /// it is allocation-free and re-entrant (a nested `js` call saves/restores its own `$__sp`).
     pub(super) fn emit_js_call(
         &mut self,
         callee: &crate::Callee,
         target: &Operand,
+        via: Option<&Operand>,
         method: Option<&Operand>,
         args: &[(Operand, TypeId)],
     ) {
@@ -143,8 +144,11 @@ impl Emitter<'_> {
             }
             self.line(&format!("     ({})", store));
         }
-        // Bridge args: target, [namePtr,] argsPtr (= current $__sp), argc.
+        // Bridge args: target, [viaPtr,] [namePtr,] argsPtr (= current $__sp), argc.
         self.emit_operand(target);
+        if let Some(prop) = via {
+            self.emit_operand(prop);
+        }
         if let Some(name) = method {
             self.emit_operand(name);
         }
@@ -152,7 +156,7 @@ impl Emitter<'_> {
         self.line(&format!("     (i32.const {})", argc));
         let sym = self.callee_symbol(callee);
         self.line(&format!("     (call ${sym})"));
-        // Release the buffer; the call's `i32` result remains beneath on the WASM stack.
+        // Release the buffer; the call's result remains beneath on the WASM stack.
         self.line("     (local.get $__jsp) (global.set $__sp)");
     }
 

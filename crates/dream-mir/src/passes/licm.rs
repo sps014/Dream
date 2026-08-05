@@ -272,6 +272,22 @@ pub(super) fn stmt_reads(stmt: &Statement, f: &mut impl FnMut(Local)) {
         }
         Statement::Retain(o) | Statement::Release(o) | Statement::Panic(o) => operand_reads(o, f),
         Statement::Call { args, .. } => args.iter().for_each(|a| operand_reads(a, f)),
+        Statement::JsCall {
+            target,
+            via,
+            method,
+            args,
+            ..
+        } => {
+            operand_reads(target, f);
+            if let Some(v) = via {
+                operand_reads(v, f);
+            }
+            if let Some(m) = method {
+                operand_reads(m, f);
+            }
+            args.iter().for_each(|(a, _)| operand_reads(a, f));
+        }
         Statement::InterfaceCall { receiver, args, .. } => {
             operand_reads(receiver, f);
             args.iter().for_each(|a| operand_reads(a, f));
@@ -347,11 +363,15 @@ fn rvalue_reads(rv: &Rvalue, f: &mut impl FnMut(Local)) {
         }
         Rvalue::JsCall {
             target,
+            via,
             method,
             args,
             ..
         } => {
             operand_reads(target, f);
+            if let Some(v) = via {
+                operand_reads(v, f);
+            }
             if let Some(m) = method {
                 operand_reads(m, f);
             }

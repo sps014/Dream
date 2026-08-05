@@ -153,11 +153,15 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         }
         Rvalue::JsCall {
             target,
+            via,
             method,
             args,
             ..
         } => {
             remap_operand(target, base);
+            if let Some(v) = via {
+                remap_operand(v, base);
+            }
             if let Some(m) = method {
                 remap_operand(m, base);
             }
@@ -180,6 +184,24 @@ fn remap_stmt(s: &mut Statement, base: u32) {
         }
         Statement::Call { args, .. } => {
             for a in args {
+                remap_operand(a, base);
+            }
+        }
+        Statement::JsCall {
+            target,
+            via,
+            method,
+            args,
+            ..
+        } => {
+            remap_operand(target, base);
+            if let Some(v) = via {
+                remap_operand(v, base);
+            }
+            if let Some(m) = method {
+                remap_operand(m, base);
+            }
+            for (a, _) in args {
                 remap_operand(a, base);
             }
         }

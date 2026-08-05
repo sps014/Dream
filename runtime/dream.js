@@ -659,6 +659,11 @@ function defaultDreamModule(getInstance) {
     // --- dynamic operations (deferred binding happens right here in JS) ----
     jsGetV: (target, name) => (target == null ? undefined : target[name]),
     jsSetV: (target, name, value) => { if (target != null) target[name] = value; },
+    // Property write with one shadow-stack value slot (no pre-box bridge for primitives/string).
+    jsSetSlot: (target, name, argsPtr, argc) => {
+      const [value] = decodeJsSlots(getInstance(), argsPtr, argc);
+      if (target != null) target[name] = value;
+    },
     // Variadic call/invoke. Arguments arrive as a shadow-stack buffer of tagged 16-byte slots
     // (`argsPtr`/`argc`); `decodeJsSlots` reads them straight out of linear memory - one boundary
     // crossing, no per-argument handles.
@@ -666,8 +671,98 @@ function defaultDreamModule(getInstance) {
       target[name](...decodeJsSlots(getInstance(), argsPtr, argc)),
     jsInvokeV: (target, argsPtr, argc) =>
       target(...decodeJsSlots(getInstance(), argsPtr, argc)),
+    // Fused `target[prop][method](...args)` — one crossing instead of get + call.
+    jsGetCallV: (target, prop, method, argsPtr, argc) => {
+      const recv = target == null ? undefined : target[prop];
+      return recv[method](...decodeJsSlots(getInstance(), argsPtr, argc));
+    },
     jsIndexGetV: (target, key) => (target == null ? undefined : target[key]),
     jsIndexSetV: (target, key, value) => { if (target != null) target[key] = value; },
+    // Index write with key+value in two shadow-stack slots.
+    jsIndexSetSlot: (target, argsPtr, argc) => {
+      const [key, value] = decodeJsSlots(getInstance(), argsPtr, argc);
+      if (target != null) target[key] = value;
+    },
+    // Typed-boundary fusion: get that returns a Dream primitive/string (no intermediate handle).
+    jsGetAsInt: (target, name) => {
+      const v = target == null ? undefined : target[name];
+      return v == null ? 0 : (Number(v) | 0);
+    },
+    jsGetAsLong: (target, name) => {
+      const v = target == null ? undefined : target[name];
+      return v == null ? 0 : Math.trunc(Number(v));
+    },
+    jsGetAsDouble: (target, name) => {
+      const v = target == null ? undefined : target[name];
+      return v == null ? 0 : Number(v);
+    },
+    jsGetAsBool: (target, name) => !!(target == null ? undefined : target[name]),
+    jsGetAsString: (target, name) => {
+      const v = target == null ? undefined : target[name];
+      return v == null ? "" : String(v);
+    },
+    // Typed-boundary fusion: call / invoke returning a Dream primitive/string.
+    jsCallAsInt: (target, name, argsPtr, argc) => {
+      const v = target[name](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : (Number(v) | 0);
+    },
+    jsCallAsLong: (target, name, argsPtr, argc) => {
+      const v = target[name](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : Math.trunc(Number(v));
+    },
+    jsCallAsDouble: (target, name, argsPtr, argc) => {
+      const v = target[name](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : Number(v);
+    },
+    jsCallAsBool: (target, name, argsPtr, argc) =>
+      !!target[name](...decodeJsSlots(getInstance(), argsPtr, argc)),
+    jsCallAsString: (target, name, argsPtr, argc) => {
+      const v = target[name](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? "" : String(v);
+    },
+    jsInvokeAsInt: (target, argsPtr, argc) => {
+      const v = target(...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : (Number(v) | 0);
+    },
+    jsInvokeAsLong: (target, argsPtr, argc) => {
+      const v = target(...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : Math.trunc(Number(v));
+    },
+    jsInvokeAsDouble: (target, argsPtr, argc) => {
+      const v = target(...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : Number(v);
+    },
+    jsInvokeAsBool: (target, argsPtr, argc) =>
+      !!target(...decodeJsSlots(getInstance(), argsPtr, argc)),
+    jsInvokeAsString: (target, argsPtr, argc) => {
+      const v = target(...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? "" : String(v);
+    },
+    // Fused get + call + typed unbox.
+    jsGetCallAsInt: (target, prop, method, argsPtr, argc) => {
+      const recv = target == null ? undefined : target[prop];
+      const v = recv[method](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : (Number(v) | 0);
+    },
+    jsGetCallAsLong: (target, prop, method, argsPtr, argc) => {
+      const recv = target == null ? undefined : target[prop];
+      const v = recv[method](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : Math.trunc(Number(v));
+    },
+    jsGetCallAsDouble: (target, prop, method, argsPtr, argc) => {
+      const recv = target == null ? undefined : target[prop];
+      const v = recv[method](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? 0 : Number(v);
+    },
+    jsGetCallAsBool: (target, prop, method, argsPtr, argc) => {
+      const recv = target == null ? undefined : target[prop];
+      return !!recv[method](...decodeJsSlots(getInstance(), argsPtr, argc));
+    },
+    jsGetCallAsString: (target, prop, method, argsPtr, argc) => {
+      const recv = target == null ? undefined : target[prop];
+      const v = recv[method](...decodeJsSlots(getInstance(), argsPtr, argc));
+      return v == null ? "" : String(v);
+    },
     // Awaiting a JS Promise: `target` (already deref'd) is the thenable. Returning it lets the async
     // import wrapper (`wrapAsyncImport`) settle it and register the resolved value as a `js` handle.
     jsAwait: (target) => target,

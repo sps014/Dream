@@ -69,6 +69,25 @@ pub(super) fn subst_stmt_reads(stmt: &mut Statement, known: &HashMap<Local, Oper
         Statement::Call { args, .. } => args
             .iter_mut()
             .fold(false, |c, a| c | subst_operand(a, known)),
+        Statement::JsCall {
+            target,
+            via,
+            method,
+            args,
+            ..
+        } => {
+            let mut c = subst_operand(target, known);
+            if let Some(v) = via {
+                c |= subst_operand(v, known);
+            }
+            if let Some(m) = method {
+                c |= subst_operand(m, known);
+            }
+            for (a, _) in args {
+                c |= subst_operand(a, known);
+            }
+            c
+        }
         Statement::InterfaceCall { receiver, args, .. } => {
             let mut c = subst_operand(receiver, known);
             for a in args {
@@ -145,11 +164,15 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         }
         Rvalue::JsCall {
             target,
+            via,
             method,
             args,
             ..
         } => {
             let mut c = subst_operand(target, known);
+            if let Some(v) = via {
+                c |= subst_operand(v, known);
+            }
             if let Some(m) = method {
                 c |= subst_operand(m, known);
             }

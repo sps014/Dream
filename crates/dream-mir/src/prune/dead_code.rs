@@ -81,6 +81,9 @@ fn prune_functions(mir: &mut Mir) {
                         Statement::Call { callee, .. } => {
                             callees.push((callee.def, callee.args.clone()))
                         }
+                        Statement::JsCall { callee, .. } => {
+                            callees.push((callee.def, callee.args.clone()))
+                        }
                         Statement::InterfaceCall {
                             iface_id,
                             method_slot,
@@ -256,6 +259,23 @@ fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {
         Statement::Call { args, .. } => args
             .iter()
             .for_each(|a| collect_global_reads_operand(a, out)),
+        Statement::JsCall {
+            target,
+            via,
+            method,
+            args,
+            ..
+        } => {
+            collect_global_reads_operand(target, out);
+            if let Some(v) = via {
+                collect_global_reads_operand(v, out);
+            }
+            if let Some(m) = method {
+                collect_global_reads_operand(m, out);
+            }
+            args.iter()
+                .for_each(|(a, _)| collect_global_reads_operand(a, out));
+        }
         Statement::InterfaceCall { receiver, args, .. } => {
             collect_global_reads_operand(receiver, out);
             args.iter()
@@ -327,11 +347,15 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         }
         Rvalue::JsCall {
             target,
+            via,
             method,
             args,
             ..
         } => {
             collect_global_reads_operand(target, out);
+            if let Some(v) = via {
+                collect_global_reads_operand(v, out);
+            }
             if let Some(m) = method {
                 collect_global_reads_operand(m, out);
             }
