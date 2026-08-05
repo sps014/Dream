@@ -71,10 +71,12 @@ impl<'a> Analyzer<'a> {
                 // A generic function used as a value (`let cmp: fun(T, T): int = natural_order;`):
                 // infer its type arguments from the expected function type and instantiate it.
                 if self.generic_functions.contains_key(&id.text) {
-                    if let Some(func_ty) = self.instantiate_generic_function_value(id, diagnostics)
-                    {
-                        return Ok(func_ty);
-                    }
+                    return match self.instantiate_generic_function_value(id, diagnostics) {
+                        Some(func_ty) => Ok(func_ty),
+                        // Diagnostic already reported (e.g. missing `fun(...)` context); poison
+                        // rather than also emitting "variable X does not exist".
+                        None => Ok(Type::Unknown),
+                    };
                 }
                 // Unresolved name: report and short-circuit. Statement-level callers recover
                 // (poisoning the binding with `Type::Unknown`) so sibling errors still surface.

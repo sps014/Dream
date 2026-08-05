@@ -1,0 +1,1 @@
+generic function 'natural_order' can only be used as a value in a context with a known function type (e.g. `let f: fun(int, int): int = natural_order;`)

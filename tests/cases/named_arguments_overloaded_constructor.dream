@@ -1,0 +1,20 @@
+// Named arguments are not supported for overloaded constructors.
+
+class Point {
+    public x: int;
+    public y: int;
+
+    constructor(x: int) {
+        this.x = x;
+        this.y = 0;
+    }
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+fun main(): void {
+    let p = Point(x: 3, y: 4);
+}

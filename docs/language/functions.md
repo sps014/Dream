@@ -318,6 +318,8 @@ println(g(5));            // 10
 println(apply(twice, 8)); // 16
 ```
 
+A [generic function used as a first-class value](generics.md#generic-functions-as-first-class-values) needs a `fun(...)`-typed context so its type arguments can be inferred — e.g. `let cmp: fun(int, int): int = natural_order;` — a bare `let f = natural_order;` is an error.
+
 #### Arrow-lambda literals
 
 An anonymous function can be written inline with arrow syntax, `(params) => expr` or `(params) => { statements }`. A parameter's `: Type` annotation is optional: when omitted, it (and the lambda's return type, always) is inferred from the `fun(...)`-typed context the lambda is used in (a `let` annotation, or a parameter/argument whose declared type is `fun(...)`):
@@ -339,7 +341,7 @@ nums.push(2);
 nums.sort_by((a, b) => a - b);   // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
 ```
 
-A lambda written with no surrounding `fun(...)` context (e.g. passed to `println` directly, or with an untyped parameter and no context at all) cannot have its type inferred and is rejected with a diagnostic asking for one.
+A lambda written with no surrounding `fun(...)` context (e.g. passed to `println` directly, or with an untyped parameter and no context at all) cannot have its type inferred and is rejected with a diagnostic asking for one. Lambdas cannot declare their own type parameters in v1 — only the enclosing context can be generic (the lambda is monomorphized with that context's bindings).
 
 #### Async lambdas
 

@@ -1,0 +1,5 @@
+// A bare lambda with no surrounding `fun(...)`-typed context cannot have its type inferred.
+
+fun main(): void {
+    let f = (x) => x * 2;
+}

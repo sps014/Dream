@@ -1,0 +1,13 @@
+// Variadic parameters are not supported on overloaded functions.
+
+fun h(x: int, ...rest: int[]): int {
+    return x;
+}
+
+fun h(x: string, ...rest: string[]): int {
+    return 1;
+}
+
+fun main(): void {
+    System.println(h(1, 2, 3));
+}

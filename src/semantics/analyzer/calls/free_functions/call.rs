@@ -66,7 +66,12 @@ impl<'a> Analyzer<'a> {
         let params: &[ExpressionNode<'a>] =
             if has_named_arg || { callee_signature(self).is_some_and(|(_, _, variadic)| variadic) }
             {
-                if self.function_table.is_overloaded(&function_name) {
+                // Constructors live under `Point_constructor`, not the bare type name — check both.
+                let ctor_key = constructor_fn(&function_name);
+                let is_overloaded = self.function_table.is_overloaded(&function_name)
+                    || (self.struct_table.get_struct(&function_name).is_some()
+                        && self.function_table.is_overloaded(&ctor_key));
+                if is_overloaded {
                     return Err(report(
                         diagnostics,
                         format!(

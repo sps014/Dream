@@ -1,1 +1,1 @@
-named arguments are not supported for overloaded function 'h'
+named/variadic arguments are not supported for overloaded function 'h'

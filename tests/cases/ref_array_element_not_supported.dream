@@ -1,0 +1,11 @@
+// v1 limitation: only local variables/parameters are valid `ref` targets; an array element is not
+// yet an addressable place (see `Analyzer::analyze_ref_argument`).
+
+fun increment(ref x: int): void {
+    x = x + 1;
+}
+
+fun main(): void {
+    let arr: int[] = [1, 2, 3];
+    increment(ref arr[0]);
+}

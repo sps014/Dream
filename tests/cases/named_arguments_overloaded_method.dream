@@ -1,0 +1,16 @@
+// Named arguments are not supported for overloaded instance methods.
+
+class Calc {
+    public fun add(x: int): int {
+        return x;
+    }
+
+    public fun add(x: int, y: int): int {
+        return x + y;
+    }
+}
+
+fun main(): void {
+    let c = Calc();
+    System.println(c.add(x: 5));
+}

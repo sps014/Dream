@@ -72,6 +72,32 @@ impl<'a> Analyzer<'a> {
                 );
             }
         }
+        // Variadic parameters need a single known signature to pack trailing args; they cannot
+        // participate in an overload set (docs/language/functions.md).
+        for function in node.functions.iter() {
+            if function.generic_parameters.is_some() {
+                continue;
+            }
+            if !function.parameters.last().is_some_and(|p| p.is_variadic) {
+                continue;
+            }
+            diagnostics.file_path = file_path_string(&function.file_path);
+            let module = self.module_of(function.file_path.as_ref());
+            let ns = self
+                .function_table
+                .resolve_in_module(module.as_ref(), &function.name.text)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| function.name.text.clone());
+            if self.function_table.overload_set_has_variadic(&ns) {
+                diagnostics.report_error(
+                    format!(
+                        "variadic parameters are not supported for overloaded function '{}'",
+                        function.name.text
+                    ),
+                    Some(function.name.position),
+                );
+            }
+        }
     }
 
     /// Ensures a `public` function does not leak a private (non-`public`) class through its

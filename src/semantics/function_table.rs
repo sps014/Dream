@@ -354,6 +354,20 @@ impl FunctionTable {
             .unwrap_or(false)
     }
 
+    /// Whether `base` is an overloaded set that includes at least one variadic declaration.
+    /// Variadic parameters are not supported on overloaded functions/methods (named-argument and
+    /// packing resolution need a single known signature up front).
+    pub fn overload_set_has_variadic(&self, base: &str) -> bool {
+        let Some(keys) = self.overloads.get(base) else {
+            return false;
+        };
+        if keys.len() <= 1 {
+            return false;
+        }
+        keys.iter()
+            .any(|k| self.functions.get(k).is_some_and(|info| info.is_variadic))
+    }
+
     /// The emitted name of the declaration of `base` whose parameter list is `parameter_types`:
     /// the bare base when `base` is not overloaded, otherwise the signature-mangled key.
     pub fn resolve_emitted_name(

@@ -66,10 +66,11 @@ pub enum ExpressionNode<'a> {
     /// error (reported, not a panic), never a valid standalone expression.
     NamedArg(SyntaxToken, &'a ExpressionNode<'a>),
     /// `ref place` — a pass-by-reference call argument (`f(ref x)`), produced only inside a call's
-    /// argument list by the shared call-argument parser. The inner expression must be an
-    /// addressable place (identifier, member access, or index access); the analyzer validates this
-    /// and rejects anything else, and rejects a `RefArgument` supplied to a non-`ref` parameter
-    /// slot (or a plain argument supplied to a `ref` slot). Never a valid standalone expression.
+    /// argument list by the shared call-argument parser. v1 only accepts a local variable or
+    /// parameter identifier as the place; member access and index access (`ref obj.field`,
+    /// `ref arr[i]`) are rejected by the analyzer. A `RefArgument` supplied to a non-`ref`
+    /// parameter slot (or a plain argument supplied to a `ref` slot) is also rejected. Never a
+    /// valid standalone expression.
     RefArgument(&'a ExpressionNode<'a>),
 }
 

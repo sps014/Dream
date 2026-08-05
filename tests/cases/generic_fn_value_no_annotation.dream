@@ -1,0 +1,10 @@
+// A generic function used as a first-class value needs a `fun(...)`-typed context so its type
+// arguments can be inferred. A bare `let f = natural_order;` is an error.
+
+fun natural_order<T : Comparable<T>>(a: T, b: T): int {
+    return a.compare(b);
+}
+
+fun main(): void {
+    let f = natural_order;
+}

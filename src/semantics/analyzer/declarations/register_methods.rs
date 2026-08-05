@@ -111,14 +111,38 @@ impl<'a> Analyzer<'a> {
         }
         // Register a distinct `DefId` for each overloaded method under its emitted (signature-mangled)
         // name, so overloads don't collide on the single base-mangled def (mirrors free functions).
-        for (mangled_name, param_types) in registered {
+        for (mangled_name, param_types) in &registered {
             let emitted = self.function_table.resolve_emitted_name(
-                &mangled_name,
-                &param_types,
+                mangled_name,
+                param_types,
                 &mut self.type_ctx,
             );
-            if emitted != mangled_name {
+            if emitted != *mangled_name {
                 self.type_ctx.register(DefKind::Function, &emitted, vec![]);
+            }
+        }
+        // Variadic parameters need a single known signature to pack trailing args; they cannot
+        // participate in an overload set (docs/language/functions.md). Run only on the
+        // non-monomorphized declaration so generic instances don't repeat the same diagnostic.
+        if bindings.is_empty() {
+            for method in methods {
+                if method.generic_parameters.is_some() {
+                    continue;
+                }
+                if !method.parameters.last().is_some_and(|p| p.is_variadic) {
+                    continue;
+                }
+                let member_name = accessor_member_name(method);
+                let mangled_name = method_fn(target_type_str, &member_name);
+                if self.function_table.overload_set_has_variadic(&mangled_name) {
+                    diagnostics.report_error(
+                        format!(
+                            "variadic parameters are not supported for overloaded method '{}'",
+                            method.name.text
+                        ),
+                        Some(method.name.position),
+                    );
+                }
             }
         }
     }

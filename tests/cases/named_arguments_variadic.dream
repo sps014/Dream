@@ -1,0 +1,13 @@
+// Named arguments cannot be combined with a variadic call — trailing args are always positional.
+
+fun sum(...nums: int[]): int {
+    let total = 0;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun main(): void {
+    System.println(sum(nums: 1, 2));
+}
