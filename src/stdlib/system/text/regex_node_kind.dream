@@ -1,0 +1,17 @@
+module system.text;
+
+// The kind of a parsed regex node.
+public enum RegexNodeKind {
+    Alt,      // left | right
+    Cat,      // left then right
+    Lit,      // a single literal character (`ch`)
+    Class,    // a character class: `ranges` (lo, hi pairs) plus `negate`
+    AnyChar,  // `.` — ranges are resolved at compile time from the dotall flag
+    Paren,    // a group; `cap` >= 0 is a capturing group's 1-based index (0 = the whole-match
+              // wrapper the parser adds), `cap` == -1 is a non-capturing `(?:...)` group
+    Star,     // left*
+    Plus,     // left+
+    Quest,    // left?
+    Assert,   // a zero-width assertion; `empty_kind` selects which one
+    Nothing,  // matches the empty string and consumes nothing (compiles to zero instructions)
+}

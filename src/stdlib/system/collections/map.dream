@@ -94,6 +94,7 @@ public class Map<K, V> {
     }
 
     // Inserts or updates the value for a key.
+    @set
     public fun set(key: K, value: V): void {
         if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
             this.rehash();
@@ -167,6 +168,7 @@ public class Map<K, V> {
     }
 
     // Gets the value for a key, or None.
+    @get
     public fun get(key: K): Option<V> {
         let i = this.find(key);
         if (i >= 0) {
@@ -242,6 +244,7 @@ public class Map<K, V> {
     }
 
     // Gets an iterator for the map.
+    @iterator
     public fun iterator(): MapIterator<K, V> {
         return MapIterator<K, V>(this.keys(), this.values());
     }

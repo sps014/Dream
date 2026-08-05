@@ -1,0 +1,22 @@
+module system.core;
+
+public class Lock {
+    @intrinsic("shared_lock_acquire")
+    static extern fun host_acquire(target: Lock): void;
+
+    @intrinsic("shared_lock_release")
+    static extern fun host_release(target: Lock): void;
+
+    // Acquires the lock, blocking (busy-waiting) until available. Reentrant: the same thread may
+    // call `acquire` again before releasing (matching `lock (obj) { ... }`'s own semantics), and
+    // must call `release` the same number of times to fully release it.
+    public fun acquire(): void {
+        Lock.host_acquire(this);
+    }
+
+    // Releases one level of a lock acquired via `acquire()`. Undefined if called by a thread that
+    // does not currently hold the lock.
+    public fun release(): void {
+        Lock.host_release(this);
+    }
+}

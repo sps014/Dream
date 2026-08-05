@@ -10,6 +10,7 @@ public class ListIterator<T> {
         this.idx = 0;
     }
 
+    @next
     public fun next(): Option<T> {
         if (this.idx >= this.list.size()) {
             return Option.None;

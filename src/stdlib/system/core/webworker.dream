@@ -44,36 +44,36 @@ public class WebWorker<TIn, TOut> {
     // (0 for a non-capturing body); returns the host handle id. `env` is fixed for the worker's
     // whole lifetime - every message it processes reuses the same body/environment.
     @js("Dream", "workerSpawn")
-    static extern fun __spawn(funcidx: int, env: int): int;
+    static extern fun spawn_host(funcidx: int, env: int): int;
 
     // Unboxes a `fun(string): string` value (the internal wire-marshaling wrapper built below, not
     // the user's own `fun(TIn): TOut)` body) to its raw function-table index. The funcidx is
     // portable across the worker's fresh module instance (every worker loads the same module).
     @intrinsic("funcbox_funcidx")
-    static extern fun __funcidx(body: fun(string): string): int;
+    static extern fun funcidx(body: fun(string): string): int;
 
-    // Future-body wrapper unbox (same runtime intrinsic as `__funcidx`).
+    // Future-body wrapper unbox (same runtime intrinsic as `funcidx`).
     @intrinsic("funcbox_funcidx")
-    static extern fun __funcidx_async(body: fun(string): Future<string>): int;
+    static extern fun funcidx_async(body: fun(string): Future<string>): int;
 
     @intrinsic("funcbox_env")
-    static extern fun __env(body: fun(string): string): int;
+    static extern fun env(body: fun(string): string): int;
 
     @intrinsic("funcbox_env")
-    static extern fun __env_async(body: fun(string): Future<string>): int;
+    static extern fun env_async(body: fun(string): Future<string>): int;
 
     // Enqueue `msg` to the worker's inbox (does not wait for a reply).
     @js("Dream", "workerPost")
-    static extern fun __post(id: int, msg: string): void;
+    static extern fun post_host(id: int, msg: string): void;
 
     // Await the next reply from the worker. Native blocks the host call until the reply is ready
     // and pre-resolves the future; the browser resolves it from the worker's `onmessage`.
     @js("Dream", "workerRecv")
-    static extern async fun __recv(id: int): string;
+    static extern async fun recv_host(id: int): string;
 
     // Terminate the worker's thread/instance. Idempotent.
     @js("Dream", "workerTerminate")
-    static extern fun __terminate(id: int): void;
+    static extern fun terminate_host(id: int): void;
 
     // Spawn a worker running `body` (top-level function or capturing lambda; see the class doc
     // comment for the capture rules). `body` itself never crosses the wire - only the `TIn`/`TOut`
@@ -82,7 +82,7 @@ public class WebWorker<TIn, TOut> {
     // encode its `TOut` result back to the wire string.
     constructor(body: fun(TIn): TOut) {
         let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
-        this.id = WebWorker<TIn, TOut>.__spawn(WebWorker<TIn, TOut>.__funcidx(wrapped), WebWorker<TIn, TOut>.__env(wrapped));
+        this.id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
     }
 
     // Async-body overload: `body` returns `Future<TOut>` (a named `async fun`, or an
@@ -94,34 +94,34 @@ public class WebWorker<TIn, TOut> {
         let wrapped: fun(string): Future<string> = async (raw: string) => {
             return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
         };
-        this.id = WebWorker<TIn, TOut>.__spawn(WebWorker<TIn, TOut>.__funcidx_async(wrapped), WebWorker<TIn, TOut>.__env_async(wrapped));
+        this.id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx_async(wrapped), WebWorker<TIn, TOut>.env_async(wrapped));
     }
 
     // Post a message to the worker without waiting for its reply. Pair with `receive()` to collect
     // replies later - posting to several workers first lets them run in parallel.
     public fun post(msg: TIn): void {
-        WebWorker<TIn, TOut>.__post(this.id, Bytes.toWire<TIn>(msg));
+        WebWorker<TIn, TOut>.post_host(this.id, Bytes.toWire<TIn>(msg));
     }
 
     // Await the next reply the worker produces (FIFO).
     public async fun receive(): TOut {
-        return Bytes.fromWire<TOut>(await WebWorker<TIn, TOut>.__recv(this.id));
+        return Bytes.fromWire<TOut>(await WebWorker<TIn, TOut>.recv_host(this.id));
     }
 
     // Post `msg` and await the matching reply in one call (request/response).
     public async fun send(msg: TIn): TOut {
-        WebWorker<TIn, TOut>.__post(this.id, Bytes.toWire<TIn>(msg));
-        return Bytes.fromWire<TOut>(await WebWorker<TIn, TOut>.__recv(this.id));
+        WebWorker<TIn, TOut>.post_host(this.id, Bytes.toWire<TIn>(msg));
+        return Bytes.fromWire<TOut>(await WebWorker<TIn, TOut>.recv_host(this.id));
     }
 
     // Stop the worker and release its thread/instance.
     public fun terminate(): void {
-        WebWorker<TIn, TOut>.__terminate(this.id);
+        WebWorker<TIn, TOut>.terminate_host(this.id);
     }
 
     // Terminate the worker when this handle is destroyed.
     del() {
-        WebWorker<TIn, TOut>.__terminate(this.id);
+        WebWorker<TIn, TOut>.terminate_host(this.id);
     }
 
     // Runs `body` once per `items` element, one worker per item, computed in parallel; results
@@ -165,84 +165,4 @@ public class WebWorker<TIn, TOut> {
         }
         return results;
     }
-}
-
-// A fixed-size set of already-running worker threads that `dispatch` hands tasks to on demand,
-// so short-lived jobs don't pay a thread spawn/teardown cost each time (unlike `WebWorker`, whose
-// body and thread are both one-shot). Pick a pool when you're issuing many small tasks over time
-// (e.g. a request-handling loop); pick `WebWorker`/`WebWorker.map` for a single batch of parallel
-// work you want to spawn, await, and tear down together.
-//
-//   async fun main(): void {
-//       let pool = WebWorkerPool(4);
-//       let a = pool.dispatch("hi", (msg) => msg + "!");
-//       let b = pool.dispatch("hi", (msg) => msg + "?");
-//       System.println(await a); // "hi!"
-//       System.println(await b); // "hi?"
-//       pool.shutdown();
-//   }
-//
-// `dispatch` is generic in `TIn`/`TOut` (same wire constraints as `WebWorker`): messages are
-// encoded with `Bytes.toWire`/`fromWire` under the hood. For an async body
-// (`fun(TIn): Future<TOut>`), use `dispatch_async` — two generic overloads that differ only in
-// the body fun type do not monomorphize cleanly under one name.
-public class WebWorkerPool {
-    ids: int[];
-    next: int;
-
-    // Start `size` worker threads up front, idle until dispatched to.
-    constructor(size: int) {
-        this.ids = Buffer.alloc<int>(size);
-        for (let i = 0; i < size; i = i + 1) {
-            this.ids[i] = WebWorkerPool.__spawn();
-        }
-        this.next = 0;
-    }
-
-    // Run `body(msg)` on the next pool member (round-robin) and await its result. Safe to call
-    // concurrently without awaiting each call before issuing the next - the underlying dispatch
-    // is a message send, so overlapping calls to distinct pool members run in parallel exactly
-    // like separate `WebWorker`s do. `body` follows the same capture rules as `WebWorker`'s
-    // constructor: a non-capturing top-level function, or a lambda capturing only `@shared
-    // class`/unmanaged state.
-    public async fun dispatch<TIn, TOut>(msg: TIn, body: fun(TIn): TOut): TOut {
-        let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
-        let id = this.ids[this.next];
-        this.next = (this.next + 1) % this.ids.size();
-        let funcidx = WebWorker<string, string>.__funcidx(wrapped);
-        let env = WebWorker<string, string>.__env(wrapped);
-        return Bytes.fromWire<TOut>(await WebWorkerPool.__dispatch(id, funcidx, env, Bytes.toWire<TIn>(msg)));
-    }
-
-    // Async-body dispatch: `body` returns `Future<TOut>` (named `async fun` or `async (msg) => …`).
-    // The trampoline drives the Future to completion on the pool member.
-    public async fun dispatch_async<TIn, TOut>(msg: TIn, body: fun(TIn): Future<TOut>): TOut {
-        let wrapped: fun(string): Future<string> = async (raw: string) => {
-            return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
-        };
-        let id = this.ids[this.next];
-        this.next = (this.next + 1) % this.ids.size();
-        let funcidx = WebWorker<string, string>.__funcidx_async(wrapped);
-        let env = WebWorker<string, string>.__env_async(wrapped);
-        return Bytes.fromWire<TOut>(await WebWorkerPool.__dispatch(id, funcidx, env, Bytes.toWire<TIn>(msg)));
-    }
-
-    // Stop every thread in the pool. Idempotent.
-    public fun shutdown(): void {
-        for (let i = 0; i < this.ids.size(); i = i + 1) {
-            WebWorker<string, string>.__terminate(this.ids[i]);
-        }
-    }
-
-    del() {
-        this.shutdown();
-    }
-
-    // Start a body-less worker thread that stays idle until `__dispatch` gives it work.
-    @js("Dream", "workerPoolSpawn")
-    static extern fun __spawn(): int;
-
-    // Run the body at `(funcidx, env)` on `msg` on pool member `id`'s thread and await its reply.
-    @js("Dream", "workerPoolDispatch")
-    static extern async fun __dispatch(id: int, funcidx: int, env: int, msg: string): string;
 }

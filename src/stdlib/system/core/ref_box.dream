@@ -1,0 +1,15 @@
+module system.core;
+
+// The address-taken box a `ref` parameter/argument (not also closure-captured — see `CaptureCell<T>`
+// above for that case) is backed by. Unlike `CaptureCell<T>`, this is a `struct` (value type): a `ref`
+// parameter's slot is `Borrow`-classified (see `mir::emit::valuetype::ValueFrame`) so the caller's
+// box is aliased in place with no heap allocation, ARC bookkeeping, or copy — the caller's shadow-
+// frame slot for it is simply passed by address. A plain local/parameter that is only ever
+// `ref`-passed (never captured) gets its own private shadow-frame slot for this box, so its address
+// is stable for the duration of the call.
+internal struct RefBox<T> {
+    public value: T;
+    constructor(v: T) {
+        this.value = v;
+    }
+}

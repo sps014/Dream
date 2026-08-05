@@ -1,5 +1,5 @@
 // Milestone B: a lambda may capture two or more variables (env is an `object[]` array of their
-// shared `__Cell<T>`s), and capture is transitive/multi-level — a doubly-nested lambda may reach
+// shared `CaptureCell<T>`s), and capture is transitive/multi-level — a doubly-nested lambda may reach
 // past its immediate parent to a grandparent's local, forwarded one hop at a time.
 
 import system;

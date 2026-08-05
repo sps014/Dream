@@ -59,6 +59,12 @@ impl<'a> Analyzer<'a> {
                 &mangled_name,
                 diagnostics,
             );
+            self.validate_and_register_protocol_hook(
+                target_type_str,
+                method,
+                &mangled_name,
+                diagnostics,
+            );
             self.type_ctx.register(
                 DefKind::Function,
                 &mangled_name,

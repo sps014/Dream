@@ -5,7 +5,7 @@ module system.collections;
 // Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
 // so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
 // `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
-fun __compare_ascending<T : Comparable<T>>(a: T, b: T): int {
+fun compare_ascending<T : Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }
 
@@ -76,6 +76,7 @@ public class List<T> : Collection<T> {
     }
 
     // Returns the element at `index`, or `None` if `index` is out of range.
+    @get
     public fun get(index: int): Option<T> {
         if ((index < 0) || (index >= this.count)) {
             return Option.None;
@@ -85,6 +86,7 @@ public class List<T> : Collection<T> {
 
     // Overwrites the element at `index`, returning true on success or false if `index` is out of
     // range (no value is written in that case).
+    @set
     public fun set(index: int, value: T): bool {
         if ((index < 0) || (index >= this.count)) {
             return false;
@@ -149,6 +151,7 @@ public class List<T> : Collection<T> {
     }
 
     // Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.
+    @iterator
     public fun iterator(): ListIterator<T> {
         return ListIterator<T>(this);
     }
@@ -217,7 +220,7 @@ extend List<T : Comparable<T>> {
     // implementation. This is why primitives ship a `Comparable` impl: `List<int>().sort()`,
     // `List<string>().sort()`, etc. work out of the box.
     public fun sort(): void {
-        let cmp: fun(T, T): int = __compare_ascending;
+        let cmp: fun(T, T): int = compare_ascending;
         this.sort_by(cmp);
     }
 

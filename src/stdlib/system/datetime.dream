@@ -3,10 +3,10 @@ module system;
 // A calendar date and time of day.
 public class DateTime {
     @js("Dream", "dateNowMillis")
-    static extern fun __now_millis(): long;
+    static extern fun now_millis(): long;
 
     @js("Dream", "dateLocalOffsetMinutes")
-    static extern fun __local_offset_minutes(epoch_millis: long): int;
+    static extern fun local_offset_minutes(epoch_millis: long): int;
 
     // The instant this value represents, as UTC epoch milliseconds.
     public epoch_millis: long;
@@ -20,13 +20,13 @@ public class DateTime {
 
     // The current instant in UTC.
     public static fun utc_now(): DateTime {
-        return DateTime(DateTime.__now_millis(), 0);
+        return DateTime(DateTime.now_millis(), 0);
     }
 
     // The current instant in the local system timezone.
     public static fun now(): DateTime {
-        let millis = DateTime.__now_millis();
-        let offset = DateTime.__local_offset_minutes(millis);
+        let millis = DateTime.now_millis();
+        let offset = DateTime.local_offset_minutes(millis);
         return DateTime(millis, offset);
     }
 
@@ -49,7 +49,7 @@ public class DateTime {
     // Builds an instant from calendar fields interpreted as local wall-clock time.
     public static fun of_local(year: int, month: int, day: int, hour: int, minute: int, second: int, millisecond: int): DateTime {
         let tentative = DateTime.of(year, month, day, hour, minute, second, millisecond);
-        let offset = DateTime.__local_offset_minutes(tentative.epoch_millis);
+        let offset = DateTime.local_offset_minutes(tentative.epoch_millis);
         return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
     }
 
@@ -60,7 +60,7 @@ public class DateTime {
 
     // The same instant in the local system timezone.
     public fun to_local(): DateTime {
-        let offset = DateTime.__local_offset_minutes(this.epoch_millis);
+        let offset = DateTime.local_offset_minutes(this.epoch_millis);
         return DateTime(this.epoch_millis, offset);
     }
 
@@ -325,7 +325,7 @@ public class DateTime {
         return era * 146097 + doe - 719468;
     }
 
-    static fun _civil_from_days(days: int): _DateTimeYmd {
+    static fun _civil_from_days(days: int): DateTimeYmd {
         let z = days + 719468;
         let era = z;
         if (z < 0) {
@@ -345,7 +345,7 @@ public class DateTime {
         if (m <= 2) {
             y = y + 1;
         }
-        return _DateTimeYmd(y, m, d);
+        return DateTimeYmd(y, m, d);
     }
 
     static fun _pad(n: int, width: int): string {
@@ -388,14 +388,3 @@ public class DateTime {
 }
 
 // A (year, month, day) tuple.
-public class _DateTimeYmd {
-    public year: int;
-    public month: int;
-    public day: int;
-
-    constructor(year: int, month: int, day: int) {
-        this.year = year;
-        this.month = month;
-        this.day = day;
-    }
-}

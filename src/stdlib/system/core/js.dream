@@ -9,7 +9,7 @@ module system.core;
 // yields another `js`; convert back to a Dream value at a typed boundary (e.g. `let n: int = el.x`)
 // or with the explicit `.to_int()` / `.to_str()` / ... helpers below.
 //
-// The compiler desugars dynamic operations into the `__*` bridges declared here, marshaling
+// The compiler desugars dynamic operations into the host bridges declared here, marshaling
 // arguments through a single host call. These bridges are an implementation detail; user code uses
 // native syntax.
 
@@ -18,12 +18,12 @@ extend js {
 
     // A handle to a value on the JS global scope by name (e.g. `js.global("document")`), for
     // computed names. Prefer the property form `js.global.document` / `js.global.fetch(...)`, which
-    // binds `js.global` to `globalThis` (see `__global_this`) and then reads members dynamically.
+    // binds `js.global` to `globalThis` (see `global_this`) and then reads members dynamically.
     @js("Dream", "jsGlobal")
     static extern fun global(name: string): js;
     // `globalThis` itself, backing the `js.global.<member>` property syntax.
     @js("Dream", "jsGlobalThis")
-    static extern fun __global_this(): js;
+    static extern fun global_this(): js;
     // A fresh empty JS object (`{}`) to populate and hand to a JS API.
     @js("Dream", "jsObject")
     static extern fun object(): js;
@@ -45,51 +45,51 @@ extend js {
     // index and the parameter count; the host wraps it as `fun(js, …): void`. A bare
     // `fun(js, js, …): void` passed to a dynamic `js` call auto-wraps through here.
     @js("Dream", "jsFuncN")
-    static extern fun __funcN(index: int, arity: int): js;
+    static extern fun funcN(index: int, arity: int): js;
 
     // --- boxing: Dream value -> js handle (used by the compiler when marshaling arguments) ---
     @js("Dream", "jsInt")
-    static extern fun __box_int(value: int): js;
+    static extern fun box_int(value: int): js;
     @js("Dream", "jsLong")
-    static extern fun __box_long(value: long): js;
+    static extern fun box_long(value: long): js;
     @js("Dream", "jsDouble")
-    static extern fun __box_double(value: double): js;
+    static extern fun box_double(value: double): js;
     @js("Dream", "jsBool")
-    static extern fun __box_bool(value: bool): js;
+    static extern fun box_bool(value: bool): js;
     @js("Dream", "jsString")
-    static extern fun __box_string(value: string): js;
+    static extern fun box_string(value: string): js;
 
     // --- dynamic operations (variadic call/invoke args are carried in a `js[]`) --------------
     @js("Dream", "jsGetV")
-    static extern fun __get(target: js, name: string): js;
+    static extern fun get(target: js, name: string): js;
     @js("Dream", "jsSetV")
-    static extern fun __set(target: js, name: string, value: js): void;
+    static extern fun set(target: js, name: string, value: js): void;
     // Variadic call/invoke. The compiler does not call these with a Dream argument list: it emits a
     // shadow-stack buffer of tagged 16-byte slots and passes its pointer + count, so all arguments
     // cross in a single boundary crossing with no per-argument boxing or heap array. The `args_ptr`
     // / `argc` parameters describe that buffer.
     @js("Dream", "jsCallV")
-    static extern fun __call(target: js, name: string, args_ptr: int, argc: int): js;
+    static extern fun call(target: js, name: string, args_ptr: int, argc: int): js;
     @js("Dream", "jsInvokeV")
-    static extern fun __invoke(target: js, args_ptr: int, argc: int): js;
+    static extern fun invoke(target: js, args_ptr: int, argc: int): js;
     @js("Dream", "jsIndexGetV")
-    static extern fun __index_get(target: js, key: js): js;
+    static extern fun index_get(target: js, key: js): js;
     @js("Dream", "jsIndexSetV")
-    static extern fun __index_set(target: js, key: js, value: js): void;
+    static extern fun index_set(target: js, key: js, value: js): void;
 
     // Awaits a JS thenable/Promise handle, yielding the resolved value as another `js`, or a `null`
     // `js` if the Promise rejected (the reason is logged host-side). Bridged as `extern async` so it
     // flows through the same Future machinery as any other async call.
     @js("Dream", "jsAwait")
-    static extern async fun __await_raw(target: js): js;
+    static extern async fun await_raw(target: js): js;
 
     // The awaited result the compiler actually targets: `await <jsExpr>` desugars to
-    // `await js.__await(<jsExpr>)`, which yields `Option<js>` - `Some(value)` when the Promise
+    // `await js.await_promise(<jsExpr>)`, which yields `Option<js>` - `Some(value)` when the Promise
     // resolved, `None` when it rejected (or resolved with `null`/`undefined`). So a JS Promise reads
     // natively while still forcing the caller to handle failure:
     //   let r = await js.global.fetch("/api");   // r: Option<js>
-    static async fun __await(target: js): Option<js> {
-        let v = await js.__await_raw(target);
+    static async fun await_promise(target: js): Option<js> {
+        let v = await js.await_raw(target);
         if (v.is_null()) {
             return Option.None;
         }
@@ -98,43 +98,43 @@ extend js {
 
     // --- unboxing: js handle -> Dream value (used by the compiler + the helpers below) -------
     @js("Dream", "jsAsInt")
-    static extern fun __as_int(target: js): int;
+    static extern fun as_int(target: js): int;
     @js("Dream", "jsAsLong")
-    static extern fun __as_long(target: js): long;
+    static extern fun as_long(target: js): long;
     @js("Dream", "jsAsDouble")
-    static extern fun __as_double(target: js): double;
+    static extern fun as_double(target: js): double;
     @js("Dream", "jsAsBool")
-    static extern fun __as_bool(target: js): bool;
+    static extern fun as_bool(target: js): bool;
     @js("Dream", "jsAsString")
-    static extern fun __as_string(target: js): string;
+    static extern fun as_string(target: js): string;
     @js("Dream", "jsIsNull")
-    static extern fun __is_null(target: js): bool;
+    static extern fun host_is_null(target: js): bool;
     @js("Dream", "jsRelease")
-    static extern fun __release(target: js): void;
+    static extern fun host_release(target: js): void;
 
     // --- ergonomic instance API (resolved before dynamic dispatch, so these names are safe) --
 
     // Explicit conversions back to Dream values.
     public fun to_int(): int {
-        return js.__as_int(this);
+        return js.as_int(this);
     }
     public fun to_double(): double {
-        return js.__as_double(this);
+        return js.as_double(this);
     }
     public fun to_bool(): bool {
-        return js.__as_bool(this);
+        return js.as_bool(this);
     }
     public fun to_str(): string {
-        return js.__as_string(this);
+        return js.as_string(this);
     }
 
     // True if the referenced value is `null` or `undefined`.
     public fun is_null(): bool {
-        return js.__is_null(this);
+        return js.host_is_null(this);
     }
 
     // Releases the host-side handle. Use for long-lived references to avoid leaking them.
     public fun release(): void {
-        js.__release(this);
+        js.host_release(this);
     }
 }

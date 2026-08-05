@@ -1,5 +1,5 @@
-// A user class opting into `for (let x in obj)` via the enumerator protocol: `iterator()`
-// returns an object whose `next(): Option<T>` yields elements until `None`. Exercises `break`
+// A user class opting into `for (let x in obj)` via the enumerator protocol: `@iterator`
+// returns an object whose `@next(): Option<T>` yields elements until `None`. Exercises `break`
 // and `continue` inside the loop body.
 
 import system;
@@ -12,6 +12,7 @@ class RangeIter {
         this.end = end;
     }
 
+    @next
     public fun next(): Option<int> {
         if (this.current >= this.end) {
             return Option.None;
@@ -31,6 +32,7 @@ class Range {
         this.end = end;
     }
 
+    @iterator
     public fun iterator(): RangeIter {
         return RangeIter(this.start, this.end);
     }

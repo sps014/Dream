@@ -1,6 +1,6 @@
 // Milestone B: capturing closures (v1 — a lambda captures at most one variable from its
 // immediately enclosing function). A captured name (parameter or `let`) is boxed into a shared
-// `__Cell<T>` so both the closure and the enclosing function see each other's writes.
+// `CaptureCell<T>` so both the closure and the enclosing function see each other's writes.
 
 import system;
 fun make_adder(n: int): fun(int): int {

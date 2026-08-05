@@ -621,7 +621,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         SyntaxToken::new(
                             TokenKind::IdentifierToken,
                             span,
-                            "__RefBox".to_string(),
+                            "RefBox".to_string(),
                         ),
                         Some(vec![ty]),
                     ))

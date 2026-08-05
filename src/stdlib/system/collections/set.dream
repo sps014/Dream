@@ -198,6 +198,7 @@ public class Set<T> {
     }
 
     // Gets an iterator for the set.
+    @iterator
     public fun iterator(): SetIterator<T> {
         return SetIterator<T>(this.to_array());
     }

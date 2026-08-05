@@ -236,6 +236,41 @@ impl Builder {
                     format!("{}.{}({})", en.name.text, variant.name.text, params)
                 };
                 self.push_decl(&variant.name, SymKind::EnumMember, detail, GLOBAL, None);
+                for field in &variant.fields {
+                    let detail = format!(
+                        "{}.{}::{}",
+                        en.name.text, variant.name.text, field.name.text
+                    );
+                    self.push_decl(
+                        &field.name,
+                        SymKind::Param,
+                        detail,
+                        GLOBAL,
+                        Some(field.field_type.display_name()),
+                    );
+                }
+            }
+        }
+        for iface in &program.interfaces {
+            let generics = iface
+                .generic_parameters
+                .as_ref()
+                .map(|params| {
+                    let names = params
+                        .iter()
+                        .map(|p| p.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("<{}>", names)
+                })
+                .unwrap_or_default();
+            let detail = format!("interface {}{}", iface.name.text, generics);
+            self.push_decl(&iface.name, SymKind::Struct, detail, GLOBAL, None);
+            for method in &iface.methods {
+                let detail = format!("{}.{}", iface.name.text, signature(method));
+                self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
+                self.method_params
+                    .insert(method.name.text.clone(), param_names(method));
             }
         }
         for ext in &program.extends {
@@ -269,8 +304,8 @@ impl Builder {
         scope: usize,
     ) {
         for attr in attributes {
-            // Treat the attribute name as a reference to a struct/class (even if it's currently a built-in).
-            self.add_ref(&attr.name, SymKind::Struct, scope);
+            // Attribute names are decorators, not types/classes.
+            self.add_ref(&attr.name, SymKind::Decorator, scope);
             for arg in &attr.args {
                 // If the argument is an identifier (e.g. referencing a constant), record it.
                 if arg.kind == dream::syntax::token::token_kind::TokenKind::IdentifierToken {
@@ -292,8 +327,26 @@ impl Builder {
             }
             self.walk_struct(st);
         }
-        for _en in &program.enums {
-            // Already declared in pass 1
+        for en in &program.enums {
+            self.walk_attributes(&en.attributes, GLOBAL);
+            for variant in &en.variants {
+                for field in &variant.fields {
+                    self.walk_attributes(&field.attributes, GLOBAL);
+                }
+            }
+        }
+        for iface in &program.interfaces {
+            self.walk_attributes(&iface.attributes, GLOBAL);
+            for method in &iface.methods {
+                self.walk_attributes(&method.attributes, GLOBAL);
+                // Interface methods have no body; still index their parameter names for hover.
+                for param in &method.parameters {
+                    let ty = param.type_.display_name();
+                    let detail = format!("{}: {}", param.name.text, ty);
+                    self.push_decl(&param.name, SymKind::Param, detail, GLOBAL, Some(ty));
+                    self.add_type_ref(&param.type_, GLOBAL);
+                }
+            }
         }
         for ext in &program.extends {
             for method in &ext.methods {
@@ -625,10 +678,18 @@ impl Builder {
             }
             ExpressionNode::Literal(_) => {}
             ExpressionNode::Try(e) => self.walk_expr(e, scope),
-            ExpressionNode::Lambda(lambda) => match &lambda.body {
-                LambdaBody::Expr(e) => self.walk_expr(e, scope),
-                LambdaBody::Block(stmts) => self.walk_block(stmts, scope),
-            },
+            ExpressionNode::Lambda(lambda) => {
+                for param in &lambda.parameters {
+                    let ty = param.type_.display_name();
+                    let detail = format!("{}: {}", param.name.text, ty);
+                    self.push_decl(&param.name, SymKind::Param, detail, scope, Some(ty));
+                    self.add_type_ref(&param.type_, scope);
+                }
+                match &lambda.body {
+                    LambdaBody::Expr(e) => self.walk_expr(e, scope),
+                    LambdaBody::Block(stmts) => self.walk_block(stmts, scope),
+                }
+            }
             ExpressionNode::NamedArg(_, e) => self.walk_expr(e, scope),
             ExpressionNode::RefArgument(e) => self.walk_expr(e, scope),
         }

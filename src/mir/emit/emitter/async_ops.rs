@@ -138,7 +138,7 @@ impl Emitter<'_> {
                 dbg.id
             ));
         }
-        self.line(" (block $__exit");
+        self.line(" (block $host_exit");
         self.line("  (loop $__loop");
         for i in (0..n).rev() {
             self.line(&format!("   (block $bb{}", i));
@@ -188,7 +188,7 @@ impl Emitter<'_> {
             self.emit_async_cfg_terminator(&block.terminator, slots);
         }
         self.line("  )"); // loop
-        self.line(" )"); // $__exit
+        self.line(" )"); // $host_exit
                          // Every reachable path suspends (returns) or completes (returns); the tail is unreachable but
                          // keeps the `(result i32)` signature well-typed.
         self.line(" (unreachable)");

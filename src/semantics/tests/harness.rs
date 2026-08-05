@@ -233,7 +233,7 @@ pub(super) const JS_STUB: &str = "
         @js(\"Dream\", \"jsGlobal\")
         static extern fun global(name: string): js;
         @js(\"Dream\", \"jsGlobalThis\")
-        static extern fun __global_this(): js;
+        static extern fun global_this(): js;
         @js(\"Dream\", \"jsObject\")
         static extern fun object(): js;
         @js(\"Dream\", \"jsArray\")
@@ -243,49 +243,49 @@ pub(super) const JS_STUB: &str = "
         @js(\"Dream\", \"jsFunc0\")
         static extern fun func0(handler: fun(): void): js;
         @js(\"Dream\", \"jsInt\")
-        static extern fun __box_int(value: int): js;
+        static extern fun box_int(value: int): js;
         @js(\"Dream\", \"jsLong\")
-        static extern fun __box_long(value: long): js;
+        static extern fun box_long(value: long): js;
         @js(\"Dream\", \"jsDouble\")
-        static extern fun __box_double(value: double): js;
+        static extern fun box_double(value: double): js;
         @js(\"Dream\", \"jsBool\")
-        static extern fun __box_bool(value: bool): js;
+        static extern fun box_bool(value: bool): js;
         @js(\"Dream\", \"jsString\")
-        static extern fun __box_string(value: string): js;
+        static extern fun box_string(value: string): js;
         @js(\"Dream\", \"jsGetV\")
-        static extern fun __get(target: js, name: string): js;
+        static extern fun get(target: js, name: string): js;
         @js(\"Dream\", \"jsSetV\")
-        static extern fun __set(target: js, name: string, value: js): void;
+        static extern fun set(target: js, name: string, value: js): void;
         @js(\"Dream\", \"jsCallV\")
-        static extern fun __call(target: js, name: string, args: js[]): js;
+        static extern fun call(target: js, name: string, args: js[]): js;
         @js(\"Dream\", \"jsInvokeV\")
-        static extern fun __invoke(target: js, args: js[]): js;
+        static extern fun invoke(target: js, args: js[]): js;
         @js(\"Dream\", \"jsIndexGetV\")
-        static extern fun __index_get(target: js, key: js): js;
+        static extern fun index_get(target: js, key: js): js;
         @js(\"Dream\", \"jsIndexSetV\")
-        static extern fun __index_set(target: js, key: js, value: js): void;
+        static extern fun index_set(target: js, key: js, value: js): void;
         @js(\"Dream\", \"jsAwait\")
-        static extern async fun __await(target: js): js;
+        static extern async fun await_promise(target: js): js;
         @js(\"Dream\", \"jsAsInt\")
-        static extern fun __as_int(target: js): int;
+        static extern fun as_int(target: js): int;
         @js(\"Dream\", \"jsAsDouble\")
-        static extern fun __as_double(target: js): double;
+        static extern fun as_double(target: js): double;
         @js(\"Dream\", \"jsAsBool\")
-        static extern fun __as_bool(target: js): bool;
+        static extern fun as_bool(target: js): bool;
         @js(\"Dream\", \"jsAsString\")
-        static extern fun __as_string(target: js): string;
-        public fun to_int(): int { return js.__as_int(this); }
-        public fun to_str(): string { return js.__as_string(this); }
+        static extern fun as_string(target: js): string;
+        public fun to_int(): int { return js.as_int(this); }
+        public fun to_str(): string { return js.as_string(this); }
     }
 ";
 
 /// The closure ABI intrinsics (mirrors `stdlib/core/closure.dream`), inlined so `fun(...)`-value
 /// tests do not depend on the full prelude being merged by the unit-test harness. Every `fun(...)`
-/// value is boxed through `__Closure.funcbox_new`/`funcbox_funcidx`/`funcbox_env` (see
+/// value is boxed through `Closure.funcbox_new`/`funcbox_funcidx`/`funcbox_env` (see
 /// `hir_set_func_value`/`hir_set_indirect_call`), so any test exercising a function value or an
 /// indirect call needs this merged in alongside its own code.
 pub(super) const CLOSURE_STUB: &str = "
-    class __Closure {
+    class Closure {
         @intrinsic(\"funcbox_new\")
         static extern fun funcbox_new(funcidx: int, env: int): int;
         @intrinsic(\"funcbox_funcidx\")
@@ -295,7 +295,7 @@ pub(super) const CLOSURE_STUB: &str = "
         @intrinsic(\"retain\")
         static extern fun retain(v: object): void;
     }
-    class __Cell<T> {
+    class CaptureCell<T> {
         public value: T;
         constructor(v: T) {
             this.value = v;

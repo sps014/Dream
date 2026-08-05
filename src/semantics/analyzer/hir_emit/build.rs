@@ -252,7 +252,7 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(move |m| (m, method_fn(&e.target.text, &m.name.text)))
         });
-        // A generic class's `extern`/`@intrinsic` methods (e.g. `WebWorker<TIn, TOut>.__spawn`) are
+        // A generic class's `extern`/`@intrinsic` methods (e.g. `WebWorker<TIn, TOut>.spawn_host`) are
         // duplicated per instantiation under a mangled `{Type_args}_{method}` name absent from
         // `node.structs` (which only ever holds the unmangled template) — walk
         // `generic_struct_instances` (recorded by `ensure_struct_instantiated`) for those instead.

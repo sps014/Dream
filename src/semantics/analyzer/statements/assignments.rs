@@ -95,11 +95,9 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    /// Desugars a class index-assignment `obj[index] = value` to `obj.set(index, value)` when
-    /// `obj_type` exposes an eligible `set` (accessible instance, non-async method taking two
-    /// arguments; its return value is discarded). A same-named `set` that is static/async/wrong
-    /// arity is left as an ordinary method and this site reports why the value is not
-    /// index-assignable.
+    /// Desugars a class index-assignment `obj[index] = value` to a call of the type's `@set`
+    /// method when registered (accessible instance, non-async method taking two arguments; its
+    /// return value is discarded).
     #[allow(clippy::too_many_arguments)]
     fn analyze_index_set(
         &mut self,
@@ -111,33 +109,23 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        if self
-            .resolve_hook_or_diagnose(
-                obj_type,
-                "set",
-                2,
-                arr.position(),
-                false,
-                diagnostics,
-                |reason| {
-                    format!(
-                        "type '{}' is not index-assignable: {}",
-                        obj_type.get_type(),
-                        reason
-                    )
-                },
-                || {
-                    format!(
-                        "type '{}' is not index-assignable (define 'public fun set(index, value)' to allow obj[index] = value)",
-                        obj_type.get_type()
-                    )
-                },
-            )
-            .is_none()
-        {
+        use crate::semantics::analyzer::declarations::protocol_hooks::ProtocolRole;
+        let Some((hook, _)) = self.resolve_hook_or_diagnose(
+            obj_type,
+            ProtocolRole::Set,
+            arr.position(),
+            false,
+            diagnostics,
+            || {
+                format!(
+                    "type '{}' is not index-assignable (define '@set public fun ...(index, value)' to allow obj[index] = value)",
+                    obj_type.get_type()
+                )
+            },
+        ) else {
             return Ok(());
-        }
-        let set_tok = synthetic_token(TokenKind::IdentifierToken, "set");
+        };
+        let set_tok = synthetic_token(TokenKind::IdentifierToken, &hook.surface_name);
         let call =
             ExpressionNode::MethodCall(arr, set_tok, None, vec![(*index).clone(), right.clone()]);
         let _ = self.analyze_expression(&call, parent_function, symbol_table, diagnostics)?;

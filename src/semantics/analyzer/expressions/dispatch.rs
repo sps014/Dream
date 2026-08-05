@@ -493,7 +493,7 @@ impl<'a> Analyzer<'a> {
                     return Ok(Type::Unknown);
                 }
                 // Awaiting a dynamic `js` value treats it as a JS Promise: desugar to
-                // `await js.__await(inner)`, whose async bridge yields `Future<js>` and resolves to
+                // `await js.await_promise(inner)`, whose async bridge yields `Future<js>` and resolves to
                 // the awaited value as another `js`.
                 if self.is_js_type(&fut) {
                     let fut_hir = self.desugar_js_await(inner_hir);
@@ -544,11 +544,9 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Desugars a class indexer read `obj[index]` to `obj.get(index)` when `obj_type` exposes an
-    /// eligible `get` (see [`Analyzer::resolve_hook_method`]): an accessible instance, non-async
-    /// method taking one argument and returning a (non-`void`) value. Any other same-named `get`
-    /// (static/async/void/wrong arity) is left as an ordinary method and this site reports why the
-    /// value cannot be indexed, rather than silently rewriting the call.
+    /// Desugars a class indexer read `obj[index]` to a call of the type's `@get` method when
+    /// registered (see [`declarations::protocol_hooks`]): an accessible instance, non-async
+    /// method taking one argument and returning a (non-`void`) value.
     fn analyze_index_get(
         &mut self,
         array_expr: &'a ExpressionNode<'a>,
@@ -558,22 +556,21 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let info = match self.resolve_hook_or_diagnose(
+        use crate::semantics::analyzer::declarations::protocol_hooks::ProtocolRole;
+        let (hook, info) = match self.resolve_hook_or_diagnose(
             obj_type,
-            "get",
-            1,
+            ProtocolRole::Get,
             array_expr.position(),
             true,
             diagnostics,
-            |reason| format!("type '{}' cannot be indexed: {}", obj_type.get_type(), reason),
             || {
                 format!(
-                    "type '{}' has no indexer (define 'public fun get(index): T' to allow obj[index])",
+                    "type '{}' has no indexer (define '@get public fun ...(index): T' to allow obj[index])",
                     obj_type.get_type()
                 )
             },
         ) {
-            Some(info) => info,
+            Some(resolved) => resolved,
             None => return Ok(Type::Unknown),
         };
         if matches!(info.return_type, None | Some(Type::Void)) {
@@ -581,14 +578,14 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             diagnostics.report_error(
                 format!(
-                    "type '{}' has no indexer: its 'get' must return a value",
+                    "type '{}' has no indexer: its '@get' method must return a value",
                     obj_type.get_type()
                 ),
                 array_expr.position(),
             );
             return Ok(Type::Unknown);
         }
-        let get_tok = synthetic_token(TokenKind::IdentifierToken, "get");
+        let get_tok = synthetic_token(TokenKind::IdentifierToken, &hook.surface_name);
         let call =
             ExpressionNode::MethodCall(array_expr, get_tok, None, vec![(*index_expr).clone()]);
         self.analyze_expression(&call, parent_function, symbol_table, diagnostics)

@@ -26,6 +26,7 @@ mod functions;
 mod globals;
 mod imports;
 pub(in crate::semantics::analyzer) mod operator_overloads;
+pub(in crate::semantics::analyzer) mod protocol_hooks;
 mod reference_cycles;
 mod register_interfaces;
 mod register_methods;

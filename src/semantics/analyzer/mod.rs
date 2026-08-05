@@ -289,14 +289,14 @@ pub struct Analyzer<'a> {
     /// Counter used to name synthesized lambda functions uniquely (`__lambda_<n>`).
     lambda_counter: usize,
     /// Names, local to the function currently being analyzed, that a nested lambda captures — and
-    /// so must be boxed into a `__Cell<T>` rather than stored as a plain local (see
+    /// so must be boxed into a `CaptureCell<T>` rather than stored as a plain local (see
     /// `expressions::capture_scan::scan_function_captures`, run once as a pre-pass before the
     /// function's body is analyzed). Cleared and repopulated per function in `hir_begin_function`.
     boxed_locals: std::collections::HashSet<String>,
     /// Names that are `ref`-passed somewhere in the current function's body
     /// (`expressions::capture_scan::scan_ref_argument_targets`) but are *not* in `boxed_locals` —
-    /// i.e. never closure-captured. These are boxed into the stack-resident `__RefBox<T>` value
-    /// struct instead of the heap `__Cell<T>` (see `hir_declare_local`/`hir_begin_function`).
+    /// i.e. never closure-captured. These are boxed into the stack-resident `RefBox<T>` value
+    /// struct instead of the heap `CaptureCell<T>` (see `hir_declare_local`/`hir_begin_function`).
     /// Cleared and repopulated per function in `hir_begin_function`.
     ref_boxed_locals: std::collections::HashSet<String>,
     /// For each synthesized capturing-lambda function (keyed by its lifted name, e.g. `__lambda_3`):
@@ -304,7 +304,7 @@ pub struct Analyzer<'a> {
     /// Consulted by identifier resolution *inside that lifted function's own body* to redirect a
     /// captured name's reads/writes through `env.<field>.value` instead of a plain local (see
     /// `identifiers::resolve_identifier`/`bindings::analyze_assignment`), and by
-    /// `expressions::lambda` to build the matching `__Closure_env_<n>` class + construction site.
+    /// `expressions::lambda` to build the matching `Closure_env_<n>` class + construction site.
     closure_captures: HashMap<String, Vec<(String, Type)>>,
     /// Fun-typed locals whose initializer/last assignment was a *capturing* `fun(...)` value
     /// (`true`) or a known captureless one (`false`). Used at the JS boundary to reject stashed
@@ -358,6 +358,9 @@ pub struct Analyzer<'a> {
     /// by `expressions::operators`/`expressions::dispatch`/`expressions::casts` to dispatch
     /// operators and user-defined conversions to the right method.
     operator_overloads: HashMap<String, declarations::operator_overloads::OperatorOverloads>,
+    /// Type name (mangled for generic instances) -> `@get`/`@set`/`@iterator`/`@next` hooks,
+    /// populated by [`declarations::protocol_hooks`] and consulted by indexer/`for..in` desugar.
+    protocol_hooks: HashMap<String, declarations::protocol_hooks::ProtocolHooks>,
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target
     /// any of these; compiler-synthesized extends (interface defaults) are exempt.
     sealed_types: std::collections::HashSet<String>,
@@ -448,6 +451,7 @@ impl<'a> Analyzer<'a> {
             type_visibility: HashMap::new(),
             implements: HashMap::new(),
             operator_overloads: HashMap::new(),
+            protocol_hooks: HashMap::new(),
             current_expected_type: None,
             current_generic_bindings: GenericBindings::new(),
             current_call_target_name: None,

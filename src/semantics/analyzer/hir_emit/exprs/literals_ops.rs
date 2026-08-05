@@ -41,7 +41,7 @@ impl<'a> Analyzer<'a> {
     /// Records the HIR for an identifier read: a local-variable reference if the name resolves to a
     /// slot, otherwise `None` (globals and function values are later slices).
     ///
-    /// A captured local (`self.hir.boxed`, see `hir_declare_local`) reads through its `__Cell<T>`
+    /// A captured local (`self.hir.boxed`, see `hir_declare_local`) reads through its `CaptureCell<T>`
     /// box's `.value` field instead of the plain slot, so a write from any closure sharing the cell
     /// (or the enclosing function itself) is visible here.
     pub(in crate::semantics::analyzer) fn hir_set_var(&mut self, name: &str) {
@@ -69,7 +69,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Reads a boxed local's raw `__Cell<T>` slot directly, bypassing the `.value` redirect
+    /// Reads a boxed local's raw `CaptureCell<T>` slot directly, bypassing the `.value` redirect
     /// [`Self::hir_set_var`] applies to a name in `self.hir.boxed` — i.e. the cell pointer itself,
     /// not the value inside it. Used when constructing a capturing lambda's environment (see
     /// `expressions::lambda`), which needs to hand the *cell* (so writes from either side stay

@@ -121,7 +121,7 @@ System.println(xs.size());                // 2
 System.println(xs.get(0).unwrap_or(-1));  // 10
 ```
 
-It offers `push`, `pop`, `get`/`set` (and the `xs[i]` indexer), `contains`, `index_of`, `remove_at`, `clear`, `iterator` (so `for (let x in xs)` works). When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
+`List<T>` offers `push`, `pop`, `@get`/`@set` (so `xs[i]` / `xs[i] = v` work), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
 
 ```dream
 let ys = List<int>();

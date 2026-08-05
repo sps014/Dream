@@ -43,7 +43,7 @@ pub(super) struct HirEmit {
     /// Keyed by name, so a re-declaration (shadowing in a sibling/nested scope) overwrites the entry;
     /// unique slot ids therefore come from `next_local`, not this map's length.
     locals: IndexMap<String, (LocalId, TypeId)>,
-    /// Names (a subset of `locals`' keys) whose slot holds a `__Cell<T>` box rather than a raw
+    /// Names (a subset of `locals`' keys) whose slot holds a `CaptureCell<T>` box rather than a raw
     /// value — either a `let` captured by a nested lambda, an enclosing function's own captured
     /// parameter, or (inside a capturing lambda's own lifted function) a captured name received
     /// from `$__closure_env`. Maps to the *unboxed* element type, so `hir_set_var`/`hir_assign_local`
@@ -57,7 +57,7 @@ pub(super) struct HirEmit {
     params: Vec<HParam>,
     /// Copy-out sites for `ref obj.field` / `ref arr[i]` arguments: after the call statement is
     /// emitted, each entry writes `box.value` back into the original place (copy-in happened when
-    /// the temporary `__RefBox` was built). Cleared by [`Analyzer::hir_flush_ref_writebacks`].
+    /// the temporary `RefBox` was built). Cleared by [`Analyzer::hir_flush_ref_writebacks`].
     ref_writebacks: Vec<(HPlace, LocalId, TypeId, TypeId)>,
     /// Stack of statement lists being built. The bottom is the function body; control-flow handlers
     /// push a frame for each nested block and pop it to attach to the enclosing statement.
@@ -188,15 +188,15 @@ impl<'a> Analyzer<'a> {
         self.hir.ok = true;
         self.hir.last = None;
         // Pre-pass: which of this function's own `let`s does a lambda in its body capture (and so
-        // must be boxed into a `__Cell<T>` — see `hir_declare_local`/`hir_set_var`/`hir_assign_local`)?
+        // must be boxed into a `CaptureCell<T>` — see `hir_declare_local`/`hir_set_var`/`hir_assign_local`)?
         // Must run before the body itself is analyzed, since a captured local's very first `let` has
         // to be boxed from the start (its declaration may come before the lambda that captures it).
         self.boxed_locals = super::expressions::capture_scan::scan_function_captures(function.body);
         // Every name ever passed as a `ref` argument (`scan_ref_argument_targets`) needs its address
         // taken so the callee can alias it. A name already captured (above) already has a stable,
-        // heap-durable box (`__Cell<T>`) whose pointer serves that purpose unchanged. A name that is
+        // heap-durable box (`CaptureCell<T>`) whose pointer serves that purpose unchanged. A name that is
         // *only* `ref`-passed gets its own address-taking box instead: the stack-resident
-        // `__RefBox<T>` value struct (`ref_boxed_locals`, see `hir_declare_local`) — no heap
+        // `RefBox<T>` value struct (`ref_boxed_locals`, see `hir_declare_local`) — no heap
         // allocation or ARC bookkeeping, since its storage never needs to outlive this call.
         let ref_targets =
             super::expressions::capture_scan::scan_ref_argument_targets(function.body);
@@ -231,7 +231,7 @@ impl<'a> Analyzer<'a> {
 
         for param in function.parameters.iter() {
             if param.is_ref {
-                // A `ref` parameter *is* the caller's `__RefBox<T>` (see
+                // A `ref` parameter *is* the caller's `RefBox<T>` (see
                 // `Analyzer::analyze_ref_argument`): the incoming pointer is the caller's box,
                 // aliased in place (`LocalDecl::is_ref`/`ValueFrame` classifies it `Borrow`, so no
                 // private copy is taken), so this slot is registered straight into `self.hir.boxed`
@@ -251,7 +251,7 @@ impl<'a> Analyzer<'a> {
                     col_no: 0,
                 };
                 self.ensure_struct_instantiated(
-                    "__RefBox",
+                    "RefBox",
                     std::slice::from_ref(&param.type_),
                     &no_span,
                     &mut throwaway,
@@ -285,12 +285,12 @@ impl<'a> Analyzer<'a> {
         }
 
         // A parameter captured by a nested lambda (`self.boxed_locals`, from the pre-pass above)
-        // must be boxed into a `__Cell<T>` from the very start of the function, exactly like a
+        // must be boxed into a `CaptureCell<T>` from the very start of the function, exactly like a
         // captured `let` (see `hir_declare_local`) — rebind its slot to a freshly-boxed copy of the
         // raw incoming argument, immediately after every parameter has its ordinary slot (so the
         // raw argument value is always available to box, regardless of declaration order above).
         // A parameter that is only ever `ref`-passed (never captured, `self.ref_boxed_locals`) gets
-        // the same treatment but boxed into `__RefBox<T>` instead (see `box_ref_only_param`).
+        // the same treatment but boxed into `RefBox<T>` instead (see `box_ref_only_param`).
         // A `ref` parameter is already boxed (above) and must not be boxed a second time.
         for param in function.parameters.iter() {
             if param.is_ref {
@@ -305,7 +305,7 @@ impl<'a> Analyzer<'a> {
 
         // This function is itself a capturing lambda's lifted body (see `expressions::lambda`):
         // recover each captured name from `$__closure_env` into a local aliasing the very same
-        // `__Cell<T>` its creating scope boxed it into, so `hir_set_var`/`hir_assign_local`'s
+        // `CaptureCell<T>` its creating scope boxed it into, so `hir_set_var`/`hir_assign_local`'s
         // `self.hir.boxed`-driven redirect (see `hir_declare_local`) applies transparently to it
         // too — reads/writes inside this body go through `.value` exactly like a captured `let`'s.
         if let Some(captures) = self
@@ -323,7 +323,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Rebinds parameter `name` (already registered with its ordinary raw slot above) to a fresh
-    /// `__Cell<T>`-boxed copy, and records it in `self.hir.boxed` so subsequent reads/writes inside
+    /// `CaptureCell<T>`-boxed copy, and records it in `self.hir.boxed` so subsequent reads/writes inside
     /// this function redirect through the cell — see the `hir_begin_function` call site.
     fn box_captured_param(&mut self, name: &str, ty: &Type) {
         let Some(&(raw_local, raw_ty)) = self.hir.locals.get(name) else {
@@ -353,7 +353,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Like [`Self::box_captured_param`], but for a parameter that is only ever `ref`-passed (never
-    /// closure-captured, `self.ref_boxed_locals`): rebinds its slot to a fresh `__RefBox<T>` (a
+    /// closure-captured, `self.ref_boxed_locals`): rebinds its slot to a fresh `RefBox<T>` (a
     /// value struct, so the new local gets its own private shadow-frame slot — no heap allocation)
     /// wrapping the raw incoming argument.
     fn box_ref_only_param(&mut self, name: &str, ty: &Type) {
@@ -384,7 +384,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// This function's own prologue for one captured name: unboxes `$__closure_env` back to the
-    /// `__Cell<T>` its creating scope boxed it into (a plain reinterpret — both are `i32` pointers
+    /// `CaptureCell<T>` its creating scope boxed it into (a plain reinterpret — both are `i32` pointers
     /// at runtime), aliases it into a local under `cap_name`, and records it in `self.hir.boxed` so
     /// this body's reads/writes of `cap_name` go through the cell like any other captured name.
     fn receive_closure_capture(&mut self, cap_name: &str, cap_ty: &Type) {
@@ -417,7 +417,7 @@ impl<'a> Analyzer<'a> {
     /// Like [`Self::receive_closure_capture`], but for **two or more** captures: unboxes
     /// `$__closure_env` to the `object[]` array [`hir_set_multi_capturing_func_value`] built (a
     /// plain reinterpret, same as the single-capture case), then aliases each `captures[i]` name to
-    /// a fresh local reading `array[i]` cast back to its own `__Cell<T>` — everything past that
+    /// a fresh local reading `array[i]` cast back to its own `CaptureCell<T>` — everything past that
     /// point (the `self.hir.boxed` redirect) is identical to a single capture.
     fn receive_closure_captures_array(&mut self, captures: &[(String, Type)]) {
         let Some(env) = self.hir_read_closure_env() else {

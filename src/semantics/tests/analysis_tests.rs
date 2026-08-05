@@ -555,12 +555,14 @@ fn test_try_propagation_rejects_option_result_mismatch() {
 
 #[test]
 fn test_class_indexer_get_set_ok() {
-    // A class with an instance `get(index): T` (non-void) and `set(index, value)` is indexable.
+    // A class with `@get`/`@set` methods is indexable (method names are free; `get`/`set` still fine).
     let code = "
         class Cell {
             v: int;
             constructor() { this.v = 0; }
+            @get
             public fun get(index: int): int { return this.v + index; }
+            @set
             public fun set(index: int, value: int): void { this.v = value; }
         }
         fun main(): void {
@@ -574,13 +576,35 @@ fn test_class_indexer_get_set_ok() {
 }
 
 #[test]
-fn test_class_indexer_void_get_is_not_an_indexer() {
-    // A `get` returning `void` is a normal method, not an indexer: `obj[i]` errors.
+fn test_class_indexer_arbitrary_names_ok() {
+    // Protocol role comes from the attribute; method names need not be `get`/`set`.
+    let code = "
+        class Cell {
+            v: int;
+            constructor() { this.v = 0; }
+            @get
+            public fun at(index: int): int { return this.v + index; }
+            @set
+            public fun put(index: int, value: int): void { this.v = value; }
+        }
+        fun main(): void {
+            let c = Cell();
+            c[1] = 5;
+            let x: int = c[2];
+        }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_class_indexer_bare_get_is_not_an_indexer() {
+    // Without `@get`, a method named `get` is ordinary — `obj[i]` errors.
     let code = "
         class Box {
             v: int;
             constructor() { this.v = 0; }
-            public fun get(index: int): void { }
+            public fun get(index: int): int { return index; }
         }
         fun main(): void {
             let b = Box();
@@ -592,7 +616,27 @@ fn test_class_indexer_void_get_is_not_an_indexer() {
     assert!(diagnostics
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("must return a value")));
+        .any(|d| d.message.contains("has no indexer")));
+}
+
+#[test]
+fn test_class_indexer_void_get_attr_rejected() {
+    // `@get` returning `void` is rejected at registration.
+    let code = "
+        class Box {
+            v: int;
+            constructor() { this.v = 0; }
+            @get
+            public fun get(index: int): void { }
+        }
+        fun main(): void { }
+    ";
+    let diagnostics = analyze_code(code);
+    assert_eq!(diagnostics.has_errors(), true);
+    assert!(diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("must return a non-void value")));
 }
 
 #[test]
@@ -614,18 +658,16 @@ fn test_class_void_get_still_callable_as_method() {
 }
 
 #[test]
-fn test_class_indexer_static_get_is_not_an_indexer() {
-    // A `static get` has no receiver, so it can't be an instance indexer: `obj[i]` errors.
+fn test_class_indexer_static_get_attr_rejected() {
+    // `@get` on a static method is rejected at registration.
     let code = "
         class Box {
             v: int;
             constructor() { this.v = 0; }
+            @get
             public static fun get(index: int): int { return index; }
         }
-        fun main(): void {
-            let b = Box();
-            let x = b[0];
-        }
+        fun main(): void { }
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
@@ -636,18 +678,16 @@ fn test_class_indexer_static_get_is_not_an_indexer() {
 }
 
 #[test]
-fn test_class_indexer_async_get_is_not_an_indexer() {
-    // An `async get` yields a `Future`, so it can't be a (synchronous) indexer: `obj[i]` errors.
+fn test_class_indexer_async_get_attr_rejected() {
+    // `@get` on an async method is rejected at registration.
     let code = "
         class Box {
             v: int;
             constructor() { this.v = 0; }
+            @get
             public async fun get(index: int): int { return index; }
         }
-        fun main(): void {
-            let b = Box();
-            let x = b[0];
-        }
+        fun main(): void { }
     ";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
@@ -749,7 +789,7 @@ fn test_async_accessor_is_rejected() {
 
 #[test]
 fn test_class_foreach_with_option_enumerator_ok() {
-    // The full enumerator protocol: `iterator()` returns an object whose `next(): Option<T>`
+    // The full enumerator protocol: `@iterator` returns an object whose `@next(): Option<T>`
     // yields elements. `break`/`continue` are valid in the body.
     let code = "
         enum Option<T> { Some(value: T), None }
@@ -757,6 +797,7 @@ fn test_class_foreach_with_option_enumerator_ok() {
             cur: int;
             end: int;
             constructor(s: int, e: int) { this.cur = s; this.end = e; }
+            @next
             public fun next(): Option<int> {
                 if (this.cur >= this.end) { return Option.None; }
                 let v = this.cur;
@@ -768,6 +809,7 @@ fn test_class_foreach_with_option_enumerator_ok() {
             start: int;
             end: int;
             constructor(s: int, e: int) { this.start = s; this.end = e; }
+            @iterator
             public fun iterator(): RangeIter { return RangeIter(this.start, this.end); }
         }
         fun main(): void {
@@ -785,15 +827,17 @@ fn test_class_foreach_with_option_enumerator_ok() {
 
 #[test]
 fn test_class_foreach_next_not_option_errors() {
-    // `next()` must return `Option<T>`; a `next()` returning a plain value is rejected.
+    // `@next` must return `Option<T>`; a non-Option return is rejected at registration.
     let code = "
         class NumIter {
             n: int;
             constructor() { this.n = 0; }
+            @next
             public fun next(): int { return 0; }
         }
         class Nums {
             constructor() { }
+            @iterator
             public fun iterator(): NumIter { return NumIter(); }
         }
         fun main(): void {
@@ -805,12 +849,12 @@ fn test_class_foreach_next_not_option_errors() {
     assert!(diagnostics
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("next()' to return Option")));
+        .any(|d| d.message.contains("must return Option")));
 }
 
 #[test]
 fn test_class_foreach_missing_iterator_errors() {
-    // A class without an `iterator()` method cannot be iterated with `for..in`.
+    // A class without an `@iterator` method cannot be iterated with `for..in`.
     let code = "
         class Plain {
             v: int;
@@ -825,7 +869,7 @@ fn test_class_foreach_missing_iterator_errors() {
     assert!(diagnostics
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("iterator()")));
+        .any(|d| d.message.contains("@iterator")));
 }
 
 #[test]
@@ -1343,13 +1387,13 @@ fn test_js_desugars_to_host_bridges() {
         wat
     );
     assert!(
-        wat.contains("$js___call"),
-        "method call lowers to the __call bridge:\n{}",
+        wat.contains("$js_call"),
+        "method call lowers to the call bridge:\n{}",
         wat
     );
     assert!(
-        wat.contains("$js___set"),
-        "property set lowers to the __set bridge:\n{}",
+        wat.contains("$js_set"),
+        "property set lowers to the set bridge:\n{}",
         wat
     );
     // The variadic method call marshals its argument through the shadow stack rather than a heap

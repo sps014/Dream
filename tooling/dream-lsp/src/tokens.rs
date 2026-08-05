@@ -109,7 +109,8 @@ pub fn lex_category(kind: TokenKind) -> Option<LexCategory> {
         | ContinueToken | LetToken | ConstToken | FunToken | StaticToken | ImportToken
         | PublicToken | ExternToken | ClassToken | StructToken | UnmanagedToken | ExtendToken
         | IsToken | InToken | EnumToken | TypeToken | SwitchToken | CaseToken | DefaultToken
-        | SealedToken | InterfaceToken | AsyncToken | AwaitToken => LexCategory::Keyword,
+        | SealedToken | InterfaceToken | AsyncToken | AwaitToken | InternalToken | ModuleToken
+        | AsToken | RefToken | WeakToken | UnownedToken | LockToken => LexCategory::Keyword,
         PlusToken
         | MinusToken
         | SlashToken

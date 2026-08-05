@@ -6,10 +6,10 @@ public class HttpClient {
     default_headers: string;
 
     @js("Dream", "httpRequest")
-    static extern async fun __http_request(url: string, method: string, headers: string, body: string): char[];
+    static extern async fun http_request(url: string, method: string, headers: string, body: string): char[];
 
     @js("Dream", "httpRequestBytes")
-    static extern async fun __http_request_bytes(url: string, method: string, headers: string, body: byte[]): char[];
+    static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[]): char[];
 
     // Creates an HTTP client with a base URL.
     constructor(base_url: string) {
@@ -59,7 +59,7 @@ public class HttpClient {
 
     // Performs a request with a text body.
     public async fun request(method: string, path: string, body: string, headers: string): HttpResponse {
-        let raw = await HttpClient.__http_request(this.resolve(path), method, this.merge_headers(headers), body);
+        let raw = await HttpClient.http_request(this.resolve(path), method, this.merge_headers(headers), body);
         return HttpResponse(raw);
     }
 
@@ -101,7 +101,7 @@ public class HttpClient {
 
     // Performs a request with a binary body.
     public async fun request_bytes(method: string, path: string, body: byte[], headers: string): HttpResponse {
-        let raw = await HttpClient.__http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body);
+        let raw = await HttpClient.http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body);
         return HttpResponse(raw);
     }
 

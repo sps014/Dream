@@ -1,0 +1,5 @@
+module system.core;
+
+public interface Equatable<T> {
+    fun equals(other: T): bool;
+}

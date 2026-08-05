@@ -2,10 +2,10 @@ use super::*;
 
 /// Which box a boxed local's slot holds — see `Analyzer::hir_declare_local`.
 enum BoxKind {
-    /// `__Cell<T>`: heap-allocated, ARC-managed. Used when the name is captured by a lambda (its
+    /// `CaptureCell<T>`: heap-allocated, ARC-managed. Used when the name is captured by a lambda (its
     /// storage may need to outlive this function's stack frame).
     Cell,
-    /// `__RefBox<T>`: a stack-resident value struct. Used when the name is only ever `ref`-passed
+    /// `RefBox<T>`: a stack-resident value struct. Used when the name is only ever `ref`-passed
     /// (never captured) — its storage never needs to outlive this call, so no heap allocation or
     /// ARC bookkeeping is needed.
     RefBox,
@@ -90,10 +90,10 @@ impl<'a> Analyzer<'a> {
     ///
     /// If `name` is captured by a lambda elsewhere in this function's body (`self.boxed_locals`,
     /// computed by the capture-scan pre-pass in `hir_begin_function`), the local is boxed instead:
-    /// the slot holds a `__Cell<T>` object (constructed here around `value`) rather than a raw `T`,
+    /// the slot holds a `CaptureCell<T>` object (constructed here around `value`) rather than a raw `T`,
     /// so a later capturing closure can alias the very same storage (see
     /// `expressions::lambda`/`hir_read_capture_cell`). If `name` is only ever `ref`-passed (never
-    /// captured, `self.ref_boxed_locals`), it is boxed into `__RefBox<T>` instead — a stack-resident
+    /// captured, `self.ref_boxed_locals`), it is boxed into `RefBox<T>` instead — a stack-resident
     /// value struct, since its storage never needs to outlive this call (see `BoxKind`). Either way
     /// `self.hir.boxed` records the unboxed element type so subsequent reads/writes of `name`
     /// (`hir_set_var`/`hir_assign_local`) know to go through the box's `.value` field transparently
@@ -228,7 +228,7 @@ impl<'a> Analyzer<'a> {
     /// Appends an assignment to a local or module-global. Fails the function for an unresolved name
     /// or a non-representable value.
     ///
-    /// A captured local (`self.hir.boxed`, see `hir_declare_local`) writes through its `__Cell<T>`
+    /// A captured local (`self.hir.boxed`, see `hir_declare_local`) writes through its `CaptureCell<T>`
     /// box's `.value` field instead of the plain slot, so the write is visible to every closure
     /// (and the enclosing function itself) sharing that same cell.
     pub(in crate::semantics::analyzer) fn hir_assign_local(
@@ -304,7 +304,7 @@ impl<'a> Analyzer<'a> {
 
     /// Appends an expression statement, failing the function if it was not representable.
     /// Flushes any pending `ref` field/index writebacks after the statement so mutations through
-    /// a temporary `__RefBox` are visible on the original place.
+    /// a temporary `RefBox` are visible on the original place.
     pub(in crate::semantics::analyzer) fn hir_expr_stmt(&mut self, value: Option<HExpr>) {
         if !self.active() {
             return;
@@ -338,7 +338,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Copy-in: wrap `value` in a temporary `__RefBox`, schedule copy-out to `place`, and return
+    /// Copy-in: wrap `value` in a temporary `RefBox`, schedule copy-out to `place`, and return
     /// the element type plus the box pointer as the `ref` argument.
     pub(in crate::semantics::analyzer) fn hir_box_ref_place(
         &mut self,

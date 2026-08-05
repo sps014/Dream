@@ -21,7 +21,7 @@ pub(crate) const HOST_MODULE: &str = "Dream";
 /// and the one the analyzer recognizes as the dynamic `js` type can never diverge.
 pub(crate) const JS_TYPE: &str = "js";
 
-/// The WAT symbol of the `js.<method>` stdlib bridge (e.g. `bridge_sym("__box_int")` -> `$js___box_int`),
+/// The WAT symbol of the `js.<method>` stdlib bridge (e.g. `bridge_sym("box_int")` -> `$js_box_int`),
 /// derived through the one canonical mangler so the generated marshalers never hard-code the scheme.
 pub(crate) fn bridge_sym(method: &str) -> String {
     format!("${}", method_fn(JS_TYPE, method))

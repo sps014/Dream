@@ -80,9 +80,9 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(Type::Unknown);
         let iter_hir = self.hir_take();
 
-        // A class or `string` receiver iterates through the enumerator protocol (`iterator()` ->
-        // `next()`), lowered directly to a `while` loop (see `analyze_foreach_iter`). `string`
-        // exposes `iterator()` via `extend string`, so `for (let c in s)` walks its chars. Arrays
+        // A class or `string` receiver iterates through the enumerator protocol (`@iterator` ->
+        // `@next`), lowered directly to a `while` loop (see `analyze_foreach_iter`). `string`
+        // exposes `@iterator` via `extend string`, so `for (let c in s)` walks its chars. Arrays
         // keep the built-in index loop below.
         if !matches!(iterable_type, Type::Array(_))
             && (Self::resolve_struct_parts(&iterable_type).is_some()
@@ -105,7 +105,7 @@ impl<'a> Analyzer<'a> {
             _ => {
                 diagnostics.report_error(
                     format!(
-                        "for-each can only iterate over arrays or types with an 'iterator()' method, got {}",
+                        "for-each can only iterate over arrays or types with an '@iterator' method, got {}",
                         iterable_type.get_type()
                     ),
                     iterable.position(),

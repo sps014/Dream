@@ -316,7 +316,7 @@ pub fn emit_module_with_debug(
 
     // Worker-thread trampoline: given a `fun(string): string` body's funcref index, its closure
     // environment word (0 for a non-capturing body; an `@shared`-object pointer or a by-value
-    // `__Cell`/`object[]` env for a capturing one — see `analyze_lambda`'s `WebWorker` capture
+    // `CaptureCell`/`object[]` env for a capturing one — see `analyze_lambda`'s `WebWorker` capture
     // check), and a message string pointer, publish the env to `$g0` (the synthetic
     // `__closure_env` global every module registers first — see `register_globals` — so a
     // capturing callee's own prologue reads the right environment on whichever thread invokes it)

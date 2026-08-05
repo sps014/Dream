@@ -1,0 +1,5 @@
+module system.core;
+
+public interface Comparable<T> {
+    fun compare(other: T): int;
+}

@@ -272,7 +272,7 @@ impl<'a> Analyzer<'a> {
     /// `fun(...)` value (e.g. `WebWorker(counter.increment)`) exactly like `() =>
     /// counter.increment()` today. Lowers to the same `[funcidx, env]` closure-box shape a
     /// capturing lambda produces (see `expressions::lambda`): `receiver_hir`'s already-analyzed
-    /// value is snapshotted into a fresh `__Cell<T>` (permanently retained, mirroring a real
+    /// value is snapshotted into a fresh `CaptureCell<T>` (permanently retained, mirroring a real
     /// capture) and a synthesized lifted function `__method_group_<n>` — whose body is the
     /// ordinary call `<captured receiver>.method(args)` — reads it back apart at its own prologue
     /// (`Analyzer::hir_begin_function`), by way of the same `closure_captures`/`pending_lambdas`

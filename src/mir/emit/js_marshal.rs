@@ -78,12 +78,12 @@ fn struct_name(mir: &crate::mir::Mir, ty: TypeId) -> Option<String> {
 /// the `double` box expects.
 fn box_prim(p: PrimTy) -> (&'static str, &'static str) {
     match p {
-        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("", "__box_int"),
-        PrimTy::Long | PrimTy::ULong => ("", "__box_long"),
-        PrimTy::Float => ("(f64.promote_f32)", "__box_double"),
-        PrimTy::Double => ("", "__box_double"),
-        PrimTy::Bool => ("", "__box_bool"),
-        PrimTy::String => ("", "__box_string"),
+        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("", "box_int"),
+        PrimTy::Long | PrimTy::ULong => ("", "box_long"),
+        PrimTy::Float => ("(f64.promote_f32)", "box_double"),
+        PrimTy::Double => ("", "box_double"),
+        PrimTy::Bool => ("", "box_bool"),
+        PrimTy::String => ("", "box_string"),
     }
 }
 
@@ -92,12 +92,12 @@ fn box_prim(p: PrimTy) -> (&'static str, &'static str) {
 /// `double` yields back to a `float`.
 fn unbox_prim(p: PrimTy) -> (&'static str, &'static str) {
     match p {
-        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("__as_int", ""),
-        PrimTy::Long | PrimTy::ULong => ("__as_long", ""),
-        PrimTy::Float => ("__as_double", "(f32.demote_f64)"),
-        PrimTy::Double => ("__as_double", ""),
-        PrimTy::Bool => ("__as_bool", ""),
-        PrimTy::String => ("__as_string", ""),
+        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("as_int", ""),
+        PrimTy::Long | PrimTy::ULong => ("as_long", ""),
+        PrimTy::Float => ("as_double", "(f32.demote_f64)"),
+        PrimTy::Double => ("as_double", ""),
+        PrimTy::Bool => ("as_bool", ""),
+        PrimTy::String => ("as_string", ""),
     }
 }
 
@@ -127,7 +127,7 @@ fn value_to_js(
         }
         TyKind::Enum(_) => Some(format!(
             "{addr} ({load}) (call {})",
-            bridge_sym("__box_int")
+            bridge_sym("box_int")
         )),
         TyKind::Js => Some(format!("{addr} ({load})")),
         TyKind::Array(elem) if is_marshalable(interner, *elem) => {
@@ -163,7 +163,7 @@ fn value_from_js(
             let (unbox, post) = unbox_prim(*p);
             Some(format!("{jsval} (call {}) {post}", bridge_sym(unbox)))
         }
-        TyKind::Enum(_) => Some(format!("{jsval} (call {})", bridge_sym("__as_int"))),
+        TyKind::Enum(_) => Some(format!("{jsval} (call {})", bridge_sym("as_int"))),
         TyKind::Js => Some(jsval.to_string()),
         TyKind::Array(elem) if is_marshalable(interner, *elem) => {
             Some(format!("{jsval} (call {})", js_to_array_sym(*elem)))
@@ -199,7 +199,7 @@ fn emit_struct_to_js(
                 "  (local.get $o) (i32.const {}) {} (call {})",
                 strings[&f.name],
                 val,
-                bridge_sym("__set")
+                bridge_sym("set")
             );
         }
     }
@@ -234,7 +234,7 @@ fn emit_js_to_struct(
         let jsval = format!(
             "(local.get $j) (i32.const {}) (call {})",
             strings[&f.name],
-            bridge_sym("__get")
+            bridge_sym("get")
         );
         if let Some(val) = value_from_js(interner, mir, &jsval, f.ty) {
             let store = store_instr_for(interner, f.ty);
@@ -276,8 +276,8 @@ fn emit_array_to_js(
     let _ = writeln!(
         out,
         "    (local.get $o) (local.get $i) (call {}) {val} (call {})",
-        bridge_sym("__box_int"),
-        bridge_sym("__index_set")
+        bridge_sym("box_int"),
+        bridge_sym("index_set")
     );
     out.push_str("    (local.get $i) (i32.const 1) (i32.add) (local.set $i)\n");
     out.push_str("    (br $lp)))\n");
@@ -296,8 +296,8 @@ fn emit_js_to_array(
     let store = store_instr_for(interner, elem);
     let jsval = format!(
         "(local.get $j) (local.get $i) (call {}) (call {})",
-        bridge_sym("__box_int"),
-        bridge_sym("__index_get")
+        bridge_sym("box_int"),
+        bridge_sym("index_get")
     );
     let val = value_from_js(interner, mir, &jsval, elem).expect("array element is marshalable");
     let _ = writeln!(
@@ -310,8 +310,8 @@ fn emit_js_to_array(
         out,
         "  (local.get $j) (i32.const {}) (call {}) (call {}) (local.set $n)",
         strings["length"],
-        bridge_sym("__get"),
-        bridge_sym("__as_int")
+        bridge_sym("get"),
+        bridge_sym("as_int")
     );
     let _ = writeln!(
         out,

@@ -1,7 +1,7 @@
 //! Call-expression analysis, grouped by call shape:
 //! - [`free_functions`]: free-function calls and overload selection entry points.
 //! - [`member_calls`]: instance/static/namespaced method calls, plus the indexer/enumerator "hook"
-//!   resolution (`get`/`set`/`iterator`/`next`) used to desugar `obj[i]`, `obj[i] = v`, and
+//!   resolution (`@get`/`@set`/`@iterator`/`@next`) used to desugar `obj[i]`, `obj[i] = v`, and
 //!   `for..in`. `resolve_hook_or_diagnose` there is the shared entry point those desugaring sites
 //!   call; the `HookResolution` outcome is an implementation detail kept private to that module.
 //! - [`overload_resolution`]: scoring/ranking of candidate overloads.
@@ -451,8 +451,8 @@ impl<'a> Analyzer<'a> {
 
     /// Resolves a `ref` call argument's inner place (`f(ref x)` / `f(ref obj.field)` /
     /// `f(ref arr[i])`) to its declared type and the HIR for the shared box pointer backing it.
-    /// Locals/parameters reuse `__Cell`/`__RefBox` slots; fields and array elements are copy-in/
-    /// copy-out through a fresh temporary `__RefBox` (writeback flushed after the call statement).
+    /// Locals/parameters reuse `CaptureCell`/`RefBox` slots; fields and array elements are copy-in/
+    /// copy-out through a fresh temporary `RefBox` (writeback flushed after the call statement).
     pub(crate) fn analyze_ref_argument(
         &mut self,
         inner: &'a ExpressionNode<'a>,

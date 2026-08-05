@@ -18,6 +18,8 @@ pub enum SymKind {
     Param,
     Type,
     Keyword,
+    /// An `@attribute` name (`@json`, `@get`, …).
+    Decorator,
 }
 
 #[derive(Debug, Clone)]

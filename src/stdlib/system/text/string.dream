@@ -34,11 +34,13 @@ extend string : Comparable<string> {
     }
 
     // Gets the character at the specified index.
+    @get
     public fun get(index: int): char {
         return this.char_at(index);
     }
 
     // Gets an iterator for the string's characters.
+    @iterator
     public fun iterator(): StringIterator {
         return StringIterator(this);
     }

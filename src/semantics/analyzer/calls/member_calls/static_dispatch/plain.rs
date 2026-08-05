@@ -145,10 +145,10 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        // `js.func` / `js.func0` / `js.__funcN` strip the closure env host-side — reject capturing
+        // `js.func` / `js.func0` / `js.funcN` strip the closure env host-side — reject capturing
         // handlers here (static dispatch, not the dynamic `js` member-call path).
         if type_name == crate::mir::js_abi::JS_TYPE
-            && matches!(method.text.as_str(), "func" | "func0" | "__funcN")
+            && matches!(method.text.as_str(), "func" | "func0" | "funcN")
         {
             for arg in arg_hirs.iter().flatten() {
                 if matches!(

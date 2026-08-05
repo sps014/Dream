@@ -178,7 +178,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         name: "shared",
         // `class` only: a `struct` is a value type (copied on assignment, no heap allocation), so
         // an embedded lock word would defeat the point (`Shared<T>` is the value-type equivalent —
-        // see `src/stdlib/core/sync.dream`). Rejecting `@shared struct` here means the rest of the
+        // see `src/stdlib/system/core/lock.dream`). Rejecting `@shared struct` here means the rest of the
         // compiler never needs to reason about a value-typed shared class.
         targets: &[AttributeTarget::Struct],
         args: ArgShape::None,
@@ -191,6 +191,33 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         // non-self-referential reference-typed payloads) or registration reports an error. See
         // `Analyzer::register_union` in `src/semantics/analyzer/declarations/enums.rs`.
         targets: &[AttributeTarget::Union],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    // Indexer / enumerator protocol hooks (mirrors `@operator`: the attribute marks the role;
+    // the method name is free). Shape/arity are checked in
+    // `declarations::protocol_hooks::validate_and_register_protocol_hook`.
+    AttributeSpec {
+        name: "get",
+        targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    AttributeSpec {
+        name: "set",
+        targets: &[AttributeTarget::Method],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    AttributeSpec {
+        name: "iterator",
+        targets: &[AttributeTarget::Method],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    AttributeSpec {
+        name: "next",
+        targets: &[AttributeTarget::Method],
         args: ArgShape::None,
         repeatable: false,
     },

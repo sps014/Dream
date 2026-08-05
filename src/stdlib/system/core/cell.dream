@@ -1,0 +1,10 @@
+module system.core;
+
+// The shared mutable cell a captured local is boxed into, so every reader (the enclosing
+// function and every closure that captures it) sees the same storage and each other's writes.
+internal class CaptureCell<T> {
+    public value: T;
+    constructor(v: T) {
+        this.value = v;
+    }
+}

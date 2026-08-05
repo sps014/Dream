@@ -5,7 +5,7 @@
 //! boxed `call_indirect` returns the async constructor's Future frame). A *capturing* one
 //! (Milestone B — see `capture_scan`'s module doc comment for how a capture is found, including
 //! transitively through further-nested lambdas) additionally receives its captured names through
-//! the `fun(...)` value's environment word: one capture as a direct `__Cell<T>` pointer, two or
+//! the `fun(...)` value's environment word: one capture as a direct `CaptureCell<T>` pointer, two or
 //! more as an `object[]` array of them (see `hir_set_capturing_func_value`/
 //! `hir_set_multi_capturing_func_value`).
 //!
@@ -37,7 +37,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
         // `ref` lambda parameters are supported: the expected `fun(...)` type encodes each `ref`
-        // slot as `__RefBox<T>` (see `fun(ref T)` in the type grammar), and the synthesized
+        // slot as `RefBox<T>` (see `fun(ref T)` in the type grammar), and the synthesized
         // function uses `HParam.is_ref` like a named `ref` function.
         let expected = self
             .current_expected_type
@@ -233,10 +233,10 @@ impl<'a> Analyzer<'a> {
         )
     }
 
-    /// If `ty` is `__RefBox<T>`, returns `(T, true)`; otherwise `(ty, false)`.
+    /// If `ty` is `RefBox<T>`, returns `(T, true)`; otherwise `(ty, false)`.
     pub(in crate::semantics::analyzer) fn peel_ref_box(ty: &Type) -> (Type, bool) {
         match ty {
-            Type::Struct(tok, Some(args)) if tok.text == "__RefBox" && args.len() == 1 => {
+            Type::Struct(tok, Some(args)) if tok.text == "RefBox" && args.len() == 1 => {
                 (args[0].clone(), true)
             }
             other => (other.clone(), false),

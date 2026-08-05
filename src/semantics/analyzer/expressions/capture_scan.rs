@@ -11,7 +11,7 @@
 //!
 //! Two entry points:
 //! - [`scan_function_captures`] — a whole-function pre-pass, run *before* the function's body is
-//!   analyzed (so the enclosing `let`s it finds can be boxed into `__Cell<T>` before they are
+//!   analyzed (so the enclosing `let`s it finds can be boxed into `CaptureCell<T>` before they are
 //!   emitted — see `Analyzer::boxed_locals`). Finds every lambda anywhere in the body (any nesting
 //!   depth) and unions each one's own free names.
 //! - [`lambda_free_names`] — one lambda's own free names (referenced but not bound within its own
@@ -44,7 +44,7 @@ pub(in crate::semantics::analyzer) fn scan_function_captures(
 /// [`scan_function_captures`]) that is ever passed as a `ref` argument to a local/parameter place
 /// (`f(ref x)`). Run as a pre-pass alongside `scan_function_captures` (feeding
 /// `Analyzer::ref_boxed_locals`, minus whatever `scan_function_captures` already claims for
-/// `Analyzer::boxed_locals`) so `x`'s slot is boxed (into `__RefBox<T>`, or `__Cell<T>` if `x` is
+/// `Analyzer::boxed_locals`) so `x`'s slot is boxed (into `RefBox<T>`, or `CaptureCell<T>` if `x` is
 /// also captured) from its very first `let`/parameter binding — a `ref` argument always needs the
 /// shared box pointer, exactly like a
 /// closure capture does, and the two triggers simply union into one boxing set. Over-approximates

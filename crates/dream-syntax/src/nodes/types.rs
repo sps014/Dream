@@ -11,7 +11,7 @@ use std::io::Error;
 /// name. This rewrite is purely on the mangled name and is applied uniformly to type identity and
 /// codegen, so the two never disagree. Any character still left over after that rewrite (e.g. a
 /// `fun(int): int` type argument's `(`, `)`, `:`, `,`, ` ` — a generic instantiated over a
-/// `fun(...)` type, such as `__Cell<fun(int): int>`, is otherwise legal) is replaced with `_` in a
+/// `fun(...)` type, such as `Cell<fun(int): int>`, is otherwise legal) is replaced with `_` in a
 /// final sanitizing pass, so every mangled name stays a valid WASM/identifier token.
 pub fn mangle_with_suffixes<S: AsRef<str>>(
     base: &str,
@@ -235,7 +235,7 @@ impl Type {
                     .iter()
                     .map(|p| match p {
                         Type::Struct(tok, Some(args))
-                            if tok.text == "__RefBox" && args.len() == 1 =>
+                            if tok.text == "RefBox" && args.len() == 1 =>
                         {
                             format!("ref {}", args[0].display_name())
                         }

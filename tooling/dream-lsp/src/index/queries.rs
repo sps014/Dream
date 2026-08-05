@@ -229,7 +229,9 @@ impl Index {
                 d.is_main
                     && match d.kind {
                         SymKind::Variable => d.scope == GLOBAL,
-                        SymKind::Param | SymKind::Keyword | SymKind::Type => false,
+                        SymKind::Param | SymKind::Keyword | SymKind::Type | SymKind::Decorator => {
+                            false
+                        }
                         _ => true,
                     }
             })
@@ -247,7 +249,10 @@ impl Index {
             .iter()
             .filter(|d| {
                 d.is_main
-                    && !matches!(d.kind, SymKind::Param | SymKind::Keyword | SymKind::Type)
+                    && !matches!(
+                        d.kind,
+                        SymKind::Param | SymKind::Keyword | SymKind::Type | SymKind::Decorator
+                    )
                     && (needle.is_empty() || d.name.to_lowercase().contains(&needle))
             })
             .collect()

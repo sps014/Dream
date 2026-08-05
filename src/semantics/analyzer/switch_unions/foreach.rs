@@ -11,10 +11,10 @@ use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
     /// Lowers `for (let <element> in <iterable>)` where `iterable` is a class exposing the
-    /// enumerator protocol: an eligible `iterator()` (accessible instance, non-async, 0-arg method
-    /// returning an enumerator object) whose `next()` (accessible instance, non-async, 0-arg) yields
-    /// `Option<T>`. It desugars to the following, built directly in HIR so that `break`/`continue`
-    /// in the user body target this loop (a `switch`/`match` arm would not):
+    /// enumerator protocol: a registered `@iterator` method (0-arg, returning an enumerator
+    /// object) whose type has a registered `@next` method yielding `Option<T>`. It desugars to
+    /// the following, built directly in HIR so that `break`/`continue` in the user body target
+    /// this loop (a `switch`/`match` arm would not):
     ///
     /// ```text
     /// let $it = <iterable>.iterator();
@@ -39,30 +39,23 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         use crate::hir::{BinOp, HExpr, HExprKind, HStmt};
+        use crate::semantics::analyzer::declarations::protocol_hooks::ProtocolRole;
 
-        // 1. `iterator()`: an eligible 0-arg instance method returning an enumerator object.
-        let iterator_info = match self.resolve_hook_or_diagnose(
+        // 1. `@iterator`: an eligible 0-arg instance method returning an enumerator object.
+        let (_iterator_hook, iterator_info) = match self.resolve_hook_or_diagnose(
             iterable_type,
-            "iterator",
-            0,
+            ProtocolRole::Iterator,
             Some(element.position),
             false,
             diagnostics,
-            |reason| {
-                format!(
-                    "type '{}' cannot be iterated: {}",
-                    iterable_type.get_type(),
-                    reason
-                )
-            },
             || {
                 format!(
-                    "for-each can only iterate over arrays or types with an 'iterator()' method, got {}",
+                    "for-each can only iterate over arrays or types with an '@iterator' method, got {}",
                     iterable_type.get_type()
                 )
             },
         ) {
-            Some(info) => info,
+            Some(resolved) => resolved,
             None => return Ok(()),
         };
         let enumerator_type = match &iterator_info.return_type {
@@ -71,7 +64,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "type '{}' is not iterable: its 'iterator()' must return an enumerator object",
+                        "type '{}' is not iterable: its '@iterator' method must return an enumerator object",
                         iterable_type.get_type()
                     ),
                     Some(element.position),
@@ -80,29 +73,21 @@ impl<'a> Analyzer<'a> {
             }
         };
 
-        // 2. `next()` on the enumerator: an eligible 0-arg instance method returning `Option<T>`.
-        let next_info = match self.resolve_hook_or_diagnose(
+        // 2. `@next` on the enumerator: an eligible 0-arg instance method returning `Option<T>`.
+        let (_next_hook, next_info) = match self.resolve_hook_or_diagnose(
             &enumerator_type,
-            "next",
-            0,
+            ProtocolRole::Next,
             Some(element.position),
             false,
             diagnostics,
-            |reason| {
-                format!(
-                    "enumerator '{}' cannot be iterated: {}",
-                    enumerator_type.get_type(),
-                    reason
-                )
-            },
             || {
                 format!(
-                    "enumerator '{}' must define 'next(): Option<T>' for for-each",
+                    "enumerator '{}' must define '@next fun ...(): Option<T>' for for-each",
                     enumerator_type.get_type()
                 )
             },
         ) {
-            Some(info) => info,
+            Some(resolved) => resolved,
             None => return Ok(()),
         };
 
@@ -113,7 +98,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "for-each requires 'next()' to return Option<T>, got {}",
+                        "for-each requires '@next' to return Option<T>, got {}",
                         next_ret.get_type()
                     ),
                     Some(element.position),
@@ -137,7 +122,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "for-each requires 'next()' to return Option<T>, got {}",
+                        "for-each requires '@next' to return Option<T>, got {}",
                         next_ret.get_type()
                     ),
                     Some(element.position),

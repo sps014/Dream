@@ -21,6 +21,7 @@ public interface Collection<T> {
     fun size(): int;
 
     // The element at `index`, or `None` when `index` is out of range.
+    @get
     fun get(index: int): Option<T>;
 
     // True when the collection holds no elements.

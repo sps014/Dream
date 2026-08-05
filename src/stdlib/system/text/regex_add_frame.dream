@@ -1,0 +1,13 @@
+module system.text;
+
+// One entry of `add_to_threadq`'s explicit epsilon-closure stack: an instruction to visit, plus
+// the capture state that would be in effect on arrival.
+internal class RegexAddFrame {
+    public pc: int;
+    public caps: int[];
+
+    constructor(pc: int, caps: int[]) {
+        this.pc = pc;
+        this.caps = caps;
+    }
+}

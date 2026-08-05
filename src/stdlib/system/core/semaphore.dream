@@ -1,0 +1,25 @@
+module system.core;
+
+public class Semaphore {
+    permits: int;
+
+    constructor(initial: int) {
+        this.permits = initial;
+    }
+
+    @intrinsic("shared_semaphore_acquire")
+    static extern fun host_acquire(target: Semaphore): void;
+
+    @intrinsic("shared_semaphore_release")
+    static extern fun host_release(target: Semaphore): void;
+
+    // Blocks (busy-waiting) until a permit is available, then takes one.
+    public fun acquire(): void {
+        Semaphore.host_acquire(this);
+    }
+
+    // Returns one permit.
+    public fun release(): void {
+        Semaphore.host_release(this);
+    }
+}

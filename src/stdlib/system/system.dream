@@ -11,13 +11,13 @@ public class System {
     static extern fun println<T>(value: T): void;
 
     @js("Dream", "consoleReadLine")
-    static extern fun __read_line(): string;
+    static extern fun host_read_line(): string;
 
     @js("Dream", "consoleReadKey")
-    static extern fun __read_key(): char;
+    static extern fun host_read_key(): char;
 
     @js("Dream", "consoleExit")
-    static extern fun __exit(code: int): void;
+    static extern fun host_exit(code: int): void;
 
     // Halts the program immediately with `message`, after printing it to standard output. Fatal
     // and non-recoverable (there is no catch/recover) — the same halt point every automatic
@@ -27,12 +27,12 @@ public class System {
 
     // Reads a line of input from stdin.
     public static fun readLine(): string {
-        return System.__read_line();
+        return System.host_read_line();
     }
 
     // Reads a single keypress from stdin.
     public static fun readKey(): char {
-        return System.__read_key();
+        return System.host_read_key();
     }
 
     // Reads a line from stdin and parses it as an integer.
@@ -47,7 +47,7 @@ public class System {
 
     // Terminates the process with the given exit code.
     public static fun exit(code: int): void {
-        System.__exit(code);
+        System.host_exit(code);
     }
 
     // Clears the terminal screen.

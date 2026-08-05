@@ -41,6 +41,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/closure.dream"),
             ),
             (
+                "<std>/system/core/cell.dream",
+                include_str!("system/core/cell.dream"),
+            ),
+            (
+                "<std>/system/core/ref_box.dream",
+                include_str!("system/core/ref_box.dream"),
+            ),
+            (
                 "<std>/system/core/string_abi.dream",
                 include_str!("system/core/string_abi.dream"),
             ),
@@ -49,8 +57,12 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/collection_tuning.dream"),
             ),
             (
-                "<std>/system/core/compare.dream",
-                include_str!("system/core/compare.dream"),
+                "<std>/system/core/equatable.dream",
+                include_str!("system/core/equatable.dream"),
+            ),
+            (
+                "<std>/system/core/comparable.dream",
+                include_str!("system/core/comparable.dream"),
             ),
             (
                 "<std>/system/core/option.dream",
@@ -73,8 +85,16 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/webworker.dream"),
             ),
             (
-                "<std>/system/core/sync.dream",
-                include_str!("system/core/sync.dream"),
+                "<std>/system/core/webworker_pool.dream",
+                include_str!("system/core/webworker_pool.dream"),
+            ),
+            (
+                "<std>/system/core/lock.dream",
+                include_str!("system/core/lock.dream"),
+            ),
+            (
+                "<std>/system/core/semaphore.dream",
+                include_str!("system/core/semaphore.dream"),
             ),
             (
                 "<std>/system/core/js.dream",
@@ -179,16 +199,44 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/text/string_builder.dream"),
             ),
             (
-                "<std>/system/text/regex_ast.dream",
-                include_str!("system/text/regex_ast.dream"),
+                "<std>/system/text/regex_node_kind.dream",
+                include_str!("system/text/regex_node_kind.dream"),
             ),
             (
-                "<std>/system/text/regex_program.dream",
-                include_str!("system/text/regex_program.dream"),
+                "<std>/system/text/regex_empty_kind.dream",
+                include_str!("system/text/regex_empty_kind.dream"),
+            ),
+            (
+                "<std>/system/text/regex_node.dream",
+                include_str!("system/text/regex_node.dream"),
+            ),
+            (
+                "<std>/system/text/regex_op.dream",
+                include_str!("system/text/regex_op.dream"),
+            ),
+            (
+                "<std>/system/text/regex_inst.dream",
+                include_str!("system/text/regex_inst.dream"),
+            ),
+            (
+                "<std>/system/text/regex_compiler.dream",
+                include_str!("system/text/regex_compiler.dream"),
             ),
             (
                 "<std>/system/text/regex_parser.dream",
                 include_str!("system/text/regex_parser.dream"),
+            ),
+            (
+                "<std>/system/text/regex_thread.dream",
+                include_str!("system/text/regex_thread.dream"),
+            ),
+            (
+                "<std>/system/text/regex_add_frame.dream",
+                include_str!("system/text/regex_add_frame.dream"),
+            ),
+            (
+                "<std>/system/text/regex_match.dream",
+                include_str!("system/text/regex_match.dream"),
             ),
             (
                 "<std>/system/text/regex_vm.dream",
@@ -281,6 +329,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/stopwatch.dream",
                 include_str!("system/stopwatch.dream"),
+            ),
+            (
+                "<std>/system/datetime_ymd.dream",
+                include_str!("system/datetime_ymd.dream"),
             ),
             (
                 "<std>/system/datetime.dream",

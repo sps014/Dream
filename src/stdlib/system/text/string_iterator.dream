@@ -11,6 +11,7 @@ public class StringIterator {
     }
 
     // Yields the next character or None.
+    @next
     public fun next(): Option<char> {
         if (this.idx >= this.text.size()) {
             return Option.None;

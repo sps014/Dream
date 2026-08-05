@@ -40,7 +40,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Diagnostic when a capturing `fun(...)` value is handed to a JS API. The host bridges
-    /// (`func0`/`func`/`__funcN`, FUNC slots) only take the funcidx half of a funcbox — the env
+    /// (`func0`/`func`/`funcN`, FUNC slots) only take the funcidx half of a funcbox — the env
     /// word is discarded — so a capturing lambda would lose its environment.
     const JS_CAPTURING_CALLBACK_MSG: &'static str = "capturing lambdas cannot be passed to JS APIs (the closure environment would be lost); pass a non-capturing top-level function, or wrap only a captureless `fun(...)` via `js.func` / `js.func0`";
 
@@ -158,20 +158,20 @@ impl<'a> Analyzer<'a> {
         let kind = self.type_ctx.interner.kind(stripped).clone();
         match kind {
             TyKind::Js => Some(e),
-            TyKind::Enum(_) => self.js_bridge_call("__box_int", vec![e], js),
+            TyKind::Enum(_) => self.js_bridge_call("box_int", vec![e], js),
             TyKind::Prim(p) => match p {
-                PrimTy::String => self.js_bridge_call("__box_string", vec![e], js),
-                PrimTy::Bool => self.js_bridge_call("__box_bool", vec![e], js),
-                PrimTy::Double => self.js_bridge_call("__box_double", vec![e], js),
+                PrimTy::String => self.js_bridge_call("box_string", vec![e], js),
+                PrimTy::Bool => self.js_bridge_call("box_bool", vec![e], js),
+                PrimTy::Double => self.js_bridge_call("box_double", vec![e], js),
                 PrimTy::Float => {
                     let d = self.cast_prim(e, PrimTy::Double);
-                    self.js_bridge_call("__box_double", vec![d], js)
+                    self.js_bridge_call("box_double", vec![d], js)
                 }
-                PrimTy::Long | PrimTy::ULong => self.js_bridge_call("__box_long", vec![e], js),
-                PrimTy::Int => self.js_bridge_call("__box_int", vec![e], js),
+                PrimTy::Long | PrimTy::ULong => self.js_bridge_call("box_long", vec![e], js),
+                PrimTy::Int => self.js_bridge_call("box_int", vec![e], js),
                 PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
                     let i = self.cast_prim(e, PrimTy::Int);
-                    self.js_bridge_call("__box_int", vec![i], js)
+                    self.js_bridge_call("box_int", vec![i], js)
                 }
             },
             TyKind::Func(params, _ret) => {
@@ -180,7 +180,7 @@ impl<'a> Analyzer<'a> {
                 // prologue of its own, so only the funcidx half is meaningful — a *capturing*
                 // lambda would lose its environment and is rejected at compile time. Arity 0/1 use
                 // the documented `func0`/`func` convenience bridges; any higher arity routes through
-                // the generalized `__funcN` bridge, which receives the raw funcref-table index plus
+                // the generalized `funcN` bridge, which receives the raw funcref-table index plus
                 // the parameter count and wraps it host-side as `fun(js, …): void`. Each parameter
                 // is marshaled as a `js` handle and the result is discarded.
                 if self.func_expr_is_capturing(&e) {
@@ -197,7 +197,7 @@ impl<'a> Analyzer<'a> {
                     n => {
                         let arity =
                             HExpr::new(self.type_ctx.interner.int(), HExprKind::IntLit(n as i64));
-                        self.js_bridge_call("__funcN", vec![funcidx, arity], js)
+                        self.js_bridge_call("funcN", vec![funcidx, arity], js)
                     }
                 }
             }
@@ -230,18 +230,18 @@ impl<'a> Analyzer<'a> {
         let bool_ty = self.type_ctx.interner.bool();
         let string = self.type_ctx.interner.string();
         let call = match p {
-            PrimTy::String => self.js_bridge_call("__as_string", vec![e], string),
-            PrimTy::Bool => self.js_bridge_call("__as_bool", vec![e], bool_ty),
-            PrimTy::Double => self.js_bridge_call("__as_double", vec![e], double),
+            PrimTy::String => self.js_bridge_call("as_string", vec![e], string),
+            PrimTy::Bool => self.js_bridge_call("as_bool", vec![e], bool_ty),
+            PrimTy::Double => self.js_bridge_call("as_double", vec![e], double),
             PrimTy::Float => {
-                let d = self.js_bridge_call("__as_double", vec![e], double);
+                let d = self.js_bridge_call("as_double", vec![e], double);
                 return d
                     .map(|d| HExpr::new(target_stripped, HExprKind::Cast(Box::new(d))))
                     .unwrap_or_else(|| HExpr::new(target_stripped, HExprKind::FloatLit(0.0)));
             }
-            PrimTy::Int => self.js_bridge_call("__as_int", vec![e], int),
+            PrimTy::Int => self.js_bridge_call("as_int", vec![e], int),
             PrimTy::UInt | PrimTy::Byte | PrimTy::Char | PrimTy::Long | PrimTy::ULong => {
-                let i = self.js_bridge_call("__as_int", vec![e], int);
+                let i = self.js_bridge_call("as_int", vec![e], int);
                 return i
                     .map(|i| HExpr::new(target_stripped, HExprKind::Cast(Box::new(i))))
                     .unwrap_or_else(|| HExpr::new(target_stripped, HExprKind::IntLit(0)));
@@ -322,7 +322,7 @@ impl<'a> Analyzer<'a> {
         Some(out)
     }
 
-    /// Builds a `JsCall` HIR node targeting the `js.__call`/`js.__invoke` bridge import, whose
+    /// Builds a `JsCall` HIR node targeting the `js.call`/`js.invoke` bridge import, whose
     /// arguments the backend marshals through the shadow stack. Returns `None` only if the bridge is
     /// somehow unregistered (a stdlib bug).
     fn js_call_node(
@@ -352,7 +352,7 @@ impl<'a> Analyzer<'a> {
 
     /// Analyzes a method call `recv.method(args)` on a `js` receiver. A method actually declared on
     /// `js` (the stdlib conversion/release helpers such as `to_int`, `is_null`, `release`) is
-    /// dispatched normally; any other name binds dynamically at runtime via `__call`.
+    /// dispatched normally; any other name binds dynamically at runtime via `call`.
     pub(super) fn analyze_js_member_call(
         &mut self,
         recv: Option<HExpr>,
@@ -379,9 +379,9 @@ impl<'a> Analyzer<'a> {
         }
 
         if let Some(sig) = known_sig {
-            // Explicit `js.func` / `js.func0` / `js.__funcN` also strip the env word host-side —
+            // Explicit `js.func` / `js.func0` / `js.funcN` also strip the env word host-side —
             // reject capturing handlers here (they skip `box_to_js` / FUNC-slot checks).
-            if matches!(method.text.as_str(), "func" | "func0" | "__funcN") {
+            if matches!(method.text.as_str(), "func" | "func0" | "funcN") {
                 for arg in arg_hirs.iter().flatten() {
                     if matches!(self.type_ctx.interner.kind(arg.ty), TyKind::Func(..))
                         && !self.ensure_captureless_js_callback(
@@ -410,7 +410,7 @@ impl<'a> Analyzer<'a> {
         Ok(Self::js_type())
     }
 
-    /// `recv.name` -> `js.__get(recv, "name")`. Sets the last-expression HIR.
+    /// `recv.name` -> `js.get(recv, "name")`. Sets the last-expression HIR.
     pub(super) fn desugar_js_get(&mut self, recv: Option<HExpr>, name: &str) {
         if !self.hir_active() {
             self.hir_none();
@@ -419,13 +419,13 @@ impl<'a> Analyzer<'a> {
         let js = self.type_ctx.interner.js();
         let name_lit = self.js_name_lit(name);
         let call = match recv {
-            Some(recv) => self.js_bridge_call("__get", vec![recv, name_lit], js),
+            Some(recv) => self.js_bridge_call("get", vec![recv, name_lit], js),
             None => None,
         };
         self.hir_set_last(call);
     }
 
-    /// `recv.name = value` -> `js.__set(recv, "name", box(value))`. Emits a void statement.
+    /// `recv.name = value` -> `js.set(recv, "name", box(value))`. Emits a void statement.
     pub(super) fn desugar_js_set(
         &mut self,
         recv: Option<HExpr>,
@@ -454,11 +454,11 @@ impl<'a> Analyzer<'a> {
             self.hir_fail();
             return;
         };
-        let call = self.js_bridge_call("__set", vec![recv, name_lit, value], void);
+        let call = self.js_bridge_call("set", vec![recv, name_lit, value], void);
         self.hir_expr_stmt(call);
     }
 
-    /// `recv.name(args...)` -> `js.__call(recv, "name", [box(args)...])`. Sets `hir.last`.
+    /// `recv.name(args...)` -> `js.call(recv, "name", [box(args)...])`. Sets `hir.last`.
     pub(super) fn desugar_js_call(
         &mut self,
         recv: Option<HExpr>,
@@ -480,11 +480,11 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return;
         };
-        let call = self.js_call_node("__call", recv, Some(name_lit), args);
+        let call = self.js_call_node("call", recv, Some(name_lit), args);
         self.hir_set_last(call);
     }
 
-    /// `recv(args...)` -> `js.__invoke(recv, [box(args)...])`. Sets `hir.last`.
+    /// `recv(args...)` -> `js.invoke(recv, [box(args)...])`. Sets `hir.last`.
     pub(super) fn desugar_js_invoke(
         &mut self,
         recv: Option<HExpr>,
@@ -504,7 +504,7 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return;
         };
-        let call = self.js_call_node("__invoke", recv, None, args);
+        let call = self.js_call_node("invoke", recv, None, args);
         self.hir_set_last(call);
     }
 
@@ -517,7 +517,7 @@ impl<'a> Analyzer<'a> {
             return;
         }
         let js = self.type_ctx.interner.js();
-        let call = self.js_bridge_call("__global_this", vec![], js);
+        let call = self.js_bridge_call("global_this", vec![], js);
         self.hir_set_last(call);
     }
 
@@ -529,7 +529,7 @@ impl<'a> Analyzer<'a> {
         )
     }
 
-    /// `await <jsExpr>` -> `await js.__await(<jsExpr>)`. Builds the async wrapper call whose result is
+    /// `await <jsExpr>` -> `await js.await_promise(<jsExpr>)`. Builds the async wrapper call whose result is
     /// `Future<Option<js>>` (so the enclosing `await` unwraps it to `Option<js>` - `Some` on resolve,
     /// `None` on rejection), letting a JS Promise be awaited natively. Returns the
     /// `Future<Option<js>>`-typed call HIR (to hand to `hir_set_await`), or `None` if the inner
@@ -539,10 +539,10 @@ impl<'a> Analyzer<'a> {
         let fut = self
             .type_ctx
             .lower(&Self::future_type(Self::option_js_type()));
-        self.js_bridge_call("__await", vec![recv], fut)
+        self.js_bridge_call("await_promise", vec![recv], fut)
     }
 
-    /// `recv[key]` -> `js.__index_get(recv, box(key))`. Sets `hir.last`.
+    /// `recv[key]` -> `js.index_get(recv, box(key))`. Sets `hir.last`.
     pub(super) fn desugar_js_index_get(
         &mut self,
         recv: Option<HExpr>,
@@ -566,11 +566,11 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return;
         };
-        let call = self.js_bridge_call("__index_get", vec![recv, key], js);
+        let call = self.js_bridge_call("index_get", vec![recv, key], js);
         self.hir_set_last(call);
     }
 
-    /// `recv[key] = value` -> `js.__index_set(recv, box(key), box(value))`. Emits a void statement.
+    /// `recv[key] = value` -> `js.index_set(recv, box(key), box(value))`. Emits a void statement.
     pub(super) fn desugar_js_index_set(
         &mut self,
         recv: Option<HExpr>,
@@ -599,7 +599,7 @@ impl<'a> Analyzer<'a> {
             self.hir_fail();
             return;
         };
-        let call = self.js_bridge_call("__index_set", vec![recv, key, value], void);
+        let call = self.js_bridge_call("index_set", vec![recv, key, value], void);
         self.hir_expr_stmt(call);
     }
 }

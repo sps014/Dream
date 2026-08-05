@@ -4,6 +4,7 @@
   "scopeName": "source.dream",
   "patterns": [
     { "include": "#comments" },
+    { "include": "#attributes" },
     { "include": "#strings" },
     { "include": "#keywords" },
     { "include": "#types" },
@@ -83,15 +84,15 @@
       "patterns": [
         {
           "name": "keyword.control.dream",
-          "match": "\\b(if|else|for|while|do|return|break|continue|switch|case|default|is|in|async|await)\\b"
+          "match": "\\b(if|else|for|while|do|return|break|continue|switch|case|default|is|in|async|await|lock)\\b"
         },
         {
           "name": "storage.type.dream",
-          "match": "\\b(let|const|class|struct|interface|enum|type|extend|fun)\\b"
+          "match": "\\b(let|const|class|struct|interface|enum|type|extend|fun|module)\\b"
         },
         {
           "name": "storage.modifier.dream",
-          "match": "\\b(static|public|extern|import|sealed|unmanaged)\\b"
+          "match": "\\b(static|public|internal|extern|import|as|sealed|unmanaged|ref|weak|unowned)\\b"
         },
         {
           "name": "variable.language.this.dream",
@@ -100,6 +101,30 @@
         {
           "name": "entity.name.function.dream",
           "match": "\\b(constructor|del|get|set)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "name": "meta.annotation.dream",
+          "begin": "(@)([A-Za-z_][A-Za-z0-9_]*)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.annotation.dream" },
+            "2": { "name": "entity.name.function.decorator.dream" }
+          },
+          "end": "(?=[^(\\s]|\\n)",
+          "patterns": [
+            {
+              "name": "meta.annotation.parameters.dream",
+              "begin": "\\(",
+              "end": "\\)",
+              "patterns": [
+                { "include": "#strings" },
+                { "include": "#constants" }
+              ]
+            }
+          ]
         }
       ]
     },

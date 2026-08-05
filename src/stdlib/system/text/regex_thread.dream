@@ -1,0 +1,12 @@
+module system.text;
+
+// Pike-VM thread: program counter + capture array.
+internal class RegexThread {
+    public pc: int;
+    public caps: int[];
+
+    constructor(pc: int, caps: int[]) {
+        this.pc = pc;
+        this.caps = caps;
+    }
+}

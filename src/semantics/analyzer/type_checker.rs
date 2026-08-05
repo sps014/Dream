@@ -61,7 +61,7 @@ impl<'a> Analyzer<'a> {
         // A capturing lambda's synthesized function (see `expressions::lambda`) additionally binds
         // its captured name(s) — not among `function.parameters`, but ordinary type-checkable
         // locals as far as the body is concerned (its runtime storage, an unboxed `.value` read
-        // through a `__Cell<T>` populated from `$__closure_env`, is purely a `hir_begin_function`
+        // through a `CaptureCell<T>` populated from `$__closure_env`, is purely a `hir_begin_function`
         // concern; see the capturing-lambda prologue there).
         if let Some(captures) = self.closure_captures.get(&function.name.text) {
             for (cap_name, cap_ty) in captures.clone() {

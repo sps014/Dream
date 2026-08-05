@@ -41,17 +41,17 @@ impl<'a> Analyzer<'a> {
         ));
     }
 
-    /// The `__Cell<elem>` struct type wrapping a captured local of type `elem` (see
+    /// The `Cell<elem>` struct type wrapping a captured local of type `elem` (see
     /// `src/stdlib/core/closure.dream`) — the shared mutable box every reader of a captured name
     /// (the enclosing function and every closure that captures it) reads/writes through.
     pub(in crate::semantics::analyzer) fn cell_type(elem: &Type) -> Type {
-        Self::boxed_type("__Cell", elem)
+        Self::boxed_type("CaptureCell", elem)
     }
 
-    /// The `__RefBox<elem>` value-struct type wrapping a local/parameter that is `ref`-passed but
+    /// The `RefBox<elem>` value-struct type wrapping a local/parameter that is `ref`-passed but
     /// never closure-captured (see `src/stdlib/core/closure.dream` and `docs/compiler/03-hir.md`).
     pub(in crate::semantics::analyzer) fn ref_box_type(elem: &Type) -> Type {
-        Self::boxed_type("__RefBox", elem)
+        Self::boxed_type("RefBox", elem)
     }
 
     fn boxed_type(base: &str, elem: &Type) -> Type {
@@ -61,7 +61,7 @@ impl<'a> Analyzer<'a> {
         )
     }
 
-    /// Builds `__Cell<elem_ty>(value)`: ensures that instantiation of the generic `__Cell<T>` class
+    /// Builds `CaptureCell<elem_ty>(value)`: ensures that instantiation of the generic `CaptureCell<T>` class
     /// exists (registering it on first use, exactly like an ordinary `List<T>()` construction site),
     /// then emits the `New` HIR wrapping `value`. Used both for a captured `let`/parameter (see
     /// `hir_declare_local`) and — indirectly, by construction at the capturing lambda's use site —
@@ -71,18 +71,18 @@ impl<'a> Analyzer<'a> {
         elem_ty: &Type,
         value: HExpr,
     ) -> Option<HExpr> {
-        self.hir_build_boxed_new("__Cell", Self::cell_type(elem_ty), elem_ty, value)
+        self.hir_build_boxed_new("CaptureCell", Self::cell_type(elem_ty), elem_ty, value)
     }
 
-    /// Builds `__RefBox<elem_ty>(value)`, the same shape as [`Self::hir_build_cell_new`] but backed
+    /// Builds `RefBox<elem_ty>(value)`, the same shape as [`Self::hir_build_cell_new`] but backed
     /// by the value-struct box a purely `ref`-passed (not closure-captured) name uses instead of the
-    /// heap `__Cell<T>` — see `hir_declare_local`/`Analyzer::hir_begin_function`.
+    /// heap `CaptureCell<T>` — see `hir_declare_local`/`Analyzer::hir_begin_function`.
     pub(in crate::semantics::analyzer) fn hir_build_ref_box_new(
         &mut self,
         elem_ty: &Type,
         value: HExpr,
     ) -> Option<HExpr> {
-        self.hir_build_boxed_new("__RefBox", Self::ref_box_type(elem_ty), elem_ty, value)
+        self.hir_build_boxed_new("RefBox", Self::ref_box_type(elem_ty), elem_ty, value)
     }
 
     fn hir_build_boxed_new(
@@ -134,22 +134,22 @@ impl<'a> Analyzer<'a> {
         Some(HExpr::new(ty, HExprKind::Var(Binding::Global(env_global))))
     }
 
-    /// Looks up one of the `__Closure.*` compiler-internal intrinsics (see
+    /// Looks up one of the `Closure.*` compiler-internal intrinsics (see
     /// `src/stdlib/core/closure.dream`) by its bare method name. These back the `fun(...)` closure
     /// ABI (a boxed `[funcidx][env]` heap value); every call site is built directly here rather than
     /// through ordinary name resolution, so the stdlib class is never referenced by user code.
     pub(in crate::semantics::analyzer) fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
         self.type_ctx.defs.lookup(
             DefKind::Function,
-            &crate::types::method_fn("__Closure", method),
+            &crate::types::method_fn("Closure", method),
         )
     }
 
     /// Wraps a raw function-table index (`raw`, always `int`-typed) plus an optional environment
     /// pointer (`env`, `None` for a non-capturing value — becomes a `0` literal) into a boxed
-    /// `fun(...)` value via `__Closure.funcbox_new`, typed as `func_ty` (the box is a plain `i32` at
+    /// `fun(...)` value via `Closure.funcbox_new`, typed as `func_ty` (the box is a plain `i32` at
     /// runtime regardless of the declared `fun(...)` shape it carries). Returns `None` (dropping HIR
-    /// coverage) if the `__Closure` intrinsics are not registered — should not happen, since the
+    /// coverage) if the `Closure` intrinsics are not registered — should not happen, since the
     /// stdlib prelude always defines them, but this keeps the failure a silent coverage drop rather
     /// than a panic if the prelude is ever missing them.
     fn build_funcbox(&mut self, raw: HExpr, env: Option<HExpr>, func_ty: &Type) -> Option<HExpr> {
@@ -174,7 +174,7 @@ impl<'a> Analyzer<'a> {
     /// Extracts a boxed `fun(...)` value's raw function-table index, discarding its environment word
     /// — used at boundaries with no env-restoring prologue of their own (a host `@js` bridge; see
     /// `js_interop::box_to_js`), where only the funcidx half of the box is meaningful. `None` if the
-    /// `__Closure` intrinsics are unavailable.
+    /// `Closure` intrinsics are unavailable.
     pub(in crate::semantics::analyzer) fn hir_funcbox_funcidx(
         &mut self,
         boxed: HExpr,
@@ -226,11 +226,11 @@ impl<'a> Analyzer<'a> {
         self.hir.last = self.build_funcbox(raw, None, func_ty);
     }
 
-    /// Appends `__Closure.retain(env);` as a statement: bumps the captured environment's (a
-    /// `__Cell<T>`, reinterpreted as `object`) reference count with no matching release, so it
+    /// Appends `Closure.retain(env);` as a statement: bumps the captured environment's (a
+    /// `CaptureCell<T>`, reinterpreted as `object`) reference count with no matching release, so it
     /// outlives the enclosing function's own scope-exit release of its `let`/parameter slot — see
     /// `src/stdlib/core/closure.dream`'s doc comment for the full leak-vs-dangle tradeoff this
-    /// buys. A no-op (returns `false`) if the `__Closure` intrinsics are unavailable.
+    /// buys. A no-op (returns `false`) if the `Closure` intrinsics are unavailable.
     pub(in crate::semantics::analyzer) fn hir_retain_env(&mut self, env: HExpr) -> bool {
         let Some(def) = self.closure_intrinsic("retain") else {
             return false;
@@ -253,7 +253,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Like [`hir_set_func_value`], but wraps the box around a *captured* environment (a
-    /// `__Cell<T>` pointer, reinterpreted to `int` — see [`build_funcbox`]) instead of a null one:
+    /// `CaptureCell<T>` pointer, reinterpreted to `int` — see [`build_funcbox`]) instead of a null one:
     /// the lambda's own lifted function reads it back apart at its own prologue (see
     /// `Analyzer::hir_begin_function`). Drops coverage if the name is not a registered function def.
     pub(in crate::semantics::analyzer) fn hir_set_capturing_func_value(
@@ -287,7 +287,7 @@ impl<'a> Analyzer<'a> {
 
     /// Like [`hir_set_capturing_func_value`], but for **two or more** captured names: the
     /// environment is an `object[]` array (one slot per capture, in `env_cells`' order) rather than
-    /// a single `__Cell<T>` — see the lifted function's receiving half,
+    /// a single `CaptureCell<T>` — see the lifted function's receiving half,
     /// `Analyzer::receive_closure_captures`. Each cell is written into the array as an ordinary
     /// `object[]` store, so the emitter's normal container-store rule retains it on the array's
     /// behalf (see `mir::passes::rc`'s doc comment) — only the array itself, not each individual
@@ -394,7 +394,7 @@ impl<'a> Analyzer<'a> {
     /// callee's own prologue; see `hir_read_closure_env`) and extracting its function-table index —
     /// then dispatches through that index. `f` is read into a fresh local first so both extractions
     /// (env, funcidx) observe the same box value without re-evaluating `f` twice. Drops coverage if
-    /// the name is not a known local, the `__Closure` intrinsics are unavailable, or any argument is
+    /// the name is not a known local, the `Closure` intrinsics are unavailable, or any argument is
     /// not representable.
     pub(in crate::semantics::analyzer) fn hir_set_indirect_call(
         &mut self,
@@ -411,7 +411,7 @@ impl<'a> Analyzer<'a> {
             return;
         };
         // A captured `fun(...)`-typed name (`self.hir.boxed`, see `hir_set_var`'s doc comment)
-        // reads through its `__Cell<T>` box's `.value` field: `ty` here is the *cell's* type, not
+        // reads through its `CaptureCell<T>` box's `.value` field: `ty` here is the *cell's* type, not
         // the `fun(...)` shape `hir_set_indirect_call_expr` needs to pick the right
         // `call_indirect` signature — dereference it exactly like a plain read would.
         let target = if let Some(&elem_ty) = self.hir.boxed.get(name) {

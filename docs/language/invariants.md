@@ -38,6 +38,17 @@ Their calling convention is fixed, so their shape is fixed.
 - A type may declare at most one `@operator` overload per (symbol, arity) and at most one `@cast`
   per target type. See [Operators § Operator overloading](operators.md#operator-overloading).
 
+## Indexers and enumerators
+
+- `@get` / `@set` / `@iterator` / `@next` mark protocol roles; method names are free (same model as
+  `@operator`). See [Classes & Structs § Indexers and enumerators](classes-structs.md#indexers-and-enumerators).
+- `@get`: instance method, one parameter, non-void return, non-async — enables `obj[i]`.
+- `@set`: instance method, two parameters, non-async — enables `obj[i] = v`.
+- `@iterator`: instance method, zero parameters, returns a class/struct — enables `for..in`.
+- `@next`: instance method, zero parameters, returns `Option<T>` — enumerator step.
+- A type may declare at most one method per role. Bare `get`/`set`/`iterator`/`next` without the
+  attribute are ordinary methods.
+
 ## Linkage modifiers are exclusive
 
 `public` and `static` express opposite linkage and cannot combine:

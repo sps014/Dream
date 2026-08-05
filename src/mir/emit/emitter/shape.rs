@@ -51,7 +51,7 @@ impl Emitter<'_> {
         self.line(&format!("  ;; entry = bb{} (pc dispatch fallback)", self.func.entry.0));
         self.line(&format!("  (i32.const {})", self.func.entry.0));
         self.line("  (local.set $__pc)");
-        self.line("  (block $__exit");
+        self.line("  (block $host_exit");
         self.line("   (loop $__loop");
         for i in (0..n).rev() {
             self.line(&format!("    (block $bb{}", i));

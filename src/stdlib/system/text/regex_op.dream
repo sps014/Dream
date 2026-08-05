@@ -1,0 +1,10 @@
+module system.text;
+
+public enum RegexOp {
+    CharClass,
+    Capture,
+    EmptyWidth,
+    Alt,
+    Match,
+    Nop,
+}

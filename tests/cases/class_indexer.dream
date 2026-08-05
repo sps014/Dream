@@ -1,4 +1,4 @@
-// A user class opting into `obj[i]` / `obj[i] = v` via convention-named `get`/`set` methods.
+// A user class opting into `obj[i]` / `obj[i] = v` via `@get`/`@set` methods.
 
 import system;
 class Grid {
@@ -8,10 +8,12 @@ class Grid {
         this.cells = Buffer.alloc<int>(size);
     }
 
+    @get
     public fun get(index: int): int {
         return this.cells[index];
     }
 
+    @set
     public fun set(index: int, value: int): void {
         this.cells[index] = value;
     }

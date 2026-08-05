@@ -1,0 +1,13 @@
+module system.text;
+
+// Zero-width assertion kinds, one per node (re2/prog.h's `EmptyOp` is a bitmask since one RE2
+// instruction can combine several; this engine never needs more than one assertion per node, so a
+// plain tag is enough).
+public enum RegexEmptyKind {
+    BeginLine,
+    EndLine,
+    BeginText,
+    EndText,
+    WordBoundary,
+    NonWordBoundary,
+}

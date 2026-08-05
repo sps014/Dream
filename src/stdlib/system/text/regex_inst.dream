@@ -1,0 +1,47 @@
+module system.text;
+
+public class RegexInst {
+    public opcode: RegexOp;
+    public ranges: List<char>;
+    public negate: bool;
+    public foldcase: bool;
+    public cap: int;
+    public empty_kind: RegexEmptyKind;
+    public out: int;
+    public out1: int;
+
+    constructor(opcode: RegexOp, ranges: List<char>, negate: bool, foldcase: bool, cap: int, empty_kind: RegexEmptyKind, out: int, out1: int) {
+        this.opcode = opcode;
+        this.ranges = ranges;
+        this.negate = negate;
+        this.foldcase = foldcase;
+        this.cap = cap;
+        this.empty_kind = empty_kind;
+        this.out = out;
+        this.out1 = out1;
+    }
+
+    public static fun char_class(ranges: List<char>, negate: bool, foldcase: bool): RegexInst {
+        return RegexInst(RegexOp.CharClass, ranges, negate, foldcase, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+    }
+
+    public static fun capture(cap: int): RegexInst {
+        return RegexInst(RegexOp.Capture, List<char>(), false, false, cap, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+    }
+
+    public static fun empty_width(kind: RegexEmptyKind): RegexInst {
+        return RegexInst(RegexOp.EmptyWidth, List<char>(), false, false, 0, kind, 0 - 1, 0 - 1);
+    }
+
+    public static fun alt(out: int, out1: int): RegexInst {
+        return RegexInst(RegexOp.Alt, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, out1);
+    }
+
+    public static fun nop(out: int): RegexInst {
+        return RegexInst(RegexOp.Nop, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, out, 0 - 1);
+    }
+
+    public static fun match_inst(): RegexInst {
+        return RegexInst(RegexOp.Match, List<char>(), false, false, 0, RegexEmptyKind.BeginLine, 0 - 1, 0 - 1);
+    }
+}

@@ -1,41 +1,5 @@
 module system.text;
 
-// Parsed regex syntax tree, produced by `RegexParser` (regex_parser.dream) and consumed by
-// `RegexCompiler` (regex_program.dream). Modeled after RE2's `Regexp` node (re2/regexp.h), scoped
-// to the operators this engine supports, and shaped like the rest of the stdlib's own recursive
-// trees (see `JsonValue`): a flat `kind` tag plus every field any variant might need, rather than
-// a discriminated union. `left`/`right` use `List<RegexNode>` (0 or 1 element) instead of
-// `Option<RegexNode>` to avoid the compiler's reference-cycle check, which is conservative about
-// a class holding a field of its own type directly.
-
-// The kind of a parsed regex node.
-public enum RegexNodeKind {
-    Alt,      // left | right
-    Cat,      // left then right
-    Lit,      // a single literal character (`ch`)
-    Class,    // a character class: `ranges` (lo, hi pairs) plus `negate`
-    AnyChar,  // `.` — ranges are resolved at compile time from the dotall flag
-    Paren,    // a group; `cap` >= 0 is a capturing group's 1-based index (0 = the whole-match
-              // wrapper the parser adds), `cap` == -1 is a non-capturing `(?:...)` group
-    Star,     // left*
-    Plus,     // left+
-    Quest,    // left?
-    Assert,   // a zero-width assertion; `empty_kind` selects which one
-    Nothing,  // matches the empty string and consumes nothing (compiles to zero instructions)
-}
-
-// Zero-width assertion kinds, one per node (re2/prog.h's `EmptyOp` is a bitmask since one RE2
-// instruction can combine several; this engine never needs more than one assertion per node, so a
-// plain tag is enough).
-public enum RegexEmptyKind {
-    BeginLine,
-    EndLine,
-    BeginText,
-    EndText,
-    WordBoundary,
-    NonWordBoundary,
-}
-
 public class RegexNode {
     public kind: RegexNodeKind;
     public left: List<RegexNode>;

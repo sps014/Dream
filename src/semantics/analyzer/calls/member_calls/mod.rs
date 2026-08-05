@@ -5,7 +5,7 @@
 //!   every (or every primitive/array) receiver.
 //! - [`instance_dispatch`]: ordinary and interface instance-method resolution once the receiver type
 //!   is known and the static/builtin cases have been ruled out.
-//! - [`hooks`]: indexer/enumerator "hook" method resolution (`get`/`set`/`iterator`/`next`) shared by
+//! - [`hooks`]: indexer/enumerator protocol-hook resolution (`@get`/`@set`/`@iterator`/`@next`) shared by
 //!   the `obj[i]`, `obj[i] = v`, and `for..in` desugaring sites; `resolve_hook_or_diagnose` is the
 //!   shared entry point those call, with the `HookResolution` outcome kept private to this module.
 

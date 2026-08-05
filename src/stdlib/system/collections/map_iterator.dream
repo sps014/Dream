@@ -12,6 +12,7 @@ public class MapIterator<K, V> {
         this.idx = 0;
     }
 
+    @next
     public fun next(): Option<KeyValuePair<K, V>> {
         if (this.idx >= this.keys.size()) {
             return Option.None;

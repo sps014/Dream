@@ -141,7 +141,27 @@ class Config {
 
 ### Indexers and enumerators
 
-Opt into `obj[i]` syntax by defining `get(index)` and `set(index, value)`. Opt into `for (let x in obj)` loops by defining `iterator()` (returning an object with `next(): Option<T>`).
+Opt into `obj[i]` / `obj[i] = v` by tagging methods with `@get` / `@set` (method names are free — they need not be called `get`/`set`). Opt into `for (let x in obj)` by tagging a zero-arg factory with `@iterator` (returning an enumerator object) and tagging that enumerator's step method with `@next` (returning `Option<T>`):
+
+```dream
+class Grid {
+    @get
+    public fun at(index: int): int { ... }
+
+    @set
+    public fun put(index: int, value: int): void { ... }
+
+    @iterator
+    public fun iter(): GridIter { ... }
+}
+
+class GridIter {
+    @next
+    public fun advance(): Option<int> { ... }
+}
+```
+
+A bare method named `get`/`set`/`iterator`/`next` without the attribute is an ordinary method and does **not** enable bracket / `for..in` sugar.
 
 ## Advanced: sealed types
 
