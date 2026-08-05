@@ -1,0 +1,22 @@
+[package]
+name = "dream-sema"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "dream_sema"
+path = "src/lib.rs"
+
+[dependencies]
+dream-syntax = { path = "../dream-syntax" }
+dream-diagnostics = { path = "../dream-diagnostics" }
+dream-text = { path = "../dream-text" }
+dream-types = { path = "../dream-types" }
+dream-hir = { path = "../dream-hir" }
+dream-abi = { path = "../dream-abi" }
+dream-stdlib = { path = "../dream-stdlib" }
+bumpalo = "3.20.3"
+indexmap = "2"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"

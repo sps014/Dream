@@ -6,10 +6,10 @@
 //! so its calls to the interface's other methods resolve and dispatch exactly like a hand-written
 //! method would. This mirrors the `@json` derive strategy (synthesize + reuse the normal path).
 
-use crate::semantics::analyzer::{generic_bindings, substitute_generic_type};
-use crate::syntax::nodes::interface_node::InterfaceDeclarationNode;
-use crate::syntax::nodes::struct_node::StructDeclarationNode;
-use crate::syntax::nodes::{ExtendNode, FunctionNode, Type};
+use dream_sema::analyzer::{generic_bindings, substitute_generic_type};
+use dream_syntax::nodes::interface_node::InterfaceDeclarationNode;
+use dream_syntax::nodes::struct_node::StructDeclarationNode;
+use dream_syntax::nodes::{ExtendNode, FunctionNode, Type};
 
 /// The declared base name of an implemented interface type (`Container<int>` -> `"Container"`),
 /// read from the identifier token so it matches the interface's declared name. (Note `get_type()`

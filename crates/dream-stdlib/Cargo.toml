@@ -1,0 +1,12 @@
+[package]
+name = "dream-stdlib"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "dream_stdlib"
+path = "src/lib.rs"
+
+[dependencies]
+dream-syntax = { path = "../dream-syntax" }
+indexmap = "2"

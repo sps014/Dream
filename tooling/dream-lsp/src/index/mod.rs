@@ -60,7 +60,7 @@ impl Index {
                     continue;
                 }
                 let module_name = import.module_name.text.as_str();
-                if let Some(pkg) = dream::stdlib::std_package_from_slash_path(module_name) {
+                if let Some(pkg) = dream_stdlib::std_package_from_slash_path(module_name) {
                     acc.requested_std_packages.insert(pkg.name.to_string());
                 }
             }
@@ -77,7 +77,7 @@ impl Index {
                         continue;
                     }
                     let module_name = import.module_name.text.as_str();
-                    if dream::stdlib::std_package_from_slash_path(module_name).is_some() {
+                    if dream_stdlib::std_package_from_slash_path(module_name).is_some() {
                         continue;
                     }
                     let import_path =

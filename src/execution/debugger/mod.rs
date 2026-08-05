@@ -3,7 +3,7 @@
 //!
 //! The compiler, when built with `-g`/`--debug-info`, instruments each function with
 //! `dream_debug.enter/line/exit` host hooks and spills every named local into a pool of exported
-//! `i64` globals at each statement boundary (see [`crate::mir::emit::debug_map`]). This module loads
+//! `i64` globals at each statement boundary (see [`dream_mir::emit::debug_map`]). This module loads
 //! the emitted `.dbg.json` [source map](sourcemap), runs the program on a dedicated thread, and lets
 //! those hooks pause execution at breakpoints / steps. While paused it snapshots the current frame's
 //! locals so the DAP main thread can answer `stackTrace`/`scopes`/`variables`/`evaluate` requests.

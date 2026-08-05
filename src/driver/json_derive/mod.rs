@@ -7,9 +7,9 @@ use bumpalo::Bump;
 use std::collections::{HashMap, HashSet};
 use std::io::Error;
 
-use crate::diagnostics::DiagnosticBag;
-use crate::syntax::lexer::Lexer;
-use crate::syntax::parser::Parser;
+use dream_diagnostics::DiagnosticBag;
+use dream_syntax::lexer::Lexer;
+use dream_syntax::parser::Parser;
 
 mod class;
 mod union;
@@ -33,11 +33,11 @@ const JSON_DERIVE_FILE: &str = "<json-derive>";
 /// by the caller (they must be wrapped in `Option`).
 pub(super) fn json_ignore_default(
     ftype: &str,
-    field_ty: &crate::syntax::nodes::Type,
+    field_ty: &dream_syntax::nodes::Type,
 ) -> Option<String> {
     if matches!(
         field_ty,
-        crate::syntax::nodes::Type::Struct(token, Some(args))
+        dream_syntax::nodes::Type::Struct(token, Some(args))
             if token.text == "Option" && args.len() == 1
     ) {
         return Some("Option.None".to_string());
@@ -57,7 +57,7 @@ pub(super) fn json_ignore_default(
 }
 
 /// Returns `true` if the field carries `@json_ignore`.
-pub(super) fn has_json_ignore(field_attrs: &[crate::syntax::nodes::AttributeNode]) -> bool {
+pub(super) fn has_json_ignore(field_attrs: &[dream_syntax::nodes::AttributeNode]) -> bool {
     field_attrs.iter().any(|a| a.name.text == JSON_IGNORE_ATTR)
 }
 
@@ -189,7 +189,7 @@ pub(super) fn missing_json_hint(core: &str, jsonable: &HashSet<String>) -> Strin
 
 /// Returns `true` if the declaration carries the `@json` attribute.
 fn has_json_attr<'a>(
-    attributes: impl IntoIterator<Item = &'a crate::syntax::nodes::AttributeNode>,
+    attributes: impl IntoIterator<Item = &'a dream_syntax::nodes::AttributeNode>,
 ) -> bool {
     attributes.into_iter().any(|a| a.name.text == JSON_ATTR)
 }
@@ -199,9 +199,9 @@ fn has_json_attr<'a>(
 /// declarations are collected so cross-type (`@json` field) references resolve.
 pub(crate) fn generate_json_derives<'a>(
     arena: &'a Bump,
-    all_structs: &[crate::syntax::nodes::struct_node::StructDeclarationNode<'a>],
-    all_enums: &[crate::syntax::nodes::EnumDeclarationNode],
-    all_extends: &mut Vec<crate::syntax::nodes::ExtendNode<'a>>,
+    all_structs: &[dream_syntax::nodes::struct_node::StructDeclarationNode<'a>],
+    all_enums: &[dream_syntax::nodes::EnumDeclarationNode],
+    all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
 ) -> Result<(), Error> {

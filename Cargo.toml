@@ -7,12 +7,17 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# Front-end crates: the source-text primitives, diagnostics, and the lexer/parser/AST live in
-# their own layered crates and are re-exported from `lib.rs` so existing
-# `crate::{syntax, diagnostics, text}::...` paths keep resolving.
+# Front-end crates
 dream-text = { path = "crates/dream-text" }
 dream-diagnostics = { path = "crates/dream-diagnostics" }
 dream-syntax = { path = "crates/dream-syntax" }
+# IR-boundary middle/back-end crates
+dream-types = { path = "crates/dream-types" }
+dream-hir = { path = "crates/dream-hir" }
+dream-abi = { path = "crates/dream-abi" }
+dream-stdlib = { path = "crates/dream-stdlib" }
+dream-sema = { path = "crates/dream-sema" }
+dream-mir = { path = "crates/dream-mir" }
 bumpalo = "3.20.3"
 # Insertion-ordered map used for the codegen tables whose iteration order reaches emitted
 # `.wat` output, so compilation is reproducible (std `HashMap` randomizes iteration per run).
@@ -22,9 +27,6 @@ tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 wasmtime = { version = "45.0.2", optional = true }
 wat = "1.252.0"
-# The WAT text AST (companion of `wat`), used for structural whole-module dead-function elimination
-# in codegen (src/mir/emit/wat_dce.rs) instead of fragile `$token` string matching.
-wast = "252.0.0"
 # HTTP client backing the native (wasmtime) `HttpClient` host functions (src/execution/host.rs).
 # Blocking so it fits the synchronous host-call model; `serde_json` parses the header object.
 reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
@@ -68,6 +70,12 @@ members = [
     "crates/dream-text",
     "crates/dream-diagnostics",
     "crates/dream-syntax",
+    "crates/dream-types",
+    "crates/dream-hir",
+    "crates/dream-abi",
+    "crates/dream-stdlib",
+    "crates/dream-sema",
+    "crates/dream-mir",
     "tooling/dream-lsp",
     "tooling/dreamer",
 ]

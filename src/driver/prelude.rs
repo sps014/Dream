@@ -1,5 +1,5 @@
 //! Standard-library prelude merging. Each built-in type lives in its own embedded prelude file
-//! (`crate::stdlib`); their declarations are parsed with the user's arena and merged into the
+//! (`dream_stdlib`); their declarations are parsed with the user's arena and merged into the
 //! program so the built-in types are real, extensible classes.
 
 use bumpalo::Bump;
@@ -8,11 +8,11 @@ use std::collections::HashMap;
 use std::io::Error;
 use std::rc::Rc;
 
-use crate::diagnostics::DiagnosticBag;
+use dream_diagnostics::DiagnosticBag;
 use crate::driver::source_loader::collect_declarations;
-use crate::stdlib::{resolve_packages_to_load, StdPackage};
-use crate::syntax::lexer::Lexer;
-use crate::syntax::parser::Parser;
+use dream_stdlib::{resolve_packages_to_load, StdPackage};
+use dream_syntax::lexer::Lexer;
+use dream_syntax::parser::Parser;
 
 /// Parses the requested embedded stdlib packages (bootstrap + `requested` + transitive deps) and
 /// merges their declarations into the program. Uses the same arena as the user's files so all AST
@@ -20,11 +20,11 @@ use crate::syntax::parser::Parser;
 #[allow(clippy::too_many_arguments)]
 pub fn merge_prelude<'a>(
     arena: &'a Bump,
-    all_functions: &mut Vec<crate::syntax::nodes::FunctionNode<'a>>,
-    all_structs: &mut Vec<crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
-    all_interfaces: &mut Vec<crate::syntax::nodes::InterfaceDeclarationNode<'a>>,
-    all_enums: &mut Vec<crate::syntax::nodes::EnumDeclarationNode>,
-    all_extends: &mut Vec<crate::syntax::nodes::ExtendNode<'a>>,
+    all_functions: &mut Vec<dream_syntax::nodes::FunctionNode<'a>>,
+    all_structs: &mut Vec<dream_syntax::nodes::struct_node::StructDeclarationNode<'a>>,
+    all_interfaces: &mut Vec<dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
+    all_enums: &mut Vec<dream_syntax::nodes::EnumDeclarationNode>,
+    all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
@@ -53,16 +53,16 @@ pub fn merge_prelude<'a>(
 #[allow(clippy::too_many_arguments)]
 pub fn merge_full_prelude<'a>(
     arena: &'a Bump,
-    all_functions: &mut Vec<crate::syntax::nodes::FunctionNode<'a>>,
-    all_structs: &mut Vec<crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
-    all_interfaces: &mut Vec<crate::syntax::nodes::InterfaceDeclarationNode<'a>>,
-    all_enums: &mut Vec<crate::syntax::nodes::EnumDeclarationNode>,
-    all_extends: &mut Vec<crate::syntax::nodes::ExtendNode<'a>>,
+    all_functions: &mut Vec<dream_syntax::nodes::FunctionNode<'a>>,
+    all_structs: &mut Vec<dream_syntax::nodes::struct_node::StructDeclarationNode<'a>>,
+    all_interfaces: &mut Vec<dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
+    all_enums: &mut Vec<dream_syntax::nodes::EnumDeclarationNode>,
+    all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
 ) -> Result<(), Error> {
-    let all: IndexSet<String> = crate::stdlib::STD_PACKAGES
+    let all: IndexSet<String> = dream_stdlib::STD_PACKAGES
         .iter()
         .map(|p| p.name.to_string())
         .collect();
@@ -84,11 +84,11 @@ pub fn merge_full_prelude<'a>(
 fn merge_package<'a>(
     pkg: &StdPackage,
     arena: &'a Bump,
-    all_functions: &mut Vec<crate::syntax::nodes::FunctionNode<'a>>,
-    all_structs: &mut Vec<crate::syntax::nodes::struct_node::StructDeclarationNode<'a>>,
-    all_interfaces: &mut Vec<crate::syntax::nodes::InterfaceDeclarationNode<'a>>,
-    all_enums: &mut Vec<crate::syntax::nodes::EnumDeclarationNode>,
-    all_extends: &mut Vec<crate::syntax::nodes::ExtendNode<'a>>,
+    all_functions: &mut Vec<dream_syntax::nodes::FunctionNode<'a>>,
+    all_structs: &mut Vec<dream_syntax::nodes::struct_node::StructDeclarationNode<'a>>,
+    all_interfaces: &mut Vec<dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
+    all_enums: &mut Vec<dream_syntax::nodes::EnumDeclarationNode>,
+    all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,

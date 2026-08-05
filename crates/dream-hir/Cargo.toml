@@ -1,0 +1,12 @@
+[package]
+name = "dream-hir"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "dream_hir"
+path = "src/lib.rs"
+
+[dependencies]
+dream-types = { path = "../dream-types" }
+indexmap = "2"

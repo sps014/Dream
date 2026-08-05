@@ -7,7 +7,7 @@
 //! *not* shared, so it cannot be used here at all. [`shared_bytes`]/[`shared_bytes_mut`] are the
 //! single place that casts `SharedMemory`'s `&[UnsafeCell<u8>]` view to ordinary byte slices.
 
-use crate::mir::abi;
+use dream_mir::abi;
 use std::slice;
 use wasmtime::*;
 

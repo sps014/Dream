@@ -8,7 +8,7 @@ use common::{exercise_all, XorShift, VALID_SNIPPETS};
 
 #[test]
 fn builds_index_for_stdlib_without_panic() {
-    let path = "../../src/stdlib/system/core/math.dream";
+    let path = "../../crates/dream-stdlib/src/system/core/math.dream";
     let src = std::fs::read_to_string(path).unwrap();
     let idx = dream_lsp::index::Index::build(Some(path), &src);
     assert!(

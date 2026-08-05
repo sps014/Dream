@@ -7,7 +7,7 @@
 //! struct lays its fields out sequentially), so the resolved field index used in
 //! [`super::HPlace::Field`] indexes straight into [`TypeLayout::fields`].
 
-use crate::types::{TyKind, TypeId, TypeInterner};
+use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 
 /// The in-memory size and alignment (bytes) of a scalar/reference value of `ty`. Reference types
@@ -21,7 +21,7 @@ pub fn scalar_size(interner: &TypeInterner, ty: TypeId) -> (u32, u32) {
     }
     match interner.kind(ty) {
         // Delegates to `PrimTy::size_align` (see there) so this agrees byte-for-byte with the
-        // string-keyed `crate::types::naming::value_size_align` used by analyzer struct tables.
+        // string-keyed `dream_types::naming::value_size_align` used by analyzer struct tables.
         TyKind::Prim(p) => p.size_align(),
         _ => (4, 4),
     }
@@ -156,7 +156,7 @@ impl LayoutTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::PrimTy;
+    use dream_types::PrimTy;
 
     #[test]
     fn packs_and_aligns_fields() {

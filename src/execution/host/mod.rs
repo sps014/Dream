@@ -42,7 +42,7 @@ mod contract_tests {
     //! (`runtime/dream.js`) and trap under wasmtime, so they have no native registration. That
     //! JS-side mirror remains an untested contract maintained by hand.
 
-    use crate::mir::js_abi::HOST_MODULE;
+    use dream_abi::js_abi::HOST_MODULE;
     use std::collections::HashSet;
 
     /// Source of every host `.rs` that registers `Dream`-module functions (via `func_wrap("Dream",
@@ -79,7 +79,7 @@ mod contract_tests {
     fn every_native_dream_host_fn_is_declared_in_the_prelude() {
         // Names declared by the prelude via `@js("Dream", "name")`.
         let mut declared: HashSet<String> = HashSet::new();
-        for (_, src) in crate::stdlib::all_prelude_files() {
+        for (_, src) in dream_stdlib::all_prelude_files() {
             for name in names_after_module(src, HOST_MODULE) {
                 declared.insert(name);
             }

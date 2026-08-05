@@ -4,8 +4,8 @@
 
 use wasmtime::*;
 
-use crate::mir::abi;
-use crate::mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
+use dream_mir::abi;
+use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
 
 use super::memory::{read_arg_bytes, read_arg_string, write_bytes_to_memory};
 

@@ -1,6 +1,6 @@
 //! Auto-import quick fixes and completion edits for missing `import system…;` lines.
 
-use dream::stdlib::symbol_to_package;
+use dream_stdlib::symbol_to_package;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Position as LspPosition, Range as LspRange,
     TextEdit, WorkspaceEdit,

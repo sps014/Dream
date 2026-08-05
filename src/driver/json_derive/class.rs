@@ -5,9 +5,9 @@
 use super::*;
 
 /// If `ty` is `Option<T>`, returns `T`'s spelling (as written in source); otherwise `None`.
-fn option_inner(ty: &crate::syntax::nodes::Type) -> Option<String> {
+fn option_inner(ty: &dream_syntax::nodes::Type) -> Option<String> {
     match ty {
-        crate::syntax::nodes::Type::Struct(token, Some(args))
+        dream_syntax::nodes::Type::Struct(token, Some(args))
             if token.text == "Option" && args.len() == 1 =>
         {
             Some(args[0].get_type())
@@ -20,7 +20,7 @@ fn option_inner(ty: &crate::syntax::nodes::Type) -> Option<String> {
 /// source for a single `@json` class, or `None` (after reporting a diagnostic) if a field type is
 /// outside the supported set (primitives, `string`, other `@json` classes, and arrays of those).
 pub(super) fn generate_json_extend(
-    struct_decl: &crate::syntax::nodes::struct_node::StructDeclarationNode,
+    struct_decl: &dream_syntax::nodes::struct_node::StructDeclarationNode,
     json_names: &HashSet<String>,
     jsonable: &HashSet<String>,
     diagnostics: &mut DiagnosticBag,

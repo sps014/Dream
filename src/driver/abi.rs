@@ -3,7 +3,7 @@ use std::io::Error;
 use std::path::Path;
 use tracing::{error, info};
 
-use crate::syntax::nodes::ProgramNode;
+use dream_syntax::nodes::ProgramNode;
 
 /// Emits a binary `.wasm` next to the `.wat`, plus an `.abi.json` describing the module's
 /// extern imports (for JS interop marshaling) and exported functions.
@@ -52,7 +52,7 @@ fn json_escape(s: &str) -> String {
 /// Builds the `.abi.json` describing extern imports and exported functions. The JS runtime uses
 /// this to wrap user-supplied import implementations with the correct value marshaling.
 pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
-    fn type_name(t: Option<&crate::syntax::nodes::Type>) -> String {
+    fn type_name(t: Option<&dream_syntax::nodes::Type>) -> String {
         match t {
             Some(t) => t.get_type(),
             None => "void".to_string(),
@@ -62,14 +62,14 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
     // Emits one extern's ABI entry, or `None` for non-externs and `@intrinsic` declarations (which
     // are lowered by the compiler and emit no WASM import). Shared by top-level functions and class
     // / `extend` static externs so a host bridge keeps its ABI entry wherever it is declared.
-    fn extern_entry(func: &crate::syntax::nodes::FunctionNode) -> Option<String> {
-        if !func.is_extern || crate::intrinsics::has_intrinsic_attr(&func.attributes) {
+    fn extern_entry(func: &dream_syntax::nodes::FunctionNode) -> Option<String> {
+        if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
             return None;
         }
-        let (import_module, import_name) = crate::attributes::js_import_target(&func.attributes)
+        let (import_module, import_name) = dream_abi::attributes::js_import_target(&func.attributes)
             .unwrap_or_else(|| {
                 (
-                    crate::mir::abi::ENV_MODULE.to_string(),
+                    dream_mir::abi::ENV_MODULE.to_string(),
                     func.name.text.clone(),
                 )
             });
@@ -110,7 +110,7 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         if func.is_extern || func.generic_parameters.is_some() {
             continue;
         }
-        if func.visibility.is_public() || func.name.text == crate::mir::abi::ENTRY_FN {
+        if func.visibility.is_public() || func.name.text == dream_mir::abi::ENTRY_FN {
             exports.push(format!("\"{}\"", json_escape(&func.name.text)));
         }
     }

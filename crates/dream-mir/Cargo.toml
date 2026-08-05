@@ -1,0 +1,25 @@
+[package]
+name = "dream-mir"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "dream_mir"
+path = "src/lib.rs"
+
+[dependencies]
+dream-hir = { path = "../dream-hir" }
+dream-types = { path = "../dream-types" }
+dream-abi = { path = "../dream-abi" }
+dream-stdlib = { path = "../dream-stdlib" }
+dream-syntax = { path = "../dream-syntax" }
+indexmap = "2"
+wat = "1.252.0"
+wast = "252.0.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+bumpalo = "3.20.3"
+dream-sema = { path = "../dream-sema" }
+dream-diagnostics = { path = "../dream-diagnostics" }
+dream-text = { path = "../dream-text" }

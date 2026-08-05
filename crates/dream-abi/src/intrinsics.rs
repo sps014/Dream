@@ -19,7 +19,7 @@ pub const INTRINSIC_ATTR: &str = "intrinsic";
 /// Extracts the intrinsic key from a declaration's attribute list, i.e. the `"name"` in
 /// `@intrinsic("name")`, or `None` if the declaration is not an intrinsic. Centralizes the
 /// attribute lookup + quote-stripping that was previously duplicated across layers.
-pub fn intrinsic_key(attributes: &[crate::syntax::nodes::AttributeNode]) -> Option<String> {
+pub fn intrinsic_key(attributes: &[dream_syntax::nodes::AttributeNode]) -> Option<String> {
     attributes
         .iter()
         .find(|a| a.name.text == INTRINSIC_ATTR)
@@ -31,7 +31,7 @@ pub fn intrinsic_key(attributes: &[crate::syntax::nodes::AttributeNode]) -> Opti
 }
 
 /// True if `attributes` contains an `@intrinsic(...)` marker.
-pub fn has_intrinsic_attr(attributes: &[crate::syntax::nodes::AttributeNode]) -> bool {
+pub fn has_intrinsic_attr(attributes: &[dream_syntax::nodes::AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == INTRINSIC_ATTR)
 }
 
@@ -210,7 +210,7 @@ impl IntrinsicOp {
 
     /// Classifies the `@intrinsic` attribute on a declaration directly.
     pub fn from_attributes(
-        attributes: &[crate::syntax::nodes::AttributeNode],
+        attributes: &[dream_syntax::nodes::AttributeNode],
     ) -> Option<IntrinsicOp> {
         intrinsic_key(attributes)
             .as_deref()

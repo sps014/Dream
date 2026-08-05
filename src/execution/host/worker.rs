@@ -22,8 +22,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use wasmtime::*;
 
-use crate::mir::abi;
-use crate::mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
+use dream_mir::abi;
+use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
 
 use super::memory::{read_arg_string, read_string_from_memory, write_string_to_memory};
 

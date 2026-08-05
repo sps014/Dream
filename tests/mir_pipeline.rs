@@ -3,15 +3,15 @@
 //! driver runs, so it both proves the pipeline composes and pins its determinism contract
 //! (byte-identical output).
 
-use dream::hir::{
+use dream_hir::{
     BinOp, Binding, HExpr, HExprKind, HFunction, HParam, HPlace, HStmt, Hir, LocalId,
 };
-use dream::mir::emit::emit_program;
-use dream::mir::lower::lower_program;
-use dream::mir::passes::{
+use dream_mir::emit::emit_program;
+use dream_mir::lower::lower_program;
+use dream_mir::passes::{
     ConstFold, CopyConstProp, Dce, PassManager, RcElision, RcInsertion, SimplifyCfg,
 };
-use dream::types::{DefKind, TypeCtx};
+use dream_types::{DefKind, TypeCtx};
 
 /// Builds, lowers, optimizes, and emits the following program, returning the WAT text:
 ///
@@ -50,12 +50,12 @@ fn compile_sum_to() -> String {
         }],
         ret: int,
         locals: vec![
-            dream::hir::HLocal {
+            dream_hir::HLocal {
                 id: i,
                 name: "i".into(),
                 ty: int,
             },
-            dream::hir::HLocal {
+            dream_hir::HLocal {
                 id: acc,
                 name: "acc".into(),
                 ty: int,

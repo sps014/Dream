@@ -7,6 +7,9 @@ description = "Native VS Code Language Server for the Dream language."
 
 [dependencies]
 dream = { path = "../..", default-features = false }
+dream-sema = { path = "../../crates/dream-sema" }
+dream-stdlib = { path = "../../crates/dream-stdlib" }
+dream-abi = { path = "../../crates/dream-abi" }
 bumpalo = "3.20.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

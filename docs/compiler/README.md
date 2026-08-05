@@ -52,22 +52,30 @@ Each arrow is a *total* lowering: the producer records everything the consumer n
 
 ```
 Dream/
-├── crates/                         Front-end crates (layered, enforced by the crate graph)
+├── crates/                         IR-boundary crates (layered, enforced by Cargo)
 │   ├── dream-text/                 Source primitives: TextSpan, LineText, IndentedTextWriter
 │   ├── dream-diagnostics/          DiagnosticBag, Severity, rendering
-│   └── dream-syntax/               Lexer, parser, AST nodes (depends on text + diagnostics)
-├── src/
-│   ├── types/                      Structured type system (interner, DefTable, compat)
-│   ├── hir/                        Typed High-level IR
-│   ├── mir/                        CFG Mid-level IR, passes, relooper, WAT backend + runtime/ + abi.rs
-│   ├── semantics/                  Semantic analyzer + its tables (HIR emission lives here)
+│   ├── dream-syntax/               Lexer, parser, AST nodes
+│   ├── dream-types/                TypeInterner, DefTable, TyKind, TypeId
+│   ├── dream-hir/                  Typed High-level IR
+│   ├── dream-abi/                  Attributes, intrinsics, JS ABI (shared by sema + MIR)
+│   ├── dream-stdlib/               Embedded prelude + package registry
+│   ├── dream-sema/                 Analyzer + tables + hir_emit (no MIR dependency)
+│   └── dream-mir/                  CFG MIR, passes, relooper, WAT emit + runtime/
+├── src/                            Root `dream`: driver, CLI, execution only
 │   ├── driver/                     Pipeline orchestration, source loading, errors
-│   ├── stdlib/                     Prelude + host function registration
 │   └── execution/                  (feature "native") wasmtime runner
 └── docs/compiler/                  ← you are here
 ```
 
-The `types → hir → mir` pipeline is the **only** backend. (An earlier AST-walking `codegen/` backend was replaced by it and deleted.)
+The `dream-types → dream-hir → dream-mir` pipeline is the **only** backend. (An earlier AST-walking `codegen/` backend was replaced by it and deleted.)
+
+### Module conventions
+
+- `mod.rs` = declarations + thin re-exports (≤ ~150 LOC of logic).
+- Prefer ≤ ~400 LOC production files; hard smell at ~600+.
+- Analysis and HIR emit stay fused in `dream-sema`.
+- No permanent middle/back-end `pub use` shims in root `dream`.
 
 ### Crate dependency graph
 
@@ -76,23 +84,43 @@ flowchart TD
     text[dream-text]
     diag[dream-diagnostics]
     syn[dream-syntax]
-    dream[dream main crate]
+    types[dream-types]
+    hir[dream-hir]
+    abi[dream-abi]
+    stdlib[dream-stdlib]
+    sema[dream-sema]
+    mir[dream-mir]
+    dream[dream driver CLI]
     lsp[dream-lsp]
 
     diag --> text
     syn --> text
     syn --> diag
-    dream --> syn
-    dream --> diag
-    dream --> text
+    types --> syn
+    types --> diag
+    hir --> types
+    abi --> types
+    sema --> syn
+    sema --> types
+    sema --> hir
+    sema --> abi
+    sema --> stdlib
+    mir --> hir
+    mir --> types
+    mir --> abi
+    mir --> stdlib
+    dream --> sema
+    dream --> mir
+    dream --> stdlib
+    dream --> abi
     lsp --> dream
 ```
 
-The front-end crates are layered so `cargo` — not convention — enforces the dependency direction: `dream-syntax` can never reach into semantics or codegen. The main `dream` crate re-exports them (`pub use dream_syntax as syntax;`) so historical `crate::syntax::…` paths keep resolving.
+Cargo enforces: `dream-sema` never depends on `dream-mir`, and `dream-syntax` never reaches sema/MIR. Shared constants live in `dream-abi`.
 
 ## The three IRs at a glance
 
-| | AST (`dream-syntax`) | HIR (`src/hir`) | MIR (`src/mir`) |
+| | AST (`dream-syntax`) | HIR (`dream-hir`) | MIR (`dream-mir`) |
 |---|---|---|---|
 | **Shape** | Tree, mirrors source | Tree, type-checked | CFG of basic blocks |
 | **Types** | Syntactic (`Type` enum) | `TypeId` on every node | `TypeId` on every local |

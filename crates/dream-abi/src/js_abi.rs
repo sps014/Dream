@@ -3,46 +3,46 @@
 //! Everything the backend and the prune pass must agree on about *how* Dream talks to the JS host —
 //! and which is specific to `js` interop rather than to any one compiler stage — lives here so there
 //! is a single source of truth: the tagged argument-slot layout used by dynamic `js` calls
-//! ([`Emitter::emit_js_call`](crate::mir::emit)), the symbol names of the generated struct/array
-//! marshalers ([`mir::emit::js_marshal`](crate::mir::emit)), and the host bridge set those marshalers
-//! call ([`marshal_bridge_defs`], consumed by [`prune`](crate::mir::prune)).
+//! (`Emitter::emit_js_call`), the symbol names of the generated struct/array
+//! marshalers (`mir::emit::js_marshal`), and the host bridge set those marshalers
+//! call ([`marshal_bridge_defs`], consumed by `dream_mir::prune`).
 
-use crate::types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
+use dream_types::{method_fn, PrimTy, TyKind, TypeId, TypeInterner};
 
 /// The host module every `@js` bridge is imported from: matches the first argument of the
 /// `@js("Dream", …)` attributes in `stdlib/core/js.dream` and the module object installed by
 /// `runtime/dream.js`.
 #[allow(dead_code)]
-pub(crate) const HOST_MODULE: &str = "Dream";
+pub const HOST_MODULE: &str = "Dream";
 
 /// The Dream type name whose stdlib methods back every interop bridge. Combined with a method name
 /// via [`method_fn`] it yields the mangled symbol an `@js` extern is emitted/imported under. Shared
-/// with the analyzer (`semantics::analyzer::js_interop`) so the spelling that drives bridge mangling
+/// with the analyzer (`dream_sema::analyzer::js_interop`) so the spelling that drives bridge mangling
 /// and the one the analyzer recognizes as the dynamic `js` type can never diverge.
-pub(crate) const JS_TYPE: &str = "js";
+pub const JS_TYPE: &str = "js";
 
 /// The WAT symbol of the `js.<method>` stdlib bridge (e.g. `bridge_sym("box_int")` -> `$js_box_int`),
 /// derived through the one canonical mangler so the generated marshalers never hard-code the scheme.
-pub(crate) fn bridge_sym(method: &str) -> String {
+pub fn bridge_sym(method: &str) -> String {
     format!("${}", method_fn(JS_TYPE, method))
 }
 
 // -- Generated-marshaler symbol names ------------------------------------------------------------
 
 /// `$<Name>_to_js`: the marshaler that deep-copies a struct/class into a plain JS object.
-pub(crate) fn struct_to_js_sym(name: &str) -> String {
+pub fn struct_to_js_sym(name: &str) -> String {
     format!("${}_to_js", name)
 }
 /// `$js_to_<Name>`: the marshaler that rebuilds a struct/class from a JS object's properties.
-pub(crate) fn js_to_struct_sym(name: &str) -> String {
+pub fn js_to_struct_sym(name: &str) -> String {
     format!("$js_to_{}", name)
 }
 /// `$array_to_js_t<id>`: the marshaler that copies a Dream `elem[]` into a JS array.
-pub(crate) fn array_to_js_sym(elem: TypeId) -> String {
+pub fn array_to_js_sym(elem: TypeId) -> String {
     format!("$array_to_js_t{}", elem.0)
 }
 /// `$js_to_array_t<id>`: the marshaler that copies a JS array into a fresh Dream `elem[]`.
-pub(crate) fn js_to_array_sym(elem: TypeId) -> String {
+pub fn js_to_array_sym(elem: TypeId) -> String {
     format!("$js_to_array_t{}", elem.0)
 }
 
@@ -50,15 +50,15 @@ pub(crate) fn js_to_array_sym(elem: TypeId) -> String {
 
 /// Bytes per argument slot in the dynamic-`js`-call buffer, laid out as
 /// `[tag: i32 @ +0][aux: i32 @ +4][payload: 8 bytes @ +8]`.
-pub(crate) const SLOT_SIZE: u32 = 16;
+pub const SLOT_SIZE: u32 = 16;
 /// Byte offset of a slot's `aux` word (see [`slot_desc`]).
-pub(crate) const SLOT_AUX_OFFSET: u32 = 4;
+pub const SLOT_AUX_OFFSET: u32 = 4;
 /// Byte offset of a slot's 8-byte payload.
-pub(crate) const SLOT_PAYLOAD_OFFSET: u32 = 8;
+pub const SLOT_PAYLOAD_OFFSET: u32 = 8;
 
 /// Slot tags identifying how the host decodes a slot's payload (see the `decodeJsSlots` decoder in
 /// `runtime/dream.js`).
-pub(crate) mod tag {
+pub mod tag {
     /// Part of the wire ABI (the host decoder maps it to `null`); the emitter never writes it today
     /// because a `null` argument is rejected earlier, so it is intentionally unused on this side.
     #[allow(dead_code)]
@@ -77,7 +77,7 @@ pub(crate) mod tag {
 /// instruction)`. `aux` carries the element tag for an `ARRAY` slot and the parameter count for a
 /// `FUNC` slot (so the host wraps the funcref with the right arity); it is `0` otherwise. The payload
 /// store is `i64.store`/`f64.store` for wide scalars, else `i32.store`.
-pub(crate) fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, &'static str) {
+pub fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, &'static str) {
     let stripped = ty;
     match interner.kind(stripped) {
         TyKind::Js => (tag::JS, 0, "i32.store"),

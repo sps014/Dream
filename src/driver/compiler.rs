@@ -2,16 +2,16 @@ use bumpalo::Bump;
 use std::fs;
 use tracing::{info, warn};
 
-use crate::diagnostics::{render, DiagnosticBag};
+use dream_diagnostics::{render, DiagnosticBag};
 use crate::driver::abi::emit_wasm_and_abi;
 use crate::driver::error::CompileError;
 use crate::driver::json_derive::generate_json_derives;
 use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
 use crate::driver::wasm_opt::OptLevel;
-use crate::semantics::analyzer::Analyzer;
-use crate::syntax::nodes::ProgramNode;
-use crate::syntax::syntax_tree::SyntaxTree;
+use dream_sema::analyzer::Analyzer;
+use dream_syntax::nodes::ProgramNode;
+use dream_syntax::syntax_tree::SyntaxTree;
 
 pub enum Target {
     Wasm,
@@ -107,7 +107,7 @@ impl Compiler {
         // Validate every attribute in the merged program (unknown names, disallowed placements,
         // wrong argument shapes, duplicates) before anything downstream (the `@json` derive below,
         // then semantic analysis) reads attributes assuming they are well-formed.
-        crate::attributes::validate_program_attributes(
+        dream_abi::attributes::validate_program_attributes(
             &acc.all_structs,
             &acc.all_interfaces,
             &acc.all_functions,
@@ -191,7 +191,7 @@ impl Compiler {
         // Destructuring moves the owned `hir` out and drops `symbol_info`'s borrowing references,
         // releasing the `&mut analyzer` borrow so the shared interner can be read (the HIR references
         // its `TypeId`s, so both must come from this same analyzer instance).
-        let crate::semantics::analyzer::SemanticInfo { hir, .. } = symbol_info;
+        let dream_sema::analyzer::SemanticInfo { hir, .. } = symbol_info;
         let interner = analyzer.interner();
         let target = &self.target;
         let debug = self.debug;
@@ -216,7 +216,7 @@ impl Compiler {
         let previous_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let codegen_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut mir = crate::mir::lower::lower_program(&hir, interner);
+            let mut mir = dream_mir::lower::lower_program(&hir, interner);
             // Whole-module optimization: tree-shaking + reference-counting insertion + function
             // inlining (see `mir::passes::optimize_module`). RC is inserted there, before inlining,
             // so callee destruction stays deterministic; the per-function pipeline below only cleans
@@ -224,18 +224,18 @@ impl Compiler {
             // Debug-info builds skip inlining and use a value-preserving per-function pipeline so
             // user variables and per-function call frames survive for the debugger; release builds
             // use the full optimizing pipeline.
-            crate::mir::passes::optimize_module_opts(&mut mir, interner, !debug_info);
+            dream_mir::passes::optimize_module_opts(&mut mir, interner, !debug_info);
             let pipeline = if debug_info {
-                crate::mir::passes::PassManager::debug_pipeline()
+                dream_mir::passes::PassManager::debug_pipeline()
             } else {
-                crate::mir::passes::PassManager::default_pipeline()
+                dream_mir::passes::PassManager::default_pipeline()
             };
             for f in &mut mir.functions {
                 pipeline.run(f, interner);
             }
             match target {
                 Target::Wasm => {
-                    crate::mir::emit::emit_module_with_debug(&mir, interner, debug, debug_info)
+                    dream_mir::emit::emit_module_with_debug(&mir, interner, debug, debug_info)
                 }
             }
         }));

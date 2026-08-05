@@ -1,0 +1,14 @@
+[package]
+name = "dream-abi"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "dream_abi"
+path = "src/lib.rs"
+
+[dependencies]
+dream-types = { path = "../dream-types" }
+dream-syntax = { path = "../dream-syntax" }
+dream-diagnostics = { path = "../dream-diagnostics" }
+dream-text = { path = "../dream-text" }

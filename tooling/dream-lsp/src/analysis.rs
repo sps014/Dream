@@ -5,8 +5,8 @@
 use bumpalo::Bump;
 use dream::diagnostics::{Diagnostic, DiagnosticBag, Severity};
 use dream::driver::source_loader::collect_declarations;
-use dream::semantics::analyzer::Analyzer;
-use dream::stdlib::std_package_from_slash_path;
+use dream_sema::analyzer::Analyzer;
+use dream_stdlib::std_package_from_slash_path;
 use dream::syntax::lexer::Lexer;
 use dream::syntax::nodes::ProgramNode;
 use dream::syntax::parser::Parser;
@@ -129,7 +129,7 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
         strip_edited_stdlib_duplicates(path, &mut acc);
     }
 
-    dream::attributes::validate_program_attributes(
+    dream_abi::attributes::validate_program_attributes(
         &acc.all_structs,
         &acc.all_interfaces,
         &acc.all_functions,
@@ -223,10 +223,13 @@ fn strip_edited_stdlib_duplicates(
     acc: &mut dream::driver::source_loader::ProgramAccumulator<'_>,
 ) {
     let norm = path.replace('\\', "/");
-    let Some(idx) = norm.find("/src/stdlib/") else {
+    let bare = if let Some(idx) = norm.find("/crates/dream-stdlib/src/") {
+        &norm[idx + "/crates/dream-stdlib/src/".len()..]
+    } else if let Some(idx) = norm.find("/src/stdlib/") {
+        &norm[idx + "/src/stdlib/".len()..]
+    } else {
         return;
     };
-    let bare = &norm[idx + "/src/stdlib/".len()..];
     let tag = format!("<std>/{}", bare);
     acc.all_functions
         .retain(|f| f.file_path.as_deref() != Some(tag.as_str()));

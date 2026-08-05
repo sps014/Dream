@@ -9,7 +9,7 @@ use super::*;
 /// variant payload field type is unsupported. Values are tagged internally with a `"type"` key
 /// naming the active variant; unit variants serialize to `{ "type": "<Variant>" }`.
 pub(super) fn generate_json_union(
-    enum_decl: &crate::syntax::nodes::EnumDeclarationNode,
+    enum_decl: &dream_syntax::nodes::EnumDeclarationNode,
     json_names: &HashSet<String>,
     jsonable: &HashSet<String>,
     diagnostics: &mut DiagnosticBag,

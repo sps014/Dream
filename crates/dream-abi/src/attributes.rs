@@ -17,13 +17,13 @@
 //! to a known operator symbol) is layered on top by each feature's own code, which can then assume
 //! the generic shape/placement contract already holds.
 
-use crate::diagnostics::DiagnosticBag;
-use crate::syntax::nodes::function::FunctionNode;
-use crate::syntax::nodes::interface_node::InterfaceDeclarationNode;
-use crate::syntax::nodes::program::{EnumDeclarationNode, ExtendNode};
-use crate::syntax::nodes::struct_node::{StructDeclarationNode, StructFieldNode};
-use crate::syntax::nodes::types::is_special_member_name;
-use crate::syntax::nodes::AttributeNode;
+use dream_diagnostics::DiagnosticBag;
+use dream_syntax::nodes::function::FunctionNode;
+use dream_syntax::nodes::interface_node::InterfaceDeclarationNode;
+use dream_syntax::nodes::program::{EnumDeclarationNode, ExtendNode};
+use dream_syntax::nodes::struct_node::{StructDeclarationNode, StructFieldNode};
+use dream_syntax::nodes::types::is_special_member_name;
+use dream_syntax::nodes::AttributeNode;
 use std::rc::Rc;
 
 /// The kind of declaration an attribute is attached to, coarse enough to express every current
@@ -417,10 +417,10 @@ pub fn validate_program_attributes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::token::syntax_token::SyntaxToken;
-    use crate::syntax::token::token_kind::TokenKind;
-    use crate::text::line_text::LineText;
-    use crate::text::text_span::TextSpan;
+    use dream_syntax::token::syntax_token::SyntaxToken;
+    use dream_syntax::token::token_kind::TokenKind;
+    use dream_text::line_text::LineText;
+    use dream_text::text_span::TextSpan;
 
     fn ident(text: &str) -> SyntaxToken {
         let span = TextSpan::new((0, 0), &LineText::new(String::new()));

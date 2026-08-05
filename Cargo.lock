@@ -691,9 +691,15 @@ dependencies = [
  "bumpalo",
  "chrono",
  "crossterm",
+ "dream-abi",
  "dream-diagnostics",
+ "dream-hir",
+ "dream-mir",
+ "dream-sema",
+ "dream-stdlib",
  "dream-syntax",
  "dream-text",
+ "dream-types",
  "indexmap",
  "logos",
  "pretty_assertions",
@@ -704,8 +710,17 @@ dependencies = [
  "tracing-subscriber",
  "wasm-opt",
  "wasmtime",
- "wast",
  "wat",
+]
+
+[[package]]
+name = "dream-abi"
+version = "0.1.0"
+dependencies = [
+ "dream-diagnostics",
+ "dream-syntax",
+ "dream-text",
+ "dream-types",
 ]
 
 [[package]]
@@ -717,16 +732,70 @@ dependencies = [
 ]
 
 [[package]]
+name = "dream-hir"
+version = "0.1.0"
+dependencies = [
+ "dream-types",
+ "indexmap",
+]
+
+[[package]]
 name = "dream-lsp"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
  "dashmap",
  "dream",
+ "dream-abi",
+ "dream-sema",
+ "dream-stdlib",
  "serde",
  "serde_json",
  "tokio",
  "tower-lsp",
+]
+
+[[package]]
+name = "dream-mir"
+version = "0.1.0"
+dependencies = [
+ "bumpalo",
+ "dream-abi",
+ "dream-diagnostics",
+ "dream-hir",
+ "dream-sema",
+ "dream-stdlib",
+ "dream-syntax",
+ "dream-text",
+ "dream-types",
+ "indexmap",
+ "pretty_assertions",
+ "wast",
+ "wat",
+]
+
+[[package]]
+name = "dream-sema"
+version = "0.1.0"
+dependencies = [
+ "bumpalo",
+ "dream-abi",
+ "dream-diagnostics",
+ "dream-hir",
+ "dream-stdlib",
+ "dream-syntax",
+ "dream-text",
+ "dream-types",
+ "indexmap",
+ "pretty_assertions",
+]
+
+[[package]]
+name = "dream-stdlib"
+version = "0.1.0"
+dependencies = [
+ "dream-syntax",
+ "indexmap",
 ]
 
 [[package]]
@@ -743,6 +812,16 @@ dependencies = [
 [[package]]
 name = "dream-text"
 version = "0.1.0"
+
+[[package]]
+name = "dream-types"
+version = "0.1.0"
+dependencies = [
+ "dream-diagnostics",
+ "dream-syntax",
+ "dream-text",
+ "indexmap",
+]
 
 [[package]]
 name = "dreamer"

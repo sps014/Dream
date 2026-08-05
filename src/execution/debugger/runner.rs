@@ -94,7 +94,7 @@ fn run_program(
     linker.define_unknown_imports_as_traps(&module)?;
 
     let instance = linker.instantiate(&mut store, &module)?;
-    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, crate::mir::abi::ENTRY_FN)
+    if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, dream_mir::abi::ENTRY_FN)
     {
         main_func.call(&mut store, ())?;
     }

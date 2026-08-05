@@ -10,16 +10,16 @@ use std::io::{Error, ErrorKind, Read};
 use std::path::Path;
 use std::rc::Rc;
 
-use crate::diagnostics::DiagnosticBag;
-use crate::stdlib::std_package_from_slash_path;
-use crate::syntax::lexer::Lexer;
-use crate::syntax::nodes::struct_node::StructDeclarationNode;
-use crate::syntax::nodes::{
+use dream_diagnostics::DiagnosticBag;
+use dream_stdlib::std_package_from_slash_path;
+use dream_syntax::lexer::Lexer;
+use dream_syntax::nodes::struct_node::StructDeclarationNode;
+use dream_syntax::nodes::{
     EnumDeclarationNode, ExtendNode, FunctionNode, GlobalVariableNode, InterfaceDeclarationNode,
     ProgramNode,
 };
-use crate::syntax::parser::Parser;
-use crate::syntax::token::syntax_token::SyntaxToken;
+use dream_syntax::parser::Parser;
+use dream_syntax::token::syntax_token::SyntaxToken;
 
 /// Collects every top-level declaration from all parsed files (user code + imports + prelude +
 /// `@json` derives), tagged with its originating file so semantic diagnostics attribute errors
