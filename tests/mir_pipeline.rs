@@ -165,8 +165,17 @@ fn hir_to_wat_pipeline_emits_expected_shape() {
         "missing loop comparison:\n{}",
         wat
     );
-    // A multi-block CFG is emitted via the block-dispatch loop.
-    assert!(wat.contains("br_table"), "missing CFG dispatch:\n{}", wat);
+    // Structured loop from relooper shapes (no `br_table` dispatch for single-header while).
+    assert!(
+        wat.contains("(loop $__cnt") || wat.contains("(loop $"),
+        "missing structured loop:\n{}",
+        wat
+    );
+    assert!(
+        !wat.contains("br_table"),
+        "sync while should not use br_table dispatch:\n{}",
+        wat
+    );
 }
 
 #[test]

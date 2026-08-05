@@ -365,7 +365,108 @@ fn emits_arithmetic_function() {
         wat
     );
     assert!(wat.contains("(return)"));
-    assert!(wat.contains("br_table"));
+    // Sync functions use relooper shapes for ordinary CFGs (no `br_table` dispatch).
+    assert!(
+        !wat.contains("br_table"),
+        "simple sync fn should not use br_table dispatch:\n{}",
+        wat
+    );
+}
+
+#[test]
+fn shape_emit_while_uses_nested_loop() {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("count", i.int());
+    let n = b.new_param(i.int(), Some("n".into()));
+    let s = b.new_local(i.int(), Some("s".into()));
+    b.assign(Place::Local(s), Rvalue::Use(Operand::Const(Const::Int(0))));
+    let cond = b.new_block();
+    let body = b.new_block();
+    let after = b.new_block();
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(cond);
+    let cmp = b.new_temp(i.bool());
+    b.assign(
+        Place::Local(cmp),
+        Rvalue::Binary(
+            BinOp::Lt,
+            Operand::Copy(Place::Local(s)),
+            Operand::Copy(Place::Local(n)),
+        ),
+    );
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(cmp)),
+        then_blk: body,
+        else_blk: after,
+    });
+    b.switch_to(body);
+    let one = b.new_temp(i.int());
+    b.assign(Place::Local(one), Rvalue::Use(Operand::Const(Const::Int(1))));
+    let sum = b.new_temp(i.int());
+    b.assign(
+        Place::Local(sum),
+        Rvalue::Binary(
+            BinOp::Add,
+            Operand::Copy(Place::Local(s)),
+            Operand::Copy(Place::Local(one)),
+        ),
+    );
+    b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(sum))));
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(after);
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(s)))));
+    let func = b.finish();
+
+    let wat = emit_function(&func, &i);
+    assert!(
+        wat.contains("(loop $__cnt"),
+        "expected relooper loop label:\n{}",
+        wat
+    );
+    assert!(
+        !wat.contains("br_table"),
+        "sync while should not use br_table dispatch:\n{}",
+        wat
+    );
+}
+
+#[test]
+fn shape_emit_if_diamond_uses_nested_if() {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("abs_sign", i.int());
+    let n = b.new_param(i.int(), Some("n".into()));
+    let then_blk = b.new_block();
+    let else_blk = b.new_block();
+    let join = b.new_block();
+    let cmp = b.new_temp(i.bool());
+    b.assign(
+        Place::Local(cmp),
+        Rvalue::Binary(
+            BinOp::Lt,
+            Operand::Copy(Place::Local(n)),
+            Operand::Const(Const::Int(0)),
+        ),
+    );
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(cmp)),
+        then_blk,
+        else_blk,
+    });
+    b.switch_to(then_blk);
+    b.terminate(Terminator::Goto(join));
+    b.switch_to(else_blk);
+    b.terminate(Terminator::Goto(join));
+    b.switch_to(join);
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(n)))));
+    let func = b.finish();
+
+    let wat = emit_function(&func, &i);
+    assert!(wat.contains("(if (then"), "expected nested if:\n{}", wat);
+    assert!(
+        !wat.contains("br_table"),
+        "sync if should not use br_table dispatch:\n{}",
+        wat
+    );
 }
 
 /// Every `{TAG_*}`/`{minus}` placeholder in the object + format runtime must be substituted; a
@@ -479,3 +580,5 @@ fn release_build_has_no_debug_hooks() {
     assert!(!wat.contains("dream_debug"), "no debug imports:\n{}", wat);
     assert!(!wat.contains("__dbg_"), "no debug hooks/pool:\n{}", wat);
 }
+
+

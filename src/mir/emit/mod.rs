@@ -1,12 +1,11 @@
 //! MIR -> WAT (text WebAssembly) backend.
 //!
-//! The relooper ([`super::relooper`]) recovers structured shapes from the CFG; this emitter lowers a
-//! function to WAT. Control flow uses a labeled-block dispatch loop (a `br_table` over a block-index
-//! local), which is correct for any reducible CFG; the relooper shapes are the basis for emitting
-//! idiomatic structured `block`/`loop`/`if` instead, the planned refinement. Straight-line
-//! statements, operands, and arithmetic are emitted directly. Memory-backed places (struct fields,
-//! array elements) and allocation reuse the existing runtime/object/string layers when wired in;
-//! they are marked `;; TODO(layout)` here pending that integration.
+//! The relooper ([`super::relooper`]) recovers structured shapes from the CFG. Sync functions walk
+//! that shape tree into nested WASM `block`/`loop`/`if` when every edge can be labeled; otherwise
+//! they fall back to a `$__pc` + `br_table` dispatch loop. Async poll functions always keep PC
+//! dispatch (suspend/resume needs a durable program counter). Straight-line statements, operands,
+//! and arithmetic are emitted directly. Memory-backed places (struct fields, array elements) and
+//! allocation reuse the existing runtime/object/string layers.
 
 use super::{BinOp, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator, UnOp};
 use crate::hir::{scalar_size, LayoutTable};

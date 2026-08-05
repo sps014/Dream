@@ -1,4 +1,4 @@
-//! Emits one MIR function as WAT text. Core function-shell emission (locals/dispatch-loop scaffold)
+//! Emits one MIR function as WAT text. Core function-shell emission (locals + shaped sync body)
 //! plus the low-level operand/type helpers shared by every other emitter submodule live here; the
 //! larger emission concerns are split out:
 //! - [`statements`]: `Statement` emission (assignment, print, retain/release, calls) and the
@@ -6,7 +6,8 @@
 //! - [`value_struct`]: the value(`struct`)/value-union inline (non-heap) representation — shadow
 //!   frame prologue/teardown, in-place construction, byte-copy, and sret-call helpers.
 //! - [`terminator`]: `Terminator` emission (branches, returns, tail calls) and the dynamic `js` call
-//!   marshaling helper.
+//!   marshaling helper. Sync CFG edges use [`shape`]; async poll still uses `$__pc` via this module.
+//! - [`shape`]: relooper-shaped nested `block`/`loop`/`if` emission for sync functions.
 //! - [`async_ops`]: async-coroutine poll emission (split out previously).
 //! - [`rvalue`]: `Rvalue` (expression) emission (split out previously).
 
@@ -17,6 +18,7 @@ use std::collections::HashSet;
 
 mod async_ops;
 mod rvalue;
+mod shape;
 mod statements;
 mod terminator;
 mod value_struct;
@@ -163,6 +165,10 @@ struct Emitter<'a> {
     /// tracks this identically while scanning the same (already fully-optimized) MIR, so the two
     /// stay in lockstep and every message `emit_panic` looks up is guaranteed pre-interned.
     current_line: u32,
+    /// Nested continue/break labels for [`shape`] emission (sync only; empty for async poll).
+    shape_scopes: Vec<shape::ShapeScope>,
+    /// Monotonic id for `$__brkN` / `$__cntN` / `$__joinN` labels in shape emit.
+    shape_label_id: u32,
 }
 
 impl<'a> Emitter<'a> {
@@ -207,6 +213,8 @@ impl<'a> Emitter<'a> {
             locate_panics,
             debug_fn,
             current_line: 0,
+            shape_scopes: Vec::new(),
+            shape_label_id: 0,
         }
     }
 }
@@ -267,7 +275,8 @@ impl Emitter<'_> {
             self.line(&format!("(func ${}{}{}", sym, params, result));
         }
 
-        // Non-parameter locals plus the dispatch program-counter.
+        // Non-parameter locals. `$__pc` is only needed when shape emit falls back to PC dispatch
+        // (multi-entry loop bodies); declare it whenever the relooper shape needs that path.
         let param_count = self.func.params.len();
         for (i, decl) in self.func.locals.iter().enumerate() {
             if i < param_count {
@@ -284,6 +293,8 @@ impl Emitter<'_> {
                 self.line(&format!("  (local ${} {})", i, self.wasm_ty(decl.ty)));
             }
         }
+        // Always reserve `$__pc`: shape emit may fall back to PC dispatch mid-body decision, and the
+        // local is cheap. Async poll declares its own copy in `emit_async_state_machine`.
         self.line("  (local $__pc i32)");
         if self.frame.size > 0 {
             // Saved shadow-stack pointer, restored before every return.
@@ -323,7 +334,7 @@ impl Emitter<'_> {
         if let Some(dbg) = self.debug_fn {
             self.line(&format!("  (call $__dbg_enter (i32.const {}))", dbg.id));
         }
-        self.emit_dispatch();
+        self.emit_shaped_body();
         self.line(")");
     }
 
@@ -334,53 +345,6 @@ impl Emitter<'_> {
         if let Some(dbg) = self.debug_fn {
             self.line(&format!("     (call $__dbg_exit (i32.const {}))", dbg.id));
         }
-    }
-
-    /// The labeled-block dispatch loop: each iteration reads `$__pc` and `br_table`s to the matching
-    /// block; each block body ends by setting `$__pc` and branching back, or by returning.
-    fn emit_dispatch(&mut self) {
-        let n = self.func.blocks.len();
-        self.line(&format!("  ;; entry = bb{}", self.func.entry.0));
-        self.line(&format!("  (i32.const {})", self.func.entry.0));
-        self.line("  (local.set $__pc)");
-        self.line("  (block $__exit");
-        self.line("   (loop $__loop");
-
-        // Open one block per CFG block, innermost = bb0.
-        for i in (0..n).rev() {
-            self.line(&format!("    (block $bb{}", i));
-        }
-        // Dispatch from the innermost scope.
-        let labels: String = (0..n).map(|i| format!("$bb{} ", i)).collect();
-        let default = format!("$bb{}", n.saturating_sub(1));
-        self.line(&format!(
-            "     (br_table {}{} (local.get $__pc))",
-            labels, default
-        ));
-
-        // After each `(block $bbK ...)` closes, that block's body runs.
-        for i in 0..n {
-            self.line(&format!("    ) ;; bb{} body", i));
-            self.emit_block(crate::mir::BlockId(i as u32));
-        }
-
-        self.line("   )"); // loop
-        self.line("  )"); // exit block
-                          // Every block ends in a `return`/`goto`, so control never falls out of the dispatch loop.
-                          // A value-returning function still needs its implicit `end` to be well-typed; mark the
-                          // unreachable tail so the validator does not demand a phantom result value on the stack. A
-                          // value-`struct` (sret) return produces no WASM result, so it needs no phantom either.
-        if self.wasm_returns_value() {
-            self.line("  (unreachable)");
-        }
-    }
-
-    fn emit_block(&mut self, id: crate::mir::BlockId) {
-        let block = self.func.block(id);
-        for stmt in &block.stmts {
-            self.emit_stmt(stmt);
-        }
-        self.emit_terminator(&block.terminator);
     }
 
     /// The runtime tag to stamp into a newly allocated value of `ty`: its assigned struct/union tag,

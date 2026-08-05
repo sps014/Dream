@@ -132,6 +132,16 @@ dream-text ← dream-diagnostics ← dream-syntax ← dream (root) ← dream-lsp
 - **Analyzer** (`src/semantics/analyzer/`): validates types/scopes/async constraints, emits HIR. Never mutates AST structure, never generates target code.
 - **Backend** (`src/mir/`): lowers typed HIR → MIR → WAT. Expects a fully validated program with resolved symbols/types. Never type-checks, never emits a compile-time diagnostic. Runs *only* after zero errors were reported.
 
+## Backend non-goals
+
+Do not implement these (decision record: `docs/compiler/10-stack-alloc-and-mono-design-note.md`):
+
+- **Small-string SSO** — `string` stays a heap ARC `i32` pointer; no tagged inline representation.
+- **`@stack` class-instance allocation** — classes stay heap refs; silent SROA may still promote non-escaping instances. (`@stack` on unions is shipped and unrelated.)
+- **Size-class-keyed unmanaged monomorphization** — mono stays `(DefId, args)`; `unmanaged` stdlib code uses runtime `esize`, not a compiler size-class key.
+
+Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll functions keep `$__pc` + `br_table` (suspend/resume).
+
 ## Error handling model
 
 - `CompileError` (`src/driver/error.rs`) is the only top-level error enum: `Syntax` / `Semantic` (already-rendered diagnostics) / `Io`.

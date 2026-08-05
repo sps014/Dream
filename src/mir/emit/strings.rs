@@ -360,27 +360,38 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
     }
 }
 
-/// Every located panic message [`located_panics_in_function`] needs pre-interned for `func`: walks
-/// its statements in emission order tracking the current line exactly like [`Emitter::current_line`]
-/// (via `Statement::SourceLine`), and for each checked construct pushes the located message(s) at
-/// that line. Also unconditionally includes the `line == 0` ("unknown") triple as a safety net —
-/// cheap (a few unused interned strings) insurance against any construct this scan under-predicts
-/// (e.g. one synthesized by a pass after this scan runs, or reached only through the async coroutine
-/// transform's own re-lowering) still finding its message pre-interned rather than crashing.
+/// Every located panic message [`located_panics_in_function`] needs pre-interned for `func`.
+/// Collects every `SourceLine` value and every checked-construct base in the function, then
+/// interns the Cartesian product (plus the `line == 0` safety net). Visit order must not matter:
+/// sync shape emit walks blocks in relooper-shape order, which differs from raw block-index order,
+/// so a running `current_line` scan would disagree with emission.
 fn located_panics_in_function(f: &MirFunction) -> Vec<String> {
+    use std::collections::BTreeSet;
     let mut out: Vec<String> = panic_msgs::located_all(f.file.as_deref(), &f.name, 0).to_vec();
-    let mut line = 0u32;
-    let mut bases = Vec::new();
+    let mut lines: BTreeSet<u32> = BTreeSet::new();
+    lines.insert(0);
+    let mut bases: BTreeSet<String> = BTreeSet::new();
+    let mut tmp = Vec::new();
     for b in &f.blocks {
         for s in &b.stmts {
             if let Statement::SourceLine(l) = s {
-                line = *l;
+                lines.insert(*l);
             }
-            bases.clear();
-            checked_bases_in_stmt(s, &mut bases);
-            for base in &bases {
-                out.push(panic_msgs::located(base, f.file.as_deref(), &f.name, line));
+            tmp.clear();
+            checked_bases_in_stmt(s, &mut tmp);
+            for base in &tmp {
+                bases.insert((*base).to_string());
             }
+        }
+    }
+    for line in lines {
+        for base in &bases {
+            out.push(panic_msgs::located(
+                base,
+                f.file.as_deref(),
+                &f.name,
+                line,
+            ));
         }
     }
     out

@@ -62,23 +62,29 @@ Because Dream's surface syntax only generates reducible CFGs, `reloop` always re
 
 ## The emitter (`src/mir/emit/`)
 
-### Today: a dispatch loop
+### Today: shape-based sync emit
 
-The current emitter does **not** yet consume the relooper shapes. Instead it uses a **labeled-block dispatch loop**: a `$blockidx` local holds "which block to run next", an outer `loop` wraps a `br_table` that jumps to the current block's code, each block ends by setting `$blockidx` and `br`-ing back to the dispatch, and `Return` exits. This is correct for *any* reducible CFG and was the fastest way to a working backend.
+Sync functions call `relooper::reloop` and walk the shape tree into nested WASM `block`/`loop`/`if`
+(see `src/mir/emit/emitter/shape.rs`). CFG edges become `br`/`br_if` relative to continue/break
+labels; multi-exit loops nest one `block` per exit arm so each break runs the matching exit shape.
 
 ```wat
 (func $f (param ...) (result ...)
-  (local $blockidx i32)
-  (loop $dispatch
-    (block $bb2 (block $bb1 (block $bb0
-      (br_table $bb0 $bb1 $bb2 (local.get $blockidx))))
-      ;; bb0 code ... (local.set $blockidx (...)) (br $dispatch)
-    ) ;; bb1 ...
+  (local $__pc i32) ;; reserved; used only on PC-dispatch fallback
+  (block $__brk0_0
+    (loop $__cnt0
+      ;; … body …
+      (br $__cnt0)
+    )
+    ;; exit arm(s)
   )
 )
 ```
 
-The relooper output is the basis for the **planned refinement**: emit idiomatic nested `block`/`loop`/`if` (smaller, faster, friendlier to the engine's own optimizer) instead of the dispatch loop. The shape tree is already produced and tested; wiring `emit` to walk it is the next backend task.
+**Async poll functions** still use a `$__pc` + `br_table` dispatch loop: suspend/resume must save and
+restore a durable program counter in the `Future` frame (`src/mir/emit/emitter/async_ops.rs`).
+Sync functions also fall back to PC dispatch when the relooper shape has a **multi-entry loop body**
+or when the nested walker cannot resolve a branch to a structured label (rewind + dispatch).
 
 ### Statements, operands, types
 

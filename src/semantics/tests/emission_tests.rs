@@ -70,7 +70,16 @@ fn test_hir_emission_while_loop() {
         "missing loop comparison:\n{}",
         wat
     );
-    assert!(wat.contains("br_table"), "missing CFG dispatch:\n{}", wat);
+    assert!(
+        wat.contains("(loop $__cnt") || wat.contains("(loop $"),
+        "missing structured loop:\n{}",
+        wat
+    );
+    assert!(
+        !wat.contains("br_table"),
+        "sync while should not use br_table dispatch:\n{}",
+        wat
+    );
 }
 
 #[test]
@@ -1806,3 +1815,5 @@ fn exec_async_sleep_and_await() {
     );
     assert_eq!(run_and_capture(&code, "main"), "42");
 }
+
+
