@@ -76,7 +76,7 @@ v2.x = 10;
 println(v1.x);  // 3 (unaffected)
 ```
 
-Structs need no heap allocation and have no GC overhead, so a struct held by value is never `null` and cannot recursively contain itself by value.
+Structs need no heap allocation and have no GC overhead, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
 
 ### `ref struct`: a stack-only value type
 
@@ -193,4 +193,4 @@ class Bad {
 
 ## Advanced: boxing a struct
 
-When a struct is used where a reference is expected, it is **boxed** into a heap copy. A nullable struct (`Vec2?`) stores a nullable pointer to a boxed value — so `null` is representable and `??` unboxes it back to an inline struct — and assigning a struct to a bare interface or `object` variable boxes it for dynamic dispatch.
+When a struct is used where a reference is expected, it is **boxed** into a heap copy. An optional struct (`Option<Vec2>`) is an ordinary `Option` over the value type — and assigning a struct to a bare interface or `object` variable boxes it for dynamic dispatch.

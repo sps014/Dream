@@ -235,9 +235,9 @@ fn strings_get_data_segments_and_addresses() {
     // panic messages — 4 checked-construct bases plus the `line == 0` fallback quadruple, none of
     // which actually occur here so all 4 collapse onto the one fallback quadruple — then the
     // object-protocol `null`/`<object>`/`[`/`]`/`, `/`length`), so the user's "hi" follows at block
-    // 1520 / data pointer 1532. Each block carries a 4-byte length prefix and no NUL terminator.
+    // 1408 / data pointer 1420. Each block carries a 4-byte length prefix and no NUL terminator.
     assert!(
-        wat.contains("(i32.const 1532)"),
+        wat.contains("(i32.const 1420)"),
         "string data pointer:\n{}",
         wat
     );
@@ -245,7 +245,7 @@ fn strings_get_data_segments_and_addresses() {
     // `ref_count=1`, then the length prefix `2`, then the bytes 'h','i' (no NUL terminator).
     assert!(
             wat.contains(
-                "(data (i32.const 1520) \"\\00\\00\\00\\00\\05\\00\\00\\00\\01\\00\\00\\00\\02\\00\\00\\00\\68\\69\")"
+                "(data (i32.const 1408) \"\\00\\00\\00\\00\\05\\00\\00\\00\\01\\00\\00\\00\\02\\00\\00\\00\\68\\69\")"
             ),
             "string data segment:\n{}",
             wat

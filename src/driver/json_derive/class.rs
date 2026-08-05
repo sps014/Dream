@@ -46,6 +46,25 @@ pub(super) fn generate_json_extend(
         let fname = &field.name.text;
         let ftype = field.type_token.text.as_str();
 
+        if has_json_ignore(&field.attributes) {
+            match json_ignore_default(ftype, &field.field_type) {
+                Some(default) => {
+                    from_fields.push(default);
+                }
+                None => {
+                    diagnostics.report_error(
+                        format!(
+                            "@json class '{}' field '{}' has @json_ignore but type '{}' has no zero default (use `Option<{}>` or remove @json_ignore)",
+                            name, fname, ftype, ftype
+                        ),
+                        Some(field.name.position),
+                    );
+                    return None;
+                }
+            }
+            continue;
+        }
+
         let mut json_key = fname.to_string();
         if let Some(prop_attr) = field
             .attributes
@@ -58,9 +77,54 @@ pub(super) fn generate_json_extend(
         }
 
         // Optional field (`Option<T>`): a JSON `null` maps to/from `None`, otherwise the inner
-        // value (`Some`'s payload) is converted as usual. The inner type is `string` or another
-        // `@json` class (optional arrays are out of scope).
+        // value (`Some`'s payload) is converted as usual. `T` may be `string`, another `@json`
+        // class/union, or an array of a supported element type.
         if let Some(base) = option_inner(&field.field_type) {
+            if let Some(elem) = base.strip_suffix("[]") {
+                let to_stmts = array_to_stmts(
+                    elem,
+                    &format!("__v_{}", fname),
+                    &format!("__arr_{}", fname),
+                    &format!("__i_{}", fname),
+                    json_names,
+                );
+                let from_stmts = array_from_stmts(
+                    elem,
+                    &format!("__src_{}", fname),
+                    &format!("__inner_{}", fname),
+                    &format!("__i_{}", fname),
+                    &format!("__asrc_{}", fname),
+                    json_names,
+                );
+                match (to_stmts, from_stmts) {
+                    (Some(to_s), Some(from_s)) => {
+                        to_body.push_str(&format!(
+                            "        switch (this.{f}) {{\n            Some(__v_{f}) => {{\n                {to_s}                __o.set(\"{k}\", __arr_{f});\n            }}\n            None => {{ __o.set(\"{k}\", JsonValue.none()); }}\n        }}\n",
+                            f = fname, k = json_key, to_s = to_s
+                        ));
+                        from_prelude.push_str(&format!(
+                            "        let __{f}: Option<{base}> = Option.None;\n        let __src_{f} = v.get(\"{k}\").unwrap_or(JsonValue.none());\n        if (__src_{f}.is_null() == false) {{\n            {from_s}            __{f} = Option.Some(__inner_{f});\n        }}\n",
+                            f = fname, k = json_key, base = base, from_s = from_s
+                        ));
+                        from_fields.push(format!("__{f}", f = fname));
+                    }
+                    _ => {
+                        diagnostics.report_error(
+                            format!(
+                                "@json class '{}' field '{}' has unsupported optional array element type '{}'{}",
+                                name,
+                                fname,
+                                elem,
+                                missing_json_hint(elem, jsonable)
+                            ),
+                            Some(field.name.position),
+                        );
+                        return None;
+                    }
+                }
+                continue;
+            }
+
             let (to_inner, from_inner) = if base == "string" {
                 (
                     format!("JsonValue.from_string(__v_{f})", f = fname),
@@ -73,7 +137,7 @@ pub(super) fn generate_json_extend(
                 )
             } else {
                 diagnostics.report_error(
-                    format!("@json class '{}' field '{}' has unsupported optional type '{}' (only `Option<string>` and `Option<@json class>` are supported){}", name, fname, ftype, missing_json_hint(&base, jsonable)),
+                    format!("@json class '{}' field '{}' has unsupported optional type '{}' (only `Option<string>`, `Option<@json class>`, and `Option<T[]>` of those are supported){}", name, fname, ftype, missing_json_hint(&base, jsonable)),
                     Some(field.name.position),
                 );
                 return None;
@@ -93,25 +157,30 @@ pub(super) fn generate_json_extend(
         if let Some(elem) = ftype.strip_suffix("[]") {
             // Array field: serialize/deserialize element-wise. Loop variables are suffixed with the
             // field name because Dream scopes locals per-function (not per-block).
-            let to_elem = json_to_expr(elem, &format!("this.{}[__i_{}]", fname, fname), json_names);
-            let from_elem = json_from_expr(
+            let to_s = array_to_stmts(
                 elem,
-                &format!(
-                    "__src_{}.at(__i_{}).unwrap_or(JsonValue.none())",
-                    fname, fname
-                ),
+                &format!("this.{}", fname),
+                &format!("__arr_{}", fname),
+                &format!("__i_{}", fname),
                 json_names,
             );
-            match (to_elem, from_elem) {
-                (Some(to_e), Some(from_e)) => {
+            let from_s = array_from_stmts(
+                elem,
+                &format!("v.get(\"{}\").unwrap_or(JsonValue.none())", json_key),
+                &format!("__{}", fname),
+                &format!("__i_{}", fname),
+                &format!("__src_{}", fname),
+                json_names,
+            );
+            match (to_s, from_s) {
+                (Some(to_s), Some(from_s)) => {
                     to_body.push_str(&format!(
-                        "        let __arr_{f} = JsonValue.array();\n        let __i_{f} = 0;\n        while (__i_{f} < this.{f}.size()) {{\n            __arr_{f}.push({to_e});\n            __i_{f} = __i_{f} + 1;\n        }}\n        __o.set(\"{k}\", __arr_{f});\n",
-                        f = fname, k = json_key, to_e = to_e
+                        "        {to_s}        __o.set(\"{k}\", __arr_{f});\n",
+                        to_s = to_s,
+                        k = json_key,
+                        f = fname
                     ));
-                    from_prelude.push_str(&format!(
-                        "        let __src_{f} = v.get(\"{k}\").unwrap_or(JsonValue.none());\n        let __{f} = Buffer.alloc<{elem}>(__src_{f}.size());\n        let __i_{f} = 0;\n        while (__i_{f} < __src_{f}.size()) {{\n            __{f}[__i_{f}] = {from_e};\n            __i_{f} = __i_{f} + 1;\n        }}\n",
-                        f = fname, k = json_key, elem = elem, from_e = from_e
-                    ));
+                    from_prelude.push_str(&format!("        {}\n", from_s.trim_end()));
                     from_fields.push(format!("__{f}", f = fname));
                 }
                 _ => {

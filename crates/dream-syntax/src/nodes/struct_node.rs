@@ -23,7 +23,7 @@ pub struct StructFieldNode {
     /// display name like `List_JsonValue`). For the structured type (which preserves generic
     /// arguments such as `List<JsonValue>`), use `field_type`.
     pub type_token: SyntaxToken,
-    /// The fully parsed field type, preserving generic arguments, arrays, and nullability so
+    /// The fully parsed field type, preserving generic arguments and arrays so
     /// generic field types (e.g. `List<JsonValue>`, `Map<string, V>`) can be instantiated and
     /// have their methods resolved.
     pub field_type: Type,

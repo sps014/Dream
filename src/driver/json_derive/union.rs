@@ -50,60 +50,68 @@ pub(super) fn generate_json_union(
         for field in &variant.fields {
             let fname = &field.name.text;
             let ftype = field.type_token.text.as_str();
-            let to_expr = if is_type_param(ftype) {
-                Some(format!("JSON.parse(JSON.serialize({}))", fname))
-            } else {
-                json_to_expr(ftype, fname, json_names)
-            };
-            match to_expr {
-                Some(expr) => {
-                    to_body.push_str(&format!(
-                        "                __o.set(\"{}\", {});\n",
-                        fname, expr
-                    ));
-                }
-                None => {
-                    diagnostics.report_error(
-                        format!(
-                            "@json union '{}' variant '{}' field '{}' has unsupported type '{}'{}",
-                            name,
-                            vname,
-                            fname,
-                            ftype,
-                            missing_json_hint(ftype, jsonable)
-                        ),
-                        Some(field.name.position),
-                    );
-                    return None;
-                }
+            if has_json_ignore(&field.attributes) {
+                // Omitted from serialize; deserialize uses a zero default via the from_json path.
+                continue;
             }
-        }
-        to_body.push_str("            }\n");
-
-        // from_json reconstruction expression for this variant
-        let ctor = if variant.fields.is_empty() {
-            format!("{}.{}", name, vname)
-        } else {
-            let mut args = Vec::new();
-            for field in &variant.fields {
-                let fname = &field.name.text;
-                let ftype = field.type_token.text.as_str();
-                let jexpr = format!("v.get(\"{}\").unwrap_or(JsonValue.none())", fname);
-                let from_expr = if is_type_param(ftype) {
-                    Some(format!(
-                        "JSON.deserialize<{}>(JSON.stringify({}))",
-                        ftype, jexpr
-                    ))
-                } else {
-                    json_from_expr(ftype, &jexpr, json_names)
-                };
-                match from_expr {
-                    Some(expr) => args.push(expr),
+            if is_type_param(ftype) {
+                to_body.push_str(&format!(
+                    "                __o.set(\"{}\", JSON.parse(JSON.serialize({})));\n",
+                    fname, fname
+                ));
+            } else if let Some(elem) = ftype.strip_suffix("[]") {
+                let to_s = array_to_stmts(
+                    elem,
+                    fname,
+                    &format!("__arr_{}_{}", vname, fname),
+                    &format!("__i_{}_{}", vname, fname),
+                    json_names,
+                );
+                match to_s {
+                    Some(to_s) => {
+                        // Indent each line of the array builder into the switch arm.
+                        for line in to_s.lines() {
+                            to_body.push_str("                ");
+                            to_body.push_str(line);
+                            to_body.push('\n');
+                        }
+                        to_body.push_str(&format!(
+                            "                __o.set(\"{}\", __arr_{}_{});\n",
+                            fname, vname, fname
+                        ));
+                    }
+                    None => {
+                        diagnostics.report_error(
+                            format!(
+                                "@json union '{}' variant '{}' field '{}' has unsupported array element type '{}'{}",
+                                name,
+                                vname,
+                                fname,
+                                elem,
+                                missing_json_hint(elem, jsonable)
+                            ),
+                            Some(field.name.position),
+                        );
+                        return None;
+                    }
+                }
+            } else {
+                match json_to_expr(ftype, fname, json_names) {
+                    Some(expr) => {
+                        to_body.push_str(&format!(
+                            "                __o.set(\"{}\", {});\n",
+                            fname, expr
+                        ));
+                    }
                     None => {
                         diagnostics.report_error(
                             format!(
                                 "@json union '{}' variant '{}' field '{}' has unsupported type '{}'{}",
-                                name, vname, fname, ftype, missing_json_hint(ftype, jsonable)
+                                name,
+                                vname,
+                                fname,
+                                ftype,
+                                missing_json_hint(ftype, jsonable)
                             ),
                             Some(field.name.position),
                         );
@@ -111,41 +119,149 @@ pub(super) fn generate_json_union(
                     }
                 }
             }
-            format!("{}.{}({})", name, vname, args.join(", "))
+        }
+        to_body.push_str("            }\n");
+
+        // from_json reconstruction for this variant (may need prelude stmts for array payloads).
+        let ctor_block = if variant.fields.is_empty() {
+            format!("            return {}.{};\n", name, vname)
+        } else {
+            let mut prelude = String::new();
+            let mut args = Vec::new();
+            for field in &variant.fields {
+                let fname = &field.name.text;
+                let ftype = field.type_token.text.as_str();
+                if has_json_ignore(&field.attributes) {
+                    match json_ignore_default(ftype, &field.field_type) {
+                        Some(default) => args.push(default),
+                        None => {
+                            diagnostics.report_error(
+                                format!(
+                                    "@json union '{}' variant '{}' field '{}' has @json_ignore but type '{}' has no zero default (use `Option<{}>` or remove @json_ignore)",
+                                    name, vname, fname, ftype, ftype
+                                ),
+                                Some(field.name.position),
+                            );
+                            return None;
+                        }
+                    }
+                    continue;
+                }
+                let jexpr = format!("v.get(\"{}\").unwrap_or(JsonValue.none())", fname);
+                if is_type_param(ftype) {
+                    args.push(format!(
+                        "JSON.deserialize<{}>(JSON.stringify({}))",
+                        ftype, jexpr
+                    ));
+                } else if let Some(elem) = ftype.strip_suffix("[]") {
+                    let out_var = format!("__{}_{}", vname, fname);
+                    let from_s = array_from_stmts(
+                        elem,
+                        &jexpr,
+                        &out_var,
+                        &format!("__i_{}_{}", vname, fname),
+                        &format!("__src_{}_{}", vname, fname),
+                        json_names,
+                    );
+                    match from_s {
+                        Some(from_s) => {
+                            for line in from_s.lines() {
+                                prelude.push_str("            ");
+                                prelude.push_str(line);
+                                prelude.push('\n');
+                            }
+                            args.push(out_var);
+                        }
+                        None => {
+                            diagnostics.report_error(
+                                format!(
+                                    "@json union '{}' variant '{}' field '{}' has unsupported array element type '{}'{}",
+                                    name, vname, fname, elem, missing_json_hint(elem, jsonable)
+                                ),
+                                Some(field.name.position),
+                            );
+                            return None;
+                        }
+                    }
+                } else {
+                    match json_from_expr(ftype, &jexpr, json_names) {
+                        Some(expr) => args.push(expr),
+                        None => {
+                            diagnostics.report_error(
+                                format!(
+                                    "@json union '{}' variant '{}' field '{}' has unsupported type '{}'{}",
+                                    name, vname, fname, ftype, missing_json_hint(ftype, jsonable)
+                                ),
+                                Some(field.name.position),
+                            );
+                            return None;
+                        }
+                    }
+                }
+            }
+            format!(
+                "{prelude}            return {name}.{vname}({args});\n",
+                prelude = prelude,
+                name = name,
+                vname = vname,
+                args = args.join(", ")
+            )
         };
         from_arms.push_str(&format!(
-            "        if (__t == \"{}\") {{\n            return {};\n        }}\n",
-            vname, ctor
+            "        if (__t == \"{}\") {{\n{}        }}\n",
+            vname, ctor_block
         ));
     }
     to_body.push_str("        }\n        return __o;\n");
 
     // Fallback: reconstruct the first variant for an unrecognized tag (only hit on malformed input).
     let first = &enum_decl.variants[0];
+    let mut fallback_prelude = String::new();
     let fallback = if first.fields.is_empty() {
         format!("{}.{}", name, first.name.text)
     } else {
         let mut args = Vec::new();
+        let vname = &first.name.text;
         for field in &first.fields {
-            let jexpr = format!("v.get(\"{}\").unwrap_or(JsonValue.none())", field.name.text);
+            let fname = &field.name.text;
+            let jexpr = format!("v.get(\"{}\").unwrap_or(JsonValue.none())", fname);
             let ftype = field.type_token.text.as_str();
             // Field types were already validated in the loop above.
-            if is_type_param(ftype) {
+            if has_json_ignore(&field.attributes) {
+                args.push(json_ignore_default(ftype, &field.field_type)?);
+            } else if is_type_param(ftype) {
                 args.push(format!(
                     "JSON.deserialize<{}>(JSON.stringify({}))",
                     ftype, jexpr
                 ));
+            } else if let Some(elem) = ftype.strip_suffix("[]") {
+                let out_var = format!("__fb_{}", fname);
+                let from_s = array_from_stmts(
+                    elem,
+                    &jexpr,
+                    &out_var,
+                    &format!("__fbi_{}", fname),
+                    &format!("__fbs_{}", fname),
+                    json_names,
+                )?;
+                for line in from_s.lines() {
+                    fallback_prelude.push_str("        ");
+                    fallback_prelude.push_str(line);
+                    fallback_prelude.push('\n');
+                }
+                args.push(out_var);
             } else {
                 args.push(json_from_expr(ftype, &jexpr, json_names)?);
             }
         }
-        format!("{}.{}({})", name, first.name.text, args.join(", "))
+        format!("{}.{}({})", name, vname, args.join(", "))
     };
 
     let from_body = format!(
-        "        let __t = v.get(\"{tag}\").unwrap_or(JsonValue.none()).as_string();\n{arms}        return {fallback};\n",
+        "        let __t = v.get(\"{tag}\").unwrap_or(JsonValue.none()).as_string();\n{arms}{prelude}        return {fallback};\n",
         tag = TYPE_TAG_KEY,
         arms = from_arms,
+        prelude = fallback_prelude,
         fallback = fallback
     );
 

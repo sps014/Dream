@@ -10,7 +10,7 @@ pub struct ParameterNode {
     pub name: SyntaxToken,
     pub type_: Type,
     /// An optional default value, restricted to a constant literal (`= 5`, `= "hi"`, `= true`,
-    /// `= -1`, `= null`). When present, the parameter may be omitted at a call site and the default
+    /// `= -1`, `= ""`). When present, the parameter may be omitted at a call site and the default
     /// is substituted. `None` for required parameters and all synthesized parameters (e.g. `this`).
     pub default: Option<Type>,
     /// True for a trailing `...name: T[]` variadic parameter: a call may pass zero or more `T`

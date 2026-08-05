@@ -134,7 +134,20 @@ async fun main(): void {
 
 Each `dispatch(msg, body)` call may supply a **different** `body` on the same underlying thread — the pool member runs whichever `(funcidx, env)` pair you pass for that call. Overlapping `dispatch` calls to distinct pool members run in parallel exactly like separate `WebWorker`s; `body` capture rules are identical, and `body` may likewise be an async top-level function returning `string` (see [Async worker bodies](#async-worker-bodies)).
 
-`dispatch` is `string`-in/`string`-out rather than generic like `WebWorker<TIn, TOut>` — an instance method can't be monomorphized per call site the way a free function or static method can, and combining that with `async` hits a narrower gap in the compiler's generic/async interaction. Convert at the call site with `Bytes.toWire`/`Bytes.fromWire` (the same helpers `WebWorker<TIn, TOut>` uses internally) if you need to pass something other than `string`.
+Instance `dispatch` is `string`-in/`string`-out (instance methods aren't monomorphized per call-site type arguments). For typed messages, use the free-function helpers:
+
+```dream
+fun square(n: int): int { return n * n; }
+
+async fun main(): void {
+    let pool = WebWorkerPool(2);
+    let a = pool_dispatch<int, int>(pool, 3, square);
+    System.println((await a).to_string()); // 9
+    pool.shutdown();
+}
+```
+
+`pool_dispatch` wraps with `Bytes.toWire`/`Bytes.fromWire` the same way `WebWorker<TIn, TOut>` does. For an async body (`fun(TIn): Future<TOut>`), use `pool_dispatch_async` instead. `TIn`/`TOut` follow the same wire constraints as `WebWorker`.
 
 Pick a pool when you're issuing many small tasks over time; pick `WebWorker`/`WebWorker.map` for a single batch of parallel work you want to spawn, await, and tear down together.
 
@@ -242,9 +255,9 @@ async fun main(): void {
 |---------|---------|
 | Native (`dream run`, `wasmtime`) | One OS thread per worker, each with a fresh `Store`/`Instance` importing the *same* `wasmtime::SharedMemory` as the owner, plus a pair of `mpsc` channels for messages. Fully supported and tested. |
 | Browser (`runtime/dream.js`) | One `Worker` per worker, each importing the parent's shared `WebAssembly.Memory` (requires COOP/COEP on the host page). Messages still cross as copied strings; `@shared` heap objects are visible across workers when isolation headers are set. |
-| Node (`runtime/dream.js`) | Not supported directly — use the native runtime for parallel workers under Node/CLI. |
+| Node (`runtime/dream.js`) | One `worker_threads.Worker` per worker, each importing the parent's shared `WebAssembly.Memory` (SharedArrayBuffer is available under `worker_threads`). Same message/`@shared` model as the browser path. |
 
-Under the hood the module exports a trampoline, `__dream_worker_invoke(fn_idx, env, msg_ptr)`, that publishes `env` (the body's closure environment word — 0 for a non-capturing body, an `@shared`-object pointer or a snapshotted unmanaged environment otherwise) to the closure-env global, then performs one `call_indirect` on the body funcref — and, if that call turns out to have hit an `async fun`'s constructor rather than an ordinary function, drives it to completion and unwraps the real result before returning (see [Async worker bodies](#async-worker-bodies)). The host driver calls it once per message, reusing the same `(fn_idx, env)` pair for every message a given worker ever processes. `receive()`/`send()` are `extern async`, bridging into the normal async scheduler like an HTTP request. The browser calls a lower-level `__dream_worker_invoke_raw` export instead and drives async completion itself (see above), since it cannot assume a pending task settles synchronously.
+Under the hood the module exports a trampoline, `__dream_worker_invoke(fn_idx, env, msg_ptr)`, that publishes `env` (the body's closure environment word — 0 for a non-capturing body, an `@shared`-object pointer or a snapshotted unmanaged environment otherwise) to the closure-env global, then performs one `call_indirect` on the body funcref — and, if that call turns out to have hit an `async fun`'s constructor rather than an ordinary function, drives it to completion and unwraps the real result before returning (see [Async worker bodies](#async-worker-bodies)). The host driver calls it once per message, reusing the same `(fn_idx, env)` pair for every message a given worker ever processes. `receive()`/`send()` are `extern async`, bridging into the normal async scheduler like an HTTP request. The browser/Node `dream.js` path calls a lower-level `__dream_worker_invoke_raw` export instead and drives async completion itself (see above), since it cannot assume a pending task settles synchronously.
 
 ## Notes and limits
 

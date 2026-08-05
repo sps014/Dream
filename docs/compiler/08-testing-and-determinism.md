@@ -16,7 +16,7 @@ flowchart TD
 
 ### Unit tests
 
-Each module tests its own logic with the smallest possible input. Passes use `FunctionBuilder` (`src/mir/build.rs`) to construct a tiny `MirFunction`, run the pass, and assert on the result. The type system tests interning, nullable collapsing, reference classification, display, and compat. Run a focused subset with a path filter:
+Each module tests its own logic with the smallest possible input. Passes use `FunctionBuilder` (`src/mir/build.rs`) to construct a tiny `MirFunction`, run the pass, and assert on the result. The type system tests interning, reference classification, display, and compat. Run a focused subset with a path filter:
 
 ```bash
 cargo test -p dream types::

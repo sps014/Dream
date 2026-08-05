@@ -10,7 +10,7 @@ Two built-in generic unions handle absence and failure safely, without null. Bot
 enum Option<T> { Some(value: T), None }
 ```
 
-Prefer it over a nullable `T?` when absence is a meaningful part of the flow — a lookup that might find nothing — because it forces the caller to handle both cases.
+Prefer it when absence is a meaningful part of the flow — a lookup that might find nothing — because it forces the caller to handle both cases. There is no nullable `T?` / `null` spelling; `Option<T>` / `None` is the only absence model.
 
 ```dream
 let some = Option.Some(42);

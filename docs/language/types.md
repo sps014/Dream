@@ -70,18 +70,19 @@ nums[1] = 99;
 
 For a growable sequence, use [`List<T>`](../stdlib/collections.md). See [Arrays](arrays.md) for the full story.
 
-## Nullable types
+## Optional values
 
-Any reference type can be made nullable with `?`, letting it hold a value or `null`:
+Absence is expressed with [`Option<T>`](../stdlib/option-result.md), not a nullable `T?` suffix.
+There is no `null` literal — use `None` / `Option.None`, and prefer `??` / `.unwrap_or(...)` for
+fallbacks (see [Operators](operators.md)).
 
 ```dream
-let node: Node? = null;
-node = Node(5, null);
+let node: Option<Node> = Option.None;
+node = Option.Some(Node(5, Option.None));
 ```
 
-Primitives cannot be nullable. Use `??` to supply a fallback (see [Operators](operators.md)).
-
-Dereferencing a `null` nullable value (e.g. reading a field or array element through it) [panics](panics.md) rather than reading a bogus address.
+Calling a method or reading a field through a value that might be absent is a type error until you
+unwrap or match on it; `.unwrap_or` / `??` supply a fallback without panicking on `None`.
 
 ## User-defined types
 

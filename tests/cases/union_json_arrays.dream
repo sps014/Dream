@@ -1,0 +1,62 @@
+@json
+class Point {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@json
+enum Tags {
+    Many(items: string[]),
+    Counts(nums: int[]),
+    Points(pts: Point[]),
+    Empty,
+}
+
+fun main(): void {
+    let items = Buffer.alloc<string>(2);
+    items[0] = "a";
+    items[1] = "b";
+    let m = Tags.Many(items);
+    System.println(JSON.serialize(m));
+    let m2 = JSON.deserialize<Tags>(JSON.serialize(m));
+    switch (m2) {
+        Many(items) => {
+            System.println(items.size());
+            System.println(items[0]);
+            System.println(items[1]);
+        }
+        _ => { System.println("bad"); }
+    }
+
+    let nums = Buffer.alloc<int>(3);
+    nums[0] = 1;
+    nums[1] = 2;
+    nums[2] = 3;
+    let c = Tags.Counts(nums);
+    System.println(JSON.serialize(c));
+    let c2 = JSON.deserialize<Tags>(JSON.serialize(c));
+    switch (c2) {
+        Counts(nums) => {
+            System.println(nums[0] + nums[1] + nums[2]);
+        }
+        _ => { System.println("bad"); }
+    }
+
+    let pts = Buffer.alloc<Point>(1);
+    pts[0] = Point(4, 5);
+    let p = Tags.Points(pts);
+    System.println(JSON.serialize(p));
+    let p2 = JSON.deserialize<Tags>(JSON.serialize(p));
+    switch (p2) {
+        Points(pts) => {
+            System.println(pts[0].x);
+            System.println(pts[0].y);
+        }
+        _ => { System.println("bad"); }
+    }
+}

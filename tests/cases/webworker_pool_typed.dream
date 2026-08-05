@@ -1,0 +1,21 @@
+// Typed pool dispatch via free-function `pool_dispatch` / `pool_dispatch_async`.
+
+fun square(n: int): int {
+    return n * n;
+}
+
+async fun bump(n: int): int {
+    await Time.sleep(1);
+    return n + 1;
+}
+
+async fun main(): void {
+    let pool = WebWorkerPool(2);
+    let a = pool_dispatch<int, int>(pool, 3, square);
+    let b = pool_dispatch<int, int>(pool, 4, square);
+    let c = pool_dispatch_async<int, int>(pool, 5, bump);
+    System.println((await a).to_string());
+    System.println((await b).to_string());
+    System.println((await c).to_string());
+    pool.shutdown();
+}

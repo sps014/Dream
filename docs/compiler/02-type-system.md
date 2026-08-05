@@ -9,12 +9,11 @@ Historically a type was identified by the string `Type::get_type()` produces:
 | Type | Legacy string | Problem |
 |------|---------------|---------|
 | `int[]` | `"int[]"` | every consumer re-parses the `[]` suffix |
-| `int?` | `"int?"` | nullable handled by `strip_suffix('?')` everywhere |
 | `Box<int>` | `"Box_int"` | mangling; `demangle_generic_struct` heuristically splits on `_` |
 | `Pair<int,string>` | `"Pair_int_string"` | ambiguous if a base name contains `_` |
 | `fun(int):bool` | `"fun(int):bool"` | parsed by string surgery |
 
-Equality was a `String` compare, monomorphization was string mangling, and reference-ness was `ends_with("[]") || known_struct(name)`. The structured system turns all of this into integer operations.
+Equality was a `String` compare, monomorphization was string mangling, and reference-ness was `ends_with("[]") || known_struct(name)`. The structured system turns all of this into integer operations. (A former `T?` / `TyKind::Nullable` layer was purged in favor of `Option<T>` — see [09](./09-nullable-purge-design-note.md).)
 
 ## The pieces
 
@@ -25,10 +24,8 @@ classDiagram
         +kind(TypeId) TyKind
         +int()/bool()/string()/object()/void()/error() TypeId
         +array(TypeId) TypeId
-        +nullable(TypeId) TypeId
         +struct_ty(DefId, args) TypeId
         +is_reference(TypeId) bool
-        +strip_nullable(TypeId) TypeId
     }
     class TyKind {
         Prim(PrimTy)
@@ -36,11 +33,12 @@ classDiagram
         Void
         Error
         Array(TypeId)
-        Nullable(TypeId)
         Struct(DefId, Vec~TypeId~)
         Union(DefId, Vec~TypeId~)
+        Interface(DefId, Vec~TypeId~)
         Enum(DefId)
         Func(Vec~TypeId~, TypeId)
+        Js
     }
     class DefTable {
         +intern(DefKind, name, generics) DefId
@@ -70,24 +68,20 @@ pub enum TyKind {
     Void,
     Error,                         // poison
     Array(TypeId),
-    Nullable(TypeId),
     Struct(DefId, Vec<TypeId>),    // (definition, type arguments)
     Union(DefId, Vec<TypeId>),
+    Interface(DefId, Vec<TypeId>),
     Enum(DefId),
     Func(Vec<TypeId>, TypeId),     // (params, return)
+    Js,                            // dynamic JS-interop handle
 }
 ```
 
-`PrimTy` keeps `string` for naming convenience; whether a value is a heap reference is decided by `TypeInterner::is_reference`, not by `PrimTy`.
+`PrimTy` keeps `string` for naming convenience; whether a value is a heap reference is decided by `TypeInterner::is_reference`, not by `PrimTy`. Absence is `Option<T>` (a `Union`/`Struct` over the prelude `Option` def), not a dedicated nullable wrapper.
 
 ### `TypeInterner` — `src/types/interner.rs`
 
 Hash-conses `TyKind → TypeId`. The nullary types (all primitives, `Object`, `Void`, `Error`) are pre-interned in `new()` so their ids are stable and reachable via accessors (`int()`, `bool()`, …).
-
-Two rules worth knowing:
-
-- `nullable(nullable(t))` collapses to `nullable(t)` — `T??` is `T?`.
-- `is_reference(id)` strips a `Nullable` wrapper first, so `string?` is a reference.
 
 > **Equality is `==`.** Because identical `TyKind`s always intern to the same `TypeId`, you never compare type *shapes* — you compare ids. If you find yourself matching on `TyKind` to test equality, you almost certainly want `id_a == id_b`.
 
@@ -102,14 +96,12 @@ This is the key to monomorphization: instead of inventing `"Box_int"`, you key i
 Three structural relations replace the old string comparisons:
 
 - `numeric_widen(from, to)` — the implicit numeric widening lattice (`byte → int → long → float → double`, plus unsigned/float cross-edges). `from == to` is *false* (identity is handled separately).
-- `assignable(interner, target, value)` — may `value` be assigned to `target`? Encodes: `Error` poison is bidirectional; anything widens into `object`; enums interconvert with `int`; numerics widen per the lattice; a nullable target accepts the bare inner type or the `null` literal (`void?`).
+- `assignable(interner, target, value)` — may `value` be assigned to `target`? Encodes: `Error` poison is bidirectional; anything widens into `object`; enums interconvert with `int`; numerics widen per the lattice; `Option<T>` follows ordinary union assignability (no special `null` literal).
 - `overload_compatible(interner, param, arg)` — *looser* than `assignable`: any two numeric primitives are compatible regardless of direction (exactness is scored separately during overload ranking).
-
-> The `null` literal is modeled as `Nullable(Void)` (i.e. `void?`).
 
 ### Display — `src/types/display.rs`
 
-`display_name(interner, defs, id)` renders source-level syntax for diagnostics and the LSP: `int[]`, `string?`, `Box<int>`, `fun(int): bool`. Generics use angle brackets, **never** the internal `Box_int` spelling. The LSP tests depend on this.
+`display_name(interner, defs, id)` renders source-level syntax for diagnostics and the LSP: `int[]`, `Option<string>`, `Box<int>`, `fun(int): bool`. Generics use angle brackets, **never** the internal `Box_int` spelling. The LSP tests depend on this.
 
 ### `TypeCtx` — `src/types/lower.rs`
 

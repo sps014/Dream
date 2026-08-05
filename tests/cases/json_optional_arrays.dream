@@ -1,0 +1,50 @@
+@json
+class Address {
+    public city: string;
+
+    constructor(city: string) {
+        this.city = city;
+    }
+}
+
+@json
+class Bag {
+    public tags: Option<int[]>;
+    public names: Option<string[]>;
+    public places: Option<Address[]>;
+
+    constructor(tags: Option<int[]>, names: Option<string[]>, places: Option<Address[]>) {
+        this.tags = tags;
+        this.names = names;
+        this.places = places;
+    }
+}
+
+fun main(): void {
+    let tags = Buffer.alloc<int>(2);
+    tags[0] = 1;
+    tags[1] = 2;
+    let names = Buffer.alloc<string>(1);
+    names[0] = "a";
+    let places = Buffer.alloc<Address>(1);
+    places[0] = Address("NYC");
+
+    let b1 = Bag(Option.Some(tags), Option.Some(names), Option.Some(places));
+    let t1 = JSON.serialize(b1);
+    System.println(t1);
+    let r1 = JSON.deserialize<Bag>(t1);
+    System.println((r1.tags ?? Buffer.alloc<int>(0)).size());
+    System.println((r1.names ?? Buffer.alloc<string>(0))[0]);
+    System.println((r1.places ?? Buffer.alloc<Address>(0))[0].city);
+
+    let none_tags: Option<int[]> = Option.None;
+    let none_names: Option<string[]> = Option.None;
+    let none_places: Option<Address[]> = Option.None;
+    let b2 = Bag(none_tags, none_names, none_places);
+    let t2 = JSON.serialize(b2);
+    System.println(t2);
+    let r2 = JSON.deserialize<Bag>(t2);
+    System.println(r2.tags.is_none());
+    System.println(r2.names.is_none());
+    System.println(r2.places.is_none());
+}

@@ -78,7 +78,7 @@ Pattern-matching `switch` lowering (analyzer):
 
 `HExpr { ty: TypeId, kind: HExprKind }`. Every node is typed. Notable kinds:
 
-- Literals: `IntLit`, `FloatLit`, `BoolLit`, `CharLit`, `StringLit`, `Null`.
+- Literals: `IntLit`, `FloatLit`, `BoolLit`, `CharLit`, `StringLit`.
 - `Var(Binding)` — resolved read.
 - `Binary { op, lhs, rhs }`, `Unary { op, operand }` using the canonical `hir::BinOp`/`UnOp` (`src/hir/ops.rs`) — *not* syntax tokens.
 - Calls: `Call { callee, args }`, `MethodCall { receiver, callee, args }`, `IndirectCall { target, args }`.

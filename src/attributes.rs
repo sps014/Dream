@@ -118,6 +118,12 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         repeatable: false,
     },
     AttributeSpec {
+        name: "json_ignore",
+        targets: &[AttributeTarget::Field],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    AttributeSpec {
         name: "override",
         targets: &[AttributeTarget::Method],
         args: ArgShape::None,

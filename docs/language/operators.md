@@ -91,10 +91,11 @@ range — see [Primitives § Integer overflow](primitives.md#integer-overflow).
 
 ## Null-coalescing and ternary
 
-`a ?? b` yields `a` when it is non-null, otherwise `b`. The left side is a nullable `T?` and the result is the unwrapped `T`:
+`a ?? b` yields the value inside `a` when `a` is `Option.Some(...)`, otherwise `b`. The left side
+is an `Option<T>` and the result is `T` (equivalent to `a.unwrap_or(b)`):
 
 ```dream
-let name: string? = lookup();
+let name: Option<string> = lookup();
 let display: string = name ?? "anonymous";
 ```
 

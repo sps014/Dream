@@ -180,13 +180,11 @@ public class WebWorker<TIn, TOut> {
 //       pool.shutdown();
 //   }
 //
-// `dispatch` is `string`-in/`string`-out rather than generic like `WebWorker<TIn, TOut>`: the
-// compiler's generic monomorphization only specializes a free function or a *static* method per
-// call site's type arguments, not an *instance* method (whose mangled name would otherwise need
-// to fold in both the receiver type and the method's own type arguments) - and combining that
-// with `async` hits a second, narrower gap in the compiler's generic/async interaction. Convert
-// at the call site with `Bytes.toWire`/`fromWire` (the same helpers `WebWorker<TIn, TOut>` uses
-// internally) if you need to pass something other than `string`.
+// Instance `dispatch` is `string`-in/`string`-out (instance methods aren't monomorphized per call
+// site's type arguments). For typed messages, use the free-function overloads `pool_dispatch`
+// below — they wrap with `Bytes.toWire`/`fromWire` the same way `WebWorker<TIn, TOut>` does.
+// (A static generic `async` method on this class hits a compiler gap around generic+async
+// monomorphization; free functions specialize cleanly.)
 public class WebWorkerPool {
     ids: int[];
     next: int;
@@ -242,4 +240,22 @@ public class WebWorkerPool {
     // Run the body at `(funcidx, env)` on `msg` on pool member `id`'s thread and await its reply.
     @js("Dream", "workerPoolDispatch")
     static extern async fun __dispatch(id: int, funcidx: int, env: int, msg: string): string;
+}
+
+// Typed pool dispatch: wire-encode `msg`, run `body` on a pool member, wire-decode the result.
+// Prefer this over manual `Bytes.toWire`/`fromWire` when `TIn`/`TOut` aren't `string`.
+// Call as `pool_dispatch<TIn, TOut>(pool, msg, body)`. Same wire constraints as `WebWorker`.
+// (Sync and async-body variants use distinct names — two generic free-function overloads that
+// differ only in `fun(TIn): TOut` vs `fun(TIn): Future<TOut>` do not monomorphize cleanly.)
+public async fun pool_dispatch<TIn, TOut>(pool: WebWorkerPool, msg: TIn, body: fun(TIn): TOut): TOut {
+    let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
+    return Bytes.fromWire<TOut>(await pool.dispatch(Bytes.toWire<TIn>(msg), wrapped));
+}
+
+// Async-body typed dispatch: `body` returns `Future<TOut>` (named `async fun` / `async` lambda).
+public async fun pool_dispatch_async<TIn, TOut>(pool: WebWorkerPool, msg: TIn, body: fun(TIn): Future<TOut>): TOut {
+    let wrapped: fun(string): Future<string> = async (raw: string) => {
+        return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
+    };
+    return Bytes.fromWire<TOut>(await pool.dispatch(Bytes.toWire<TIn>(msg), wrapped));
 }

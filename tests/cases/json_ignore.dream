@@ -1,0 +1,32 @@
+@json
+class User {
+    public name: string;
+    public age: int;
+    @json_ignore
+    public password: string;
+    @json_ignore
+    public login_count: int;
+    @json_ignore
+    public nickname: Option<string>;
+
+    constructor(name: string, age: int, password: string, login_count: int, nickname: Option<string>) {
+        this.name = name;
+        this.age = age;
+        this.password = password;
+        this.login_count = login_count;
+        this.nickname = nickname;
+    }
+}
+
+fun main(): void {
+    let u = User("Ada", 36, "secret", 7, Option.Some("Countess"));
+    let text = JSON.serialize(u);
+    System.println(text);
+
+    let back = JSON.deserialize<User>(text);
+    System.println(back.name);
+    System.println(back.age);
+    System.println(back.password);
+    System.println(back.login_count);
+    System.println(back.nickname.is_none());
+}

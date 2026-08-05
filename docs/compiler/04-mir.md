@@ -57,7 +57,7 @@ pub enum Terminator {
 
 - `Place` (assignable): `Local`, `Global`, `Field { base, field }`, `Index { base, index: Box<Operand> }`. *(The `Box` breaks the `Place`→`Operand`→`Place` type cycle.)*
 - `Operand` (readable): `Copy(Place)` or `Const(Const)`.
-- `Const`: `Int`, `Float`, `Bool`, `Char`, `Str(String)` (interned later), `Null`.
+- `Const`: `Int`, `Float`, `Bool`, `Char`, `Str(String)` (interned later), `Null` (pointer-sized zero — an absent heap reference / cleared slot in MIR, **not** a source-level `null` literal; the language uses `Option<T>` / `None` for absence).
 
 ### Rvalues — all real computation
 

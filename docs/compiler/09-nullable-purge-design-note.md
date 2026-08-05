@@ -98,4 +98,4 @@ With these three decisions fixed, `removal-nullable-implementation` reduces to:
    either delete the nullable-specific branch (if `Option<T>` already handles it structurally) or
    retarget it at `Option<T>`'s existing discriminated-union path.
 3. Rewrite the `??` lowering to target `Option<T>.unwrap_or` as described above.
-4. Migrate every `T?`/`null` fixture and doc page to `Option<T>`/`None`/`.unwrap_or(...)`.
+4. ~~Migrate every `T?`/`null` fixture and doc page to `Option<T>`/`None`/`.unwrap_or(...)`.~~ **Done** (fixtures + user/compiler docs; this note remains as the decision record).

@@ -1,0 +1,9 @@
+{"type":"Many","items":["a","b"]}
+2
+a
+b
+{"type":"Counts","nums":[1,2,3]}
+6
+{"type":"Points","pts":[{"x":4,"y":5}]}
+4
+5

@@ -72,7 +72,7 @@ greet("Ada", 3);   // times = 3
 
 Rules:
 
-- A default must be a **constant literal**: a number (may be negative), `true`/`false`, a string, a char, or `null`. No arbitrary expressions.
+- A default must be a **constant literal**: a number (may be negative), `true`/`false`, a string, or a char. No arbitrary expressions.
 - Defaults must be **trailing** — once one parameter has a default, all after it must too.
 - Callers must still pass every leading required argument; passing more than the total is an error.
 

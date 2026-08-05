@@ -21,10 +21,45 @@ use union::generate_json_union;
 const JSON_ATTR: &str = "json";
 /// Per-field attribute overriding the emitted JSON key.
 pub(super) const PROPERTY_NAME_ATTR: &str = "property_name";
+/// Per-field attribute omitting a field from `to_json` / `from_json` key traffic.
+pub(super) const JSON_IGNORE_ATTR: &str = "json_ignore";
 /// The discriminator key written for `@json` discriminated unions.
 pub(super) const TYPE_TAG_KEY: &str = "type";
 /// Synthetic file name under which the generated derive source is parsed/reported.
 const JSON_DERIVE_FILE: &str = "<json-derive>";
+
+/// Zero / empty default expression for a `@json_ignore` field that still must be passed to the
+/// positional constructor. Nested `@json` class/union fields without a trivial zero are rejected
+/// by the caller (they must be wrapped in `Option`).
+pub(super) fn json_ignore_default(
+    ftype: &str,
+    field_ty: &crate::syntax::nodes::Type,
+) -> Option<String> {
+    if matches!(
+        field_ty,
+        crate::syntax::nodes::Type::Struct(token, Some(args))
+            if token.text == "Option" && args.len() == 1
+    ) {
+        return Some("Option.None".to_string());
+    }
+    if let Some(elem) = ftype.strip_suffix("[]") {
+        return Some(format!("Buffer.alloc<{elem}>(0)", elem = elem));
+    }
+    match ftype {
+        "int" | "long" | "uint" | "ulong" | "byte" => Some("0".to_string()),
+        "float" => Some("0.0f".to_string()),
+        "double" => Some("0.0".to_string()),
+        "bool" => Some("false".to_string()),
+        "string" => Some("\"\"".to_string()),
+        "char" => Some("'\\0'".to_string()),
+        _ => None,
+    }
+}
+
+/// Returns `true` if the field carries `@json_ignore`.
+pub(super) fn has_json_ignore(field_attrs: &[crate::syntax::nodes::AttributeNode]) -> bool {
+    field_attrs.iter().any(|a| a.name.text == JSON_IGNORE_ATTR)
+}
 
 /// One primitive's JSON codec: how to serialize (`to`, given the accessor expression) and
 /// deserialize (`from`, given the source `JsonValue` expression). Unifies the former parallel
@@ -71,7 +106,8 @@ fn json_codec(elem_type: &str, json_names: &HashSet<String>) -> Option<JsonCodec
 }
 
 /// Classifies a field's element type for JSON derivation, returning the serialize expression for
-/// `access`, or `None` if the type is unsupported.
+/// `access`, or `None` if the type is unsupported. Does not handle arrays — use
+/// [`array_to_stmts`] for `T[]`.
 pub(super) fn json_to_expr(
     elem_type: &str,
     access: &str,
@@ -81,7 +117,8 @@ pub(super) fn json_to_expr(
 }
 
 /// Returns the deserialize expression that reconstructs a value of `elem_type` from the JSON
-/// expression `jexpr`, or `None` if the type is unsupported.
+/// expression `jexpr`, or `None` if the type is unsupported. Does not handle arrays — use
+/// [`array_from_stmts`] for `T[]`.
 pub(super) fn json_from_expr(
     elem_type: &str,
     jexpr: &str,
@@ -90,9 +127,54 @@ pub(super) fn json_from_expr(
     Some((json_codec(elem_type, json_names)?.from)(jexpr))
 }
 
+/// Emits statements that build a `JsonValue` array from a Dream `elem[]` accessor into `arr_var`
+/// (also declares `idx_var`). Returns `None` if `elem` is unsupported.
+pub(super) fn array_to_stmts(
+    elem: &str,
+    access: &str,
+    arr_var: &str,
+    idx_var: &str,
+    json_names: &HashSet<String>,
+) -> Option<String> {
+    let to_e = json_to_expr(elem, &format!("{}[{}]", access, idx_var), json_names)?;
+    Some(format!(
+        "let {arr} = JsonValue.array();\n        let {idx} = 0;\n        while ({idx} < {access}.size()) {{\n            {arr}.push({to_e});\n            {idx} = {idx} + 1;\n        }}\n",
+        arr = arr_var,
+        idx = idx_var,
+        access = access,
+        to_e = to_e
+    ))
+}
+
+/// Emits statements that reconstruct a Dream `elem[]` from JSON array expression `jexpr` into
+/// `out_var` (also declares `idx_var`). Returns `None` if `elem` is unsupported.
+pub(super) fn array_from_stmts(
+    elem: &str,
+    jexpr: &str,
+    out_var: &str,
+    idx_var: &str,
+    src_var: &str,
+    json_names: &HashSet<String>,
+) -> Option<String> {
+    let from_e = json_from_expr(
+        elem,
+        &format!("{}.at({}).unwrap_or(JsonValue.none())", src_var, idx_var),
+        json_names,
+    )?;
+    Some(format!(
+        "let {src} = {jexpr};\n        let {out} = Buffer.alloc<{elem}>({src}.size());\n        let {idx} = 0;\n        while ({idx} < {src}.size()) {{\n            {out}[{idx}] = {from_e};\n            {idx} = {idx} + 1;\n        }}\n",
+        src = src_var,
+        jexpr = jexpr,
+        out = out_var,
+        elem = elem,
+        idx = idx_var,
+        from_e = from_e
+    ))
+}
+
 /// Actionable suffix for an "unsupported field type" diagnostic: when `core` names a user-defined
 /// class/struct/union that *could* be `@json` but isn't, point the user at the fix. `core` is the
-/// bare type name (nullable `?` / array `[]` already stripped). Empty for genuinely unsupported
+/// bare type name (array `[]` already stripped). Empty for genuinely unsupported
 /// types (`js`, functions, C-style enums, …), which keep the plain "unsupported" wording.
 pub(super) fn missing_json_hint(core: &str, jsonable: &HashSet<String>) -> String {
     if jsonable.contains(core) {

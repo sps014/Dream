@@ -1,0 +1,22 @@
+@json
+class Address {
+    public city: string;
+    constructor(city: string) { this.city = city; }
+}
+
+@json
+class Bad {
+    public name: string;
+    @json_ignore
+    public home: Address;
+
+    constructor(name: string, home: Address) {
+        this.name = name;
+        this.home = home;
+    }
+}
+
+fun main(): void {
+    let b = Bad("x", Address("y"));
+    System.println(JSON.serialize(b));
+}

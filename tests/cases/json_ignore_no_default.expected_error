@@ -1,0 +1,1 @@
+@json class 'Bad' field 'home' has @json_ignore but type 'Address' has no zero default (use `Option<Address>` or remove @json_ignore)

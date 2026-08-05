@@ -8,7 +8,7 @@ Primitive and literal names cannot be reused for a variable, function, parameter
 
 - Primitives: `int`, `float`, `double`, `string`, `bool`, `char`, `object`, `void`, `long`, `uint`, `ulong`, `byte`.
 - Former C#-style spellings (`String`, `Int32`, `Int64`, `UInt32`, `UInt64`, `Byte`, `Single`, `Double`, `Boolean`, `Char`, `Object`, `Void`) are no longer usable as types, but remain reserved as identifiers so old code fails loudly instead of silently shadowing them.
-- Literals: `true`, `false`, `null`.
+- Literals: `true`, `false`.
 
 The print combinators `__print` / `__println` and any `$`-prefixed name are reserved for the compiler.
 

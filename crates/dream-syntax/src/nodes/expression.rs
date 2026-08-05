@@ -133,7 +133,7 @@ impl<'a> ExpressionNode<'a> {
     /// Returns a representative source span for this expression, derived from an existing
     /// token in the node (no positions are stored separately). Used to attach line/column
     /// information to semantic diagnostics. Returns `None` only when nothing positional is
-    /// available (e.g. an empty array literal or the `null` literal).
+    /// available (e.g. an empty array literal).
     pub fn position(&self) -> Option<TextSpan> {
         match self {
             ExpressionNode::Literal(t) => t.get_span(),

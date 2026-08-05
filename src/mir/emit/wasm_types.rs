@@ -6,8 +6,8 @@
 
 use super::*;
 
-/// The WASM value type for a Dream type (`i32`/`i64`/`f32`/`f64`). Nullability is stripped first;
-/// every reference/`object`/`void` type is an `i32` pointer/word.
+/// The WASM value type for a Dream type (`i32`/`i64`/`f32`/`f64`).
+/// Every reference/`object`/`void` type is an `i32` pointer/word.
 pub(crate) fn wasm_ty_of(interner: &TypeInterner, ty: TypeId) -> &'static str {
     match interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => "f64",

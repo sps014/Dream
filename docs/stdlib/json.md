@@ -27,7 +27,7 @@ fun main(): void {
 - `JSON.serialize(x): string` — stringify any `@json` value.
 - `JSON.deserialize<T>(text): T` — parse and reconstruct a `T`.
 
-Field types may be primitives, `string`, other `@json` classes, arrays of those, and nullable `string?` or nullable `@json` classes. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
+Field types may be primitives, `string`, other `@json` classes, arrays of those, and `Option<string>`, `Option<@json class>`, or `Option<T[]>` of a supported element type. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
 
 ### Custom keys
 
@@ -46,22 +46,43 @@ class Product {
 
 This writes `product_id` as `"id"` and `price` as `"priceUsd"`.
 
-### Nullable fields
+### Ignoring fields
 
-A nullable field (`string?` or a nullable `@json` class) maps to JSON `null`. On serialize, a `null` field is written as `null`; on deserialize, a JSON `null` *or* a missing key produces a `null` field:
+`@json_ignore` omits a field from both serialize and deserialize. On deserialize the positional constructor still receives a zero/empty default for that slot (`0`, `false`, `""`, `Option.None`, empty array, …). Nested `@json` class/union fields cannot be ignored unless wrapped in `Option` (defaults to `None`):
 
 ```dream
 @json
-class Profile { name: string; nickname: string?; address: Address?; }
+class User {
+    name: string;
+    @json_ignore
+    password: string;
+}
+```
+
+### Optional fields
+
+An `Option<T>` field maps to JSON `null`. On serialize, `None` is written as `null`; on deserialize, a JSON `null` *or* a missing key produces `None`. `T` may be `string`, another `@json` class/union, or an array of a supported element type:
+
+```dream
+@json
+class Profile {
+    name: string;
+    nickname: Option<string>;
+    address: Option<Address>;
+    tags: Option<string[]>;
+}
 ```
 
 ### Unions
 
-`@json` also works on [discriminated unions](../language/enums-unions.md). A value serializes as an object tagged with a `"type"` key naming the active variant, followed by its payload fields; a unit variant becomes just `{ "type": "<Variant>" }`:
+`@json` also works on [discriminated unions](../language/enums-unions.md). A value serializes as an object tagged with a `"type"` key naming the active variant, followed by its payload fields; a unit variant becomes just `{ "type": "<Variant>" }`. Payload fields may include arrays of supported element types:
 
 ```dream
 @json
 enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
+
+@json
+enum Tags { Many(items: string[]), Empty }
 
 let text = JSON.serialize(Shape.Rect(3, 4));   // {"type":"Rect","width":3,"height":4}
 let back = JSON.deserialize<Shape>(text);       // Shape.Rect(3, 4)
@@ -71,7 +92,7 @@ println(JSON.serialize(Shape.Empty));           // {"type":"Empty"}
 On deserialize, an unrecognized `"type"` falls back to the first variant. `@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives its own converters.
 
 !!! note "v1 limits"
-    Field and payload types are limited to primitives, `string`, other `@json` classes/unions, type parameters of a generic `@json` type, and (for classes) arrays of those plus nullable `string?` / nullable `@json` classes. Nullable arrays, and arrays in union payloads, are not supported. Calling `serialize`/`deserialize` on a type without a derived converter is a compile-time error.
+    Field and payload types are limited to primitives, `string`, other `@json` classes/unions, type parameters of a generic `@json` type, arrays of those (classes and unions), and (for classes) `Option<string>` / `Option<@json class>` / `Option<T[]>` of a supported element. Calling `serialize`/`deserialize` on a type without a derived converter is a compile-time error.
 
 ## The `JsonValue` model
 

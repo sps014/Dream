@@ -16,6 +16,8 @@
 //   import { load } from "./dream.js";
 //   const mod = await load("interop.wasm", { imports: { alert: console.log } });
 //   mod.run();
+// WebWorker / WebWorkerPool also work under Node via `worker_threads` (see
+// `sample/node_webworker_smoke.mjs`).
 
 // Runtime type tags stored in each heap block header (see object.rs).
 export const TAGS = {
@@ -358,15 +360,13 @@ export class DreamInstance {
    * Runs one `fun(string): string` worker body: writes `msg` into this instance's memory, calls the
    * exported `__dream_worker_invoke_raw` trampoline (publishes `env` to the closure-env global, then
    * a single `call_indirect` on the body funcref `fnIndex`), and resolves with the reply string.
-   * Used by the Web Worker bootstrap. Returns a Promise because an *async* body's `call_indirect`
-   * only returns its `Future` constructor's frame pointer, not the real reply — see
-   * `__awaitWorkerResult`.
+   * Used by the Web Worker / Node worker_threads bootstrap. Returns a Promise because an *async*
+   * body's `call_indirect` only returns its `Future` constructor's frame pointer, not the real
+   * reply — see `__awaitWorkerResult`.
    *
-   * NOTE: unlike the native (wasmtime) worker path, each browser `Worker` still instantiates its OWN
-   * private `WebAssembly.Memory` (no `SharedArrayBuffer` wiring yet) — see the module doc comment on
-   * `workerBootSource`. A capturing body's `env` pointer is therefore only meaningful across threads
-   * on native; under this browser runtime a captured `@shared class`/unmanaged environment is not
-   * actually shared memory, so cross-thread `@shared` capture is native-only for now.
+   * Workers (browser and Node) import the parent's shared `WebAssembly.Memory`, so an `@shared
+   * class` / unmanaged `env` pointer is meaningful across threads. Browser pages still need
+   * COOP/COEP headers for `SharedArrayBuffer`; Node's `worker_threads` exposes it by default.
    */
   __workerInvoke(fnIndex, env, msg) {
     const ptr = this.writeString(msg == null ? "" : String(msg));
@@ -887,12 +887,33 @@ async function loadAbi(abi) {
 }
 
 /**
- * Source of the Web Worker bootstrap module. It imports this same `dream.js` (so the worker reuses
+ * Source of the worker bootstrap module. It imports this same `dream.js` (so the worker reuses
  * all the env/`Dream` import wiring, including nested workers) and, on `init`, instantiates the
  * same `.wasm` bytes importing the parent's shared `WebAssembly.Memory`. Thereafter each `msg` or
  * `dispatch` runs a `fun(string):string` body via `__workerInvoke` and posts the reply back.
+ *
+ * Browser workers use `self.onmessage` / `self.postMessage`; Node `worker_threads` workers use
+ * `parentPort` instead — pass `node: true` for that dialect.
  */
-function workerBootSource(dreamUrl) {
+function workerBootSource(dreamUrl, { node = false } = {}) {
+  if (node) {
+    return `import { parentPort } from 'node:worker_threads';
+import * as Dream from ${JSON.stringify(dreamUrl)};
+let inst = null;
+parentPort.on('message', async (m) => {
+  if (m.t === 'init') {
+    inst = await Dream.load(m.bytes, { abi: m.abi, memory: m.memory });
+    parentPort.postMessage({ t: 'ready' });
+  } else if (m.t === 'msg') {
+    parentPort.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
+  } else if (m.t === 'dispatch') {
+    parentPort.postMessage({ t: 'reply', data: await inst.__workerInvoke(m.fnIdx, m.env, m.data) });
+  } else if (m.t === 'term') {
+    parentPort.close();
+  }
+});
+`;
+  }
   return `import * as Dream from ${JSON.stringify(dreamUrl)};
 let inst = null;
 self.onmessage = async (e) => {
@@ -907,62 +928,114 @@ self.onmessage = async (e) => {
   } else if (m.t === 'term') {
     self.close();
   }
-};`;
+};
+`;
 }
 
 /**
  * Builds the `Dream`-module worker host functions (`workerSpawn`/`workerPost`/`workerRecv`/
  * `workerTerminate`/`workerPoolSpawn`/`workerPoolDispatch`) behind `src/stdlib/core/webworker.dream`.
- * Browser only: each worker is a real `Worker` running a fresh instance of the same module,
- * importing the parent's shared `WebAssembly.Memory`. `workerRecv`/`workerPoolDispatch` are
- * `extern async`, so they return Promises bridged into Dream's scheduler. Under Node, use the
- * native wasmtime runtime for parallelism.
+ * Each worker is a real browser `Worker` or Node `worker_threads.Worker` running a fresh instance
+ * of the same module, importing the parent's shared `WebAssembly.Memory`.
+ * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
+ * Dream's scheduler.
  */
 function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
   const reg = new Map();
   let nextId = 1;
+  /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
+  let NodeWorkerCtor = null;
 
   const postJob = (state, job) => {
     if (state.ready) state.worker.postMessage(job);
     else state.queued.push(job);
   };
 
-  const spawnWorker = (fnIndex, env) => {
-    if (typeof Worker === "undefined") {
-      throw new Error(
-        "WebWorker is only supported in the browser under dream.js; use the native runtime for parallel workers under Node/CLI",
-      );
+  const attachHandlers = (worker, state) => {
+    // Browser: `onmessage` event with `e.data`. Node worker_threads: `message` event with data directly.
+    if (typeof worker.on === "function" && isNode) {
+      worker.on("message", (m) => {
+        if (m.t === "ready") {
+          state.ready = true;
+          for (const q of state.queued) state.worker.postMessage(q);
+          state.queued = [];
+        } else if (m.t === "reply") {
+          if (state.pending.length > 0) state.pending.shift()(m.data);
+          else state.replies.push(m.data);
+        }
+      });
+    } else {
+      worker.onmessage = (e) => {
+        const m = e.data;
+        if (m.t === "ready") {
+          state.ready = true;
+          for (const q of state.queued) state.worker.postMessage(q);
+          state.queued = [];
+        } else if (m.t === "reply") {
+          if (state.pending.length > 0) state.pending.shift()(m.data);
+          else state.replies.push(m.data);
+        }
+      };
     }
-    const url = URL.createObjectURL(
-      new Blob([workerBootSource(import.meta.url)], { type: "text/javascript" }),
-    );
-    const worker = new Worker(url, { type: "module" });
+  };
+
+  const spawnWorker = (fnIndex, env) => {
     const state = {
-      worker,
+      worker: null,
       fnIndex,
       env,
       pending: [],
       replies: [],
       ready: false,
       queued: [],
+      blobUrl: null,
     };
-    worker.onmessage = (e) => {
-      const m = e.data;
-      if (m.t === "ready") {
-        state.ready = true;
-        for (const q of state.queued) state.worker.postMessage(q);
-        state.queued = [];
-      } else if (m.t === "reply") {
-        if (state.pending.length > 0) state.pending.shift()(m.data);
-        else state.replies.push(m.data);
+
+    const finishSpawn = (worker) => {
+      state.worker = worker;
+      attachHandlers(worker, state);
+      worker.postMessage({
+        t: "init",
+        bytes: wasmBytes,
+        abi,
+        memory: getSharedMemory(),
+      });
+    };
+
+    if (isNode) {
+      // Spawn synchronously once the ctor is cached; first call kicks off an async import and
+      // queues the init until it resolves (postJob already buffers until `ready`).
+      const startNode = (NodeWorker) => {
+        const worker = new NodeWorker(workerBootSource(import.meta.url, { node: true }), {
+          eval: true,
+        });
+        // Allow the Node process to exit once Dream's async main has settled even if a worker
+        // handle is still referenced briefly during teardown.
+        if (typeof worker.unref === "function") worker.unref();
+        finishSpawn(worker);
+      };
+      if (NodeWorkerCtor) {
+        startNode(NodeWorkerCtor);
+      } else {
+        // Synchronous-looking spawn from Dream's POV: register the id immediately; jobs queue
+        // until the worker posts `ready`. The dynamic import of worker_threads is one-shot.
+        import("node:worker_threads").then(({ Worker }) => {
+          NodeWorkerCtor = Worker;
+          startNode(Worker);
+        });
       }
-    };
-    worker.postMessage({
-      t: "init",
-      bytes: wasmBytes,
-      abi,
-      memory: getSharedMemory(),
-    });
+    } else if (typeof Worker !== "undefined") {
+      const url = URL.createObjectURL(
+        new Blob([workerBootSource(import.meta.url)], { type: "text/javascript" }),
+      );
+      state.blobUrl = url;
+      finishSpawn(new Worker(url, { type: "module" }));
+    } else {
+      throw new Error(
+        "WebWorker requires a browser Worker or Node worker_threads; neither is available in this environment",
+      );
+    }
+
     const id = nextId++;
     reg.set(id, state);
     return id;
@@ -998,10 +1071,19 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory) {
       const s = reg.get(id);
       if (!s) return;
       try {
-        s.worker.postMessage({ t: "term" });
-        s.worker.terminate();
+        if (s.worker) {
+          s.worker.postMessage({ t: "term" });
+          s.worker.terminate();
+        }
       } catch (_) {
         /* already gone */
+      }
+      if (s.blobUrl) {
+        try {
+          URL.revokeObjectURL(s.blobUrl);
+        } catch (_) {
+          /* ignore */
+        }
       }
       for (const p of s.pending) p("");
       reg.delete(id);
