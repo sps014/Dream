@@ -119,7 +119,6 @@ Rules:
   for a `Result<T, E>?`, or `Option<_>` for an `Option<T>?`. Using `?` in a function with an
   incompatible (or missing) return type is a compile error, since there is nowhere for the
   propagated failure to go.
-- `expr?` cannot appear at the very top of a `switch`/`if` condition or before another bare `?`
-  without parentheses, because a lone `?` immediately followed by an expression-starting token is
-  ambiguous with the ternary `cond ? a : b`. Parenthesize the propagated expression to
-  disambiguate: `(half(n)?) + 1` rather than `half(n)? + 1`.
+- Postfix `?` is preferred over ternary unless a matching `:` follows at the same nesting depth, so
+  `half(n)? + 1` and `if (half(n)? > 0)` are try-propagation. Write `cond ? a : b` when you mean the
+  ternary; parentheses around `(expr?)` are never required for ordinary postfix use.

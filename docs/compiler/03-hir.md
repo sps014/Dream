@@ -64,6 +64,11 @@ A `ref` parameter (`fun f(ref x: int)`) needs no dedicated HIR shape: it is boxe
 | `Break / Continue (Option<label>)` | |
 | `Await(HExpr)` | the only legal `await` *statement* position |
 
+Pattern-matching `switch` lowering (analyzer):
+
+- Flat unguarded arms — including **or-patterns** and **small int/char literal ranges** (inclusive span ≤ 256) expanded into multi-key arms — emit `HStmt::Switch` (MIR `br_table`).
+- Arms with **guards** or **nested/literal sub-patterns** lower as an if-chain (`Discriminant` / `UnionField` tests), not `Switch`.
+
 `HPattern` is `Const(HExpr)`, `Variant { def, variant, bindings }` (binds the payload into fresh locals), or `Wildcard`.
 
 `HPlace` is the assignable subset: `Local`, `Global`, `Field { obj, field }` (resolved field **index**, not a name), `Index { array, index }`.

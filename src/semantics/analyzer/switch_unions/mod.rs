@@ -8,7 +8,8 @@
 //!   [`lowering`] (`HirArmShape`, `compile_pattern`, `hir_switch_pattern`, `pattern_is_nested`).
 //! - [`foreach`]: `for (x in iterable)` desugaring via the enumerator protocol (`iterator()`/`next()`).
 //! - [`lowering`]: the two pattern-`switch` lowering paths — a `Switch`/br_table fast path
-//!   (`analyze_pattern_switch`) and a general if-chain fallback for guards/nested patterns
+//!   (`analyze_pattern_switch`, including or-patterns and small literal ranges expanded to multi-key
+//!   arms) and a general if-chain fallback for guards/nested patterns
 //!   (`analyze_pattern_switch_chain`) — plus the subject-resolution/arm-result helpers they share.
 
 use super::*;

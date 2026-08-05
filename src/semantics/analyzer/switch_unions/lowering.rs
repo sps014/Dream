@@ -1,7 +1,8 @@
 //! The two pattern-`switch` lowering paths, plus the subject-resolution/arm-result helpers they
 //! share:
 //! - [`Analyzer::analyze_pattern_switch`]: the `Switch`/br_table fast path for flat, unguarded
-//!   variant/const/catch-all arms.
+//!   variant/const/catch-all arms (including or-patterns and small literal ranges expanded into
+//!   multi-key arms).
 //! - [`Analyzer::analyze_pattern_switch_chain`]: the general if-chain fallback used whenever any arm
 //!   has a guard or a nested/literal sub-pattern (see [`Analyzer::pattern_switch_needs_chain`]).
 
@@ -290,9 +291,11 @@ impl<'a> Analyzer<'a> {
         is_expression: bool,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        // A `Switch` (br_table) can only express flat, unguarded variant/const arms. Switches with a
-        // guard or a nested/literal sub-pattern lower through the general if-chain path instead.
-        if Self::pattern_switch_needs_chain(arms) {
+        // Or-patterns and small literal ranges expand into flat multi-key Switch arms. Nested
+        // sub-patterns / guards / unexpanded ranges still need the if-chain (use the original arms
+        // there so `compile_pattern` sees Or/Range intact).
+        let expanded = Self::expand_switch_arms_for_fast_path(arms);
+        if Self::pattern_switch_needs_chain(&expanded) {
             return self.analyze_pattern_switch_chain(
                 subject,
                 arms,
@@ -309,11 +312,26 @@ impl<'a> Analyzer<'a> {
             .defs
             .lookup(crate::types::DefKind::Union, &subject_base);
 
+        // Or-alternatives are validated binding-free against the original arms (expansion turns each
+        // alt into its own arm, which would otherwise miss this check).
+        for arm in arms {
+            if let PatternNode::Or(alts) = &arm.pattern {
+                for alt in alts {
+                    if Self::pattern_introduces_binding(alt, &union_info) {
+                        diagnostics.report_error(
+                            "an or-pattern alternative cannot bind a variable; use `_`, a literal, a range, or a payload-free variant".to_string(),
+                            alt.position(),
+                        );
+                    }
+                }
+            }
+        }
+
         // A whole-subject binding arm (`other => ...`, where `other` names no unit variant) needs the
         // subject value available in the `default` block. Bind it to a temp once and dispatch the
         // `Switch` on a read of that temp, so the binding arm can copy it into its named local.
         let subj_ty_id = self.type_ctx.lower(&subject_type);
-        let has_whole_bind = arms.iter().any(|a| {
+        let has_whole_bind = expanded.iter().any(|a| {
             a.guard.is_none()
                 && matches!(&a.pattern, PatternNode::Binding(n)
                     if !matches!(&union_info, Some(info) if info.variant(&n.text).is_some_and(|v| v.fields.is_empty())))
@@ -349,7 +367,7 @@ impl<'a> Analyzer<'a> {
         let mut result_temp: Option<crate::hir::LocalId> = None;
         let mut result_ty_id: Option<crate::types::TypeId> = None;
 
-        for (i, arm) in arms.iter().enumerate() {
+        for (i, arm) in expanded.iter().enumerate() {
             if catch_all_index.is_some() {
                 diagnostics.report_error(
                     "Unreachable switch arm: a previous arm already matches everything".to_string(),
@@ -374,6 +392,10 @@ impl<'a> Analyzer<'a> {
             // Classify the pattern (allocating payload binding slots) before the body is lowered.
             let shape =
                 self.hir_switch_pattern(&arm.pattern, &union_info, union_def, &subject_type);
+            debug_assert!(
+                !matches!(shape, HirArmShape::Unsupported),
+                "expand_switch_arms_for_fast_path + pattern_switch_needs_chain should keep Unsupported off the Switch path"
+            );
 
             self.hir_open_block();
             // A whole-subject binding copies the subject into its named local as the first statement
@@ -445,6 +467,7 @@ impl<'a> Analyzer<'a> {
             self.hir_switch(switch_scrutinee, hir_arms, hir_default, hir_ok);
         }
 
+        // Exhaustiveness uses the original arms so Or/Range coverage is computed as written.
         self.check_exhaustiveness(
             &subject_base,
             &subject_type,

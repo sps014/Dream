@@ -31,11 +31,10 @@ fun describe_first_positive(xs: int[]): Option<string> {
     return Option.Some("first positive: " + v.to_string());
 }
 
-// `?` used directly inside a call argument (not just a `let` initializer). A `?` immediately
-// followed by a token that could start a ternary's "then" branch (like `+`) is ambiguous with
-// `cond ? a : b` and is parsed as ternary; parens disambiguate it as try-propagation instead.
+// `?` used directly inside a call argument (not just a `let` initializer), including before a
+// binary operator — try-propagation wins unless a matching ternary `:` follows.
 fun quarter_plus_one(n: int): Result<int, string> {
-    return Result.Ok((half(n)?) + 1);
+    return Result.Ok(half(n)? + 1);
 }
 
 fun main(): void {

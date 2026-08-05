@@ -117,9 +117,8 @@ fun quarter(n: int): Result<int, string> {
 }
 ```
 
-A bare `expr?` immediately followed by a token that could start an expression (like `+`) is parsed
-as the ternary's leading `cond ?`, not try-propagation; parenthesize it (`(half(n)?) + 1`) to
-disambiguate.
+Postfix `?` wins over ternary unless a matching `:` follows at the same nesting depth
+(`half(n)? + 1` is try-propagation; `cond ? a : b` is still the ternary).
 
 ## Assignment
 

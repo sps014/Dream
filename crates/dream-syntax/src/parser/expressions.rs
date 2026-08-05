@@ -482,24 +482,37 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     /// Disambiguates a postfix `?` (try-propagation, `expr?`) from the leading `?` of a ternary
-    /// (`cond ? a : b`), both of which start with a bare `?` right after an expression. A `?` is
-    /// recognized as postfix propagation only when the token immediately following it cannot
-    /// start an expression — i.e. it cannot be the "then" branch of a ternary — which covers the
-    /// overwhelming majority of real usage (`x?;`, `x?.foo()`, `f(x?, y)`, `[x?]`, `return x?;`).
-    /// Any other following token is left for the ternary parse in [`parse_expression`]. Genuinely
-    /// ambiguous cases are rare and can be disambiguated by the caller with parens.
+    /// (`cond ? a : b`). Prefers try-propagation unless a matching ternary `:` appears at nesting
+    /// depth 0 in the following tokens (so `half(n)? + 1` and `if (half(n)? > 0)` parse as try,
+    /// while `cond ? a : b` stays ternary). An immediately following `?` is always try, so
+    /// `x? ? a : b` is `(x?) ? a : b`.
     fn is_try_propagation_question_mark(&self) -> bool {
-        matches!(
-            self.peek_token(1).kind,
-            TokenKind::SemicolonToken
-                | TokenKind::CommaToken
-                | TokenKind::CloseParenthesisToken
+        if self.peek_token(1).kind == TokenKind::QuestionMarkToken {
+            return true;
+        }
+        let mut depth: i32 = 0;
+        let mut i = 1;
+        loop {
+            let kind = self.peek_token(i).kind;
+            match kind {
+                TokenKind::EndOfFileToken | TokenKind::SemicolonToken => return true,
+                TokenKind::CommaToken if depth == 0 => return true,
+                TokenKind::ColonToken if depth == 0 => return false,
+                TokenKind::OpenParenthesisToken
+                | TokenKind::OpenBracketToken
+                | TokenKind::CurlyOpenBracketToken => depth += 1,
+                TokenKind::CloseParenthesisToken
                 | TokenKind::CloseBracketToken
-                | TokenKind::CurlyCloseBracketToken
-                | TokenKind::DotToken
-                | TokenKind::QuestionMarkToken
-                | TokenKind::EndOfFileToken
-        )
+                | TokenKind::CurlyCloseBracketToken => {
+                    depth -= 1;
+                    if depth < 0 {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
     }
 
     /// Parses one call argument: either a plain expression, or a named argument `name: value`

@@ -1613,6 +1613,76 @@ fn test_hir_emission_switch_expression() {
 }
 
 #[test]
+fn test_hir_switch_or_pattern_expands_to_multi_const_arms() {
+    // A char or-pattern expands into one `HPattern::Const` arm per alternative on the Switch path.
+    let code = "
+        fun is_vowel(c: char): bool {
+            return switch (c) {
+                'a' | 'e' | 'i' | 'o' | 'u' => true,
+                _ => false,
+            };
+        }
+    ";
+    compile_test_pipeline(code, |hir, _| {
+        let f = hir
+            .functions
+            .iter()
+            .find(|f| f.name == "is_vowel")
+            .expect("is_vowel should be emitted");
+        let switch = f.body.iter().find_map(|s| match s {
+            crate::hir::HStmt::Switch { arms, .. } => Some(arms),
+            _ => None,
+        });
+        let arms = switch.expect("or-pattern switch should emit HStmt::Switch");
+        assert_eq!(
+            arms.len(),
+            5,
+            "five vowel alternatives should become five Const arms, got {:?}",
+            arms.len()
+        );
+        assert!(arms.iter().all(|a| matches!(
+            a.pattern,
+            crate::hir::HPattern::Const(_)
+        )));
+    });
+}
+
+#[test]
+fn test_hir_switch_range_pattern_expands_to_multi_const_arms() {
+    // A small int range expands into one Const arm per inclusive value on the Switch path.
+    let code = "
+        fun in_teens(n: int): bool {
+            return switch (n) {
+                10..12 => true,
+                _ => false,
+            };
+        }
+    ";
+    compile_test_pipeline(code, |hir, _| {
+        let f = hir
+            .functions
+            .iter()
+            .find(|f| f.name == "in_teens")
+            .expect("in_teens should be emitted");
+        let switch = f.body.iter().find_map(|s| match s {
+            crate::hir::HStmt::Switch { arms, .. } => Some(arms),
+            _ => None,
+        });
+        let arms = switch.expect("range-pattern switch should emit HStmt::Switch");
+        assert_eq!(
+            arms.len(),
+            3,
+            "10..12 should expand to three Const arms, got {}",
+            arms.len()
+        );
+        assert!(arms.iter().all(|a| matches!(
+            a.pattern,
+            crate::hir::HPattern::Const(_)
+        )));
+    });
+}
+
+#[test]
 fn test_switch_nested_patterns_are_exhaustive() {
     // Nested union patterns are counted recursively: `Wrap(A(n))` + `Wrap(B)` together cover the
     // `Wrap` variant (all of `Inner`), so with `Bare` the switch is exhaustive without a `_` arm.

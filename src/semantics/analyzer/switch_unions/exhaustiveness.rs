@@ -343,7 +343,7 @@ impl<'a> Analyzer<'a> {
     /// `Circle(_)` does not bind, but `Circle(r)` does). Used to reject a binding-introducing
     /// or-pattern alternative, since a name bound by only *some* alternatives would be meaningless
     /// (which alternative matched is not visible to the arm body).
-    fn pattern_introduces_binding(p: &PatternNode, union_info: &Option<UnionInfo>) -> bool {
+    pub(super) fn pattern_introduces_binding(p: &PatternNode, union_info: &Option<UnionInfo>) -> bool {
         match p {
             PatternNode::Wildcard(_) | PatternNode::Literal(_) | PatternNode::Range(..) => false,
             PatternNode::Binding(name) => !matches!(union_info, Some(info)

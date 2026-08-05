@@ -1,12 +1,15 @@
 //! Pattern classification/compilation shared by both switch-lowering paths in [`super::lowering`]:
 //! [`Analyzer::hir_switch_pattern`] classifies a pattern into the [`super::HirArmShape`] the
 //! `Switch`-emitting fast path needs, while [`Analyzer::compile_pattern`] compiles a pattern into
-//! explicit boolean test conditions for the general if-chain fallback. [`Analyzer::pattern_switch_needs_chain`]
-//! decides which path a given switch's arms require.
+//! explicit boolean test conditions for the general if-chain fallback.
+//! [`Analyzer::expand_switch_arms_for_fast_path`] turns or-patterns and small literal ranges into
+//! flat multi-key arms; [`Analyzer::pattern_switch_needs_chain`] decides which path remains.
 
 use super::*;
 use crate::semantics::union_table::UnionInfo;
 use crate::syntax::nodes::{PatternNode, SwitchArm, Type};
+use crate::syntax::token::syntax_token::SyntaxToken;
+use crate::syntax::token::token_kind::TokenKind;
 
 impl<'a> Analyzer<'a> {
     /// Classifies a switch pattern for HIR statement-`switch` lowering, allocating HIR locals for any
@@ -85,29 +88,125 @@ impl<'a> Analyzer<'a> {
                     bindings,
                 }
             }
-            // Neither is representable as a single `Switch` const/variant arm; routed through the
-            // if-chain path by `pattern_switch_needs_chain` before this function ever sees them.
+            // Range/Or are expanded into flat Const/Variant arms before the Switch path runs; if
+            // one still reaches here it is an ICE-class routing gap.
             PatternNode::Range(..) | PatternNode::Or(..) => HirArmShape::Unsupported,
+        }
+    }
+
+    /// Cap on inclusive literal range expansion onto multi-key `Switch` arms (`90..100` → 11 arms).
+    /// Larger ranges stay on the if-chain path.
+    const RANGE_EXPAND_MAX: i64 = 256;
+
+    /// Expands top-level or-patterns and small int/char literal ranges into flat arms so they can
+    /// lower through `HStmt::Switch` (multi-key arms sharing a cloned body, like C-style multi-label
+    /// cases). Unexpandable ranges and nested/guarded shapes are left unchanged for if-chain routing.
+    pub(super) fn expand_switch_arms_for_fast_path<'b>(
+        arms: &[SwitchArm<'b>],
+    ) -> Vec<SwitchArm<'b>> {
+        let mut out = Vec::with_capacity(arms.len());
+        for arm in arms {
+            match &arm.pattern {
+                PatternNode::Or(alts)
+                    if !alts.iter().any(|a| Self::pattern_needs_chain(a)) =>
+                {
+                    for alt in alts {
+                        out.push(SwitchArm {
+                            pattern: alt.clone(),
+                            guard: arm.guard.clone(),
+                            body: arm.body.clone(),
+                        });
+                    }
+                }
+                PatternNode::Range(lo, hi) => {
+                    if let Some(lits) = Self::expand_range_literals(lo, hi) {
+                        for lit in lits {
+                            out.push(SwitchArm {
+                                pattern: PatternNode::Literal(lit),
+                                guard: arm.guard.clone(),
+                                body: arm.body.clone(),
+                            });
+                        }
+                    } else {
+                        out.push(arm.clone());
+                    }
+                }
+                _ => out.push(arm.clone()),
+            }
+        }
+        out
+    }
+
+    /// Inclusive int/char literal range → one `Type` literal per value, or `None` when the span is
+    /// too large, inverted, or not an int/char literal pair.
+    fn expand_range_literals(lo: &Type, hi: &Type) -> Option<Vec<Type>> {
+        match (lo, hi) {
+            (Type::Integer(a), Type::Integer(b)) => {
+                let lo_v = a.text.parse::<i64>().ok()?;
+                let hi_v = b.text.parse::<i64>().ok()?;
+                if hi_v < lo_v {
+                    return None;
+                }
+                let span = hi_v.checked_sub(lo_v)?.checked_add(1)?;
+                if span > Self::RANGE_EXPAND_MAX {
+                    return None;
+                }
+                Some(
+                    (lo_v..=hi_v)
+                        .map(|v| {
+                            Type::Integer(SyntaxToken::new(
+                                TokenKind::NumberToken,
+                                a.position,
+                                v.to_string(),
+                            ))
+                        })
+                        .collect(),
+                )
+            }
+            (Type::Char(a), Type::Char(b)) => {
+                let lo_v = a.text.parse::<u32>().ok().and_then(char::from_u32)?;
+                let hi_v = b.text.parse::<u32>().ok().and_then(char::from_u32)?;
+                if hi_v < lo_v {
+                    return None;
+                }
+                let span = (u32::from(hi_v) - u32::from(lo_v) + 1) as i64;
+                if span > Self::RANGE_EXPAND_MAX {
+                    return None;
+                }
+                Some(
+                    (lo_v..=hi_v)
+                        .map(|c| {
+                            Type::Char(SyntaxToken::new(
+                                TokenKind::CharToken,
+                                a.position,
+                                u32::from(c).to_string(),
+                            ))
+                        })
+                        .collect(),
+                )
+            }
+            _ => None,
         }
     }
 
     /// True when `arms` need the general if-chain lowering rather than a `Switch`: any arm has a
     /// guard, or a pattern isn't representable as a flat const/variant `Switch` arm (a nested
-    /// variant sub-pattern, a range, or an or-pattern).
+    /// variant sub-pattern, or an unexpanded range/or-pattern).
     pub(super) fn pattern_switch_needs_chain(arms: &[SwitchArm]) -> bool {
         arms.iter()
             .any(|a| a.guard.is_some() || Self::pattern_needs_chain(&a.pattern))
     }
 
-    /// True for a pattern that the `Switch`/br_table fast path cannot represent: a variant pattern
-    /// with at least one sub-pattern that isn't a flat binding/wildcard, a range pattern, or an
-    /// or-pattern.
+    /// True for a pattern that the `Switch`/br_table fast path cannot represent after expansion:
+    /// a variant with a nested/literal sub-pattern, an unexpanded range, or an unexpanded or-pattern
+    /// (or whose alternatives themselves need the chain).
     fn pattern_needs_chain(p: &PatternNode) -> bool {
         match p {
             PatternNode::Variant(_, _, subs) => subs
                 .iter()
                 .any(|s| !matches!(s, PatternNode::Binding(_) | PatternNode::Wildcard(_))),
-            PatternNode::Range(..) | PatternNode::Or(..) => true,
+            PatternNode::Range(..) => true,
+            PatternNode::Or(alts) => alts.iter().any(|a| Self::pattern_needs_chain(a)),
             _ => false,
         }
     }

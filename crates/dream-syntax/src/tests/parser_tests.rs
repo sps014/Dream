@@ -363,8 +363,7 @@ fn test_parse_try_propagation_chained_with_method_call() {
 
 #[test]
 fn test_parse_bare_question_mark_still_parses_as_ternary() {
-    // With no parens, `x? + 1` is ambiguous with `cond ? a : b`; ternary parsing wins (a `?`
-    // followed by a token that could start an expression is never try-propagation).
+    // A matching `:` at nesting depth 0 still selects ternary over try-propagation.
     let code = "fun f(): int { return half(4) ? 1 : 2; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
@@ -378,9 +377,41 @@ fn test_parse_bare_question_mark_still_parses_as_ternary() {
 }
 
 #[test]
+fn test_parse_try_propagation_before_binary_operator() {
+    // No matching ternary `:` → postfix try, then binary `+`.
+    let code = "fun f(): int { return half(4)? + 1; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Return(Some(ExpressionNode::Binary(left, _, _))) = &func.body[0] else {
+        panic!("expected a return of a binary expression");
+    };
+    assert!(matches!(**left, ExpressionNode::Try(_)));
+}
+
+#[test]
+fn test_parse_try_propagation_before_comparison_in_condition() {
+    // Compound conditions like `if (half(4)? > 0)` also prefer try over ternary.
+    let code = "fun f(): int { if (half(4)? > 0) { return 1; } return 0; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::IfElse(cond, _, _, _) = &func.body[0] else {
+        panic!("expected an if statement");
+    };
+    let ExpressionNode::Binary(left, _, _) = cond else {
+        panic!("expected a comparison condition");
+    };
+    assert!(matches!(**left, ExpressionNode::Try(_)));
+}
+
+#[test]
 fn test_parse_try_propagation_disambiguated_with_parens() {
-    // Parens around the try-propagated call resolve the `? +` ambiguity in favor of `?`, since the
-    // `?` is then immediately followed by the closing `)`.
+    // Parenthesized try still works; parens are no longer required for `? +`.
     let code = "fun f(): int { return (half(4)?) + 1; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
