@@ -609,8 +609,26 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::FunToken {
             self.match_token(TokenKind::FunToken);
             self.match_token(TokenKind::OpenParenthesisToken);
-            let params =
-                self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_type())?;
+            let params = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
+                let is_ref = p.current_token().kind == TokenKind::RefToken;
+                if is_ref {
+                    p.match_token(TokenKind::RefToken);
+                }
+                let ty = p.parse_type()?;
+                if is_ref {
+                    let span = ty.get_span().unwrap_or_else(|| p.current_token().position);
+                    Ok(Type::Struct(
+                        SyntaxToken::new(
+                            TokenKind::IdentifierToken,
+                            span,
+                            "__RefBox".to_string(),
+                        ),
+                        Some(vec![ty]),
+                    ))
+                } else {
+                    Ok(ty)
+                }
+            })?;
             let ret = if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
                 self.parse_type()?

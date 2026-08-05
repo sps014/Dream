@@ -78,14 +78,26 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::SwitchToken {
             return self.parse_switch_expr();
         }
-        // `async (params) => …` — optional `async` before an arrow-lambda. Lookahead must see
-        // `(` then a matching `) =>`; a bare `async` elsewhere is still "expected expression".
-        if self.current_token().kind == TokenKind::AsyncToken
-            && self.peek_token(1).kind == TokenKind::OpenParenthesisToken
-            && self.is_lambda_start_at(1)
+        // `async <T>(params) => …` / `async (params) => …`
+        if self.current_token().kind == TokenKind::AsyncToken {
+            if self.peek_token(1).kind == TokenKind::OpenParenthesisToken
+                && self.is_lambda_start_at(1)
+            {
+                self.match_token(TokenKind::AsyncToken);
+                return self.parse_lambda(true);
+            }
+            if self.peek_token(1).kind == TokenKind::SmallerThanToken
+                && self.is_generic_lambda_start_at(1)
+            {
+                self.match_token(TokenKind::AsyncToken);
+                return self.parse_lambda(true);
+            }
+        }
+        // `<T>(params) => …` generic arrow-lambda
+        if self.current_token().kind == TokenKind::SmallerThanToken
+            && self.is_generic_lambda_start_at(0)
         {
-            self.match_token(TokenKind::AsyncToken);
-            return self.parse_lambda(true);
+            return self.parse_lambda(false);
         }
         //parse parenthesized expressions, casts, or arrow-lambdas
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
@@ -337,6 +349,20 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     /// Lookahead for an arrow-lambda literal (`(params) => ...`), starting at peek offset `start`
+    /// True when peek offset `start` begins `<…>(…) =>` — a generic arrow-lambda.
+    fn is_generic_lambda_start_at(&self, start: usize) -> bool {
+        if self.peek_token(start).kind != TokenKind::SmallerThanToken {
+            return false;
+        }
+        let Some(after_generics) = self.scan_generic_args(start + 1) else {
+            return false;
+        };
+        if self.peek_token(after_generics).kind != TokenKind::OpenParenthesisToken {
+            return false;
+        }
+        self.is_lambda_start_at(after_generics)
+    }
+
     /// which must point at the leading `(`. Finds the matching `)` (tracking paren nesting only —
     /// a lambda's parameter types cannot themselves contain unbalanced parens) and checks whether
     /// it's immediately followed by `=>`. Safe to try *before* the cast/paren dispatch: `) =>`
@@ -361,14 +387,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    /// Parses an arrow-lambda literal `(params) => expr` / `(params) => { stmts }`, assuming
-    /// [`is_lambda_start_at`](Self::is_lambda_start_at) has already confirmed the shape. `is_async`
-    /// is true when the caller already consumed a leading `async`. Unlike an ordinary function's
-    /// parameters, a lambda parameter's `: Type` annotation is optional (see
-    /// [`parse_lambda_parameters`](Self::parse_lambda_parameters)): an omitted type is filled in by
-    /// the analyzer from the lambda's expected `fun(...)` context (e.g. `nums.sort_by((a, b) => a -
-    /// b)` infers `a`/`b` as `int` from `sort_by`'s declared `cmp: fun(int, int): int` parameter).
+    /// Parses an arrow-lambda literal `(params) => expr` / `(params) => { stmts }`, optionally
+    /// preceded by `<TypeParams>`. `is_async` is true when the caller already consumed a leading
+    /// `async`.
     fn parse_lambda(&mut self, is_async: bool) -> Result<ExpressionNode<'a>, Error> {
+        let (generic_parameters, generic_constraints) = self.take_generic_params();
         let open_paren_position = self.current_token().position;
         let parameters = self.parse_lambda_parameters()?;
         self.match_token(TokenKind::FatArrowToken);
@@ -381,6 +404,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(ExpressionNode::Lambda(self.arena.alloc(LambdaNode {
             open_paren_position,
             is_async,
+            generic_parameters,
+            generic_constraints,
             parameters,
             body,
         })))

@@ -108,6 +108,7 @@ impl TypeCtx {
             Type::Object(_) => self.interner.object(),
             Type::Void => self.interner.void(),
             Type::Unknown => self.interner.error(),
+            Type::GenericFunctionItem(_) => self.interner.error(),
             Type::Array(inner) => {
                 let e = self.lower_with(inner, bindings);
                 self.interner.array(e)

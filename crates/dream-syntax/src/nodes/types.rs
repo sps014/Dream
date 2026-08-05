@@ -152,6 +152,11 @@ pub enum Type {
     /// A first-class function value `fun(params...): ret`. Represented at runtime as an `i32`
     /// index into the module's function table (used with `call_indirect`).
     Function(Vec<Type>, Box<Type>),
+    /// A generic free-function name used as a value before its type arguments are known
+    /// (`let f = natural_order;`). Not a runtime value until instantiated at a use site that
+    /// supplies a concrete `fun(...)` type or call-argument types. The string is the template
+    /// function's source name.
+    GenericFunctionItem(String),
     Void,
     /// The "poison" type produced on a semantic error (e.g. an unresolved identifier or call).
     /// It is assignable to and from every type so a single mistake does not cascade into a flood
@@ -201,6 +206,7 @@ impl Type {
                     .join(",");
                 format!("fun({}):{}", params_str, ret.get_type())
             }
+            Type::GenericFunctionItem(name) => format!("<generic-fn:{}>", name),
             Type::Unknown => UNKNOWN_TYPE_NAME.to_string(),
         }
     }
@@ -227,11 +233,19 @@ impl Type {
             Type::Function(params, ret) => {
                 let params_str = params
                     .iter()
-                    .map(|p| p.display_name())
+                    .map(|p| match p {
+                        Type::Struct(tok, Some(args))
+                            if tok.text == "__RefBox" && args.len() == 1 =>
+                        {
+                            format!("ref {}", args[0].display_name())
+                        }
+                        other => other.display_name(),
+                    })
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("fun({}): {}", params_str, ret.display_name())
             }
+            Type::GenericFunctionItem(name) => name.clone(),
             Type::Unknown => "unknown".to_string(),
             // Primitives and bare generic parameters spell the same either way.
             _ => self.get_type(),
@@ -301,7 +315,11 @@ impl Type {
             | Type::Object(token)
             | Type::Struct(token, _) => Some(token.position),
             Type::Array(inner) => inner.get_span(),
-            Type::Void | Type::Generic(_) | Type::Function(_, _) | Type::Unknown => None,
+            Type::Void
+            | Type::Generic(_)
+            | Type::Function(_, _)
+            | Type::GenericFunctionItem(_)
+            | Type::Unknown => None,
         }
     }
 
@@ -324,6 +342,7 @@ impl Type {
             Type::Struct(token, _) => token.position.get_point_str(),
             Type::Generic(_) => "".to_string(), // Can be improved
             Type::Function(_, _) => "".to_string(),
+            Type::GenericFunctionItem(_) => "".to_string(),
             Type::Unknown => "".to_string(),
         }
     }

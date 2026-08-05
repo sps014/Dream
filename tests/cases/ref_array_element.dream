@@ -1,0 +1,10 @@
+fun increment(ref x: int): void {
+    x = x + 1;
+}
+
+fun main(): void {
+    let arr: int[] = [1, 2, 3];
+    increment(ref arr[0]);
+    System.println(arr[0]);
+    System.println(arr[1]);
+}

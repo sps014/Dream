@@ -1,5 +1,6 @@
-// A bare lambda with no surrounding `fun(...)`-typed context cannot have its type inferred.
+// With annotated parameters, a lambda's return type is inferred from its body — no fun(...) annotation needed.
 
 fun main(): void {
-    let f = (x) => x * 2;
+    let f = (x: int) => x * 2;
+    System.println(f(21));
 }

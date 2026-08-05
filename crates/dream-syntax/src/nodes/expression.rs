@@ -91,6 +91,10 @@ pub struct LambdaNode<'a> {
     pub open_paren_position: TextSpan,
     /// True when the literal was written `async (params) => …`.
     pub is_async: bool,
+    /// Own type parameters when written `<T>(…) => …`; `None` for a non-generic lambda.
+    pub generic_parameters: Option<Vec<SyntaxToken>>,
+    /// Constraints on [`Self::generic_parameters`] (`T : Comparable<T>`).
+    pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
     pub parameters: Vec<ParameterNode>,
     pub body: LambdaBody<'a>,
 }

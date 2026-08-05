@@ -193,7 +193,7 @@ impl<'a> Analyzer<'a> {
             if let ExpressionNode::RefArgument(inner) = param {
                 arg_is_ref.push(true);
                 self.current_expected_type = saved_expected;
-                match self.analyze_ref_argument(inner, symbol_table, diagnostics) {
+                match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
                         arg_hirs.push(hir);
                         params_types.push(t.get_type());
@@ -227,8 +227,18 @@ impl<'a> Analyzer<'a> {
         // path (indirect, constructor, generic, async, overload/arity errors) leaves `last` cleared.
         self.hir_none();
 
+        // A local bound to a polymorphic generic function item (`let f = natural_order; f(1, 2)`)
+        // is called by instantiating the template from the argument types — rewrite to the
+        // template name so the generic monomorphization path below runs.
+        if let Ok(Type::GenericFunctionItem(gname)) =
+            (*symbol_table).as_ref().borrow().get_symbol(name)
+        {
+            function_name = gname;
+        }
+
         // Indirect call: if the called name is a local variable of function type, validate the
         // arguments against the function-type signature and return its result type.
+        // `fun(ref T)` is encoded as `__RefBox<T>` in the parameter list.
         if let Ok(Type::Function(param_types, ret)) =
             (*symbol_table).as_ref().borrow().get_symbol(name)
         {
@@ -244,7 +254,21 @@ impl<'a> Analyzer<'a> {
                 );
                 return Ok((*ret).clone());
             }
-            let expected_strs: Vec<String> = param_types.iter().map(|t| t.get_type()).collect();
+            let expected_is_ref: Vec<bool> = param_types
+                .iter()
+                .map(|t| Self::peel_ref_box(t).1)
+                .collect();
+            self.validate_ref_arguments(
+                &format!("function value '{}'", name.text),
+                &expected_is_ref,
+                &arg_is_ref,
+                name.position,
+                diagnostics,
+            );
+            let expected_strs: Vec<String> = param_types
+                .iter()
+                .map(|t| Self::peel_ref_box(t).0.get_type())
+                .collect();
             self.validate_arguments(
                 &format!("function value '{}'", name.text),
                 &expected_strs,
@@ -493,7 +517,23 @@ impl<'a> Analyzer<'a> {
 
         let mut arg_hirs = Vec::with_capacity(params.len());
         let mut params_types = Vec::with_capacity(params.len());
+        let mut arg_is_ref = Vec::with_capacity(params.len());
         for param in params.iter() {
+            if let ExpressionNode::RefArgument(inner) = param {
+                arg_is_ref.push(true);
+                match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
+                    Some((t, hir)) => {
+                        arg_hirs.push(hir);
+                        params_types.push(t.get_type());
+                    }
+                    None => {
+                        arg_hirs.push(None);
+                        params_types.push(Type::Unknown.get_type());
+                    }
+                }
+                continue;
+            }
+            arg_is_ref.push(false);
             let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
             arg_hirs.push(self.hir_take());
             params_types.push(t.get_type());
@@ -518,7 +558,21 @@ impl<'a> Analyzer<'a> {
                 self.hir_none();
                 return Ok((**ret).clone());
             }
-            let expected_strs: Vec<String> = param_types.iter().map(|t| t.get_type()).collect();
+            let expected_is_ref: Vec<bool> = param_types
+                .iter()
+                .map(|t| Self::peel_ref_box(t).1)
+                .collect();
+            self.validate_ref_arguments(
+                "function value",
+                &expected_is_ref,
+                &arg_is_ref,
+                span.unwrap_or_else(empty_span),
+                diagnostics,
+            );
+            let expected_strs: Vec<String> = param_types
+                .iter()
+                .map(|t| Self::peel_ref_box(t).0.get_type())
+                .collect();
             self.validate_arguments(
                 "function value",
                 &expected_strs,

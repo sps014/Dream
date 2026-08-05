@@ -303,14 +303,76 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Appends an expression statement, failing the function if it was not representable.
+    /// Flushes any pending `ref` field/index writebacks after the statement so mutations through
+    /// a temporary `__RefBox` are visible on the original place.
     pub(in crate::semantics::analyzer) fn hir_expr_stmt(&mut self, value: Option<HExpr>) {
         if !self.active() {
             return;
         }
         match value {
-            Some(value) => self.push_stmt(HStmt::Expr(value)),
+            Some(value) => {
+                self.push_stmt(HStmt::Expr(value));
+                self.hir_flush_ref_writebacks();
+            }
             None => self.hir.ok = false,
         }
+    }
+
+    /// Writes pending `ref` place writebacks (`box.value` → original field/index) and clears them.
+    pub(in crate::semantics::analyzer) fn hir_flush_ref_writebacks(&mut self) {
+        if !self.active() {
+            self.hir.ref_writebacks.clear();
+            return;
+        }
+        let writebacks = std::mem::take(&mut self.hir.ref_writebacks);
+        for (place, box_local, box_ty, elem_ty) in writebacks {
+            let box_expr = HExpr::new(box_ty, HExprKind::Var(Binding::Local(box_local)));
+            let value = HExpr::new(
+                elem_ty,
+                HExprKind::Field {
+                    obj: Box::new(box_expr),
+                    field: 0,
+                },
+            );
+            self.push_stmt(HStmt::Assign { place, value });
+        }
+    }
+
+    /// Copy-in: wrap `value` in a temporary `__RefBox`, schedule copy-out to `place`, and return
+    /// the element type plus the box pointer as the `ref` argument.
+    pub(in crate::semantics::analyzer) fn hir_box_ref_place(
+        &mut self,
+        place: HPlace,
+        elem_ty: &Type,
+        value: HExpr,
+    ) -> Option<(Type, Option<HExpr>)> {
+        if !self.active() {
+            self.hir_none();
+            return Some((elem_ty.clone(), None));
+        }
+        let box_ast_ty = Self::ref_box_type(elem_ty);
+        let box_expr = self.hir_build_ref_box_new(elem_ty, value)?;
+        let box_ty = self.type_ctx.lower(&box_ast_ty);
+        let elem_tid = self.type_ctx.lower(elem_ty);
+        let local = LocalId(self.hir.next_local);
+        self.hir.next_local += 1;
+        self.hir.local_decls.push(HLocal {
+            id: local,
+            name: format!("__ref_tmp_{}", local.0),
+            ty: box_ty,
+        });
+        self.push_stmt(HStmt::Let {
+            local,
+            ty: box_ty,
+            value: box_expr,
+        });
+        self.hir
+            .ref_writebacks
+            .push((place, local, box_ty, elem_tid));
+        Some((
+            elem_ty.clone(),
+            Some(HExpr::new(box_ty, HExprKind::Var(Binding::Local(local)))),
+        ))
     }
 
     /// Appends a `while (cond) { body }`. Fails the function if the condition was not representable.

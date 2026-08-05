@@ -94,7 +94,10 @@ As with any static member, the method must be `public` to be called from another
 
 ### Generic functions as first-class values
 
-A generic function can become a [first-class function value](functions.md). Its type arguments are inferred from the expected function type at the use site, then monomorphized like any other instance:
+A generic function can become a [first-class function value](functions.md). With a concrete
+`fun(...)` type at the use site, its type arguments are inferred and the function is
+monomorphized. A bare binding keeps a polymorphic item that instantiates independently at each
+later use (typed assignment, typed argument, or call):
 
 ```dream
 fun natural_order<T : Comparable<T>>(a: T, b: T): int {
@@ -102,9 +105,10 @@ fun natural_order<T : Comparable<T>>(a: T, b: T): int {
 }
 
 let cmp: fun(int, int): int = natural_order;   // inferred as natural_order<int>
+let f = natural_order;                         // polymorphic until used
+println(f(3, 1));                              // instantiates from argument types
+let g: fun(int, int): int = f;                 // instantiates from the annotation
 ```
-
-Because inference needs a target, a bare `let f = natural_order;` is an error — supply a function type via annotation or a matching parameter.
 
 ### Type checking inside generic bodies
 

@@ -228,11 +228,17 @@ Rules:
 
 - `ref` must appear at the call site (`f(ref x)`), not just the declaration — omitting it, or
   adding it where the parameter isn't `ref`, is a compile-time error.
-- v1 only supports a local variable or parameter as a `ref` argument's target — not yet a struct
-  field or array element.
+- A `ref` argument's target may be a local variable, a parameter, a struct/class field, or an
+  array element (`f(ref x)`, `f(ref obj.field)`, `f(ref arr[i])`).
 - `ref` cannot combine with a default value or a variadic (`...`) parameter on the same parameter.
-- A lambda expression cannot yet declare its own `ref` parameter — only named functions and
-  methods.
+- A lambda may declare `ref` parameters. Annotate the function type as `fun(ref T): R` (the
+  `ref` markers are part of the type) and call with `f(ref x)`:
+  ```dream
+  let inc: fun(ref int): void = (ref n: int) => { n = n + 1; };
+  let a: int = 5;
+  inc(ref a);
+  println(a); // 6
+  ```
 - A lambda **cannot capture** an enclosing function's `ref` parameter, even though it can capture
   an ordinary `let`/parameter (see [Capturing closures](#capturing-closures)). A `ref`
   parameter's storage is only guaranteed to live for the duration of the call it came from; a
@@ -324,7 +330,7 @@ A [generic function used as a first-class value](generics.md#generic-functions-a
 
 #### Arrow-lambda literals
 
-An anonymous function can be written inline with arrow syntax, `(params) => expr` or `(params) => { statements }`. A parameter's `: Type` annotation is optional: when omitted, it (and the lambda's return type, always) is inferred from the `fun(...)`-typed context the lambda is used in (a `let` annotation, or a parameter/argument whose declared type is `fun(...)`):
+An anonymous function can be written inline with arrow syntax, `(params) => expr` or `(params) => { statements }`. A parameter's `: Type` annotation is optional when the lambda is used in a `fun(...)`-typed context (a `let` annotation, or a parameter/argument whose declared type is `fun(...)`): omitted parameter types and the return type are taken from that context. When every parameter is explicitly annotated, the return type can instead be inferred from the body — so `let f = (x: int) => x * 2;` works without a surrounding `fun(...)` annotation. A lambda with any untyped parameter and no `fun(...)` context is rejected.
 
 ```dream
 let add: fun(int, int): int = (x, y) => x + y;   // x, y inferred as int from the `let` annotation
@@ -343,7 +349,7 @@ nums.push(2);
 nums.sort_by((a, b) => a - b);   // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
 ```
 
-A lambda written with no surrounding `fun(...)` context (e.g. passed to `println` directly, or with an untyped parameter and no context at all) cannot have its type inferred and is rejected with a diagnostic asking for one. Lambdas cannot declare their own type parameters in v1 — only the enclosing context can be generic (the lambda is monomorphized with that context's bindings).
+A lambda written with an untyped parameter and no surrounding `fun(...)` context cannot have its type inferred and is rejected with a diagnostic asking for one. A lambda may declare its own type parameters (`<T>(x: T) => x`), which monomorphize like a generic function — from a `fun(...)` context or by binding a polymorphic item and instantiating at each use.
 
 #### Async lambdas
 

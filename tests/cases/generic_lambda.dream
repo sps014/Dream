@@ -1,0 +1,10 @@
+// Generic lambdas declare their own type parameters and instantiate from context or use.
+
+fun main(): void {
+    let id: fun(int): int = <T>(x: T) => x;
+    System.println(id(42));
+
+    let poly = <T>(x: T) => x;
+    let as_string: fun(string): string = poly;
+    System.println(as_string("hi"));
+}

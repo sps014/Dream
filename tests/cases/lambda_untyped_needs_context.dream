@@ -1,0 +1,5 @@
+// An untyped lambda parameter still needs a fun(...) context.
+
+fun main(): void {
+    let f = (x) => x * 2;
+}

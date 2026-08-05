@@ -1,0 +1,16 @@
+// Lambda `ref` parameters: surface type `fun(ref T): R`, call with `f(ref x)`.
+fun main(): void {
+    let inc: fun(ref int): void = (ref n: int) => {
+        n = n + 1;
+    };
+    let a: int = 5;
+    inc(ref a);
+    System.println(a);
+
+    let bump: fun(ref int): int = (ref n) => {
+        n = n + 1;
+        return n;
+    };
+    System.println(bump(ref a));
+    System.println(a);
+}

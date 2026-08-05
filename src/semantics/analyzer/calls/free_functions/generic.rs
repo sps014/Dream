@@ -90,9 +90,11 @@ impl<'a> Analyzer<'a> {
             .as_ref()
             .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
         let Some(Type::Function(exp_params, exp_ret)) = expected else {
+            // Callers that want a polymorphic binding use `Type::GenericFunctionItem` instead of
+            // this helper (see `analyze_identifier`).
             diagnostics.report_error(
                 format!(
-                    "generic function '{}' can only be used as a value in a context with a known function type (e.g. `let f: fun(int, int): int = {};`)",
+                    "generic function '{}' can only be used as a concrete value in a context with a known function type (e.g. `let f: fun(int, int): int = {};`)",
                     id.text, id.text
                 ),
                 Some(id.position),

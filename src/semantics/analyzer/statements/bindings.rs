@@ -71,8 +71,28 @@ impl<'a> Analyzer<'a> {
             right_type.clone()
         };
 
+        // A polymorphic generic function item is not a runtime value until instantiated at a use
+        // site — bind it in the symbol table only (no HIR local).
+        if matches!(var_type, Type::GenericFunctionItem(_)) {
+            if let Err(e) = (*ctx.symbol_table)
+                .as_ref()
+                .borrow_mut()
+                .add_symbol(left.text.clone(), var_type)
+            {
+                diagnostics.report_error(e.to_string(), Some(left.position));
+            }
+            if is_const {
+                (*ctx.symbol_table)
+                    .as_ref()
+                    .borrow_mut()
+                    .mark_const(left.text.clone());
+            }
+            return Ok(());
+        }
+
         self.record_capturing_fun_local(&left.text, &var_type, value.as_ref());
         self.hir_declare_local(&left.text, &var_type, value);
+        self.hir_flush_ref_writebacks();
 
         if let Err(e) = (*ctx.symbol_table)
             .as_ref()

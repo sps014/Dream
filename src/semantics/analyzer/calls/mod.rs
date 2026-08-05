@@ -14,7 +14,7 @@ pub(crate) mod overload_resolution;
 
 use super::*;
 use crate::diagnostics::DiagnosticBag;
-use crate::hir::HExpr;
+use crate::hir::{HExpr, HPlace};
 use crate::semantics::errors::SemanticError;
 use crate::semantics::symbol_table::SymbolTable;
 use crate::syntax::nodes::{ExpressionNode, FunctionNode, Type};
@@ -449,46 +449,113 @@ impl<'a> Analyzer<'a> {
         Ok(first)
     }
 
-    /// Resolves a `ref` call argument's inner place (`f(ref x)` -> `x`) to its declared type and
-    /// the HIR for the shared box pointer backing it — the *box*, not the current value, so the
-    /// callee sees the exact same shared storage (see `Analyzer::hir_read_cell_ref`). The box is
-    /// `__Cell<T>` (heap) if `x` is also closure-captured, or `__RefBox<T>` (stack-resident value
-    /// struct, no heap allocation) otherwise — either way `x` must already be one of
-    /// `self.boxed_locals`/`self.ref_boxed_locals` by the time this runs (guaranteed by the
-    /// `scan_ref_argument_targets` pre-pass in `hir_begin_function` having found this very call
-    /// site).
-    ///
-    /// v1 only supports a plain local-variable/parameter place; a field or array element (`ref
-    /// obj.field`, `ref arr[i]`) is not yet an addressable place the backend can hand out a stable
-    /// pointer to, so it is rejected here with a clear diagnostic rather than silently miscompiling.
-    /// Returns `None` (having already reported) for any unsupported shape or unresolved name.
+    /// Resolves a `ref` call argument's inner place (`f(ref x)` / `f(ref obj.field)` /
+    /// `f(ref arr[i])`) to its declared type and the HIR for the shared box pointer backing it.
+    /// Locals/parameters reuse `__Cell`/`__RefBox` slots; fields and array elements are copy-in/
+    /// copy-out through a fresh temporary `__RefBox` (writeback flushed after the call statement).
     pub(crate) fn analyze_ref_argument(
         &mut self,
         inner: &'a ExpressionNode<'a>,
+        parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<(Type, Option<HExpr>)> {
-        let ExpressionNode::Identifier(tok) = inner else {
-            diagnostics.report_error(
-                "a 'ref' argument must be a local variable or parameter (fields and array elements are not yet supported)".to_string(),
-                inner.position(),
-            );
-            self.hir_none();
-            return None;
-        };
-        let ty = match (**symbol_table).borrow().get_symbol(tok) {
-            Ok(t) => t,
-            Err(e) => {
-                diagnostics.report_error(e.to_string(), Some(tok.position));
-                self.hir_none();
-                return None;
+        match inner {
+            ExpressionNode::Identifier(tok) => {
+                let ty = match (**symbol_table).borrow().get_symbol(tok) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        diagnostics.report_error(e.to_string(), Some(tok.position));
+                        self.hir_none();
+                        return None;
+                    }
+                };
+                let hir = self.hir_read_cell_ref(&tok.text);
+                if hir.is_none() {
+                    self.hir_fail();
+                }
+                Some((ty, hir))
             }
-        };
-        let hir = self.hir_read_cell_ref(&tok.text);
-        if hir.is_none() {
-            self.hir_fail();
+            ExpressionNode::MemberAccess(obj, member) => {
+                let obj_ty = self
+                    .analyze_expression(obj, parent_function, symbol_table, diagnostics)
+                    .ok()?;
+                let obj_hir = self.hir_take()?;
+                let struct_name = match Self::resolve_struct_parts(&obj_ty) {
+                    Some((base, _)) => base,
+                    None => obj_ty.get_type(),
+                };
+                let Some(field_idx) = self.struct_field_index(&struct_name, &member.text) else {
+                    diagnostics.report_error(
+                        format!("'{}' has no field '{}'", struct_name, member.text),
+                        Some(member.position),
+                    );
+                    self.hir_none();
+                    return None;
+                };
+                let field_ty = self
+                    .struct_table
+                    .get_struct(&struct_name)
+                    .and_then(|s| s.fields.get(&member.text).map(|f| f.type_.clone()))
+                    .unwrap_or(Type::Unknown);
+                self.hir_set_field(Some(obj_hir.clone()), field_idx, &field_ty);
+                let value = self.hir_take()?;
+                self.hir_box_ref_place(
+                    HPlace::Field {
+                        obj: Box::new(obj_hir),
+                        field: field_idx,
+                    },
+                    &field_ty,
+                    value,
+                )
+            }
+            ExpressionNode::IndexAccess(array, index) => {
+                let array_ty = self
+                    .analyze_expression(array, parent_function, symbol_table, diagnostics)
+                    .ok()?;
+                let array_hir = self.hir_take()?;
+                let _index_ty = self
+                    .analyze_expression(index, parent_function, symbol_table, diagnostics)
+                    .ok()?;
+                let index_hir = self.hir_take()?;
+                let elem_ty = match &array_ty {
+                    Type::Array(inner) => (**inner).clone(),
+                    _ => {
+                        diagnostics.report_error(
+                            format!(
+                                "cannot take a 'ref' to an element of type '{}'",
+                                array_ty.get_type()
+                            ),
+                            array.position(),
+                        );
+                        self.hir_none();
+                        return None;
+                    }
+                };
+                self.hir_set_index(Some(array_hir.clone()), Some(index_hir.clone()), &elem_ty);
+                let value = self.hir_take()?;
+                self.hir_box_ref_place(
+                    HPlace::Index {
+                        array: Box::new(array_hir),
+                        index: Box::new(index_hir),
+                    },
+                    &elem_ty,
+                    value,
+                )
+            }
+            ExpressionNode::Parenthesized(inner) => {
+                self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics)
+            }
+            _ => {
+                diagnostics.report_error(
+                    "a 'ref' argument must be a local variable, parameter, field, or array element"
+                        .to_string(),
+                    inner.position(),
+                );
+                self.hir_none();
+                None
+            }
         }
-        Some((ty, hir))
     }
 
     /// Collects a variadic call's trailing arguments into a single array literal, so the rest of
@@ -643,7 +710,7 @@ impl<'a> Analyzer<'a> {
             if let ExpressionNode::RefArgument(inner) = param {
                 arg_is_ref.push(true);
                 self.current_expected_type = saved_expected;
-                match self.analyze_ref_argument(inner, symbol_table, diagnostics) {
+                match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
                         arg_hirs.push(hir);
                         arg_types.push(t.get_type());

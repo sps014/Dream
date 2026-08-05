@@ -55,6 +55,10 @@ pub(super) struct HirEmit {
     next_local: u32,
     local_decls: Vec<HLocal>,
     params: Vec<HParam>,
+    /// Copy-out sites for `ref obj.field` / `ref arr[i]` arguments: after the call statement is
+    /// emitted, each entry writes `box.value` back into the original place (copy-in happened when
+    /// the temporary `__RefBox` was built). Cleared by [`Analyzer::hir_flush_ref_writebacks`].
+    ref_writebacks: Vec<(HPlace, LocalId, TypeId, TypeId)>,
     /// Stack of statement lists being built. The bottom is the function body; control-flow handlers
     /// push a frame for each nested block and pop it to attach to the enclosing statement.
     blocks: Vec<Vec<HStmt>>,
@@ -206,6 +210,7 @@ impl<'a> Analyzer<'a> {
         self.hir.next_local = 0;
         self.hir.local_decls.clear();
         self.hir.params.clear();
+        self.hir.ref_writebacks.clear();
         self.hir.blocks.clear();
         self.hir.blocks.push(Vec::new());
         self.hir.def = def;

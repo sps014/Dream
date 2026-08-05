@@ -1,5 +1,5 @@
-// A generic function used as a first-class value needs a `fun(...)`-typed context so its type
-// arguments can be inferred. A bare `let f = natural_order;` is an error.
+// A generic function used as a first-class value can be bound without a fun(...) annotation;
+// each later use instantiates from context or call-argument types.
 
 fun natural_order<T : Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
@@ -7,4 +7,7 @@ fun natural_order<T : Comparable<T>>(a: T, b: T): int {
 
 fun main(): void {
     let f = natural_order;
+    System.println(f(3, 1));
+    let g: fun(int, int): int = f;
+    System.println(g(1, 2));
 }

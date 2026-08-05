@@ -18,7 +18,25 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
         let r = match (*symbol_table).as_ref().borrow().get_symbol(id) {
-            Ok(t) => t,
+            Ok(t) => {
+                // A local bound to a polymorphic generic function item instantiates when the
+                // use site publishes a concrete `fun(...)` expected type.
+                if let Type::GenericFunctionItem(ref gname) = t {
+                    if matches!(
+                        self.current_expected_type
+                            .as_ref()
+                            .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings)),
+                        Some(Type::Function(_, _))
+                    ) {
+                        let tok = synthetic_token(TokenKind::IdentifierToken, gname);
+                        return match self.instantiate_generic_function_value(&tok, diagnostics) {
+                            Some(func_ty) => Ok(func_ty),
+                            None => Ok(Type::Unknown),
+                        };
+                    }
+                }
+                t
+            }
             Err(e) => {
                 // A bare identifier that names a top-level function is a first-class function value.
                 if let Ok(sig) = self.function_table.get_function(&id.text) {
@@ -68,15 +86,21 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_func_value(&id.text, &func_ty, &ret);
                 return Ok(func_ty);
                 }
-                // A generic function used as a value (`let cmp: fun(T, T): int = natural_order;`):
-                // infer its type arguments from the expected function type and instantiate it.
+                // A generic function used as a value: with a `fun(...)` context, instantiate now;
+                // otherwise bind a polymorphic item that instantiates at each later use.
                 if self.generic_functions.contains_key(&id.text) {
-                    return match self.instantiate_generic_function_value(id, diagnostics) {
-                        Some(func_ty) => Ok(func_ty),
-                        // Diagnostic already reported (e.g. missing `fun(...)` context); poison
-                        // rather than also emitting "variable X does not exist".
-                        None => Ok(Type::Unknown),
-                    };
+                    let expected = self
+                        .current_expected_type
+                        .as_ref()
+                        .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
+                    if matches!(expected, Some(Type::Function(_, _))) {
+                        return match self.instantiate_generic_function_value(id, diagnostics) {
+                            Some(func_ty) => Ok(func_ty),
+                            None => Ok(Type::Unknown),
+                        };
+                    }
+                    self.hir_none();
+                    return Ok(Type::GenericFunctionItem(id.text.clone()));
                 }
                 // Unresolved name: report and short-circuit. Statement-level callers recover
                 // (poisoning the binding with `Type::Unknown`) so sibling errors still surface.
