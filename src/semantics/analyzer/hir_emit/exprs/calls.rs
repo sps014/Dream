@@ -666,6 +666,48 @@ impl<'a> Analyzer<'a> {
         ));
     }
 
+    /// Like [`hir_set_method_call`], but populates `Callee.instance` for a method-level generic
+    /// monomorphization (`obj.method<T>(...)`). `base_name` is the shared template DefId
+    /// (`{Type}_{method}`); `instance` disambiguates the emitted WASM symbol.
+    pub(in crate::semantics::analyzer) fn hir_set_generic_method_call(
+        &mut self,
+        receiver: Option<HExpr>,
+        base_name: &str,
+        instance: Vec<TypeId>,
+        args: Vec<Option<HExpr>>,
+        ret: &Type,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        let (Some(def), Some(receiver)) = (
+            self.type_ctx.defs.lookup(DefKind::Function, base_name),
+            receiver,
+        ) else {
+            self.hir.last = None;
+            return;
+        };
+        let Some(collected) = Self::collect_hir_args(args) else {
+            self.hir.last = None;
+            return;
+        };
+        let ret_ty = self.type_ctx.lower(ret);
+        let callee = Callee {
+            def,
+            instance,
+            ret: ret_ty,
+        };
+        self.hir.last = Some(HExpr::new(
+            ret_ty,
+            HExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                callee,
+                args: collected,
+            },
+        ));
+    }
+
     /// Wraps the last-emitted expression in a logical negation (`!expr`), preserving its type. Used
     /// to lower `a != b` after it has been rewritten to the `equals` call `a.equals(b)`.
     pub(in crate::semantics::analyzer) fn hir_negate_last(&mut self) {

@@ -24,14 +24,14 @@ impl<'a> Analyzer<'a> {
         &mut self,
         obj: &ExpressionNode<'a>,
         method: &SyntaxToken,
-        _generic_args: &Option<Vec<Type>>,
+        generic_args: &Option<Vec<Type>>,
         params: &Vec<ExpressionNode<'a>>,
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, crate::semantics::errors::SemanticError> {
         if let ExpressionNode::Identifier(id) = obj {
             if let Some(t) =
-                self.try_analyze_static_method(id, method, _generic_args, params, ctx, diagnostics)?
+                self.try_analyze_static_method(id, method, generic_args, params, ctx, diagnostics)?
             {
                 return Ok(t);
             }
@@ -73,6 +73,14 @@ impl<'a> Analyzer<'a> {
             return Ok(t);
         }
 
-        self.analyze_instance_method(&obj_type, method, params, ctx, recv, diagnostics)
+        self.analyze_instance_method(
+            &obj_type,
+            method,
+            generic_args,
+            params,
+            ctx,
+            recv,
+            diagnostics,
+        )
     }
 }

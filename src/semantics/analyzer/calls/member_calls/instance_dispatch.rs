@@ -127,12 +127,17 @@ impl<'a> Analyzer<'a> {
 
     /// Resolves and type-checks an instance method call `obj.method(args)` once the receiver type
     /// (`obj_type`) is known and the builtins/static cases have been ruled out: monomorphizes the
-    /// receiver, selects the (possibly overloaded) `{Type}_{method}`, enforces privacy and the
+    /// Resolves an ordinary instance method call on a concrete (non-interface) receiver. Instantiates
+    /// a generic struct receiver, selects the (possibly overloaded) `{Type}_{method}`, enforces privacy and the
     /// argument arity/types, and returns the call's result type (a `Future<T>` for `async`).
+    /// Method-level generics (`obj.method<T>(...)`) are monomorphized on the fly, mirroring static
+    /// generic methods.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn analyze_instance_method(
         &mut self,
         obj_type: &Type,
         method: &SyntaxToken,
+        generic_args: &Option<Vec<Type>>,
         params: &Vec<ExpressionNode<'a>>,
         ctx: &super::super::super::AnalyzerContext<'a, '_>,
         receiver: Option<crate::hir::HExpr>,
@@ -177,6 +182,22 @@ impl<'a> Analyzer<'a> {
         };
 
         let mangled_name = method_fn(&struct_name, &method.text);
+
+        // Method-level generics (`pool.dispatch<TIn, TOut>(...)`): monomorphize before the plain
+        // `function_table` path, which only knows the unbound template signature.
+        if let Some(&template) = self.generic_functions.get(&mangled_name) {
+            return self.analyze_generic_instance_method(
+                template,
+                &mangled_name,
+                &struct_name,
+                method,
+                generic_args,
+                params,
+                ctx,
+                receiver,
+                diagnostics,
+            );
+        }
 
         // Reorder named arguments (`obj.method(x, y: 2)`) to positional and collect a
         // non-overloaded variadic call's trailing arguments into an array before index-driven
@@ -383,6 +404,183 @@ impl<'a> Analyzer<'a> {
         // name; resolve to the selected overload's name so the call targets the right instance.
         // Non-overloaded methods keep their base-mangled name.
         self.hir_set_method_call(receiver, &store_sig.name, arg_hirs, &ret_type);
+        Ok(ret_type)
+    }
+
+    /// Monomorphizes a method-level generic instance call (`obj.method<T>(args)`). Mirrors
+    /// [`analyze_generic_static_method`]: infer/bind type args, register a concrete instance, emit
+    /// a `MethodCall` whose `Callee.instance` carries the TypeIds so WASM symbols match the body.
+    #[allow(clippy::too_many_arguments)]
+    fn analyze_generic_instance_method(
+        &mut self,
+        template: &'a FunctionNode<'a>,
+        base: &str,
+        struct_name: &str,
+        method: &SyntaxToken,
+        generic_args: &Option<Vec<Type>>,
+        params: &Vec<ExpressionNode<'a>>,
+        ctx: &super::super::super::AnalyzerContext<'a, '_>,
+        receiver: Option<crate::hir::HExpr>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        // Explicit type args let us publish monomorphized parameter types as expected types for
+        // argument lambdas (`pool.dispatch<int,int>(5, (n) => n + 1)`).
+        let early_bindings = if generic_args.as_ref().is_some_and(|g| !g.is_empty()) {
+            Some(self.infer_generic_bindings(
+                template,
+                generic_args,
+                &[],
+                &method.position,
+                diagnostics,
+            ))
+        } else {
+            None
+        };
+
+        let expected_params: Option<Vec<Type>> = early_bindings.as_ref().map(|bindings| {
+            template
+                .parameters
+                .iter()
+                .skip(1) // implicit `this`
+                .map(|p| Self::monomorphize_type(&p.type_, bindings))
+                .collect()
+        });
+
+        let call_target = format!("{}.{}", struct_name, method.text);
+        let saved_call_target = self.current_call_target_name.take();
+        self.current_call_target_name = Some(call_target);
+
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self.analyze_call_arguments_expecting_ref(
+            params,
+            expected_params.as_deref(),
+            ctx.parent_function,
+            ctx.symbol_table,
+            diagnostics,
+        )?;
+
+        self.current_call_target_name = saved_call_target;
+
+        // Align with the template's parameter list (index 0 is `this`) for inference.
+        let mut inference_types: Vec<String> = Vec::with_capacity(arg_types.len() + 1);
+        inference_types.push(struct_name.to_string());
+        inference_types.extend(arg_types.iter().cloned());
+
+        let bindings = early_bindings.unwrap_or_else(|| {
+            self.infer_generic_bindings(
+                template,
+                generic_args,
+                &inference_types,
+                &method.position,
+                diagnostics,
+            )
+        });
+
+        if !self.member_accessible(
+            template.visibility,
+            &template.file_path,
+            ctx.parent_function.file_path.as_ref(),
+            self.in_methods_of(ctx.parent_function, struct_name),
+        ) {
+            diagnostics.report_error(
+                format!("'{}' is private to '{}'", method.text, struct_name),
+                Some(method.position),
+            );
+        }
+
+        self.verify_generic_constraints(
+            &template.generic_constraints,
+            &bindings,
+            &method.position,
+            diagnostics,
+        );
+        let mangled_name = self.register_generic_function_instance(template, &bindings);
+
+        let store_sig = match self.function_table.get_function(&mangled_name) {
+            Ok(sig) => sig,
+            Err(_) => {
+                diagnostics.report_error(
+                    format!("Function '{}' could not be instantiated", mangled_name),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+        };
+
+        self.check_unsafe_call(&store_sig, method.position, diagnostics);
+
+        let mut expected_params = store_sig.parameters.clone();
+        let mut expected_defaults = store_sig.defaults.clone();
+        let mut expected_is_ref = store_sig.is_ref.clone();
+        if !expected_params.is_empty() {
+            expected_params.remove(0);
+        }
+        if !expected_defaults.is_empty() {
+            expected_defaults.remove(0);
+        }
+        if !expected_is_ref.is_empty() {
+            expected_is_ref.remove(0);
+        }
+
+        self.pack_variadic_analyzed_args(
+            &store_sig,
+            &mut arg_types,
+            &mut arg_hirs,
+            &mut arg_is_ref,
+            1,
+        );
+
+        self.validate_ref_arguments(
+            &format!("method '{}'", method.text),
+            &expected_is_ref,
+            &arg_is_ref,
+            method.position,
+            diagnostics,
+        );
+
+        let total = expected_params.len();
+        let required = Self::required_arg_count(&expected_defaults, total);
+        let given = arg_types.len();
+        if given < required || given > total {
+            let message = if required == total {
+                format!(
+                    "function {} expects {} parameters, got {}",
+                    mangled_name, total, given
+                )
+            } else {
+                format!(
+                    "function {} expects between {} and {} parameters, got {}",
+                    mangled_name, required, total, given
+                )
+            };
+            diagnostics.report_error(message, Some(method.position));
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
+
+        self.substitute_default_args(
+            &expected_defaults,
+            &mut arg_types,
+            &mut arg_hirs,
+            ctx.parent_function,
+            ctx.symbol_table,
+            diagnostics,
+        )?;
+
+        self.validate_arguments(
+            &format!("function {}", mangled_name),
+            &expected_params,
+            &arg_types,
+            method.position,
+            diagnostics,
+        );
+
+        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type.clone());
+        let instance = bindings
+            .values()
+            .map(|t| self.type_ctx.lower(t))
+            .collect();
+        // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
+        self.hir_set_generic_method_call(receiver, base, instance, arg_hirs, &ret_type);
         Ok(ret_type)
     }
 

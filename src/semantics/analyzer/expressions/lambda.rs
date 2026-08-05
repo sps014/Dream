@@ -651,7 +651,9 @@ impl<'a> Analyzer<'a> {
                 Some((recv, "map")) => {
                     recv == "WebWorker" || recv.starts_with("WebWorker_")
                 }
-                Some((recv, "dispatch")) => recv == "WebWorkerPool",
+                Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => {
+                    recv == "WebWorkerPool"
+                }
                 _ => false,
             },
             None => false,

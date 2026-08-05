@@ -1,10 +1,10 @@
 async fun main(): void {
     let pool = WebWorkerPool(2);
-    let a = pool.dispatch("x", async (url) => {
+    let a = pool.dispatch_async<string, string>("x", async (url) => {
         await Time.sleep(1);
         return "resp:" + url;
     });
-    let b = pool.dispatch("y", async (url) => {
+    let b = pool.dispatch_async<string, string>("y", async (url) => {
         await Time.sleep(1);
         return "resp:" + url;
     });

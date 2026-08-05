@@ -132,22 +132,22 @@ async fun main(): void {
 }
 ```
 
-Each `dispatch(msg, body)` call may supply a **different** `body` on the same underlying thread — the pool member runs whichever `(funcidx, env)` pair you pass for that call. Overlapping `dispatch` calls to distinct pool members run in parallel exactly like separate `WebWorker`s; `body` capture rules are identical, and `body` may likewise be an async top-level function returning `string` (see [Async worker bodies](#async-worker-bodies)).
+Each `dispatch(msg, body)` call may supply a **different** `body` on the same underlying thread — the pool member runs whichever `(funcidx, env)` pair you pass for that call. Overlapping `dispatch` calls to distinct pool members run in parallel exactly like separate `WebWorker`s; `body` capture rules are identical, and `body` may likewise be an async top-level function (see [Async worker bodies](#async-worker-bodies)).
 
-Instance `dispatch` is `string`-in/`string`-out (instance methods aren't monomorphized per call-site type arguments). For typed messages, use the free-function helpers:
+`dispatch` is generic in `TIn`/`TOut` like `WebWorker` — messages are wire-encoded with `Bytes.toWire`/`Bytes.fromWire` under the hood:
 
 ```dream
 fun square(n: int): int { return n * n; }
 
 async fun main(): void {
     let pool = WebWorkerPool(2);
-    let a = pool_dispatch<int, int>(pool, 3, square);
+    let a = pool.dispatch(3, square);
     System.println((await a).to_string()); // 9
     pool.shutdown();
 }
 ```
 
-`pool_dispatch` wraps with `Bytes.toWire`/`Bytes.fromWire` the same way `WebWorker<TIn, TOut>` does. For an async body (`fun(TIn): Future<TOut>`), use `pool_dispatch_async` instead. `TIn`/`TOut` follow the same wire constraints as `WebWorker`.
+For an async body (`fun(TIn): Future<TOut>`), use `dispatch_async` instead (two generic overloads that differ only in the body fun type need distinct names). `TIn`/`TOut` follow the same wire constraints as `WebWorker`.
 
 Pick a pool when you're issuing many small tasks over time; pick `WebWorker`/`WebWorker.map` for a single batch of parallel work you want to spawn, await, and tear down together.
 
@@ -220,7 +220,7 @@ async fun main(): void {
 }
 ```
 
-This works with `WebWorker.map` and `WebWorkerPool.dispatch` too — each worker drives its own body's awaits to completion independently, so `map`'s parallelism still holds even when every element's work involves a real await.
+This works with `WebWorker.map` and `WebWorkerPool.dispatch` / `dispatch_async` too — each worker drives its own body's awaits to completion independently, so `map`'s parallelism still holds even when every element's work involves a real await.
 
 **Why the Future-body overload exists.** The worker-invoke trampoline distinguishes "the body already finished" from "the body is an async task still running" by checking the raw `call_indirect` result's heap tag: an async constructor returns an untagged `Future` frame pointer. The Future-body overload wraps the user's `fun(TIn): Future<TOut>` in an async `fun(string): Future<string>` that `await`s the body and then `Bytes.toWire`s the result — so the trampoline always unwraps a settled wire `string`, and any unmanaged `TOut` is sound. The older string-only path (boxing a top-level `async fun` as `fun(string): string` and relying on identity `toWire`) remains for compatibility with existing string async bodies.
 

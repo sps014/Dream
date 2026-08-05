@@ -1,4 +1,4 @@
-// `WebWorkerPool.dispatch` also accepts an async body (see `webworker_async_body.dream`), driven
+// `WebWorkerPool.dispatch_async` accepts an async body (see `webworker_async_body.dream`), driven
 // to completion on the pool member's own thread before the reply is sent back.
 async fun fetchLike(url: string): string {
     await Time.sleep(1);
@@ -7,8 +7,8 @@ async fun fetchLike(url: string): string {
 
 async fun main(): void {
     let pool = WebWorkerPool(2);
-    let a = pool.dispatch("x", fetchLike);
-    let b = pool.dispatch("y", fetchLike);
+    let a = pool.dispatch_async("x", fetchLike);
+    let b = pool.dispatch_async("y", fetchLike);
     System.println(await a);
     System.println(await b);
     pool.shutdown();

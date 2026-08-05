@@ -39,6 +39,7 @@ impl<'a> Analyzer<'a> {
     fn match_generic_type(formal: &Type, arg: &str, param_name: &str) -> Option<String> {
         match formal {
             Type::Struct(token, None) if token.text == param_name => Some(arg.to_string()),
+            Type::Generic(name) if name == param_name => Some(arg.to_string()),
             Type::Array(inner) => {
                 if let Some(arg_inner) = arg.strip_suffix("[]") {
                     Self::match_generic_type(inner, arg_inner, param_name)
@@ -46,8 +47,93 @@ impl<'a> Analyzer<'a> {
                     None
                 }
             }
+            // `Future<TOut>` / `List<T>` against `Future_int` or `Future<int>` spellings.
+            Type::Struct(token, Some(args)) => {
+                if let Some(inner_args) = Self::split_generic_type_str(arg, &token.text) {
+                    if args.len() != inner_args.len() {
+                        return None;
+                    }
+                    for (f, a) in args.iter().zip(inner_args.iter()) {
+                        if let Some(c) = Self::match_generic_type(f, a, param_name) {
+                            return Some(c);
+                        }
+                    }
+                }
+                None
+            }
+            // `fun(TIn): TOut` against `fun(int):int` — recurse into params and the return type.
+            // An `async fun(...): T` value is typed as `fun(...): T` until a `Future<T>` context
+            // wraps it, so also accept `fun(...): Future<TOut>` against a bare `T` return.
+            Type::Function(formals, ret) => {
+                let (arg_params, arg_ret) = Self::split_fun_type_str(arg)?;
+                if formals.len() != arg_params.len() {
+                    return None;
+                }
+                for (f, a) in formals.iter().zip(arg_params.iter()) {
+                    if let Some(c) = Self::match_generic_type(f, a, param_name) {
+                        return Some(c);
+                    }
+                }
+                if let Some(c) = Self::match_generic_type(ret, arg_ret, param_name) {
+                    return Some(c);
+                }
+                // `Future<TOut>` formal return vs bare `T` actual (async fun sugar).
+                if let Type::Struct(token, Some(args)) = ret.as_ref() {
+                    if token.text == "Future" && args.len() == 1 {
+                        return Self::match_generic_type(&args[0], arg_ret, param_name);
+                    }
+                }
+                None
+            }
             _ => None,
         }
+    }
+
+    /// Splits `Future_int` / `Future<int>` (when `base` is `Future`) into the type-argument
+    /// spellings, or `None` if `s` is not an application of `base`.
+    fn split_generic_type_str<'b>(s: &'b str, base: &str) -> Option<Vec<&'b str>> {
+        if let Some(rest) = s.strip_prefix(base).and_then(|r| r.strip_prefix('<')) {
+            let inner = rest.strip_suffix('>')?;
+            return Some(Self::split_top_level_args(inner));
+        }
+        if let Some(rest) = s.strip_prefix(base).and_then(|r| r.strip_prefix('_')) {
+            // Mangling joins args with `_`; nested generics are rare here and already flattened.
+            return Some(rest.split('_').filter(|p| !p.is_empty()).collect());
+        }
+        None
+    }
+
+    fn split_top_level_args(s: &str) -> Vec<&str> {
+        let mut out = Vec::new();
+        let mut depth = 0i32;
+        let mut start = 0;
+        for (i, ch) in s.char_indices() {
+            match ch {
+                '(' | '<' => depth += 1,
+                ')' | '>' => depth -= 1,
+                ',' if depth == 0 => {
+                    out.push(s[start..i].trim());
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        out.push(s[start..].trim());
+        out
+    }
+
+    /// Splits a `fun(a,b):ret` spelling into `([a, b], ret)`, or `None` if `s` is not a fun type.
+    fn split_fun_type_str(s: &str) -> Option<(Vec<&str>, &str)> {
+        let rest = s.strip_prefix("fun(")?;
+        let close = rest.find(')')?;
+        let params_str = &rest[..close];
+        let after = rest[close + 1..].strip_prefix(':')?;
+        let params = if params_str.is_empty() {
+            Vec::new()
+        } else {
+            Self::split_top_level_args(params_str)
+        };
+        Some((params, after.trim()))
     }
 
     /// Determines the concrete type bound to each generic parameter of `template` for one call.
