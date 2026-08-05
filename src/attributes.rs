@@ -181,8 +181,8 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
     AttributeSpec {
         name: "stack",
         // A checked contract, not a request: every monomorphized instance of a `@stack` union
-        // must already qualify as a value union (all payloads value/primitive, or a single
-        // reference-typed payload) or registration reports an error. See
+        // must qualify as a value union (all payloads value/primitive, or any number of
+        // non-self-referential reference-typed payloads) or registration reports an error. See
         // `Analyzer::register_union` in `src/semantics/analyzer/declarations/enums.rs`.
         targets: &[AttributeTarget::Union],
         args: ArgShape::None,

@@ -1,0 +1,32 @@
+// `@stack` allows any number of non-self-referential reference-typed payload fields inline:
+// refs across different variants (Either) and multiple refs in one variant (Pair).
+
+@stack
+enum Either {
+    Left(value: string),
+    Right(value: string),
+}
+
+@stack
+enum Pair {
+    Both(a: string, b: string),
+}
+
+fun side(e: Either): string {
+    return switch (e) {
+        Left(v)  => "L:" + v,
+        Right(v) => "R:" + v,
+    };
+}
+
+fun join(p: Pair): string {
+    return switch (p) {
+        Both(a, b) => a + "|" + b,
+    };
+}
+
+fun main(): void {
+    System.println(side(Either.Left("hi")));
+    System.println(side(Either.Right("bye")));
+    System.println(join(Pair.Both("x", "y")));
+}

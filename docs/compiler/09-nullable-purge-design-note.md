@@ -74,9 +74,9 @@ follow-up," but it landed as a property of unions generally rather than an `Opti
 codegen path — no `TyKind::Nullable`-shaped bifurcation was reintroduced, because the rule is keyed
 on payload-type shape (`is_value_type`), not on `Option` being a special case.
 
-One reference-typed field is also permitted inline when the union is explicitly annotated
-`@stack` (see [`docs/language/enums-unions.md`](../language/enums-unions.md)): this exists for
-payload shapes like a `Span<T>`/array-backed variant that need one non-self-referential reference
+Any number of non-self-referential reference-typed fields is also permitted inline when the union
+is explicitly annotated `@stack` (see [`docs/language/enums-unions.md`](../language/enums-unions.md)):
+this exists for payload shapes like a `Span<T>`/array-backed variant that need reference fields
 alongside value fields, without forcing a fully boxed union. `Option<T>` itself never needs this —
 `None` carries no payload and `Some(T)` carries exactly one value-typed field — so the ordinary
 (non-`@stack`) value-union rule already covers it.

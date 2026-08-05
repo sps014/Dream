@@ -1,0 +1,1 @@
+'@stack' union 'List' cannot be stored inline: field 'tail' has type 'List', which is a self-referential payload that would make this value type infinite-size

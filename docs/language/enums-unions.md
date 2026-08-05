@@ -135,17 +135,23 @@ let n: Option<int> = Option.None; // annotation needed for the unit variant
 
 Unions are heap-allocated and reference-counted by default. But if **every** variant's payload is a value type or primitive (`int`, `bool`, `float`, a value `struct`, ...), the union automatically becomes a **stack (value) union**: stored inline, copied by value, with zero heap allocation. This is decided per concrete instantiation, so `Option<int>` is a value union while `Option<string>` stays a heap union, even though they share one generic declaration.
 
-#### `@stack`: a checked contract, plus one relaxation
+#### `@stack`: a checked contract, plus a reference-payload relaxation
 
-`@stack` on a union declaration turns "should be a value union" from a best-effort inference into a checked contract: the compiler reports an error if the union doesn't qualify, instead of silently falling back to the heap. This catches a regression (e.g. someone later adds a second `string` payload) at the declaration site rather than as a silent performance cliff.
+`@stack` on a union declaration turns "should be a value union" from a best-effort inference into a checked contract: the compiler reports an error if the union doesn't qualify, instead of silently falling back to the heap. This catches a regression (e.g. someone later adds a self-referential payload) at the declaration site rather than as a silent performance cliff.
 
-`@stack` also unlocks one relaxation the automatic inference doesn't apply on its own: a union may still go inline even with **one** reference-typed payload field (a `string`, a `class`, an array, ...) across all of its variants — that field is stored inline as a retained pointer, exactly like a reference field embedded in a value `struct` already is. A union with *two or more* reference-typed payload fields, or one that refers to itself, still cannot be stored inline (`@stack` reports an error explaining which field forces it onto the heap):
+`@stack` also unlocks a relaxation the automatic inference doesn't apply on its own: a union may still go inline with **any number** of reference-typed payload fields (a `string`, a `class`, an array, ...) across its variants — each is stored inline as a retained pointer, exactly like a reference field embedded in a value `struct` already is. A union that refers to itself still cannot be stored inline (an inline recursive value type would have infinite size); `@stack` reports an error naming the offending field:
 
 ```dream
 @stack
 enum Outcome {
     Success(code: int),
-    Failure(code: int, reason: string), // one reference field: string
+    Failure(code: int, reason: string), // reference fields are fine under @stack
+}
+
+@stack
+enum Either {
+    Left(value: string),
+    Right(value: string), // multiple reference fields across variants: also fine
 }
 ```
 

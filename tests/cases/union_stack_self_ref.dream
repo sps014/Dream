@@ -1,0 +1,12 @@
+// `@stack` rejects a self-referential payload: an inline recursive value union would have
+// infinite size. This must be a compile-time error, not a silent fallback to the heap.
+
+@stack
+enum List {
+    Nil,
+    Cons(head: int, tail: List),
+}
+
+fun main(): void {
+    let n: List = List.Nil;
+}

@@ -1,9 +1,10 @@
 // `@stack` on a discriminated union is a *checked contract*: registration errors out unless the
-// union already qualifies as a value union (every payload value/primitive, or at most one
-// reference-typed payload). When it does qualify, `@stack` has no representational effect (the
-// union was already going to be inline) - its value is catching a future regression (e.g. someone
-// adding a second `string` field) at the declaration site instead of silently forcing the union
-// onto the heap.
+// union qualifies as a value union (every payload value/primitive, or any number of
+// non-self-referential reference-typed payloads). When every payload is already value/primitive,
+// `@stack` has no representational effect (the union was already going to be inline) — its value
+// is catching a future regression (e.g. someone adding a self-referential field) at the
+// declaration site instead of silently forcing the union onto the heap. With a reference payload
+// (as below), `@stack` is what opts the union into the inline representation.
 
 @stack
 enum Outcome {
