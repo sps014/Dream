@@ -357,32 +357,31 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Appends a desugared `for (init; cond; step) { body }`. `init`/`step` must each be exactly one
-    /// statement (the surface form guarantees this) and `cond` must be present. `hir_mark_line`
-    /// unconditionally opens each of `init`/`step` with a fresh-block [`HStmt::SourceLine`] marker
-    /// (and, with debug info on, an additional [`HStmt::DebugLine`] marker too — see
-    /// `hir_open_block`/`hir_mark_line`); both are stripped here since [`HStmt::For`] carries
-    /// `init`/`step` as a single bare statement, not a block, and losing marker precision on a
-    /// `for` header's init/step is an acceptable v1 tradeoff (its `body` is a real block and keeps
-    /// its markers).
+    /// Appends a desugared `for (init; cond; step) { body }`. `init`/`step` are statement lists
+    /// (surface form contributes one real statement each, plus optional [`HStmt::SourceLine`] /
+    /// [`HStmt::DebugLine`] markers from `hir_mark_line`). `cond` must be present.
     pub(in crate::semantics::analyzer) fn hir_for(
         &mut self,
-        mut init: Vec<HStmt>,
+        init: Vec<HStmt>,
         cond: Option<HExpr>,
-        mut step: Vec<HStmt>,
+        step: Vec<HStmt>,
         body: Vec<HStmt>,
         label: Option<String>,
     ) {
         if !self.active() {
             return;
         }
-        init.retain(|s| !matches!(s, HStmt::SourceLine(_) | HStmt::DebugLine(_)));
-        step.retain(|s| !matches!(s, HStmt::SourceLine(_) | HStmt::DebugLine(_)));
-        match (init.len(), step.len(), cond) {
+        let real = |stmts: &[HStmt]| {
+            stmts
+                .iter()
+                .filter(|s| !matches!(s, HStmt::SourceLine(_) | HStmt::DebugLine(_)))
+                .count()
+        };
+        match (real(&init), real(&step), cond) {
             (1, 1, Some(cond)) => self.push_stmt(HStmt::For {
-                init: Box::new(init.remove(0)),
+                init,
                 cond,
-                step: Box::new(step.remove(0)),
+                step,
                 body,
                 label,
             }),

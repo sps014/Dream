@@ -115,6 +115,11 @@ impl Builder {
                         }
                     })
             }
+            ExpressionNode::Call(callee, _, _) => {
+                // Best-effort: if the callee is a fun-typed expression, we don't recover the return
+                // type from the index heuristic; fall through to walking the callee alone.
+                self.infer_type(callee, scope)
+            }
             ExpressionNode::MethodCall(recv, method, _, _) => {
                 let receiver_ty_opt = self.infer_type(recv, scope);
                 self.decls
@@ -542,6 +547,12 @@ impl Builder {
                 if let Some(params) = params {
                     self.push_param_hints(&params.clone(), args);
                 }
+                for arg in args {
+                    self.walk_expr(arg, scope);
+                }
+            }
+            ExpressionNode::Call(callee, _, args) => {
+                self.walk_expr(callee, scope);
                 for arg in args {
                     self.walk_expr(arg, scope);
                 }

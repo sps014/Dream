@@ -344,6 +344,41 @@ fn test_parse_try_propagation_before_semicolon() {
 }
 
 #[test]
+fn test_parse_primitive_static_try_propagation() {
+    // `int.parse(...)` is a DataTypeToken static receiver; try `?` must still attach via the
+    // postfix chain (not stop after the `.method(...)` loop).
+    let code = "fun f(): Result<int, string> { return int.parse(\"5\")?; }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Return(Some(ExpressionNode::Try(inner))) = &func.body[0] else {
+        panic!(
+            "expected return of Try(int.parse(...)), got {:?}",
+            func.body[0]
+        );
+    };
+    assert!(matches!(**inner, ExpressionNode::MethodCall(_, _, _, _)));
+}
+
+#[test]
+fn test_parse_postfix_call_on_call() {
+    // `make()()`: the second `(…)` is a postfix Call on the first FunctionCall.
+    let code = "fun f(): int { return make(5)(1); }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert_eq!(diagnostics.has_errors(), false);
+    let func = &program.functions[0];
+    let StatementNode::Return(Some(ExpressionNode::Call(callee, _, args))) = &func.body[0] else {
+        panic!("expected return of Call(make(5), [1]), got {:?}", func.body[0]);
+    };
+    assert!(matches!(**callee, ExpressionNode::FunctionCall(_, _, _)));
+    assert_eq!(args.len(), 1);
+}
+
+#[test]
 fn test_parse_try_propagation_chained_with_method_call() {
     // `expr?.method()`: the `?` is recognized (followed by `.`), then the postfix chain continues.
     let code = "fun f(): int { return half(4)?.abs(); }";

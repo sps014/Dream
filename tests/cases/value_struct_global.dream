@@ -1,0 +1,19 @@
+struct Point {
+    public x: int;
+    public y: int;
+
+    constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+let origin: Point = Point(1, 2);
+
+fun main(): void {
+    System.println(origin.x);
+    System.println(origin.y);
+    origin = Point(3, 4);
+    System.println(origin.x);
+    System.println(origin.y);
+}

@@ -63,9 +63,9 @@ impl<'a> Analyzer<'a> {
             return self.analyze_js_member_call(obj_hir, method, params, ctx, diagnostics);
         }
 
-        // Builtin methods: `size()` lowers to `ArrayLen`; the rest (`to_string`/`char_at`/`hash_code`)
-        // need runtime defs and stay on the legacy path (they clear HIR inside the helper). The
-        // receiver is threaded in so `len` can wrap it; it is left intact when no builtin matches.
+        // Builtin methods: `size()` lowers to `ArrayLen`; `to_string`/`char_at`/`hash_code` emit
+        // their own HIR via helpers below. The receiver is threaded in so `size` can wrap it; it is
+        // left intact when no builtin matches.
         let mut recv = obj_hir;
         if let Some(t) =
             self.analyze_builtin_method(&obj_type, method, params, ctx, &mut recv, diagnostics)?

@@ -70,9 +70,9 @@ fn hir_stmt_edges(stmt: &crate::hir::HStmt, out: &mut HirEdges) {
             body,
             ..
         } => {
-            hir_stmt_edges(init, out);
+            hir_body_edges(init, out);
             hir_expr_edges(cond, out);
-            hir_stmt_edges(step, out);
+            hir_body_edges(step, out);
             hir_body_edges(body, out);
         }
         HStmt::Foreach { iterable, body, .. } => {

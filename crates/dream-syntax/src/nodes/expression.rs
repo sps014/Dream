@@ -25,6 +25,13 @@ pub enum ExpressionNode<'a> {
     Identifier(SyntaxToken),
     Parenthesized(&'a ExpressionNode<'a>),
     FunctionCall(SyntaxToken, Option<Vec<Type>>, Vec<ExpressionNode<'a>>),
+    /// `expr(args)` — a call whose callee is an arbitrary expression (not only a bare identifier).
+    /// Produced by the postfix `(…)` chain after any primary (e.g. `make()()`, `(f)(x)`).
+    Call(
+        &'a ExpressionNode<'a>,
+        Option<Vec<Type>>,
+        Vec<ExpressionNode<'a>>,
+    ),
     IndexAccess(&'a ExpressionNode<'a>, &'a ExpressionNode<'a>),
     Cast(Type, &'a ExpressionNode<'a>),
     MemberAccess(&'a ExpressionNode<'a>, SyntaxToken),
@@ -132,6 +139,7 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::MethodCall(_, token, _, _)
             | ExpressionNode::Binary(_, token, _)
             | ExpressionNode::Unary(token, _) => Some(token.position),
+            ExpressionNode::Call(callee, _, _) => callee.position(),
             ExpressionNode::Parenthesized(inner)
             | ExpressionNode::Await(inner)
             | ExpressionNode::Try(inner)
@@ -162,6 +170,7 @@ impl<'a> ExpressionNode<'a> {
                 receiver.start_position().or_else(|| self.position())
             }
             ExpressionNode::MethodCall(receiver, _, _, _) => receiver.start_position(),
+            ExpressionNode::Call(callee, _, _) => callee.start_position(),
             ExpressionNode::Binary(left, _, _) => left.start_position(),
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.start_position(),
             ExpressionNode::Parenthesized(inner)

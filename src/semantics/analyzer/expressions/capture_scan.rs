@@ -18,10 +18,9 @@
 //!   body), used both by the pre-pass above and again when the lambda itself is analyzed (to build
 //!   its capture list / synthesized environment — see `expressions::lambda`).
 //!
-//! Both deliberately over-approximate rather than track precise lexical scoping/shadowing order: a
-//! name is "bound" if it is declared *anywhere* in the relevant body, regardless of position
-//! relative to its uses. This can only make the analysis too conservative (boxing/capturing a name
-//! that turns out to be shadowed and never really needed), never unsound.
+//! Free-name collection uses a **scope stack**: binders cover only their region (block / arm /
+//! foreach / nested-lambda params). A use of `x` before a later `let x` still sees the outer `x`.
+//! Nested lambdas get their own binder scopes and do not pollute the parent's bound set.
 
 use crate::syntax::nodes::{
     ExpressionNode, LambdaBody, LambdaNode, PatternNode, StatementNode, SwitchArmBody,
@@ -177,6 +176,12 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
         ExpressionNode::Unary(_, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::Parenthesized(e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::FunctionCall(_, _, args) => {
+            for a in args {
+                walk_expr_for_ref_targets(a, out);
+            }
+        }
+        ExpressionNode::Call(callee, _, args) => {
+            walk_expr_for_ref_targets(callee, out);
             for a in args {
                 walk_expr_for_ref_targets(a, out);
             }
@@ -341,6 +346,12 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
                 walk_expr_for_lambdas(a, out);
             }
         }
+        ExpressionNode::Call(callee, _, args) => {
+            walk_expr_for_lambdas(callee, out);
+            for a in args {
+                walk_expr_for_lambdas(a, out);
+            }
+        }
         ExpressionNode::IndexAccess(a, i) => {
             walk_expr_for_lambdas(a, out);
             walk_expr_for_lambdas(i, out);
@@ -379,143 +390,177 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
     }
 }
 
-/// One lambda's own free names: identifiers referenced anywhere in its body — *including*,
-/// transitively, inside any lambda nested within it (see the module doc comment) — that are not
-/// its own parameters or a name it binds itself (`let`/`for`/`foreach`/`is ... name`/pattern
-/// bindings, or a nested lambda's own parameters).
+/// One lambda's own free names: identifiers referenced in its body that are not bound by a
+/// covering scope inside the lambda (params, `let`s after their declaration, foreach binders,
+/// switch-arm pattern bindings, nested-lambda params). Nested lambdas contribute their own free
+/// names transitively (filtered against this lambda's scopes).
 pub(in crate::semantics::analyzer) fn lambda_free_names(l: &LambdaNode) -> HashSet<String> {
-    let mut bound: HashSet<String> = l.parameters.iter().map(|p| p.name.text.clone()).collect();
+    let mut scopes: Vec<HashSet<String>> = vec![l
+        .parameters
+        .iter()
+        .map(|p| p.name.text.clone())
+        .collect()];
     let mut referenced: HashSet<String> = HashSet::new();
     match &l.body {
-        LambdaBody::Expr(e) => collect_names_expr(e, &mut bound, &mut referenced),
-        LambdaBody::Block(stmts) => collect_names_stmts(stmts, &mut bound, &mut referenced),
+        LambdaBody::Expr(e) => collect_names_expr(e, &mut scopes, &mut referenced),
+        LambdaBody::Block(stmts) => collect_names_stmts(stmts, &mut scopes, &mut referenced),
     }
-    referenced.retain(|n| !bound.contains(n));
     referenced
 }
 
-fn bind_pattern(pattern: &PatternNode, bound: &mut HashSet<String>) {
+fn is_bound(scopes: &[HashSet<String>], name: &str) -> bool {
+    scopes.iter().rev().any(|s| s.contains(name))
+}
+
+fn bind_here(scopes: &mut [HashSet<String>], name: String) {
+    if let Some(top) = scopes.last_mut() {
+        top.insert(name);
+    }
+}
+
+fn push_scope(scopes: &mut Vec<HashSet<String>>) {
+    scopes.push(HashSet::new());
+}
+
+fn pop_scope(scopes: &mut Vec<HashSet<String>>) {
+    scopes.pop();
+}
+
+fn bind_pattern(pattern: &PatternNode, scopes: &mut [HashSet<String>]) {
     match pattern {
         PatternNode::Wildcard(_) | PatternNode::Literal(_) | PatternNode::Range(..) => {}
-        PatternNode::Binding(tok) => {
-            bound.insert(tok.text.clone());
-        }
+        PatternNode::Binding(tok) => bind_here(scopes, tok.text.clone()),
         PatternNode::Variant(_, _, subs) => {
             for s in subs {
-                bind_pattern(s, bound);
+                bind_pattern(s, scopes);
             }
         }
-        // Or-pattern alternatives are validated binding-free during analysis, so none of them
-        // contribute a bound name.
         PatternNode::Or(_) => {}
     }
 }
 
 fn collect_names_stmts(
     stmts: &[StatementNode],
-    bound: &mut HashSet<String>,
+    scopes: &mut Vec<HashSet<String>>,
     referenced: &mut HashSet<String>,
 ) {
     for s in stmts {
-        collect_names_stmt(s, bound, referenced);
+        collect_names_stmt(s, scopes, referenced);
     }
+}
+
+fn collect_names_block(
+    stmts: &[StatementNode],
+    scopes: &mut Vec<HashSet<String>>,
+    referenced: &mut HashSet<String>,
+) {
+    push_scope(scopes);
+    collect_names_stmts(stmts, scopes, referenced);
+    pop_scope(scopes);
 }
 
 fn collect_names_stmt(
     stmt: &StatementNode,
-    bound: &mut HashSet<String>,
+    scopes: &mut Vec<HashSet<String>>,
     referenced: &mut HashSet<String>,
 ) {
     match stmt {
         StatementNode::Assignment(tok, e) => {
-            referenced.insert(tok.text.clone());
-            collect_names_expr(e, bound, referenced);
+            if !is_bound(scopes, &tok.text) {
+                referenced.insert(tok.text.clone());
+            }
+            collect_names_expr(e, scopes, referenced);
         }
         StatementNode::IndexAssignment(a, b, v) => {
-            collect_names_expr(a, bound, referenced);
-            collect_names_expr(b, bound, referenced);
-            collect_names_expr(v, bound, referenced);
+            collect_names_expr(a, scopes, referenced);
+            collect_names_expr(b, scopes, referenced);
+            collect_names_expr(v, scopes, referenced);
         }
         StatementNode::MemberAssignment(a, _, v) => {
-            collect_names_expr(a, bound, referenced);
-            collect_names_expr(v, bound, referenced);
+            collect_names_expr(a, scopes, referenced);
+            collect_names_expr(v, scopes, referenced);
         }
         StatementNode::Declaration(name, _, e, _) => {
-            collect_names_expr(e, bound, referenced);
-            bound.insert(name.text.clone());
+            // Init sees outer scopes; the name binds only after the initializer.
+            collect_names_expr(e, scopes, referenced);
+            bind_here(scopes, name.text.clone());
         }
-        // Same note as the `ExpressionNode::FunctionCall` arm below: the callee may be a captured
-        // `fun(...)`-typed local invoked as a bare statement (its result discarded).
         StatementNode::FunctionInvocation(name, _, args) => {
-            referenced.insert(name.text.clone());
+            if !is_bound(scopes, &name.text) {
+                referenced.insert(name.text.clone());
+            }
             for a in args {
-                collect_names_expr(a, bound, referenced);
+                collect_names_expr(a, scopes, referenced);
             }
         }
         StatementNode::MethodInvocation(recv, _, _, args) => {
-            collect_names_expr(recv, bound, referenced);
+            collect_names_expr(recv, scopes, referenced);
             for a in args {
-                collect_names_expr(a, bound, referenced);
+                collect_names_expr(a, scopes, referenced);
             }
         }
-        StatementNode::Return(Some(e)) => collect_names_expr(e, bound, referenced),
+        StatementNode::Return(Some(e)) => collect_names_expr(e, scopes, referenced),
         StatementNode::Return(None) => {}
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
-            collect_names_expr(cond, bound, referenced);
-            collect_names_stmts(then_b, bound, referenced);
+            collect_names_expr(cond, scopes, referenced);
+            collect_names_block(then_b, scopes, referenced);
             for (c, b) in elifs {
-                collect_names_expr(c, bound, referenced);
-                collect_names_stmts(b, bound, referenced);
+                collect_names_expr(c, scopes, referenced);
+                collect_names_block(b, scopes, referenced);
             }
             if let Some(b) = else_b {
-                collect_names_stmts(b, bound, referenced);
+                collect_names_block(b, scopes, referenced);
             }
         }
         StatementNode::While(cond, body) => {
-            collect_names_expr(cond, bound, referenced);
-            collect_names_stmts(body, bound, referenced);
+            collect_names_expr(cond, scopes, referenced);
+            collect_names_block(body, scopes, referenced);
         }
         StatementNode::DoWhile(body, cond) => {
-            collect_names_stmts(body, bound, referenced);
-            collect_names_expr(cond, bound, referenced);
+            collect_names_block(body, scopes, referenced);
+            collect_names_expr(cond, scopes, referenced);
         }
         StatementNode::Lock(target, body) => {
-            collect_names_expr(target, bound, referenced);
-            collect_names_stmts(body, bound, referenced);
+            collect_names_expr(target, scopes, referenced);
+            collect_names_block(body, scopes, referenced);
         }
         StatementNode::For(init, cond, step, body) => {
+            push_scope(scopes);
             if let Some(i) = init {
-                collect_names_stmt(i, bound, referenced);
+                collect_names_stmt(i, scopes, referenced);
             }
             if let Some(c) = cond {
-                collect_names_expr(c, bound, referenced);
+                collect_names_expr(c, scopes, referenced);
             }
             if let Some(s) = step {
-                collect_names_stmt(s, bound, referenced);
+                collect_names_stmt(s, scopes, referenced);
             }
-            collect_names_stmts(body, bound, referenced);
+            collect_names_block(body, scopes, referenced);
+            pop_scope(scopes);
         }
-        StatementNode::Labeled(_, s) => collect_names_stmt(s, bound, referenced),
+        StatementNode::Labeled(_, s) => collect_names_stmt(s, scopes, referenced),
         StatementNode::Break(_) | StatementNode::Continue(_) => {}
-        StatementNode::ExpressionStatement(e) => collect_names_expr(e, bound, referenced),
-        StatementNode::AwaitStmt(e) => collect_names_expr(e, bound, referenced),
+        StatementNode::ExpressionStatement(e) => collect_names_expr(e, scopes, referenced),
+        StatementNode::AwaitStmt(e) => collect_names_expr(e, scopes, referenced),
         StatementNode::ForEach(elem, iter, idx_name, arr_name, body) => {
-            collect_names_expr(iter, bound, referenced);
-            bound.insert(elem.text.clone());
-            bound.insert(idx_name.clone());
-            bound.insert(arr_name.clone());
-            collect_names_stmts(body, bound, referenced);
+            collect_names_expr(iter, scopes, referenced);
+            push_scope(scopes);
+            bind_here(scopes, elem.text.clone());
+            bind_here(scopes, idx_name.clone());
+            bind_here(scopes, arr_name.clone());
+            collect_names_stmts(body, scopes, referenced);
+            pop_scope(scopes);
         }
         StatementNode::Switch(subj, cases, default) => {
-            collect_names_expr(subj, bound, referenced);
+            collect_names_expr(subj, scopes, referenced);
             for (labels, body) in cases {
                 for l in labels {
-                    collect_names_expr(l, bound, referenced);
+                    collect_names_expr(l, scopes, referenced);
                 }
-                collect_names_stmts(body, bound, referenced);
+                collect_names_block(body, scopes, referenced);
             }
             if let Some(b) = default {
-                collect_names_stmts(b, bound, referenced);
+                collect_names_block(b, scopes, referenced);
             }
         }
     }
@@ -523,94 +568,93 @@ fn collect_names_stmt(
 
 fn collect_names_expr(
     expr: &ExpressionNode,
-    bound: &mut HashSet<String>,
+    scopes: &mut Vec<HashSet<String>>,
     referenced: &mut HashSet<String>,
 ) {
     match expr {
         ExpressionNode::Literal(_) => {}
         ExpressionNode::Identifier(tok) => {
-            referenced.insert(tok.text.clone());
+            if !is_bound(scopes, &tok.text) {
+                referenced.insert(tok.text.clone());
+            }
         }
         ExpressionNode::ArrayLiteral(es) | ExpressionNode::SetLiteral(es) => {
             for e in es {
-                collect_names_expr(e, bound, referenced);
+                collect_names_expr(e, scopes, referenced);
             }
         }
         ExpressionNode::MapLiteral(entries) => {
             for (k, v) in entries {
-                collect_names_expr(k, bound, referenced);
-                collect_names_expr(v, bound, referenced);
+                collect_names_expr(k, scopes, referenced);
+                collect_names_expr(v, scopes, referenced);
             }
         }
         ExpressionNode::Binary(l, _, r) => {
-            collect_names_expr(l, bound, referenced);
-            collect_names_expr(r, bound, referenced);
+            collect_names_expr(l, scopes, referenced);
+            collect_names_expr(r, scopes, referenced);
         }
-        ExpressionNode::Unary(_, e) => collect_names_expr(e, bound, referenced),
-        ExpressionNode::Parenthesized(e) => collect_names_expr(e, bound, referenced),
-        // See the identical note in `walk_expr_for_lambdas`: the callee may be a captured
-        // `fun(...)`-typed local, so its name must be a candidate free name too.
+        ExpressionNode::Unary(_, e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::Parenthesized(e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::FunctionCall(name, _, args) => {
-            referenced.insert(name.text.clone());
+            if !is_bound(scopes, &name.text) {
+                referenced.insert(name.text.clone());
+            }
             for a in args {
-                collect_names_expr(a, bound, referenced);
+                collect_names_expr(a, scopes, referenced);
+            }
+        }
+        ExpressionNode::Call(callee, _, args) => {
+            collect_names_expr(callee, scopes, referenced);
+            for a in args {
+                collect_names_expr(a, scopes, referenced);
             }
         }
         ExpressionNode::IndexAccess(a, i) => {
-            collect_names_expr(a, bound, referenced);
-            collect_names_expr(i, bound, referenced);
+            collect_names_expr(a, scopes, referenced);
+            collect_names_expr(i, scopes, referenced);
         }
-        ExpressionNode::Cast(_, e) => collect_names_expr(e, bound, referenced),
-        ExpressionNode::MemberAccess(e, _) => collect_names_expr(e, bound, referenced),
-        ExpressionNode::IsExpression(e, _, binding) => {
-            collect_names_expr(e, bound, referenced);
-            if let Some(tok) = binding {
-                bound.insert(tok.text.clone());
-            }
-        }
+        ExpressionNode::Cast(_, e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::MemberAccess(e, _) => collect_names_expr(e, scopes, referenced),
+        // `is`-with-binding is scoped by the statement layer (`if`/`while`); here the binding is
+        // only recorded when analyzing those statements' branches, so ignore it on the expression.
+        ExpressionNode::IsExpression(e, _, _) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::MethodCall(recv, _, _, args) => {
-            collect_names_expr(recv, bound, referenced);
+            collect_names_expr(recv, scopes, referenced);
             for a in args {
-                collect_names_expr(a, bound, referenced);
+                collect_names_expr(a, scopes, referenced);
             }
         }
         ExpressionNode::Ternary(c, t, e) => {
-            collect_names_expr(c, bound, referenced);
-            collect_names_expr(t, bound, referenced);
-            collect_names_expr(e, bound, referenced);
+            collect_names_expr(c, scopes, referenced);
+            collect_names_expr(t, scopes, referenced);
+            collect_names_expr(e, scopes, referenced);
         }
-        ExpressionNode::Await(e) => collect_names_expr(e, bound, referenced),
+        ExpressionNode::Await(e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::Switch(subj, arms) => {
-            collect_names_expr(subj, bound, referenced);
+            collect_names_expr(subj, scopes, referenced);
             for arm in arms {
-                bind_pattern(&arm.pattern, bound);
+                push_scope(scopes);
+                bind_pattern(&arm.pattern, scopes);
                 if let Some(g) = &arm.guard {
-                    collect_names_expr(g, bound, referenced);
+                    collect_names_expr(g, scopes, referenced);
                 }
                 match &arm.body {
-                    SwitchArmBody::Expr(e) => collect_names_expr(e, bound, referenced),
-                    SwitchArmBody::Block(stmts) => collect_names_stmts(stmts, bound, referenced),
+                    SwitchArmBody::Expr(e) => collect_names_expr(e, scopes, referenced),
+                    SwitchArmBody::Block(stmts) => collect_names_stmts(stmts, scopes, referenced),
+                }
+                pop_scope(scopes);
+            }
+        }
+        ExpressionNode::Try(e) => collect_names_expr(e, scopes, referenced),
+        // Transitive capture: a nested lambda's free names that aren't bound here are free here too.
+        ExpressionNode::Lambda(l) => {
+            for free in lambda_free_names(l) {
+                if !is_bound(scopes, &free) {
+                    referenced.insert(free);
                 }
             }
         }
-        ExpressionNode::Try(e) => collect_names_expr(e, bound, referenced),
-        // Transitive capture (multi-level): descend into a nested lambda's own body too, so a
-        // grandparent's local referenced only inside a doubly-nested lambda still shows up as one
-        // of *this* lambda's free names — which is exactly what makes `analyze_lambda` forward it
-        // as one of this lambda's own captures, so the inner lambda can in turn receive it from
-        // this one. The nested lambda's own parameters are folded into the shared `bound` set first
-        // (same flat/over-approximate treatment as every other binder here — see the module doc
-        // comment), so they are never mistaken for a name this lambda itself needs to capture.
-        ExpressionNode::Lambda(l) => {
-            for p in &l.parameters {
-                bound.insert(p.name.text.clone());
-            }
-            match &l.body {
-                LambdaBody::Expr(e) => collect_names_expr(e, bound, referenced),
-                LambdaBody::Block(stmts) => collect_names_stmts(stmts, bound, referenced),
-            }
-        }
-        ExpressionNode::NamedArg(_, e) => collect_names_expr(e, bound, referenced),
-        ExpressionNode::RefArgument(e) => collect_names_expr(e, bound, referenced),
+        ExpressionNode::NamedArg(_, e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::RefArgument(e) => collect_names_expr(e, scopes, referenced),
     }
 }

@@ -1,7 +1,7 @@
 //! Memory layout for nominal types: the byte offset, size, and type of each field, which the backend
 //! needs to lower `obj.field` / `array[i]` access to concrete loads and stores.
 //!
-//! Offsets are computed here (not borrowed from the legacy `StructInfo`) with a single, internally
+//! Offsets are computed here (independently of analyzer `StructInfo`) with a single, internally
 //! consistent size rule ([`scalar_size`]), so the layout and the store widths the emitter picks
 //! always agree. Fields are kept in **declaration order**, which coincides with offset order (a
 //! struct lays its fields out sequentially), so the resolved field index used in
@@ -21,7 +21,7 @@ pub fn scalar_size(interner: &TypeInterner, ty: TypeId) -> (u32, u32) {
     }
     match interner.kind(ty) {
         // Delegates to `PrimTy::size_align` (see there) so this agrees byte-for-byte with the
-        // string-keyed `crate::types::naming::value_size_align` used by the legacy struct tables.
+        // string-keyed `crate::types::naming::value_size_align` used by analyzer struct tables.
         TyKind::Prim(p) => p.size_align(),
         _ => (4, 4),
     }

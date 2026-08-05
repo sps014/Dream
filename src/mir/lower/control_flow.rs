@@ -94,13 +94,13 @@ impl Lowerer<'_> {
 
     pub(super) fn lower_for(
         &mut self,
-        init: &HStmt,
+        init: &[HStmt],
         cond: &HExpr,
-        step: &HStmt,
+        step: &[HStmt],
         body: &[HStmt],
         label: Option<&str>,
     ) {
-        self.lower_stmt(init);
+        self.lower_block(init);
         let cond_blk = self.b.new_block();
         let body_blk = self.b.new_block();
         let step_blk = self.b.new_block();
@@ -129,7 +129,7 @@ impl Lowerer<'_> {
         self.loops.pop();
 
         self.b.switch_to(step_blk);
-        self.lower_stmt(step);
+        self.lower_block(step);
         self.b.terminate(Terminator::Goto(cond_blk));
 
         self.b.switch_to(after_blk);

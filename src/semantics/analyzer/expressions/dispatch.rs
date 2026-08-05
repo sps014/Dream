@@ -378,6 +378,9 @@ impl<'a> Analyzer<'a> {
                 )?;
                 Ok(t)
             }
+            ExpressionNode::Call(callee, _generic_args, params) => {
+                self.analyze_expr_call(callee, params, parent_function, symbol_table, diagnostics)
+            }
             ExpressionNode::IsExpression(left, right_type, _binding) => {
                 // `is` always evaluates to a bool. A concrete static operand folds to a compile-time
                 // result; an `object` or interface-typed operand emits a runtime `$object_tag`

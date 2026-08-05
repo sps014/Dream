@@ -4,7 +4,6 @@
 
 use super::*;
 use crate::intrinsics;
-use crate::semantics::function_table::FunctionTableInfo;
 use crate::syntax::nodes::types::is_unknown_type_name;
 
 /// Call-site bundle for [`Analyzer::analyze_generic_static_method`]: the parsed pieces of a
@@ -289,7 +288,6 @@ impl<'a> Analyzer<'a> {
             &method.position,
             diagnostics,
         );
-        let mangled_name = mangle_bindings(base, &bindings);
 
         // Promise combinators (`Promise.all/any/race`) are typed by the shared async
         // intrinsic logic; classify via the registry and delegate when applicable.
@@ -317,7 +315,7 @@ impl<'a> Analyzer<'a> {
         // `JSON.serialize<T>(v)` / `JSON.deserialize<T>(text)`: the `@json` derive emits
         // `<T>.to_json()` / `<T>.from_json()` (see `driver::json_derive`), and `JSON.stringify` /
         // `JSON.parse` are ordinary static methods. Expand the intrinsic into that composition so
-        // the whole thing lowers through MIR (rather than staying on the legacy expansion).
+        // the whole thing lowers through MIR as ordinary calls.
         let json_op = intrinsics::IntrinsicOp::from_attributes(&template.attributes);
         if json_op == Some(intrinsics::IntrinsicOp::JsonSerialize) {
             let named = |name: &str| -> Type {
@@ -380,26 +378,68 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        // A non-intrinsic generic static method is registered here so its monomorphized body is
-        // emitted later, but the call site itself does not yet participate in HIR coverage: it
-        // types as `Unknown` and produces no argument validation or call HIR. This is a known
-        // limitation, deliberately left in place rather than routed through `analyze_static_call`
-        // (which would validate arguments, emit the call, and return the real type).
-        if self.function_table.get_function(&mangled_name).is_err() {
-            let mut specialized = template.clone();
-            Self::substitute_generic_signature(&mut specialized, &bindings);
-            let specialized_ref: &'a FunctionNode<'a> = self.arena.alloc(specialized);
-            let info = FunctionTableInfo::from(specialized_ref);
-            let _ = self.function_table.add_function(mangled_name.clone(), info);
-            self.instantiated_generics
-                .insert(mangled_name.clone(), (bindings, specialized_ref));
+        self.verify_generic_constraints(
+            &template.generic_constraints,
+            &bindings,
+            &method.position,
+            diagnostics,
+        );
+        let mangled_name = self.register_generic_function_instance(template, &bindings);
+
+        let store_sig = match self.function_table.get_function(&mangled_name) {
+            Ok(sig) => sig,
+            Err(_) => {
+                diagnostics.report_error(
+                    format!("Function '{}' could not be instantiated", mangled_name),
+                    Some(method.position),
+                );
+                return Ok(Type::Unknown);
+            }
+        };
+
+        let required = store_sig.required_params();
+        let total = store_sig.parameters.len();
+        let given = params_types.len();
+        if given < required || given > total {
+            let message = if required == total {
+                format!(
+                    "Function {} has {} params but {} params are given",
+                    mangled_name, total, given
+                )
+            } else {
+                format!(
+                    "Function {} expects between {} and {} arguments, got {}",
+                    mangled_name, required, total, given
+                )
+            };
+            diagnostics.report_error(message, Some(method.position));
+            return Ok(Type::Unknown);
         }
-        if self.function_table.get_function(&mangled_name).is_err() {
-            diagnostics.report_error(
-                format!("Function '{}' could not be instantiated", mangled_name),
-                Some(method.position),
-            );
-        }
-        Ok(Type::Unknown)
+
+        self.substitute_default_args(
+            &store_sig.defaults,
+            &mut params_types,
+            &mut arg_hirs,
+            ctx.parent_function,
+            ctx.symbol_table,
+            diagnostics,
+        )?;
+
+        self.validate_arguments(
+            &format!("function '{}'", mangled_name),
+            &store_sig.parameters,
+            &params_types,
+            method.position,
+            diagnostics,
+        );
+
+        let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
+        let instance = bindings
+            .values()
+            .map(|t| self.type_ctx.lower(t))
+            .collect();
+        // `base` is the template's `{Type}_{method}` DefId shared by every monomorphization.
+        self.hir_set_generic_call(base, instance, arg_hirs, &ret_type);
+        Ok(ret_type)
     }
 }

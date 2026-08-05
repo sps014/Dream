@@ -74,3 +74,28 @@ pub(super) fn heap_base(strings: &IndexMap<String, u32>) -> u32 {
         .unwrap_or(STRING_BASE);
     (end.max(STRING_BASE) + 7) & !7
 }
+
+/// Reserves permanent static storage for every value-struct/value-union module global, starting at
+/// `start` (typically past the interned-string region). Returns `(global_id → address, end)` where
+/// `end` is 8-byte-aligned past the last slot (suitable as the itable base). Memory is assumed
+/// zero-filled; `$__dream_init` constructs into these addresses.
+pub(super) fn value_global_addrs(
+    mir: &crate::mir::Mir,
+    interner: &TypeInterner,
+    start: u32,
+) -> (HashMap<u32, u32>, u32) {
+    let mut addr = start;
+    let mut map = HashMap::new();
+    for g in &mir.globals {
+        if !interner.is_value_type(g.ty) {
+            continue;
+        }
+        let (size, align) = interner.value_layout(g.ty).unwrap_or((4, 4));
+        let align = align.max(1);
+        addr = (addr + align - 1) & !(align - 1);
+        map.insert(g.id.0, addr);
+        addr = addr.saturating_add(size);
+    }
+    let end = (addr + 7) & !7;
+    (map, end)
+}

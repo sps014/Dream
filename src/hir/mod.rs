@@ -209,11 +209,12 @@ pub enum HStmt {
         label: Option<String>,
     },
     /// A counted/`for` loop with an explicit init/cond/step (already desugared from surface syntax
-    /// far enough to carry typed parts).
+    /// far enough to carry typed parts). `init`/`step` are statement lists so debug line markers
+    /// can sit ahead of the real header statement.
     For {
-        init: Box<HStmt>,
+        init: Vec<HStmt>,
         cond: HExpr,
-        step: Box<HStmt>,
+        step: Vec<HStmt>,
         body: Vec<HStmt>,
         label: Option<String>,
     },

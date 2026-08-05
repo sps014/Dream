@@ -1,0 +1,9 @@
+fun make_adder(n: int): fun(int): int {
+    return (x: int) => x + n;
+}
+
+fun main(): void {
+    System.println(make_adder(5)(1));
+    let f: fun(int): int = make_adder(10);
+    System.println((f)(2));
+}

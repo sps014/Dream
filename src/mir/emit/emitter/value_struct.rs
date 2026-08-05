@@ -93,7 +93,7 @@ impl Emitter<'_> {
                     self.elem_addr(*base, ety, index);
                 }
             }
-            Place::Global(_) => self.line("     (i32.const 0) ;; value-struct global unsupported"),
+            Place::Global(g) => self.line(&format!("     (global.get $g{})", g.0)),
         }
     }
 

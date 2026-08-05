@@ -37,6 +37,7 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
         ftable,
         value_glue,
     } = build_tables(mir, interner);
+    let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
     let mut out = String::new();
     for f in &mir.functions {
         out.push_str(&emit_function_with(
@@ -49,6 +50,7 @@ pub fn emit_program(mir: &crate::mir::Mir, interner: &TypeInterner) -> String {
             &tags,
             &ftable,
             &value_glue,
+            &global_tys,
             false,
             None,
         ));
@@ -81,6 +83,7 @@ pub fn emit_module_with_debug(
         ftable,
         value_glue,
     } = build_tables(mir, interner);
+    let global_tys: HashMap<u32, TypeId> = mir.globals.iter().map(|g| (g.id.0, g.ty)).collect();
 
     // Debug-info metadata (file table + per-function variable tables + spill-pool width). Built up
     // front so both the instrumentation below and the returned source map agree on ids/slots.
@@ -130,16 +133,17 @@ pub fn emit_module_with_debug(
     emit_func_signatures(&mut out, interner);
     emit_func_table(&mut out, mir);
 
-    // Interface dispatch tables live in linear memory just past the interned strings; the heap bump
-    // pointer then starts past those. Its trampolines/data are emitted below.
+    // Interface dispatch tables live in linear memory just past the interned strings and any
+    // value-struct global BSS; the heap bump pointer then starts past those.
     let used_slots = used_iface_slots(mir);
-    let iface = emit_interface_dispatch(mir, interner, heap_base(&strings), &used_slots);
+    let (vg_addrs, static_end) = value_global_addrs(mir, interner, heap_base(&strings));
+    let iface = emit_interface_dispatch(mir, interner, static_end, &used_slots);
 
-    // Linear memory + allocator runtime state. Layout (low -> high): static data (strings + itables)
-    // | shadow-stack region (grows down) | heap (grows up, extends memory via memory.grow). The
-    // shadow stack and heap grow away from a shared boundary in opposite directions, so they never
-    // collide. `iface.heap_start` is the end of the static data; the shadow stack occupies the next
-    // SHADOW_STACK_SIZE bytes and the heap begins at the top of that region.
+    // Linear memory + allocator runtime state. Layout (low -> high): static data (strings +
+    // value-struct global BSS + itables) | shadow-stack region (grows down) | heap (grows up).
+    // The shadow stack and heap grow away from a shared boundary in opposite directions, so they
+    // never collide. `iface.heap_start` is the end of the static data; the shadow stack occupies
+    // the next SHADOW_STACK_SIZE bytes and the heap begins at the top of that region.
     let data_end = iface.heap_start;
     let heap_base = data_end + SHADOW_STACK_SIZE;
     let initial_pages = heap_base.div_ceil(WASM_PAGE_SIZE) + INITIAL_HEAP_PAGES;
@@ -169,17 +173,25 @@ pub fn emit_module_with_debug(
     out.push_str("(global $live_objects (mut i32) (i32.const 0))\n");
     out.push_str("(global $total_allocations (mut i32) (i32.const 0))\n");
 
-    // Module-level user variables. They start zeroed; any initializer runs in `$__dream_init`
-    // (emitted as a normal function below and wired to `(start ...)`).
+    // Module-level user variables. Scalars/references start zeroed; value-struct globals hold the
+    // address of their permanent BSS slot (constructed in `$__dream_init`).
     for g in &mir.globals {
-        let zero = zero_literal(wasm_ty_of(interner, g.ty));
-        let _ = writeln!(
-            out,
-            "(global $g{} (mut {}) {})",
-            g.id.0,
-            wasm_ty_of(interner, g.ty),
-            zero
-        );
+        if let Some(&addr) = vg_addrs.get(&g.id.0) {
+            let _ = writeln!(
+                out,
+                "(global $g{} (mut i32) (i32.const {}))",
+                g.id.0, addr
+            );
+        } else {
+            let zero = zero_literal(wasm_ty_of(interner, g.ty));
+            let _ = writeln!(
+                out,
+                "(global $g{} (mut {}) {})",
+                g.id.0,
+                wasm_ty_of(interner, g.ty),
+                zero
+            );
+        }
     }
 
     // Debug-info spill pool: one exported mutable `i64` global per live-local slot. Each named local
@@ -263,6 +275,7 @@ pub fn emit_module_with_debug(
                 &tags,
                 &ftable,
                 &value_glue,
+                &global_tys,
                 debug,
                 debug_fn,
             ));

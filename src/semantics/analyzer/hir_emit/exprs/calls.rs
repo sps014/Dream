@@ -6,8 +6,8 @@ use super::*;
 impl<'a> Analyzer<'a> {
     /// Records the HIR for a direct free-function call `name(args)`. Resolves `name` to its function
     /// `DefId`; if it is not a registered (non-generic, non-overloaded) function or any argument is
-    /// not representable, the call is dropped from coverage (the function falls back to the legacy
-    /// path).
+    /// not representable, the call is dropped from HIR coverage (enclosing function may fail
+    /// backend support).
     pub(in crate::semantics::analyzer) fn hir_set_call(
         &mut self,
         name: &str,
@@ -430,10 +430,14 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Shared unboxing logic for an indirect call through a boxed `fun(...)` value `boxed` — see
-    /// [`hir_set_indirect_call`]. Split out so a closure-valued *expression* (not just a named local)
-    /// can dispatch through the same path once general `fun(...)`-typed expressions (not just
-    /// locals) support calling — currently only [`hir_set_indirect_call`] calls this.
-    fn hir_set_indirect_call_expr(&mut self, boxed: HExpr, args: Vec<Option<HExpr>>, ret: &Type) {
+    /// [`hir_set_indirect_call`]. Used for both named locals and arbitrary `fun(...)`-typed
+    /// expression callees.
+    pub(in crate::semantics::analyzer) fn hir_set_indirect_call_expr(
+        &mut self,
+        boxed: HExpr,
+        args: Vec<Option<HExpr>>,
+        ret: &Type,
+    ) {
         let (Some(funcidx_def), Some(env_def)) = (
             self.closure_intrinsic("funcbox_funcidx"),
             self.closure_intrinsic("funcbox_env"),
@@ -561,7 +565,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Records the HIR for a struct field read `obj.field`; `field` is the resolved field index
-    /// (offset order). Fails over to the legacy path if the receiver was not representable.
+    /// (offset order). Clears `last` if the receiver was not representable.
     pub(in crate::semantics::analyzer) fn hir_set_field(
         &mut self,
         obj: Option<HExpr>,

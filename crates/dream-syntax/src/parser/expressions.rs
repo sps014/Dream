@@ -108,18 +108,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         // A primitive type name used as a static-call receiver, e.g. `int.parse("5")`. The
         // keyword is treated as an identifier so the member/method-access loop below applies;
-        // static dispatch is resolved later by the analyzer/codegen.
+        // static dispatch is resolved later by the analyzer. After the `.` chain, the full
+        // postfix chain applies (`[…]`, further `.member`, try `?`).
         else if self.current_token().kind == TokenKind::DataTypeToken
             && self.peek_token(1).kind == TokenKind::DotToken
         {
-            // A primitive type name used as a static-call receiver only supports `.member`
-            // access (no index suffix), so the dot-chain is parsed directly rather than via
-            // the full postfix chain.
             let mut expr = ExpressionNode::Identifier(self.next_token());
             while self.current_token().kind == TokenKind::DotToken {
                 expr = self.parse_member_access_step(expr)?;
             }
-            return Ok(expr);
+            return self.parse_postfix_chain(expr);
         }
         //parse identifiers
         else if self.current_token().kind == IdentifierToken {
@@ -283,18 +281,30 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 if self.peek_token(i).kind == TokenKind::CloseParenthesisToken {
                     let next_kind = self.peek_token(i + 1).kind;
-                    // If the token after `)` is an expression starter, it's a cast
-                    matches!(
-                        next_kind,
-                        TokenKind::NumberToken
-                            | TokenKind::StringToken
-                            | TokenKind::BooleanToken
-                            | TokenKind::IdentifierToken
-                            | TokenKind::OpenParenthesisToken
-                            | TokenKind::OpenBracketToken
-                            | TokenKind::MinusToken
-                            | TokenKind::BangToken
-                    )
+                    // If the token after `)` is an expression starter, it's a cast — except for
+                    // `(ident)(…)` when `ident` is neither a primitive spelling nor a PascalCase
+                    // nominal type: that shape is the postfix-call form `(fun_value)(args)`.
+                    // Primitive casts like `(long)((int)c)` and nominal casts like `(Node)(x)`
+                    // still win; `(f)(2)` becomes Parenthesized + Call.
+                    if next_kind == TokenKind::OpenParenthesisToken {
+                        let type_name = &self.peek_token(1).text;
+                        crate::nodes::types::PRIMITIVE_TYPE_NAMES.contains(&type_name.as_str())
+                            || type_name
+                                .chars()
+                                .next()
+                                .is_some_and(|c| c.is_uppercase())
+                    } else {
+                        matches!(
+                            next_kind,
+                            TokenKind::NumberToken
+                                | TokenKind::StringToken
+                                | TokenKind::BooleanToken
+                                | TokenKind::IdentifierToken
+                                | TokenKind::OpenBracketToken
+                                | TokenKind::MinusToken
+                                | TokenKind::BangToken
+                        )
+                    }
                 } else {
                     false
                 }
@@ -453,9 +463,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(params)
     }
 
-    /// Continues parsing index (`[...]`) and member/method (`.name` / `.name(...)`) accesses onto an
-    /// already-parsed base expression. Used so a call on a bare identifier (e.g. a constructor like
-    /// `HttpClient(url)`) can be chained: `HttpClient(url).set_header(...)`.
+    /// Continues parsing index (`[...]`), call (`(...)`), and member/method (`.name` / `.name(...)`)
+    /// accesses onto an already-parsed base expression. Used so a call on a bare identifier (e.g. a
+    /// constructor like `HttpClient(url)`) can be chained: `HttpClient(url).set_header(...)`, and so
+    /// a `fun(...)` value expression can be invoked: `make()()`, `(f)(x)`.
     pub(super) fn parse_postfix_chain(
         &mut self,
         base: ExpressionNode<'a>,
@@ -467,6 +478,25 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let index = self.parse_expression(0)?;
                 self.match_token(TokenKind::CloseBracketToken);
                 expr = ExpressionNode::IndexAccess(self.arena.alloc(expr), self.arena.alloc(index));
+            } else if self.current_token().kind == TokenKind::OpenParenthesisToken {
+                // Generic type args on a postfix call (`expr<T>(...)`) are not supported; only
+                // bare `expr(...)`. Named free-function generics stay on the `FunctionCall` path.
+                self.match_token(TokenKind::OpenParenthesisToken);
+                let mut arguments = Vec::new();
+                while self.current_token().kind != TokenKind::CloseParenthesisToken
+                    && self.current_token().kind != EndOfFileToken
+                {
+                    let iter = self.current_token_index;
+                    arguments.push(self.parse_call_argument()?);
+                    if self.current_token().kind == TokenKind::CommaToken
+                        && self.peek_token(1).kind != TokenKind::CloseParenthesisToken
+                    {
+                        self.match_token(TokenKind::CommaToken);
+                    }
+                    self.ensure_progress(iter);
+                }
+                self.match_token(TokenKind::CloseParenthesisToken);
+                expr = ExpressionNode::Call(self.arena.alloc(expr), None, arguments);
             } else if self.current_token().kind == TokenKind::DotToken {
                 expr = self.parse_member_access_step(expr)?;
             } else if self.current_token().kind == TokenKind::QuestionMarkToken

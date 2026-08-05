@@ -454,9 +454,9 @@ impl<'a> Analyzer<'a> {
 
         let ret_type = Self::async_return_type(store_sig.is_async, store_sig.return_type);
         // Emit a resolved direct call. A generic call resolves to the template's base `DefId` plus
-        // the monomorphization args (so it targets the emitted instance); a plain non-overloaded
-        // free function resolves by name. Overloads would collide on the base name's single `DefId`,
-        // so they stay on the legacy path for now.
+        // the monomorphization args (so it targets the emitted instance). Overloaded free functions
+        // resolve to the selected overload's emitted name (each is a distinct `DefId`);
+        // non-overloaded ones resolve directly by their base name.
         if let Some((base_name, instance_types)) = generic_instance {
             let instance = instance_types
                 .iter()
@@ -464,11 +464,82 @@ impl<'a> Analyzer<'a> {
                 .collect();
             self.hir_set_generic_call(&base_name, instance, arg_hirs, &ret_type);
         } else {
-            // Overloaded free functions resolve to the selected overload's emitted name (each is a
-            // distinct `DefId`); non-overloaded ones resolve directly by their base name.
             self.hir_set_call(&store_sig.name, arg_hirs, &ret_type);
         }
         Ok(ret_type)
+    }
+
+    /// Analyzes `callee(args)` where `callee` is an arbitrary expression (postfix call). Only
+    /// `fun(...)` values (and `js`-typed values) are callable this way; free-function / constructor
+    /// lookup stays on the named [`analyze_function_call`] path.
+    pub(crate) fn analyze_expr_call(
+        &mut self,
+        callee: &ExpressionNode<'a>,
+        params: &Vec<ExpressionNode<'a>>,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        let callee_ty =
+            self.analyze_expression(callee, parent_function, symbol_table, diagnostics)?;
+        let callee_hir = self.hir_take();
+        let span = callee.position();
+
+        let mut arg_hirs = Vec::with_capacity(params.len());
+        let mut params_types = Vec::with_capacity(params.len());
+        for param in params.iter() {
+            let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
+            arg_hirs.push(self.hir_take());
+            params_types.push(t.get_type());
+        }
+
+        if self.is_js_type(&callee_ty) {
+            let recv = callee_hir;
+            self.desugar_js_invoke(recv, arg_hirs, span, diagnostics);
+            return Ok(Self::js_type());
+        }
+
+        if let Type::Function(param_types, ret) = &callee_ty {
+            if param_types.len() != params_types.len() {
+                diagnostics.report_error(
+                    format!(
+                        "function value expects {} arguments, got {}",
+                        param_types.len(),
+                        params_types.len()
+                    ),
+                    span,
+                );
+                self.hir_none();
+                return Ok((**ret).clone());
+            }
+            let expected_strs: Vec<String> = param_types.iter().map(|t| t.get_type()).collect();
+            self.validate_arguments(
+                "function value",
+                &expected_strs,
+                &params_types,
+                span.unwrap_or_else(empty_span),
+                diagnostics,
+            );
+            match callee_hir {
+                Some(boxed) => self.hir_set_indirect_call_expr(boxed, arg_hirs, ret.as_ref()),
+                None => self.hir_none(),
+            }
+            return Ok((**ret).clone());
+        }
+
+        if callee_ty.is_unknown() {
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
+
+        Err(report(
+            diagnostics,
+            format!(
+                "cannot call value of type '{}'",
+                callee_ty.get_type()
+            ),
+            span,
+        ))
     }
 
     /// Appends the default values of any omitted trailing parameters to a call's argument lists.

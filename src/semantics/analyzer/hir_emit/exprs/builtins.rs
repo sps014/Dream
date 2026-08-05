@@ -7,8 +7,8 @@ impl<'a> Analyzer<'a> {
     /// Records a `print`/`println` builtin call as [`HExprKind::Print`] (void). Every scalar
     /// primitive is covered: `int`/`char`/`string` go straight to a host import, while the other
     /// numerics and `bool` route through the in-wasm `*_to_string` runtime before `$print_string`.
-    /// Non-scalar (object/struct/array) arguments still need the object-protocol `to_string` and so
-    /// drop the enclosing function out of HIR coverage until that runtime lands.
+    /// `fun(...)` values print as their static type spelling (funcboxes are untagged and have no
+    /// object-protocol `to_string`). Other non-scalars go through `$print_object`.
     pub(in crate::semantics::analyzer) fn hir_set_print(
         &mut self,
         arg: Option<HExpr>,
@@ -18,7 +18,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(arg) = arg else {
+        let Some(mut arg) = arg else {
             self.hir.ok = false;
             self.hir.last = None;
             return;
@@ -26,6 +26,7 @@ impl<'a> Analyzer<'a> {
         let base = arg.ty;
         // Scalars print directly; enums print as their `int` value; every reference type (struct,
         // union, array, `object`) renders through the backend's tag-dispatching `$print_object`.
+        // Funcboxes print as their type spelling (no heap tag / object protocol).
         let printable = matches!(
             self.type_ctx.interner.kind(base),
             TyKind::Prim(_)
@@ -35,11 +36,15 @@ impl<'a> Analyzer<'a> {
                 | TyKind::Array(_)
                 | TyKind::Object
                 | TyKind::Interface(..)
+                | TyKind::Func(..)
         );
         if !printable {
             self.hir.ok = false;
             self.hir.last = None;
             return;
+        }
+        if matches!(self.type_ctx.interner.kind(base), TyKind::Func(..)) {
+            arg = self.func_type_string_lit(base);
         }
         let void = self.type_ctx.interner.void();
         self.hir.last = Some(HExpr::new(
@@ -49,6 +54,13 @@ impl<'a> Analyzer<'a> {
                 newline,
             },
         ));
+    }
+
+    /// A `fun(...)` value's printable form: the static type spelling (funcboxes are untagged).
+    fn func_type_string_lit(&self, ty: crate::types::TypeId) -> HExpr {
+        let string = self.type_ctx.interner.string();
+        let name = crate::types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, ty);
+        HExpr::new(string, HExprKind::StringLit(name))
     }
 
     /// Records `recv.size()` (typed `int`): an array reads its stored length word (`ArrayLen`), while a
@@ -141,7 +153,8 @@ impl<'a> Analyzer<'a> {
 
     /// Converts a concatenation operand to a `string`-typed HExpr: string operands pass through, a
     /// C-style enum maps its discriminant to the interned variant name (matching `.to_string()`),
-    /// and any other type goes through the object-protocol `to_string`.
+    /// a `fun(...)` value becomes its type spelling, and any other type goes through the
+    /// object-protocol `to_string`.
     fn concat_stringify(
         &self,
         e: HExpr,
@@ -164,6 +177,9 @@ impl<'a> Analyzer<'a> {
                     arms,
                 },
             );
+        }
+        if matches!(self.type_ctx.interner.kind(e.ty), TyKind::Func(..)) {
+            return self.func_type_string_lit(e.ty);
         }
         HExpr::new(string, HExprKind::ToString(Box::new(e)))
     }
@@ -211,14 +227,18 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Records the object-protocol `x.to_string()` (typed `string`): the backend dispatches on the
-    /// receiver's static type. Drops out of coverage if the receiver is not representable.
+    /// Records `x.to_string()` (typed `string`). A `fun(...)` value becomes its type spelling;
+    /// everything else uses the object-protocol / prim formatter. Drops out of coverage if the
+    /// receiver is not representable.
     pub(in crate::semantics::analyzer) fn hir_set_to_string(&mut self, recv: Option<HExpr>) {
         if !self.active() {
             self.hir.last = None;
             return;
         }
         match recv {
+            Some(e) if matches!(self.type_ctx.interner.kind(e.ty), TyKind::Func(..)) => {
+                self.hir.last = Some(self.func_type_string_lit(e.ty));
+            }
             Some(e) => {
                 let string = self.type_ctx.interner.prim(PrimTy::String);
                 self.hir.last = Some(HExpr::new(string, HExprKind::ToString(Box::new(e))));

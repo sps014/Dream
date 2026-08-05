@@ -24,6 +24,7 @@ mod value_struct;
 /// Emits one function as WAT (calls fall back to `$def{N}`, and field/index access has no layout, so
 /// this is for layout-free unit tests; the pipeline uses [`emit_program`]/[`emit_module`]).
 pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
+    let empty_globals = HashMap::new();
     emit_function_with(
         func,
         interner,
@@ -34,6 +35,7 @@ pub fn emit_function(func: &MirFunction, interner: &TypeInterner) -> String {
         &HashMap::new(),
         &HashMap::new(),
         &HashSet::new(),
+        &empty_globals,
         false,
         None,
     )
@@ -50,12 +52,25 @@ pub(super) fn emit_function_with(
     tags: &HashMap<TypeId, i32>,
     func_table: &HashMap<(DefId, Vec<TypeId>), usize>,
     value_glue: &HashSet<TypeId>,
+    global_tys: &HashMap<u32, TypeId>,
     debug: bool,
     debug_fn: Option<&crate::mir::emit::debug_map::DebugFunction>,
 ) -> String {
     let mut e = Emitter::new(
-        func, interner, symbols, sigs, layouts, strings, tags, func_table, value_glue, None, 0,
-        debug, debug_fn,
+        func,
+        interner,
+        symbols,
+        sigs,
+        layouts,
+        strings,
+        tags,
+        func_table,
+        value_glue,
+        global_tys,
+        None,
+        0,
+        debug,
+        debug_fn,
     );
     e.emit();
     e.out
@@ -83,6 +98,7 @@ pub(crate) fn emit_async_poll(
     // elsewhere); empty maps disable those paths without extra plumbing through the transform.
     let sigs: HashMap<(DefId, Vec<TypeId>), Vec<TypeId>> = HashMap::new();
     let value_glue: HashSet<TypeId> = HashSet::new();
+    let global_tys: HashMap<u32, TypeId> = HashMap::new();
     // The poll body *is* the coroutine; completions release its own reference locals.
     let mut e = Emitter::new(
         func,
@@ -94,6 +110,7 @@ pub(crate) fn emit_async_poll(
         tags,
         ftable,
         &value_glue,
+        &global_tys,
         Some(func),
         user_local_count,
         debug,
@@ -115,6 +132,8 @@ struct Emitter<'a> {
     func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
     /// Value-struct types that require retain/drop glue (see [`valuetype`]).
     value_glue: &'a HashSet<TypeId>,
+    /// Module global id → type (for value-struct global stores/addresses).
+    global_tys: &'a HashMap<u32, TypeId>,
     /// Shadow-frame layout + ownership classification of this function's value-struct locals.
     frame: ValueFrame,
     out: String,
@@ -153,6 +172,7 @@ impl<'a> Emitter<'a> {
         tags: &'a HashMap<TypeId, i32>,
         func_table: &'a HashMap<(DefId, Vec<TypeId>), usize>,
         value_glue: &'a HashSet<TypeId>,
+        global_tys: &'a HashMap<u32, TypeId>,
         async_parent: Option<&'a MirFunction>,
         async_user_locals: usize,
         debug: bool,
@@ -169,6 +189,7 @@ impl<'a> Emitter<'a> {
             tags,
             func_table,
             value_glue,
+            global_tys,
             frame,
             out: String::new(),
             async_parent,

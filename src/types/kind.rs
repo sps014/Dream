@@ -21,8 +21,8 @@ pub enum PrimTy {
 }
 
 impl PrimTy {
-    /// The surface spelling, matching the legacy `Type::get_type()` strings exactly so the two
-    /// representations stay interchangeable during the migration.
+    /// The surface spelling, matching AST `Type::get_type()` strings so string-keyed and
+    /// `TypeId`-keyed paths agree.
     pub fn name(self) -> &'static str {
         match self {
             PrimTy::Int => "int",
@@ -78,9 +78,9 @@ impl PrimTy {
     /// field, array element, or local): `bool`/`char`/`byte` occupy a single byte;
     /// `double`/`long`/`ulong` are 8 bytes; everything else (`int`, `uint`, `float`, and `string`,
     /// which is a 4-byte heap pointer) is a 4-byte word. Single source of truth for this rule,
-    /// shared by the string-keyed [`crate::types::naming::value_size_align`] (used by the
-    /// legacy/analyzer struct tables) and the `TypeId`-keyed [`crate::hir::scalar_size`] (used by
-    /// HIR/MIR layout) so the two representations can never disagree on a primitive's width.
+    /// shared by the string-keyed [`crate::types::naming::value_size_align`] (analyzer struct
+    /// tables) and the `TypeId`-keyed [`crate::hir::scalar_size`] (HIR/MIR layout) so the two
+    /// representations can never disagree on a primitive's width.
     pub fn size_align(self) -> (u32, u32) {
         match self {
             PrimTy::Bool | PrimTy::Char | PrimTy::Byte => (1, 1),

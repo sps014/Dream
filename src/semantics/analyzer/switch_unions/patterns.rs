@@ -3,7 +3,8 @@
 //! `Switch`-emitting fast path needs, while [`Analyzer::compile_pattern`] compiles a pattern into
 //! explicit boolean test conditions for the general if-chain fallback.
 //! [`Analyzer::expand_switch_arms_for_fast_path`] turns or-patterns and small literal ranges into
-//! flat multi-key arms; [`Analyzer::pattern_switch_needs_chain`] decides which path remains.
+//! flat multi-key arms; [`Analyzer::pattern_switch_needs_full_chain`] /
+//! [`Analyzer::pattern_switch_needs_residual`] decide which path remains.
 
 use super::*;
 use crate::semantics::union_table::UnionInfo;
@@ -189,15 +190,30 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// True when `arms` need the general if-chain lowering rather than a `Switch`: any arm has a
-    /// guard, or a pattern isn't representable as a flat const/variant `Switch` arm (a nested
-    /// variant sub-pattern, or an unexpanded range/or-pattern).
-    pub(super) fn pattern_switch_needs_chain(arms: &[SwitchArm]) -> bool {
+    /// True when `arms` cannot participate in any outer `Switch`/`br_table` at all (an unexpanded
+    /// range, or an or-pattern whose alternatives themselves lack an outer key). Nested/literal
+    /// sub-patterns and guards are handled by the hybrid outer-Switch + residual path instead.
+    pub(super) fn pattern_switch_needs_full_chain(arms: &[SwitchArm]) -> bool {
+        arms.iter().any(|a| Self::pattern_lacks_outer_key(&a.pattern))
+    }
+
+    /// True when `arms` need residual if-chain work inside Switch arms (guards or nested
+    /// sub-patterns) but still have representable outer keys.
+    pub(super) fn pattern_switch_needs_residual(arms: &[SwitchArm]) -> bool {
         arms.iter()
             .any(|a| a.guard.is_some() || Self::pattern_needs_chain(&a.pattern))
     }
 
-    /// True for a pattern that the `Switch`/br_table fast path cannot represent after expansion:
+    /// True when the pattern has no Switch-representable outer key even after expansion.
+    fn pattern_lacks_outer_key(p: &PatternNode) -> bool {
+        match p {
+            PatternNode::Range(..) => true,
+            PatternNode::Or(alts) => alts.iter().any(Self::pattern_lacks_outer_key),
+            _ => false,
+        }
+    }
+
+    /// True for a pattern that the flat `Switch` arm shape cannot represent after expansion:
     /// a variant with a nested/literal sub-pattern, an unexpanded range, or an unexpanded or-pattern
     /// (or whose alternatives themselves need the chain).
     fn pattern_needs_chain(p: &PatternNode) -> bool {

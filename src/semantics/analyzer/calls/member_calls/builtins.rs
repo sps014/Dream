@@ -27,7 +27,7 @@ impl<'a> Analyzer<'a> {
         receiver: &mut Option<crate::hir::HExpr>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Option<Type>, SemanticError> {
-        // Default: no builtin HIR. `len` opts back in below; the others stay on the legacy path.
+        // Default: clear `last` until a matching builtin re-fills it (`size` / `to_string` / …).
         self.hir_none();
 
         // `arr.size()` / `str.size()`: built-in element-count method on arrays and strings (the same

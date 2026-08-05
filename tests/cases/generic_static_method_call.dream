@@ -1,0 +1,15 @@
+class Util {
+    public static fun id<T>(x: T): T {
+        return x;
+    }
+
+    public static fun pair<A, B>(a: A, b: B): string {
+        return a.to_string() + "," + b.to_string();
+    }
+}
+
+fun main(): void {
+    System.println(Util.id(42));
+    System.println(Util.id("hi"));
+    System.println(Util.pair(1, true));
+}

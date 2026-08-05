@@ -19,7 +19,7 @@ pub struct TypeCtx {
     /// Mangled monomorphization name (`List_JsonValue`) -> the canonical interned id of that generic
     /// instance (`Struct(List_def, [JsonValue])`). The analyzer registers each instantiation here so
     /// the pre-mangled bare spelling and the structured `List<JsonValue>` spelling lower to the same
-    /// [`TypeId`] (the legacy pipeline uses both interchangeably).
+    /// [`TypeId`].
     instances: IndexMap<String, TypeId>,
 }
 
@@ -76,9 +76,9 @@ impl TypeCtx {
         self.lower_with(ty, &IndexMap::new())
     }
 
-    /// Lowers a bare type-name string (possibly suffixed `T[]`/`T?`, a primitive spelling, or a
-    /// pre-mangled generic instance) to an interned id. Bridges the legacy string-typed signatures
-    /// and tables onto the structured type system.
+    /// Lowers a bare type-name string (possibly suffixed `T[]`, a primitive spelling, or a
+    /// pre-mangled generic instance) to an interned id. Used where signatures/tables still carry
+    /// string type spellings.
     pub fn lower_str(&mut self, name: &str) -> TypeId {
         self.lower_name(name, &IndexMap::new())
     }
@@ -164,9 +164,9 @@ impl TypeCtx {
     }
 
     /// Lowers a bare type *name* (as opposed to a structured AST node) to an interned id, absorbing
-    /// the stringly-typed spellings the legacy pipeline still produces: array (`T[]`) suffixes,
-    /// primitive names, `object`/`void`, pre-mangled generic instances, and nominal references. This
-    /// keeps every spelling of the same type interning to one [`TypeId`].
+    /// string spellings still used by signatures/tables: array (`T[]`) suffixes, primitive names,
+    /// `object`/`void`, pre-mangled generic instances, and nominal references. This keeps every
+    /// spelling of the same type interning to one [`TypeId`].
     fn lower_name(&mut self, name: &str, bindings: &IndexMap<String, TypeId>) -> TypeId {
         if let Some(&bound) = bindings.get(name) {
             return bound;

@@ -10,7 +10,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn test_hir_emission_arithmetic_function() {
     // A plain free function over arithmetic on parameters is fully representable in HIR, so the
-    // analyzer emits it and it survives the whole new backend pipeline.
+    // analyzer emits it and it survives the MIR backend pipeline.
     let (wat, count) = emit_hir_to_wat("fun add(a: int, b: int): int { return a + b; }");
     assert_eq!(
         count, 1,
@@ -40,8 +40,8 @@ fn test_hir_emission_locals_and_assignment() {
 #[test]
 fn test_hir_emission_skips_unsupported_functions() {
     // An uninstantiated generic template (`gen<T>`) has no concrete body to lower until it is
-    // monomorphized at a call site, so the interleaved HIR emission skips it, leaving the legacy path
-    // to handle its instantiations. The concrete sibling still emits.
+    // monomorphized at a call site, so the interleaved HIR emission skips it. Instantiations are
+    // emitted when a call site specializes them. The concrete sibling still emits.
     let code = "
         fun simple(a: int): int { return a; }
         fun gen<T>(x: T): T { return x; }
@@ -1123,23 +1123,31 @@ fn exec_first_class_function_from_source() {
     assert_eq!(run_and_capture(&code, "main"), "5");
 }
 
+#[cfg(feature = "native")]
 #[test]
-fn dropped_function_reports_error_instead_of_silent_omission() {
-    // Printing a function value is not representable in HIR, so `main` is dropped from backend
-    // coverage. Historically this compiled "successfully" while emitting no code for `main`; the
-    // analyzer must now surface an explicit error rather than silently omitting the function.
+fn exec_print_function_value() {
+    // Printing a `fun(...)` value renders its static type spelling (funcboxes are untagged).
     let code = format!(
         "{SYSTEM_STUB}
+        {CLOSURE_STUB}
+        fun add(a: int, b: int): int {{ return a + b; }}
+        fun main(): void {{ let f: fun(int, int): int = add; System.println(f); }}"
+    );
+    assert_eq!(run_and_capture(&code, "main"), "fun(int, int): int\n");
+}
+
+#[test]
+fn print_function_value_emits_hir() {
+    let code = format!(
+        "{SYSTEM_STUB}
+        {CLOSURE_STUB}
         fun add(a: int, b: int): int {{ return a + b; }}
         fun main(): void {{ let f: fun(int, int): int = add; System.println(f); }}"
     );
     let diagnostics = analyze_code(&code);
     assert!(
-        diagnostics.errors().any(|d| d
-            .message
-            .contains("not yet supported by the compiler backend")
-            && d.message.contains("main")),
-        "expected an explicit unsupported-construct error for the dropped function, got: {:?}",
+        !diagnostics.has_errors(),
+        "printing a function value should be supported, got: {:?}",
         diagnostics.diagnostics
     );
 }

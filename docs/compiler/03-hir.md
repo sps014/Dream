@@ -67,7 +67,8 @@ A `ref` parameter (`fun f(ref x: int)`) needs no dedicated HIR shape: it is boxe
 Pattern-matching `switch` lowering (analyzer):
 
 - Flat unguarded arms — including **or-patterns** and **small int/char literal ranges** (inclusive span ≤ 256) expanded into multi-key arms — emit `HStmt::Switch` (MIR `br_table`).
-- Arms with **guards** or **nested/literal sub-patterns** lower as an if-chain (`Discriminant` / `UnionField` tests), not `Switch`.
+- Arms with **guards** or **nested/literal sub-patterns** use a **hybrid**: outer `HStmt::Switch` on the variant tag / const key, with a residual if-chain (`Discriminant` / `UnionField` / guard tests) inside each Switch arm.
+- Unexpanded ranges (or or-patterns that still need the chain after expansion) fall back to a full linear if-chain.
 
 `HPattern` is `Const(HExpr)`, `Variant { def, variant, bindings }` (binds the payload into fresh locals), or `Wildcard`.
 

@@ -155,6 +155,12 @@ impl<'a> Analyzer<'a> {
                     self.scan_expr_await(a, message, diagnostics);
                 }
             }
+            ExpressionNode::Call(callee, _, args) => {
+                self.scan_expr_await(callee, message, diagnostics);
+                for a in args {
+                    self.scan_expr_await(a, message, diagnostics);
+                }
+            }
             ExpressionNode::MethodCall(obj, _, _, args) => {
                 self.scan_expr_await(obj, message, diagnostics);
                 for a in args {

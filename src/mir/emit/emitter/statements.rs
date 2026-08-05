@@ -249,6 +249,17 @@ impl Emitter<'_> {
                 self.line(&format!("     (local.set ${})", l.0));
             }
             Place::Global(g) => {
+                if let Some(&ty) = self.global_tys.get(&g.0) {
+                    if self.interner.is_value_type(ty) {
+                        let g0 = g.0;
+                        self.emit_value_store(
+                            |s| s.line(&format!("     (global.get $g{})", g0)),
+                            ty,
+                            rvalue,
+                        );
+                        return;
+                    }
+                }
                 self.emit_rvalue(rvalue);
                 self.line(&format!("     (global.set $g{})", g.0));
             }
