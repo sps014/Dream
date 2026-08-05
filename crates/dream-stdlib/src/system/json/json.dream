@@ -22,9 +22,21 @@ public class JSON {
         return JSON._json_stringify_pretty(value, indent, 0);
     }
 
-    public static fun parse(text: string): JsonValue {
+    public static fun parse(text: string): Result<JsonValue, ParseError> {
+        if (text.is_empty()) {
+            return Result.Err(ParseError.invalid("empty JSON input"));
+        }
         let parser = JsonParser(text, 0, text.size());
-        return parser.parse_value();
+        let value = parser.parse_value();
+        if (parser.at_end() == false) {
+            return Result.Err(ParseError.invalid("trailing characters after JSON value"));
+        }
+        return Result.Ok(value);
+    }
+
+    // Internal: JsonValue or `none` on parse failure (used by `JSON.deserialize` expansion).
+    static fun parse_value(text: string): JsonValue {
+        return JSON.parse(text).unwrap_or(JsonValue.none());
     }
 
     // --- internal serialization helpers -----------------------------------------------------

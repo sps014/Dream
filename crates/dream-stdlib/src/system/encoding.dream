@@ -1,0 +1,180 @@
+module system.encoding;
+
+// UTF-8 / Base64 / hex codecs over `byte[]` and `string`.
+// Dream strings are length-prefixed UTF-8 bytes; `utf8_encode`/`utf8_decode` copy those bytes.
+public fun hex_digit(v: int): char {
+    if (v < 10) {
+        return (char)(48 + v);
+    }
+    return (char)(97 + (v - 10));
+}
+
+public fun hex_value(c: char): int {
+    if ((c >= '0') && (c <= '9')) {
+        return (int)c - 48;
+    }
+    if ((c >= 'a') && (c <= 'f')) {
+        return (int)c - 97 + 10;
+    }
+    if ((c >= 'A') && (c <= 'F')) {
+        return (int)c - 65 + 10;
+    }
+    return 0 - 1;
+}
+
+public fun b64_value(c: char): int {
+    if ((c >= 'A') && (c <= 'Z')) {
+        return (int)c - 65;
+    }
+    if ((c >= 'a') && (c <= 'z')) {
+        return (int)c - 97 + 26;
+    }
+    if ((c >= '0') && (c <= '9')) {
+        return (int)c - 48 + 52;
+    }
+    if (c == '+') {
+        return 62;
+    }
+    if (c == '/') {
+        return 63;
+    }
+    return 0 - 1;
+}
+
+public class Encoding {
+    public static fun utf8_encode(text: string): byte[] {
+        return Bytes.fromWireString(text);
+    }
+
+    public static fun utf8_decode(bytes: byte[]): string {
+        return Bytes.toWireString(bytes);
+    }
+
+    public static fun hex_encode(bytes: byte[]): string {
+        let n = bytes.size();
+        let out = string.alloc(n * 2);
+        let i = 0;
+        while (i < n) {
+            let b = (int)bytes[i];
+            string.set(out, i * 2, hex_digit(b / 16));
+            string.set(out, i * 2 + 1, hex_digit(b % 16));
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public static fun hex_decode(text: string): Result<byte[], ParseError> {
+        let n = text.size();
+        if ((n % 2) != 0) {
+            return Result.Err(ParseError.invalid("hex string length must be even"));
+        }
+        let out = Buffer.alloc<byte>(n / 2);
+        let i = 0;
+        while (i < n) {
+            let hi = hex_value(text.char_at(i));
+            let lo = hex_value(text.char_at(i + 1));
+            if ((hi < 0) || (lo < 0)) {
+                return Result.Err(ParseError.invalid("invalid hex digit"));
+            }
+            let byte_val = hi * 16 + lo;
+            out[i / 2] = (byte)byte_val;
+            i = i + 2;
+        }
+        return Result.Ok(out);
+    }
+
+    public static fun base64_encode(bytes: byte[]): string {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let n = bytes.size();
+        let out = "";
+        let i = 0;
+        while (i < n) {
+            let b0 = (int)bytes[i];
+            let b1 = 0;
+            let b2 = 0;
+            let remain = n - i;
+            if (remain > 1) {
+                b1 = (int)bytes[i + 1];
+            }
+            if (remain > 2) {
+                b2 = (int)bytes[i + 2];
+            }
+            let triple = (b0 * 65536) + (b1 * 256) + b2;
+            out = out + alphabet.char_at((triple / 262144) % 64);
+            out = out + alphabet.char_at((triple / 4096) % 64);
+            if (remain > 1) {
+                out = out + alphabet.char_at((triple / 64) % 64);
+            } else {
+                out = out + "=";
+            }
+            if (remain > 2) {
+                out = out + alphabet.char_at(triple % 64);
+            } else {
+                out = out + "=";
+            }
+            i = i + 3;
+        }
+        return out;
+    }
+
+    public static fun base64_decode(text: string): Result<byte[], ParseError> {
+        let cleaned = "";
+        let i = 0;
+        while (i < text.size()) {
+            let c = text.char_at(i);
+            if (c != '=') {
+                if ((c != ' ') && (c != '\n') && (c != '\r') && (c != '\t')) {
+                    cleaned = cleaned + c;
+                }
+            }
+            i = i + 1;
+        }
+        let n = cleaned.size();
+        if ((n % 4) == 1) {
+            return Result.Err(ParseError.invalid("invalid base64 length"));
+        }
+        while ((cleaned.size() % 4) != 0) {
+            cleaned = cleaned + "A";
+        }
+        let pad = 0;
+        if (text.ends_with("==")) {
+            pad = 2;
+        } else if (text.ends_with("=")) {
+            pad = 1;
+        }
+        let out_len = (cleaned.size() / 4) * 3 - pad;
+        if (out_len < 0) {
+            out_len = 0;
+        }
+        let out = Buffer.alloc<byte>(out_len);
+        let oi = 0;
+        i = 0;
+        while (i < cleaned.size()) {
+            let c0 = b64_value(cleaned.char_at(i));
+            let c1 = b64_value(cleaned.char_at(i + 1));
+            let c2 = b64_value(cleaned.char_at(i + 2));
+            let c3 = b64_value(cleaned.char_at(i + 3));
+            if ((c0 < 0) || (c1 < 0) || (c2 < 0) || (c3 < 0)) {
+                return Result.Err(ParseError.invalid("invalid base64 character"));
+            }
+            let triple = (c0 * 262144) + (c1 * 4096) + (c2 * 64) + c3;
+            if (oi < out_len) {
+                let b = (triple / 65536) % 256;
+                out[oi] = (byte)b;
+                oi = oi + 1;
+            }
+            if (oi < out_len) {
+                let b = (triple / 256) % 256;
+                out[oi] = (byte)b;
+                oi = oi + 1;
+            }
+            if (oi < out_len) {
+                let b = triple % 256;
+                out[oi] = (byte)b;
+                oi = oi + 1;
+            }
+            i = i + 4;
+        }
+        return Result.Ok(out);
+    }
+}

@@ -1,0 +1,9 @@
+import system;
+fun main(): void {
+    let a = Random((uint)42);
+    let b = Random((uint)42);
+    System.println(a.next_int(100) == b.next_int(100));
+    System.println(a.next_bool() == b.next_bool());
+    let c = Random((uint)7);
+    System.println(c.next_int(10) >= 0);
+}

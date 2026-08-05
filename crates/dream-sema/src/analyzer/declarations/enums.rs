@@ -74,6 +74,15 @@ impl<'a> Analyzer<'a> {
             }
             self.type_ctx.register(DefKind::Enum, name, vec![]);
             self.enum_table.insert(name.clone(), members);
+            // C-style enums may declare methods in the body (same as unions/classes).
+            if !enum_decl.methods.is_empty() {
+                self.register_methods_for(
+                    name,
+                    &enum_decl.methods,
+                    &GenericBindings::new(),
+                    diagnostics,
+                );
+            }
         }
 
         // Pass 2: register concrete (non-generic) discriminated unions. Their payload fields may
@@ -88,6 +97,14 @@ impl<'a> Analyzer<'a> {
                     has_stack,
                     diagnostics,
                 );
+                if !enum_decl.methods.is_empty() {
+                    self.register_methods_for(
+                        &enum_decl.name.text,
+                        &enum_decl.methods,
+                        &GenericBindings::new(),
+                        diagnostics,
+                    );
+                }
             }
         }
     }
@@ -295,6 +312,17 @@ impl<'a> Analyzer<'a> {
             has_stack,
             diagnostics,
         );
+        // Methods declared on the generic enum template (e.g. `Option.is_some`) attach to each
+        // monomorphization the same way class methods do.
+        if !template.methods.is_empty() {
+            self.verify_generic_constraints(
+                &template.generic_constraints,
+                &bindings,
+                position,
+                diagnostics,
+            );
+            self.register_methods_for(&mangled, &template.methods, &bindings, diagnostics);
+        }
         self.register_generic_extension_methods(base_name, &mangled, args, diagnostics);
     }
 
@@ -326,10 +354,10 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// True when every generic constraint on an `extend` block is satisfied by the concrete
-    /// bindings of one instantiation. Unlike class/function constraints, an unsatisfied extension
-    /// constraint is not an error — the extension's methods simply do not attach to that instance.
-    fn extension_constraints_satisfied(
+    /// True when every generic constraint on an `extend` block or method `where` clause is
+    /// satisfied by the concrete bindings of one instantiation. Unlike class/function constraints,
+    /// an unsatisfied attachment constraint is not an error — the methods simply do not attach.
+    pub(in crate::analyzer) fn extension_constraints_satisfied(
         &self,
         constraints: &[dream_syntax::nodes::GenericConstraint],
         bindings: &GenericBindings,

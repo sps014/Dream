@@ -1,0 +1,25 @@
+import system;
+fun parse_even(s: string): Result<int, ParseError> {
+    let parsed = int.parse(s);
+    if (parsed.is_err()) {
+        return Result.Err(ParseError.invalid("parse"));
+    }
+    let n = parsed.unwrap_or(0);
+    if ((n % 2) != 0) {
+        return Result.Err(ParseError.invalid("odd"));
+    }
+    return Result.Ok(n);
+}
+fun double_ok(n: int): Result<int, ParseError> {
+    return Result.Ok(n * 2);
+}
+fun main(): void {
+    switch (parse_even("10").and_then(double_ok)) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.message()),
+    }
+    switch (parse_even("3").and_then(double_ok)) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.message()),
+    }
+}

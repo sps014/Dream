@@ -65,6 +65,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/comparable.dream"),
             ),
             (
+                "<std>/system/core/error.dream",
+                include_str!("system/core/error.dream"),
+            ),
+            (
+                "<std>/system/core/parse_error.dream",
+                include_str!("system/core/parse_error.dream"),
+            ),
+            (
                 "<std>/system/core/option.dream",
                 include_str!("system/core/option.dream"),
             ),
@@ -180,6 +188,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 "<std>/system/collections/set_iterator.dream",
                 include_str!("system/collections/set_iterator.dream"),
             ),
+            (
+                "<std>/system/collections/queue.dream",
+                include_str!("system/collections/queue.dream"),
+            ),
+            (
+                "<std>/system/collections/stack.dream",
+                include_str!("system/collections/stack.dream"),
+            ),
         ],
     },
     StdPackage {
@@ -272,26 +288,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
     },
     StdPackage {
-        name: "system.net",
-        deps: &[
-            "system.core",
-            "system.primitives",
-            "system.collections",
-            "system.text",
-            "system.json",
-        ],
-        files: &[
-            (
-                "<std>/system/net/http_response.dream",
-                include_str!("system/net/http_response.dream"),
-            ),
-            (
-                "<std>/system/net/http_client.dream",
-                include_str!("system/net/http_client.dream"),
-            ),
-        ],
-    },
-    StdPackage {
         name: "system.io",
         deps: &[
             "system.core",
@@ -300,6 +296,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             "system.text",
         ],
         files: &[
+            (
+                "<std>/system/io/io_error.dream",
+                include_str!("system/io/io_error.dream"),
+            ),
+            (
+                "<std>/system/io/path.dream",
+                include_str!("system/io/path.dream"),
+            ),
             (
                 "<std>/system/io/file.dream",
                 include_str!("system/io/file.dream"),
@@ -311,12 +315,62 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
     },
     StdPackage {
-        name: "system",
+        name: "system.net",
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.collections",
+            "system.text",
+            "system.json",
+        ],
+        files: &[
+            (
+                "<std>/system/net/http_error.dream",
+                include_str!("system/net/http_error.dream"),
+            ),
+            (
+                "<std>/system/net/http_headers.dream",
+                include_str!("system/net/http_headers.dream"),
+            ),
+            (
+                "<std>/system/net/url.dream",
+                include_str!("system/net/url.dream"),
+            ),
+            (
+                "<std>/system/net/http_response.dream",
+                include_str!("system/net/http_response.dream"),
+            ),
+            (
+                "<std>/system/net/http_client.dream",
+                include_str!("system/net/http_client.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.encoding",
         deps: &["system.core", "system.primitives", "system.text"],
         files: &[
             (
+                "<std>/system/encoding.dream",
+                include_str!("system/encoding.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system",
+        deps: &["system.core", "system.primitives", "system.text", "system.io"],
+        files: &[
+            (
+                "<std>/system/arg_error.dream",
+                include_str!("system/arg_error.dream"),
+            ),
+            (
                 "<std>/system/system.dream",
                 include_str!("system/system.dream"),
+            ),
+            (
+                "<std>/system/random.dream",
+                include_str!("system/random.dream"),
             ),
             (
                 "<std>/system/console_color.dream",

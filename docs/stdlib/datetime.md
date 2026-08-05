@@ -85,7 +85,7 @@ System.println(a.compare_to(b));    // -1
 
 `to_iso8601()` renders `"YYYY-MM-DDTHH:mm:ss.fffZ"` for UTC, or with a `"+HH:MM"`/`"-HH:MM"` suffix for a non-zero offset. `to_string()` is a more human-readable variant (space-separated, no fractional seconds).
 
-`DateTime.parse_iso8601(text)` parses `"YYYY-MM-DDTHH:mm:ss[.fff](Z|+HH:MM|-HH:MM)?"` and returns a `Result<DateTime, string>`. A missing fractional part defaults to `0`; extra fractional digits are truncated to milliseconds; a missing offset (and no trailing `Z`) is treated as UTC:
+`DateTime.parse_iso8601(text)` parses `"YYYY-MM-DDTHH:mm:ss[.fff](Z|+HH:MM|-HH:MM)?"` and returns a `Result<DateTime, ParseError>`. A missing fractional part defaults to `0`; extra fractional digits are truncated to milliseconds; a missing offset (and no trailing `Z`) is treated as UTC:
 
 ```dream
 let parsed = DateTime.parse_iso8601("2026-07-02T10:35:00.250Z");

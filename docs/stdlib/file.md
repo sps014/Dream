@@ -2,6 +2,8 @@
 
 **Package:** `system.io` — `import system.io;`
 
+Fallible ops return `Result<_, IoError>` (`message()` / `code()` such as `ENOENT`). `Path` helpers (`join`, `file_name`, `normalize`, …) live in the same package.
+
 `File` and `FileStream` are the filesystem API. Operations are [`async`](../language/async.md) and return a `Future<T>` you `await`; the same `.dream` runs unchanged on every host.
 
 ## Runtime support
@@ -53,7 +55,7 @@ For non-text data, `read_bytes`/`write_bytes` move raw bytes between the file an
 
 ```dream
 async fun main(): void {
-    let bytes = await File.read_bytes("image.png");   // Result<byte[], string>
+    let bytes = await File.read_bytes("image.png");   // Result<byte[], IoError>
     await File.write_bytes("copy.png", bytes.unwrap_or(Buffer.alloc<byte>(0)));
 }
 ```
@@ -64,7 +66,7 @@ async fun main(): void {
 
 ```dream
 async fun main(): void {
-    let opened = await File.open("notes.txt");           // Result<FileStream, string>
+    let opened = await File.open("notes.txt");           // Result<FileStream, IoError>
     let stream = opened.unwrap_or(FileStream(Buffer.alloc<byte>(0)));
 
     System.println(stream.read(5));        // first 5 bytes as text
@@ -89,14 +91,14 @@ async fun main(): void {
 | `File.read(path): Future<Result<string, string>>` | whole file as UTF-8 text; `Err` if missing |
 | `File.write(path, content): Future<Result<long, string>>` | overwrite; `Ok(bytes_written)` or `Err` |
 | `File.append(path, content): Future<Result<long, string>>` | append; `Ok(bytes_written)` or `Err` |
-| `File.read_bytes(path): Future<Result<byte[], string>>` | whole file as raw bytes; `Err` if missing |
+| `File.read_bytes(path): Future<Result<byte[], IoError>>` | whole file as raw bytes; `Err` if missing |
 | `File.write_bytes(path, data): Future<Result<long, string>>` | write raw bytes; `Ok(bytes_written)` or `Err` |
 | `File.delete(path): Future<bool>` | delete; resolves `true` on success |
 | `File.list(path): Future<string[]>` | directory entry names (empty if not a directory) |
 | `File.exists(path): bool` | true if `path` exists (synchronous) |
 | `File.size(path): Option<long>` | size in bytes, or `None` if missing (synchronous) |
 | `File.is_dir(path): bool` | true if `path` is a directory (synchronous) |
-| `File.open(path): Future<Result<FileStream, string>>` | open a buffered read stream; `Err` if missing |
+| `File.open(path): Future<Result<FileStream, IoError>>` | open a buffered read stream; `Err` if missing |
 
 ### FileStream
 

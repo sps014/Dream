@@ -28,9 +28,11 @@ Helpers:
 
 - `.is_some()` / `.is_none()` — which variant it is.
 - `.unwrap_or(fallback)` — the contained value, or `fallback`.
+- `.map(f)` / `.and_then(f)` / `.or(fallback)` — transform or chain without nested `switch`.
 
 ```dream
 System.println(some.unwrap_or(0));   // 42
+System.println(some.map((x: int): int => x + 1).unwrap_or(0));  // 43
 ```
 
 ## `Result<T, E>`
@@ -59,6 +61,8 @@ Helpers:
 
 - `.is_ok()` / `.is_err()` — which variant it is.
 - `.unwrap_or(fallback)` — the success value, or `fallback`.
+- `.map(f)` / `.map_err(f)` — transform the success or error payload.
+- `.and_then(f)` — chains into another `Result` when `Ok`, otherwise preserves the error.
 
 !!! note
     There are no panicking `unwrap()` methods, by design. Always supply a fallback or use `switch` to handle the empty/error case explicitly.
@@ -124,3 +128,18 @@ Rules:
 - Postfix `?` is preferred over ternary unless a matching `:` follows at the same nesting depth, so
   `half(n)? + 1` and `if (half(n)? > 0)` are try-propagation. Write `cond ? a : b` when you mean the
   ternary; parentheses around `(expr?)` are never required for ordinary postfix use.
+
+
+## `Error`
+
+Stdlib fallible APIs use `Result<T, E>` where `E` implements the `Error` interface:
+
+```dream
+public interface Error {
+    fun message(): string;
+    fun code(): string;   // stable machine code: "ENOENT", "EPARSE", "HTTP_404", …
+}
+```
+
+Concrete types: `ParseError` (bootstrap), `IoError` (`system.io`), `HttpError` (`system.net`), `ArgError` (`system`). Prefer `e.message()` / `e.code()` at call sites.
+

@@ -1,0 +1,164 @@
+module system.io;
+
+// Path helpers for joining and inspecting filesystem paths.
+public class Path {
+    public static fun join(a: string, b: string): string {
+        if (a.is_empty()) {
+            return b;
+        }
+        if (b.is_empty()) {
+            return a;
+        }
+        let sep = Path.separator();
+        if (a.ends_with(sep) || a.ends_with("/") || a.ends_with("\\")) {
+            return a + b;
+        }
+        return a + sep + b;
+    }
+
+    public static fun of(parts: string[]): string {
+        let result = "";
+        let i = 0;
+        while (i < parts.size()) {
+            result = Path.join(result, parts[i]);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    public static fun file_name(path: string): Option<string> {
+        let n = path.size();
+        if (n == 0) {
+            return Option.None;
+        }
+        let i = n - 1;
+        while (i >= 0) {
+            let c = path.char_at(i);
+            if ((c == '/') || (c == '\\')) {
+                if (i + 1 >= n) {
+                    return Option.None;
+                }
+                return Option.Some(path.substring(i + 1, n));
+            }
+            i = i - 1;
+        }
+        return Option.Some(path);
+    }
+
+    public static fun extension(path: string): Option<string> {
+        let name = Path.file_name(path).unwrap_or("");
+        let n = name.size();
+        let i = n - 1;
+        while (i >= 0) {
+            if (name.char_at(i) == '.') {
+                if (i + 1 >= n) {
+                    return Option.None;
+                }
+                return Option.Some(name.substring(i + 1, n));
+            }
+            i = i - 1;
+        }
+        return Option.None;
+    }
+
+    public static fun parent(path: string): Option<string> {
+        let n = path.size();
+        if (n == 0) {
+            return Option.None;
+        }
+        let i = n - 1;
+        while (i >= 0) {
+            let c = path.char_at(i);
+            if ((c == '/') || (c == '\\')) {
+                if (i == 0) {
+                    return Option.Some(path.substring(0, 1));
+                }
+                return Option.Some(path.substring(0, i));
+            }
+            i = i - 1;
+        }
+        return Option.None;
+    }
+
+    public static fun is_absolute(path: string): bool {
+        if (path.is_empty()) {
+            return false;
+        }
+        let c = path.char_at(0);
+        if ((c == '/') || (c == '\\')) {
+            return true;
+        }
+        if ((path.size() >= 3) && (path.char_at(1) == ':')) {
+            return true;
+        }
+        return false;
+    }
+
+    // Resolves `.` and `..` segments where possible. Does not consult the filesystem.
+    public static fun normalize(path: string): string {
+        if (path.is_empty()) {
+            return path;
+        }
+        let sep = Path.separator();
+        let absolute = Path.is_absolute(path);
+        let parts = List<string>();
+        let start = 0;
+        let i = 0;
+        let n = path.size();
+        while (i <= n) {
+            if ((i == n) || (path.char_at(i) == '/') || (path.char_at(i) == '\\')) {
+                if (i > start) {
+                    let part = path.substring(start, i);
+                    if (part == ".") {
+                        // skip
+                    } else if (part == "..") {
+                        if (parts.size() > 0) {
+                            let last = parts.get(parts.size() - 1).unwrap_or("");
+                            if (last != "..") {
+                                parts.pop();
+                            } else {
+                                parts.push(part);
+                            }
+                        } else if (!absolute) {
+                            parts.push(part);
+                        }
+                    } else {
+                        parts.push(part);
+                    }
+                }
+                start = i + 1;
+            }
+            i = i + 1;
+        }
+        let out = "";
+        let j = 0;
+        while (j < parts.size()) {
+            if (j > 0) {
+                out = out + sep;
+            }
+            out = out + parts.get(j).unwrap_or("");
+            j = j + 1;
+        }
+        if (absolute) {
+            if (path.char_at(0) == '/') {
+                return "/" + out;
+            }
+            if (path.char_at(0) == '\\') {
+                return "\\" + out;
+            }
+        }
+        if (out.is_empty()) {
+            if (absolute) {
+                return sep;
+            }
+            return ".";
+        }
+        return out;
+    }
+
+    // Host path separator. Always `/` in the WASM stdlib surface (native hosts accept `/`
+    // even on Windows); use `OsFamily` at call sites when Windows-style paths are required.
+    public static fun separator(): string {
+        return "/";
+    }
+}

@@ -1,0 +1,9 @@
+import system;
+import system.io;
+fun main(): void {
+    System.println(Path.join("a", "b"));
+    System.println(Path.join("a/", "b"));
+    System.println(Path.of(["usr", "local", "bin"]));
+    System.println(Path.file_name("/tmp/x.txt").unwrap_or(""));
+    System.println(Path.extension("/tmp/x.txt").unwrap_or(""));
+}

@@ -1,0 +1,40 @@
+module system.collections;
+
+// FIFO queue backed by `List<T>`.
+public class Queue<T> : Collection<T> {
+    items: List<T>;
+
+    constructor() {
+        this.items = List<T>();
+    }
+
+    public fun size(): int {
+        return this.items.size();
+    }
+
+    public fun enqueue(value: T): void {
+        this.items.push(value);
+    }
+
+    public fun dequeue(): Option<T> {
+        if (this.items.size() == 0) {
+            return Option.None;
+        }
+        let v = this.items.get(0);
+        this.items.remove_at(0);
+        return v;
+    }
+
+    public fun peek(): Option<T> {
+        return this.items.get(0);
+    }
+
+    public fun clear(): void {
+        this.items.clear();
+    }
+
+    @iterator
+    public fun iterator(): ListIterator<T> {
+        return this.items.iterator();
+    }
+}

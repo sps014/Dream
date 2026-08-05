@@ -1,7 +1,7 @@
 module system.collections;
 
 // A generic open-addressing hash map.
-public class Map<K, V> {
+public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     keys: K[];
     values: V[];
     states: int[];
@@ -36,13 +36,13 @@ public class Map<K, V> {
     }
 
     // Initial probe index for a key.
-    public fun home(key: K): int {
+    fun home(key: K): int {
         let h = key.hash_code();
         return h & (this.cap - 1);
     }
 
     // Index of an occupied slot holding a key, or -1.
-    public fun find(key: K): int {
+    fun find(key: K): int {
         let idx = this.home(key);
         let result = -1;
         let searching = true;
@@ -69,7 +69,7 @@ public class Map<K, V> {
     }
 
     // Grows and rehashes the map when it gets too full.
-    public fun rehash(): void {
+    fun rehash(): void {
         let old_keys = this.keys;
         let old_values = this.values;
         let old_states = this.states;

@@ -16,6 +16,7 @@ mod file;
 mod http;
 mod math;
 mod memory;
+mod process;
 mod shared_memory;
 mod worker;
 
@@ -28,6 +29,7 @@ pub use memory::{
     read_string_from_memory, shared_bytes, shared_bytes_mut, write_bytes_to_memory,
     write_string_to_memory,
 };
+pub use process::link_process_functions;
 pub use shared_memory::{shared_memory_for, threaded_wasm_config};
 pub use worker::{
     link_worker_functions, set_worker_debug, set_worker_module, set_worker_runtime, WorkerDebug,
@@ -52,6 +54,7 @@ mod contract_tests {
         include_str!("datetime.rs"),
         include_str!("file.rs"),
         include_str!("http.rs"),
+        include_str!("process.rs"),
         include_str!("worker.rs"),
     ];
 

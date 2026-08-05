@@ -15,7 +15,7 @@ module system.text;
 // same recover-and-continue spirit as the compiler's own parser, applied to a runtime string
 // instead of source code.
 
-public class RegexParser {
+internal class RegexParser {
     pattern: string;
     pos: int;
     n: int;

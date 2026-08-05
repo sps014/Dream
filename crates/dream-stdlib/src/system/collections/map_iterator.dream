@@ -1,7 +1,7 @@
 module system.collections;
 
 // Cursor produced by `Map.iterator()`.
-public class MapIterator<K, V> {
+public class MapIterator<K, V> : Iterator<KeyValuePair<K, V>> {
     keys: K[];
     values: V[];
     idx: int;

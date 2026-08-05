@@ -1,0 +1,16 @@
+import system;
+fun double_int(n: int): int {
+    return n * 2;
+}
+
+fun main(): void {
+    let some = Option.Some(21);
+    let mapped = some.map(double_int);
+    System.println(mapped.unwrap_or(0));
+
+    let none: Option<int> = Option.None;
+    System.println(none.map(double_int).is_none());
+
+    let chained = Option.Some(10).map(double_int);
+    System.println(chained.unwrap_or(0));
+}

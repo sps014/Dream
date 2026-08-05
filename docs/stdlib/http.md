@@ -14,6 +14,8 @@
 
 The API is identical across all three; only the transport differs. Unlike the dynamic [`js`](../language/references.md) type, there is nothing to release — the body bytes are in hand once the future resolves.
 
+Typed headers use `HttpHeaders` (set/get/contains). `Url.parse` returns `Result<Url, ParseError>`.
+
 ## Creating a client
 
 Construct with a base URL (`""` for none) and, optionally, default headers applied to every request. `set_header` returns the client, so calls chain:
@@ -39,9 +41,15 @@ import system.json;
 
 async fun main(): void {
     let api = HttpClient("https://api.example.com");
-    let body = await api.text("/users/42");
-    let user = JSON.parse(body);
-    System.println(user.get("name").unwrap_or(JsonValue.none()).as_string());
+    switch (await api.text("/users/42")) {
+        Ok(body) => {
+            switch (JSON.parse(body)) {
+                Ok(user) => System.println(user.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("")),
+                Err(e) => System.println(e.message()),
+            }
+        },
+        Err(e) => System.println(e.code()),
+    }
 }
 ```
 
@@ -52,11 +60,18 @@ async fun main(): void {
 ```dream
 async fun main(): void {
     let api = HttpClient("https://api.example.com");
-    let res = await api.get("/data");
-    if (res.ok()) {                          // 2xx
-        System.println(res.status());        // 200
-        System.println(res.header("content-type"));
-        let data = res.json();               // JsonValue
+    switch (await api.get("/data")) {
+        Ok(res) => {
+            if (res.ok()) {                          // 2xx
+                System.println(res.status());        // 200
+                System.println(res.header("content-type").unwrap_or(""));
+                switch (res.json()) {
+                    Ok(data) => System.println(data.size()),
+                    Err(e) => System.println(e.message()),
+                }
+            }
+        },
+        Err(e) => System.println(e.message()),
     }
 }
 ```

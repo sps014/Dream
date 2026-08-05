@@ -1,7 +1,8 @@
 use super::host::{
     enable_ansi_support, link_console_functions, link_datetime_functions, link_file_functions,
-    link_http_functions, link_math_functions, link_worker_functions, read_string_from_memory,
-    set_worker_module, set_worker_runtime, shared_memory_for, threaded_wasm_config,
+    link_http_functions, link_math_functions, link_process_functions, link_worker_functions,
+    read_string_from_memory, set_worker_module, set_worker_runtime, shared_memory_for,
+    threaded_wasm_config,
 };
 use std::fs;
 use wasmtime::*;
@@ -136,6 +137,7 @@ pub fn link_runtime_host_functions(linker: &mut Linker<()>) -> Result<()> {
     link_http_functions(linker)?;
     link_console_functions(linker)?;
     link_datetime_functions(linker)?;
+    link_process_functions(linker)?;
     link_worker_functions(linker)?;
     linker.func_wrap("env", "strlen", |_: i32| -> i32 { 0 })?;
     linker.func_wrap("env", "debug_get_free_list_head", || -> i32 { 0 })?;

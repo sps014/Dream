@@ -1,0 +1,38 @@
+module system.io;
+
+// Filesystem / path failure implementing `Error`.
+public class IoError : Error {
+    public path: string;
+    _code: string;
+    _message: string;
+
+    constructor(path: string, code: string, message: string) {
+        this.path = path;
+        this._code = code;
+        this._message = message;
+    }
+
+    public fun message(): string {
+        return this._message;
+    }
+
+    public fun code(): string {
+        return this._code;
+    }
+
+    public static fun not_found(path: string): IoError {
+        return IoError(path, "ENOENT", "file not found: " + path);
+    }
+
+    public static fun permission_denied(path: string): IoError {
+        return IoError(path, "EACCES", "permission denied: " + path);
+    }
+
+    public static fun other(path: string, message: string): IoError {
+        return IoError(path, "EIO", message);
+    }
+
+    public static fun exists(path: string): IoError {
+        return IoError(path, "EEXIST", "already exists: " + path);
+    }
+}

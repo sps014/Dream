@@ -1,0 +1,15 @@
+import system;
+fun main(): void {
+    switch (int.parse("42")) {
+        Ok(n) => System.println(n),
+        Err(e) => System.println(e.message()),
+    }
+    switch (int.parse("nope")) {
+        Ok(n) => System.println(n),
+        Err(e) => System.println(e.code() + ":" + e.message()),
+    }
+    switch (float.parse("1.5")) {
+        Ok(n) => System.println(n),
+        Err(e) => System.println(e.message()),
+    }
+}

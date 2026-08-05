@@ -139,13 +139,17 @@ user.set("tags", tags);
 ```dream
 let text = JSON.stringify(user);     // {"name":"Ada","age":36,"tags":["dev"]}
 
-let v = JSON.parse(text);
-let none = JsonValue.none();
-System.println(v.get("name").unwrap_or(none).as_string());  // Ada
-System.println(v.get("age").unwrap_or(none).as_int());      // 36
+switch (JSON.parse(text)) {
+    Ok(v) => {
+        let none = JsonValue.none();
+        System.println(v.get("name").unwrap_or(none).as_string().unwrap_or(""));  // Ada
+        System.println(v.get("age").unwrap_or(none).as_int().unwrap_or(0));        // 36
+    },
+    Err(e) => System.println(e.message()),
+}
 ```
 
-`JSON.parse` is a recursive-descent parser. A JSON `null` reads back as a `JsonValue` whose `is_null()` is `true`; a missing object key yields `None` from `get`, so a miss is distinguishable from a present `null`.
+`JSON.parse` returns `Result<JsonValue, ParseError>`. It is a recursive-descent parser. A JSON `null` reads back as a `JsonValue` whose `is_null()` is `true`; a missing object key yields `None` from `get`, so a miss is distinguishable from a present `null`.
 
 `JSON.stringify_pretty(value, indent)` formats with newlines and `indent` spaces per level; an `indent` of `0` matches compact `JSON.stringify`:
 

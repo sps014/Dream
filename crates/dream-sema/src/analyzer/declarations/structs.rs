@@ -240,6 +240,11 @@ impl<'a> Analyzer<'a> {
                 check_fn(self, m, diagnostics);
             }
         }
+        for en in node.enums.iter() {
+            for m in &en.methods {
+                check_fn(self, m, diagnostics);
+            }
+        }
     }
 
     /// Rejects any `ref struct` type appearing in `args` as a generic type argument: instantiating

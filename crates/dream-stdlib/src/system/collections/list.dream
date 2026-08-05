@@ -9,7 +9,7 @@ fun compare_ascending<T : Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }
 
-public class List<T> : Collection<T> {
+public class List<T> : IndexedCollection<T>, Collection<T> {
     items: T[];
     count: int;
 
@@ -26,6 +26,11 @@ public class List<T> : Collection<T> {
     // Number of elements currently stored.
     public fun size(): int {
         return this.count;
+    }
+
+    // True when the list has no elements.
+    public fun is_empty(): bool {
+        return this.count == 0;
     }
 
     // Current capacity of the backing buffer.
@@ -135,6 +140,25 @@ public class List<T> : Collection<T> {
         this.count = 0;
     }
 
+    // Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out
+    // of range (index may equal `size()` to append).
+    public fun insert(index: int, value: T): bool {
+        if ((index < 0) || (index > this.count)) {
+            return false;
+        }
+        if (this.count == this.items.size()) {
+            this.grow();
+        }
+        let i = this.count;
+        while (i > index) {
+            this.items[i] = this.items[i - 1];
+            i = i - 1;
+        }
+        this.items[index] = value;
+        this.count = this.count + 1;
+        return true;
+    }
+
     // Removes the element at `index`, shifting later elements left. Returns true on success, or
     // false if `index` is out of range (the list is left unchanged in that case).
     public fun remove_at(index: int): bool {
@@ -148,6 +172,14 @@ public class List<T> : Collection<T> {
         }
         this.count = this.count - 1;
         return true;
+    }
+
+    // Removes the first occurrence of `value` (by equality). Returns true when something was removed.
+    public fun remove(value: T): bool {
+        return switch (this.index_of(value)) {
+            Some(i) => this.remove_at(i),
+            None => false,
+        };
     }
 
     // Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.
@@ -208,25 +240,18 @@ public class List<T> : Collection<T> {
             width = width + width;
         }
     }
-}
 
-// `sort()` is available only when the element type is `Comparable`: this constrained extension
-// attaches to `List<C>` exactly when `C : Comparable<C>`, so `List<int>.sort()` is a compile error
-// unless `int` is made `Comparable`, while `List<Money>.sort()` (with `Money : Comparable<Money>`)
-// works and dispatches `compare` statically (no boxing).
-extend List<T : Comparable<T>> {
-    // Sorts the list in place into ascending order using each element's `compare` method. This just
-    // hands the natural-order comparator to `sort_by`, so there is a single merge-sort
-    // implementation. This is why primitives ship a `Comparable` impl: `List<int>().sort()`,
-    // `List<string>().sort()`, etc. work out of the box.
-    public fun sort(): void {
+    // Sorts the list in place into ascending order using each element's `compare` method.
+    // Only attached when `T : Comparable<T>` (via `where`).
+    public fun sort(): void where T : Comparable<T> {
         let cmp: fun(T, T): int = compare_ascending;
         this.sort_by(cmp);
     }
 
     // Binary search over a list that is already sorted ascending (by `compare`). Returns the index
     // of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n).
-    public fun binary_search(value: T): Option<int> {
+    // Only attached when `T : Comparable<T>` (via `where`).
+    public fun binary_search(value: T): Option<int> where T : Comparable<T> {
         let lo = 0;
         let hi = this.count - 1;
         while (lo <= hi) {

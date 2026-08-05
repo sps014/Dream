@@ -9,7 +9,7 @@ use super::*;
 /// variant payload field type is unsupported. Values are tagged internally with a `"type"` key
 /// naming the active variant; unit variants serialize to `{ "type": "<Variant>" }`.
 pub(super) fn generate_json_union(
-    enum_decl: &dream_syntax::nodes::EnumDeclarationNode,
+    enum_decl: &dream_syntax::nodes::EnumDeclarationNode<'_>,
     json_names: &HashSet<String>,
     jsonable: &HashSet<String>,
     diagnostics: &mut DiagnosticBag,
@@ -56,7 +56,7 @@ pub(super) fn generate_json_union(
             }
             if is_type_param(ftype) {
                 to_body.push_str(&format!(
-                    "                __o.set(\"{}\", JSON.parse(JSON.serialize({})));\n",
+                    "                __o.set(\"{}\", JSON.parse(JSON.serialize({})).unwrap_or(JsonValue.none()));\n",
                     fname, fname
                 ));
             } else if let Some(elem) = ftype.strip_suffix("[]") {
@@ -258,7 +258,7 @@ pub(super) fn generate_json_union(
     };
 
     let from_body = format!(
-        "        let __t = v.get(\"{tag}\").unwrap_or(JsonValue.none()).as_string();\n{arms}{prelude}        return {fallback};\n",
+        "        let __t = v.get(\"{tag}\").unwrap_or(JsonValue.none()).as_string().unwrap_or(\"\");\n{arms}{prelude}        return {fallback};\n",
         tag = TYPE_TAG_KEY,
         arms = from_arms,
         prelude = fallback_prelude,

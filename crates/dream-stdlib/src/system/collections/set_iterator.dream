@@ -1,7 +1,7 @@
 module system.collections;
 
 // An iterator for traversing a `Set`.
-public class SetIterator<T> {
+public class SetIterator<T> : Iterator<T> {
     elements: T[];
     index: int;
 

@@ -351,6 +351,7 @@ impl<'a> Analyzer<'a> {
             name: synthetic_token(TokenKind::IdentifierToken, &name),
             generic_parameters: None,
             generic_constraints: Vec::new(),
+            where_constraints: Vec::new(),
             return_type: Some(box_ret.clone()),
             parameters,
             body,

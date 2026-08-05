@@ -1,0 +1,14 @@
+import system;
+import system.encoding;
+fun main(): void {
+    let bytes = Encoding.utf8_encode("hi");
+    System.println(Encoding.hex_encode(bytes));
+    switch (Encoding.hex_decode("6869")) {
+        Ok(b) => System.println(Encoding.utf8_decode(b)),
+        Err(e) => System.println(e.message()),
+    }
+    switch (Encoding.hex_decode("xyz")) {
+        Ok(b) => System.println("unexpected"),
+        Err(e) => System.println(e.code()),
+    }
+}

@@ -1,7 +1,7 @@
 module system.text;
 
 // The kind of a parsed regex node.
-public enum RegexNodeKind {
+internal enum RegexNodeKind {
     Alt,      // left | right
     Cat,      // left then right
     Lit,      // a single literal character (`ch`)

@@ -18,33 +18,49 @@ System.println("hello");  // "hello\n"
 System.println(true);     // "true\n"
 ```
 
-`System.printColored(text, color)` prints one string in a color and resets after (no newline). `System.setForeground`/`setBackground(color)` change the color of all subsequent output until `System.resetColor()`. `System.clear()` clears the terminal.
+`System.print_colored(text, color)` prints one string in a color and resets after (no newline). `System.set_foreground`/`setBackground(color)` change the color of all subsequent output until `System.reset_color()`. `System.clear()` clears the terminal.
 
 `ConsoleColor` is an enum of the 16 standard console colors (C# ordering): `Black`, `DarkBlue`, `DarkGreen`, `DarkCyan`, `DarkRed`, `DarkMagenta`, `DarkYellow`, `Gray`, `DarkGray`, `Blue`, `Green`, `Cyan`, `Red`, `Magenta`, `Yellow`, `White`.
 
 ```dream
-System.printColored("warning", ConsoleColor.Yellow);
+System.print_colored("warning", ConsoleColor.Yellow);
 ```
 
 These use ANSI escapes, supported by every macOS/Linux terminal and Windows 10+ console (native builds enable Windows virtual-terminal processing at startup).
 
 ## Console input
 
-- `System.readLine()` — blocks until a full line is available on stdin, returns it without the trailing newline.
-- `System.readKey()` — blocks for a single keypress and returns its character code, without waiting for Enter or echoing. Keys with no character (e.g. arrows) yield `(char)0`. In the browser and for non-interactive stdin (piped input), it falls back to reading a single byte.
-- `System.readInt()` / `System.readDouble()` — read a line and parse it, returning a `Result` so a malformed line is `Err` rather than a crash.
+- `System.read_line()` — blocks until a full line is available on stdin, returns it without the trailing newline.
+- `System.read_key()` — blocks for a single keypress and returns its character code, without waiting for Enter or echoing. Keys with no character (e.g. arrows) yield `(char)0`. In the browser and for non-interactive stdin (piped input), it falls back to reading a single byte.
+- `System.read_int()` / `System.read_double()` — read a line and parse it, returning a `Result` so a malformed line is `Err` rather than a crash.
 
 ```dream
 System.print("age? ");
-switch (System.readInt()) {
+switch (System.read_int()) {
     Ok(v)  => System.println("age: " + v.to_string()),
-    Err(e) => System.println("invalid input: " + e),
+    Err(e) => System.println("invalid input: " + e.message()),
 }
 ```
 
 `System.exit(code)` terminates the process immediately and never returns.
 
 `System.panic(message)` halts the program with a fatal, non-recoverable error after printing `message` — see [Panics](../language/panics.md).
+
+## Platform, env, and process
+
+`System.platform()` returns a `Platform` enum (`Native`, `Node`, `Browser`, `Unknown`). `System.os_family()` returns `OsFamily` (`Unix`, `Windows`, `Unknown`). Convenience: `System.is_browser()`.
+
+```dream
+System.println(System.platform() == Platform.Native);
+switch (System.cwd()) {
+    Ok(path) => System.println(path),
+    Err(e) => System.println(e.code()),
+}
+System.set_env("DEMO", "1");
+System.println(System.env_or("DEMO", "missing"));
+```
+
+`System.env(name)` / `System.exe_path()` return `Option<string>`. `System.args()` returns `string[]`. `System.set_env` returns `Result<bool, ArgError>`; `System.set_cwd` returns `Result<bool, IoError>`.
 
 ## `to_string` and `hash_code`
 

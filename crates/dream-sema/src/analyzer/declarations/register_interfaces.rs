@@ -246,11 +246,18 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when `iface_method` and `class_method` have matching signatures (same parameter types
-    /// in order, the same return type, and the same async-ness). Both are compared using their
-    /// surface type spellings. An `async` interface method must be implemented by an `async` method
-    /// (and vice versa) because the two dispatch to different code shapes (a `Future`-producing
-    /// constructor vs. a plain call).
-    fn interface_method_matches(iface_method: &FunctionNode, class_method: &FunctionNode) -> bool {
+    /// in order, matching return types, and the same async-ness). Return types may be an exact
+    /// match or a class return that is assignable to the interface return (e.g. a concrete
+    /// `ListIterator<T>` for an `Iterator<T>` interface requirement). An `async` interface method
+    /// must be implemented by an `async` method (and vice versa) because the two dispatch to
+    /// different code shapes (a `Future`-producing constructor vs. a plain call).
+    fn interface_method_matches(
+        &mut self,
+        iface_method: &FunctionNode,
+        class_method: &FunctionNode,
+        bindings: &GenericBindings,
+        _diagnostics: &mut DiagnosticBag,
+    ) -> bool {
         if iface_method.is_async != class_method.is_async {
             return false;
         }
@@ -262,17 +269,28 @@ impl<'a> Analyzer<'a> {
             .iter()
             .zip(class_method.parameters.iter())
         {
-            if a.type_.get_type() != b.type_.get_type() {
+            let a_ty = substitute_generic_type(&a.type_, bindings);
+            let b_ty = substitute_generic_type(&b.type_, bindings);
+            if a_ty.get_type() != b_ty.get_type() {
                 return false;
             }
         }
-        let ret = |m: &FunctionNode| {
-            m.return_type
-                .as_ref()
-                .map(|t| t.get_type())
-                .unwrap_or_else(|| "void".to_string())
-        };
-        ret(iface_method) == ret(class_method)
+        let iface_ret = iface_method
+            .return_type
+            .as_ref()
+            .map(|t| substitute_generic_type(t, bindings))
+            .unwrap_or(Type::Void);
+        let class_ret = class_method
+            .return_type
+            .as_ref()
+            .map(|t| substitute_generic_type(t, bindings))
+            .unwrap_or(Type::Void);
+        // Exact match, or the class return type is assignable to the interface return
+        // (e.g. `ListIterator<T>` implementing `Iterator<T>`).
+        if iface_ret.get_type() == class_ret.get_type() {
+            return true;
+        }
+        self.type_str_assignable(&iface_ret.get_type(), &class_ret.get_type())
     }
 
     /// Validates a class's `implements` clause: every listed type must name an interface, and the
@@ -330,11 +348,11 @@ impl<'a> Analyzer<'a> {
                 {
                     Some(cm) => {
                         let matches = if bindings.is_empty() {
-                            Self::interface_method_matches(im, cm)
+                            self.interface_method_matches(im, cm, bindings, diagnostics)
                         } else {
                             let mut sub = cm.clone();
                             Self::substitute_generic_signature(&mut sub, bindings);
-                            Self::interface_method_matches(im, &sub)
+                            self.interface_method_matches(im, &sub, bindings, diagnostics)
                         };
                         if !matches {
                             diagnostics.report_error(

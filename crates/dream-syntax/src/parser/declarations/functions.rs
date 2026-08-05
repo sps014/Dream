@@ -175,6 +175,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             return_type = Some(self.parse_type()?);
         }
 
+        let where_constraints = self.parse_where_constraints();
+
         if is_extern {
             // Extern functions are lowered to WASM imports: no body, terminated by `;`.
             // An `@intrinsic` marker lets an extern function be generic. Checked inline so the
@@ -203,6 +205,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_static = is_static;
             node.is_async = is_async;
             node.generic_constraints = generic_constraints;
+            node.where_constraints = where_constraints;
             return Ok(node);
         }
 
@@ -219,6 +222,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.is_static = is_static;
         node.is_async = is_async;
         node.generic_constraints = generic_constraints;
+        node.where_constraints = where_constraints;
         Ok(node)
     }
 

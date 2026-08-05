@@ -1,9 +1,9 @@
 module system.net;
 
-// A cross-runtime HTTP client returning HttpResponse.
+// A cross-runtime HTTP client returning `Result<HttpResponse, HttpError>`.
 public class HttpClient {
     base_url: string;
-    default_headers: string;
+    default_headers: HttpHeaders;
 
     @js("Dream", "httpRequest")
     static extern async fun http_request(url: string, method: string, headers: string, body: string): char[];
@@ -14,17 +14,12 @@ public class HttpClient {
     // Creates an HTTP client with a base URL.
     constructor(base_url: string) {
         this.base_url = base_url;
-        this.default_headers = "";
+        this.default_headers = HttpHeaders();
     }
 
     // Adds a default header sent with every request.
     public fun set_header(name: string, value: string): HttpClient {
-        let obj = JsonValue.dict();
-        if (this.default_headers.is_empty() == false) {
-            obj = JSON.parse(this.default_headers);
-        }
-        obj.set(name, JsonValue.from_string(value));
-        this.default_headers = JSON.stringify(obj);
+        this.default_headers.set(name, value);
         return this;
     }
 
@@ -38,80 +33,82 @@ public class HttpClient {
         return this.base_url + path;
     }
 
-    fun merge_headers(call: string): string {
-        if (this.default_headers.is_empty() == true) {
-            return call;
+    fun merge_headers(call: HttpHeaders): string {
+        let merged = HttpHeaders();
+        for (let pair in this.default_headers) {
+            merged.set(pair.key, pair.value);
         }
-        if (call.is_empty() == true) {
-            return this.default_headers;
+        for (let pair in call) {
+            merged.set(pair.key, pair.value);
         }
-        let base = JSON.parse(this.default_headers);
-        let extra = JSON.parse(call);
-        let keys = extra.keys();
-        let i = 0;
-        while (i < keys.size()) {
-            let key = keys.get(i).unwrap_or("");
-            base.set(key, extra.get(key).unwrap_or(JsonValue.none()));
-            i = i + 1;
+        return merged.to_wire();
+    }
+
+    fun wrap(raw: char[]): Result<HttpResponse, HttpError> {
+        let res = HttpResponse(raw);
+        if (res.status() == 0) {
+            return Result.Err(HttpError.transport(res.text()));
         }
-        return JSON.stringify(base);
+        return Result.Ok(res);
     }
 
     // Performs a request with a text body.
-    public async fun request(method: string, path: string, body: string, headers: string): HttpResponse {
+    public async fun request(method: string, path: string, body: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
         let raw = await HttpClient.http_request(this.resolve(path), method, this.merge_headers(headers), body);
-        return HttpResponse(raw);
+        return this.wrap(raw);
     }
 
     // Performs a GET request.
-    public async fun get(path: string): HttpResponse {
-        return await this.request("GET", path, "", "");
+    public async fun get(path: string): Result<HttpResponse, HttpError> {
+        return await this.request("GET", path, "", HttpHeaders());
     }
 
     // Performs a POST request.
-    public async fun post(path: string, body: string): HttpResponse {
-        return await this.request("POST", path, body, "");
+    public async fun post(path: string, body: string): Result<HttpResponse, HttpError> {
+        return await this.request("POST", path, body, HttpHeaders());
     }
 
     // Performs a PUT request.
-    public async fun put(path: string, body: string): HttpResponse {
-        return await this.request("PUT", path, body, "");
+    public async fun put(path: string, body: string): Result<HttpResponse, HttpError> {
+        return await this.request("PUT", path, body, HttpHeaders());
     }
 
     // Performs a PATCH request.
-    public async fun patch(path: string, body: string): HttpResponse {
-        return await this.request("PATCH", path, body, "");
+    public async fun patch(path: string, body: string): Result<HttpResponse, HttpError> {
+        return await this.request("PATCH", path, body, HttpHeaders());
     }
 
     // Performs a DELETE request.
-    public async fun delete(path: string): HttpResponse {
-        return await this.request("DELETE", path, "", "");
+    public async fun delete(path: string): Result<HttpResponse, HttpError> {
+        return await this.request("DELETE", path, "", HttpHeaders());
     }
 
     // Performs a HEAD request.
-    public async fun head(path: string): HttpResponse {
-        return await this.request("HEAD", path, "", "");
+    public async fun head(path: string): Result<HttpResponse, HttpError> {
+        return await this.request("HEAD", path, "", HttpHeaders());
     }
 
     // Performs a GET request and resolves with its body as text.
-    public async fun text(path: string): string {
-        let res = await this.get(path);
-        return res.text();
+    public async fun text(path: string): Result<string, HttpError> {
+        return switch (await this.get(path)) {
+            Ok(res) => Result.Ok(res.text()),
+            Err(e) => Result.Err(e),
+        };
     }
 
     // Performs a request with a binary body.
-    public async fun request_bytes(method: string, path: string, body: byte[], headers: string): HttpResponse {
+    public async fun request_bytes(method: string, path: string, body: byte[], headers: HttpHeaders): Result<HttpResponse, HttpError> {
         let raw = await HttpClient.http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body);
-        return HttpResponse(raw);
+        return this.wrap(raw);
     }
 
     // Performs a POST request with a binary body.
-    public async fun post_bytes(path: string, body: byte[]): HttpResponse {
-        return await this.request_bytes("POST", path, body, "");
+    public async fun post_bytes(path: string, body: byte[]): Result<HttpResponse, HttpError> {
+        return await this.request_bytes("POST", path, body, HttpHeaders());
     }
 
     // Performs a PUT request with a binary body.
-    public async fun put_bytes(path: string, body: byte[]): HttpResponse {
-        return await this.request_bytes("PUT", path, body, "");
+    public async fun put_bytes(path: string, body: byte[]): Result<HttpResponse, HttpError> {
+        return await this.request_bytes("PUT", path, body, HttpHeaders());
     }
 }

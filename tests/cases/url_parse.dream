@@ -1,0 +1,19 @@
+import system;
+import system.net;
+fun main(): void {
+    switch (Url.parse("https://example.com:8443/a/b?x=1#frag")) {
+        Ok(u) => {
+            System.println(u.scheme);
+            System.println(u.host);
+            System.println(u.port.unwrap_or(-1));
+            System.println(u.path);
+            System.println(u.query);
+            System.println(u.fragment);
+        },
+        Err(e) => System.println(e.message()),
+    }
+    switch (Url.parse("")) {
+        Ok(u) => System.println("unexpected"),
+        Err(e) => System.println(e.code()),
+    }
+}

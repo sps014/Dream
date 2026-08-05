@@ -148,5 +148,23 @@ pub fn link_file_functions(linker: &mut Linker<()>) -> Result<()> {
         },
     )?;
 
+    linker.func_wrap(
+        "Dream",
+        "dirCreate",
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            Ok(fs::create_dir(&path).is_ok() as i32)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "dirCreateAll",
+        |mut caller: Caller<'_, ()>, path_ptr: i32| -> Result<i32> {
+            let path = read_arg_string(&mut caller, path_ptr)?;
+            Ok(fs::create_dir_all(&path).is_ok() as i32)
+        },
+    )?;
+
     Ok(())
 }

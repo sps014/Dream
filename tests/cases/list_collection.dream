@@ -1,13 +1,13 @@
 // `List<T>` as a class-based collection, its `Comparable`-constrained `sort`/`binary_search`, the
-// `for (let x in xs)` enumerator, and polymorphism through the `Collection<T>` interface,
+// `for (let x in xs)` enumerator, and polymorphism through the `IndexedCollection<T>` interface,
 // including the interface's default methods.
 
-// Sums any collection through the interface: exercises dynamic dispatch of `size()` and the
+// Sums any indexed collection through the interface: exercises dynamic dispatch of `size()` and the
 // value-returning `get()` (an sret `Option<int>`) through the itable trampoline.
 import system;
 import system.collections;
 import system.text;
-fun sum(xs: Collection<int>): int {
+fun sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
     while (i < xs.size()) {
@@ -34,7 +34,7 @@ fun main(): void {
     System.println(a.contains(10));
     System.println(a.index_of(30).unwrap_or(-1));
 
-    // Collection<T> default methods dispatched on the concrete class.
+    // IndexedCollection<T> default methods dispatched on the concrete class.
     System.println(a.is_empty());
     System.println(a.first().unwrap_or(-1));
     System.println(a.last().unwrap_or(-1));
@@ -43,7 +43,7 @@ fun main(): void {
     System.println(popped.unwrap_or(-1));
     System.println(a.size());
 
-    // Polymorphism: two independent `List<int>` instances both flow through `Collection<int>`.
+    // Polymorphism: two independent `List<int>` instances both flow through `IndexedCollection<int>`.
     let b = List<int>();
     b.push(1);
     b.push(2);

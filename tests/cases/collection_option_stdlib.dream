@@ -1,0 +1,28 @@
+import system;
+import system.collections;
+
+fun total_size(xs: Collection<string>): int {
+    return xs.size();
+}
+
+fun double_it(x: int): int {
+    return x * 2;
+}
+
+fun main(): void {
+    let list: List<string> = ["ab", "c"];
+    System.println(total_size(list));
+
+    let set = Set<string>();
+    set.add("hi");
+    set.add("there");
+    System.println(total_size(set));
+
+    let opt = Option.Some(21);
+    let mapped = opt.map(double_it);
+    System.println(mapped.unwrap_or(0));
+
+    for (let s in list) {
+        System.println(s.size());
+    }
+}

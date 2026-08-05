@@ -33,7 +33,9 @@ Indexing is read-only (no `s[i] = c`). Build derived strings with `substring`, `
 
 - `contains(sub)` — `true` if `sub` occurs anywhere (the empty string always does).
 - `starts_with(prefix)` / `ends_with(suffix)` — prefix/suffix tests.
-- `index_of(target)` — index of the first occurrence of a character as an `Option<int>`; `None` if absent.
+- `index_of(target)` — index of the first occurrence of a character as an `Option<int>`; `None` if absent. Overloaded for substring search: `index_of(sub: string)`.
+- `split(sep)` — split on a `char` or `string` separator into `string[]`.
+- `replace(old, replacement)` — replace every occurrence of substring `old`.
 
 ```dream
 System.println("hello world".contains("world"));         // true

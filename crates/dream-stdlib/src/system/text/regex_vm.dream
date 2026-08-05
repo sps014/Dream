@@ -13,7 +13,7 @@ module system.text;
 // array on a `Capture` write and otherwise passing the same array reference along — no manual
 // refcounting needed.
 
-public class RegexVM {
+internal class RegexVM {
     prog: RegexInst[];
     ngroup: int;
     multiline: bool;

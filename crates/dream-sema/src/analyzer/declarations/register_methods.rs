@@ -39,6 +39,14 @@ impl<'a> Analyzer<'a> {
         // second pass, once the whole overload set for this target is known.
         let mut registered: Vec<(String, Vec<Type>)> = Vec::new();
         for method in methods {
+            // Conditional methods (`fun sort(): void where T : Comparable<T>`) only attach when
+            // every where-bound is satisfied by this instantiation — same rule as constrained
+            // `extend` blocks.
+            if !method.where_constraints.is_empty()
+                && !self.extension_constraints_satisfied(&method.where_constraints, bindings)
+            {
+                continue;
+            }
             // Validate object-protocol overrides once (on the non-monomorphized declaration).
             if bindings.is_empty() {
                 self.validate_protocol_override(method, diagnostics);
@@ -90,10 +98,17 @@ impl<'a> Analyzer<'a> {
             // `in_methods_of`'s static-method check matches on the `{base}_` name prefix to grant
             // the method access to its own class's private members — the unrenamed original's bare
             // method name (e.g. `idx`, not `Helper_idx`) would never match that prefix.
+            //
+            // Method-level generics (`map<U>`, `dispatch<TIn,TOut>`) mirror free generic functions:
+            // stash the template only. Analyzing the unbound body would treat type params as
+            // concrete names (e.g. `Option_U`) and emit the wrong calling convention for the
+            // caller's monomorphized return type. Concrete instances are analyzed via
+            // `instantiated_generics` after `register_generic_function_instance`.
             if method.generic_parameters.is_some() {
-                let renamed_template: &'a FunctionNode<'a> = self.arena.alloc(new_method.clone());
+                let renamed_template: &'a FunctionNode<'a> = self.arena.alloc(new_method);
                 self.generic_functions
                     .insert(mangled_name.clone(), renamed_template);
+                continue;
             }
 
             let param_types: Vec<Type> = new_method
@@ -111,9 +126,7 @@ impl<'a> Analyzer<'a> {
             {
                 diagnostics.report_error(e.to_string(), Some(method.name.position));
             }
-            if method.generic_parameters.is_none() {
-                registered.push((mangled_name, param_types));
-            }
+            registered.push((mangled_name, param_types));
         }
         // Register a distinct `DefId` for each overloaded method under its emitted (signature-mangled)
         // name, so overloads don't collide on the single base-mangled def (mirrors free functions).

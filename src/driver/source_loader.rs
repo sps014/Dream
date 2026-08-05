@@ -30,7 +30,7 @@ pub struct ProgramAccumulator<'a> {
     pub all_functions: Vec<FunctionNode<'a>>,
     pub all_structs: Vec<StructDeclarationNode<'a>>,
     pub all_interfaces: Vec<InterfaceDeclarationNode<'a>>,
-    pub all_enums: Vec<EnumDeclarationNode>,
+    pub all_enums: Vec<EnumDeclarationNode<'a>>,
     pub all_extends: Vec<ExtendNode<'a>>,
     pub all_globals: Vec<GlobalVariableNode<'a>>,
     pub file_contents: HashMap<String, String>,
@@ -121,7 +121,7 @@ pub fn collect_declarations<'a>(
     all_functions: &mut Vec<FunctionNode<'a>>,
     all_structs: &mut Vec<StructDeclarationNode<'a>>,
     all_interfaces: &mut Vec<InterfaceDeclarationNode<'a>>,
-    all_enums: &mut Vec<EnumDeclarationNode>,
+    all_enums: &mut Vec<EnumDeclarationNode<'a>>,
     all_extends: &mut Vec<ExtendNode<'a>>,
     all_globals: &mut Vec<GlobalVariableNode<'a>>,
 ) {

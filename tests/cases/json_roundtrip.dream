@@ -12,11 +12,11 @@ fun main(): void {
 
     System.println(JSON.stringify(user));
 
-    let parsed = JSON.parse(JSON.stringify(user));
+    let parsed = JSON.parse(JSON.stringify(user)).unwrap_or(JsonValue.none());
     let none = JsonValue.none();
-    System.println(parsed.get("name").unwrap_or(none).as_string());
-    System.println(parsed.get("age").unwrap_or(none).as_int());
-    System.println(parsed.get("tags").unwrap_or(none).at(1).unwrap_or(none).as_string());
-    System.println(parsed.get("active").unwrap_or(none).as_bool());
+    System.println(parsed.get("name").unwrap_or(none).as_string().unwrap_or(""));
+    System.println(parsed.get("age").unwrap_or(none).as_int().unwrap_or(0));
+    System.println(parsed.get("tags").unwrap_or(none).at(1).unwrap_or(none).as_string().unwrap_or(""));
+    System.println(parsed.get("active").unwrap_or(none).as_bool().unwrap_or(false));
     System.println(parsed.get("tags").unwrap_or(none).size());
 }

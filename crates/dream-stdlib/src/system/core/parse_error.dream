@@ -1,0 +1,24 @@
+module system.core;
+
+// Parse / format failure implementing `Error` (JSON, numbers, URLs, ISO-8601, …).
+public class ParseError : Error {
+    _code: string;
+    _message: string;
+
+    constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    public fun message(): string {
+        return this._message;
+    }
+
+    public fun code(): string {
+        return this._code;
+    }
+
+    public static fun invalid(message: string): ParseError {
+        return ParseError("EPARSE", message);
+    }
+}

@@ -119,5 +119,5 @@ Functions cross the boundary in both directions too — see [Callbacks](callback
 
 Several standard-library features are interop wrappers and serve as worked examples:
 
-- [Regex](../stdlib/regex.md) — a cross-runtime regex class (the `regex` crate natively, `RegExp` on JS hosts).
+- [Regex](../stdlib/regex.md) — a pure-Dream regex engine (ASCII subset; no host/`RegExp` dependency).
 - [HttpClient](../stdlib/http.md) — a cross-runtime HTTP client over `extern async fun`.

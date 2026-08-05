@@ -211,13 +211,13 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
     },
     AttributeSpec {
         name: "iterator",
-        targets: &[AttributeTarget::Method],
+        targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
         args: ArgShape::None,
         repeatable: false,
     },
     AttributeSpec {
         name: "next",
-        targets: &[AttributeTarget::Method],
+        targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
         args: ArgShape::None,
         repeatable: false,
     },
@@ -357,7 +357,7 @@ pub fn validate_program_attributes(
     structs: &[StructDeclarationNode<'_>],
     interfaces: &[InterfaceDeclarationNode<'_>],
     functions: &[FunctionNode<'_>],
-    enums: &[EnumDeclarationNode],
+    enums: &[EnumDeclarationNode<'_>],
     extends: &[ExtendNode<'_>],
     diagnostics: &mut DiagnosticBag,
 ) {
@@ -403,6 +403,7 @@ pub fn validate_program_attributes(
         for v in &e.variants {
             validate_fields(&v.fields, diagnostics);
         }
+        validate_function_list(&e.methods, false, diagnostics);
     }
 
     for ext in extends {

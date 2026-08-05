@@ -305,6 +305,62 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
+    /// Parses an optional `where T : Comparable<T> [, U : Foo]` clause after a method signature.
+    /// `where` is a contextual keyword (ordinary `IdentifierToken`). Returns an empty vec when absent.
+    pub(crate) fn parse_where_constraints(
+        &mut self,
+    ) -> Vec<crate::nodes::GenericConstraint> {
+        if self.current_token().kind != TokenKind::IdentifierToken
+            || self.current_token().text != "where"
+        {
+            return Vec::new();
+        }
+        self.match_token(TokenKind::IdentifierToken);
+        let mut constraints = Vec::new();
+        loop {
+            let iter = self.current_token_index;
+            let param = self.match_token(TokenKind::IdentifierToken);
+            self.match_token(TokenKind::ColonToken);
+            let mut bounds = Vec::new();
+            let mut kinds = Vec::new();
+            loop {
+                match self.current_token().kind {
+                    TokenKind::StructToken => {
+                        self.match_token(TokenKind::StructToken);
+                        kinds.push(crate::nodes::ConstraintKind::Struct);
+                    }
+                    TokenKind::ClassToken => {
+                        self.match_token(TokenKind::ClassToken);
+                        kinds.push(crate::nodes::ConstraintKind::Class);
+                    }
+                    TokenKind::UnmanagedToken => {
+                        self.match_token(TokenKind::UnmanagedToken);
+                        kinds.push(crate::nodes::ConstraintKind::Unmanaged);
+                    }
+                    _ => match self.parse_type() {
+                        Ok(t) => bounds.push(t),
+                        Err(_) => break,
+                    },
+                }
+                if self.current_token().kind != TokenKind::PlusToken {
+                    break;
+                }
+                self.match_token(TokenKind::PlusToken);
+            }
+            constraints.push(crate::nodes::GenericConstraint {
+                param,
+                bounds,
+                kinds,
+            });
+            if self.current_token().kind != TokenKind::CommaToken {
+                break;
+            }
+            self.match_token(TokenKind::CommaToken);
+            self.ensure_progress(iter);
+        }
+        constraints
+    }
+
     /// Recovery guard for token-consuming loops: if no token has been consumed since `mark`,
     /// skip one token so malformed input surfaces an error (already reported by the failing
     /// `match_token`) instead of spinning forever. Never advances past end-of-file.

@@ -1,0 +1,30 @@
+module system.net;
+
+// HTTP transport / status failure implementing `Error`.
+public class HttpError : Error {
+    public status: int;
+    _code: string;
+    _message: string;
+
+    constructor(status: int, code: string, message: string) {
+        this.status = status;
+        this._code = code;
+        this._message = message;
+    }
+
+    public fun message(): string {
+        return this._message;
+    }
+
+    public fun code(): string {
+        return this._code;
+    }
+
+    public static fun transport(message: string): HttpError {
+        return HttpError(0, "HTTP_0", message);
+    }
+
+    public static fun status(status: int, message: string): HttpError {
+        return HttpError(status, "HTTP_" + status.to_string(), message);
+    }
+}

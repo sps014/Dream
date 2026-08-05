@@ -41,55 +41,83 @@ public class File {
     @js("Dream", "dirList")
     static extern fun dir_list(path: string): string;
 
-    // Reads the whole file at `path` as UTF-8 text. Resolves with `Err` when the file does not
-    // exist, otherwise `Ok` with the contents.
-    public static async fun read(path: string): Result<string, string> {
+    @js("Dream", "dirCreate")
+    static extern fun dir_create(path: string): bool;
+
+    @js("Dream", "dirCreateAll")
+    static extern fun dir_create_all(path: string): bool;
+
+    // Reads the whole file at `path` as UTF-8 text.
+    public static async fun read(path: string): Result<string, IoError> {
         if (File.exists(path) == false) {
-            return Result.Err("file not found: " + path);
+            return Result.Err(IoError.not_found(path));
         }
         return Result.Ok(File.file_read(path));
     }
 
     // Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
-    public static async fun write(path: string, content: string): Result<long, string> {
+    public static async fun write(path: string, content: string): Result<long, IoError> {
         let n = File.file_write(path, content);
         if (n < 0L) {
-            return Result.Err("failed to write file: " + path);
+            return Result.Err(IoError.other(path, "failed to write file: " + path));
         }
         return Result.Ok(n);
     }
 
     // Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
-    public static async fun append(path: string, content: string): Result<long, string> {
+    public static async fun append(path: string, content: string): Result<long, IoError> {
         let n = File.file_append(path, content);
         if (n < 0L) {
-            return Result.Err("failed to append to file: " + path);
+            return Result.Err(IoError.other(path, "failed to append to file: " + path));
         }
         return Result.Ok(n);
     }
 
-    // Reads the whole file at `path` as raw bytes (binary-safe; a single bulk copy). Resolves
-    // with `Err` when the file does not exist.
-    public static async fun read_bytes(path: string): Result<byte[], string> {
+    // Reads the whole file at `path` as raw bytes.
+    public static async fun read_bytes(path: string): Result<byte[], IoError> {
         if (File.exists(path) == false) {
-            return Result.Err("file not found: " + path);
+            return Result.Err(IoError.not_found(path));
         }
         return Result.Ok(File.file_read_bytes(path));
     }
 
-    // Writes raw bytes to `path`, replacing any existing contents; resolves with `Ok(byte_count)`
-    // or `Err` on failure.
-    public static async fun write_bytes(path: string, data: byte[]): Result<long, string> {
+    // Writes raw bytes to `path`, replacing any existing contents.
+    public static async fun write_bytes(path: string, data: byte[]): Result<long, IoError> {
         let n = File.file_write_bytes(path, data);
         if (n < 0L) {
-            return Result.Err("failed to write file: " + path);
+            return Result.Err(IoError.other(path, "failed to write file: " + path));
         }
         return Result.Ok(n);
     }
 
-    // Deletes `path`; resolves true on success.
-    public static async fun delete(path: string): bool {
-        return File.file_delete(path);
+    // Deletes `path`; resolves `Ok(true)` on success.
+    public static async fun delete(path: string): Result<bool, IoError> {
+        if (File.file_delete(path) == false) {
+            if (File.exists(path) == false) {
+                return Result.Err(IoError.not_found(path));
+            }
+            return Result.Err(IoError.other(path, "failed to delete: " + path));
+        }
+        return Result.Ok(true);
+    }
+
+    // Creates a single directory at `path`; resolves `Ok(true)` on success.
+    public static async fun create_dir(path: string): Result<bool, IoError> {
+        if (File.dir_create(path) == false) {
+            if (File.exists(path)) {
+                return Result.Err(IoError.exists(path));
+            }
+            return Result.Err(IoError.other(path, "failed to create directory: " + path));
+        }
+        return Result.Ok(true);
+    }
+
+    // Creates `path` and any missing parents; resolves `Ok(true)` on success.
+    public static async fun create_dir_all(path: string): Result<bool, IoError> {
+        if (File.dir_create_all(path) == false) {
+            return Result.Err(IoError.other(path, "failed to create directories: " + path));
+        }
+        return Result.Ok(true);
     }
 
     // Lists the entries of directory `path`. An empty or non-directory path yields an empty array.
@@ -117,11 +145,10 @@ public class File {
         return File.file_is_dir(path);
     }
 
-    // Opens a buffered read stream over `path` (reads the file's bytes once into memory). Resolves
-    // with `Err` when the file does not exist.
-    public static async fun open(path: string): Result<FileStream, string> {
+    // Opens a buffered read stream over `path`.
+    public static async fun open(path: string): Result<FileStream, IoError> {
         if (File.exists(path) == false) {
-            return Result.Err("file not found: " + path);
+            return Result.Err(IoError.not_found(path));
         }
         let bytes = await File.read_bytes(path);
         return Result.Ok(FileStream(bytes.unwrap_or(Buffer.alloc<byte>(0))));

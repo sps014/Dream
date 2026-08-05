@@ -691,6 +691,12 @@ function defaultDreamModule(getInstance) {
     fileSize: (path) => BigInt(fsBackend().size(path)),
     fileIsDir: (path) => fsBackend().isDir(path),
     dirList: (path) => fsBackend().list(path).join("\n"),
+    dirCreate: (path) => {
+      try { fsBackend().mkdir(path); return true; } catch (_) { return false; }
+    },
+    dirCreateAll: (path) => {
+      try { fsBackend().mkdirAll(path); return true; } catch (_) { return false; }
+    },
     // Wall-clock helpers (see src/stdlib/system/datetime.dream). Mirrored natively in
     // src/execution/host/datetime.rs so `DateTime` works the same under wasmtime, Node, and the
     // browser. `dateNowMillis` returns a `long` (BigInt). `Date.getTimezoneOffset()` returns
@@ -715,6 +721,32 @@ function defaultDreamModule(getInstance) {
     consoleExit: (code) => {
       if (isNode) process.exit(code);
       throw new Error(`System.exit(${code}): no process to exit in the browser`);
+    },
+    // Process / platform helpers (see src/stdlib/system/system.dream). Mirrored natively in
+    // src/execution/host/process.rs.
+    processPlatform: () => {
+      if (isNode) return 1;
+      if (typeof window !== "undefined" || typeof self !== "undefined") return 2;
+      return 3;
+    },
+    processOsFamily: () => {
+      if (!isNode) return 2;
+      return process.platform === "win32" ? 1 : 0;
+    },
+    processArgs: () => (isNode ? process.argv.slice(2).join("\n") : ""),
+    processExePath: () => (isNode ? (process.execPath || "") : ""),
+    processEnvGet: (name) => {
+      if (!isNode) return "";
+      const v = process.env[name];
+      return v === undefined ? "" : ("1" + v);
+    },
+    processEnvSet: (name, value) => {
+      if (isNode) process.env[name] = value;
+    },
+    processCwd: () => (isNode ? process.cwd() : "/"),
+    processSetCwd: (path) => {
+      if (!isNode) return false;
+      try { process.chdir(path); return true; } catch (_) { return false; }
     },
   };
 }
@@ -770,6 +802,7 @@ let _nodeFs = null;
  * Files persist for the page session only. Paths are keys; directories are inferred from prefixes.
  */
 const memFiles = new Map(); // path -> Uint8Array
+const memDirs = new Set(); // explicit directory markers
 const memFs = {
   readBytes(path) {
     const bytes = memFiles.get(path);
@@ -787,9 +820,10 @@ const memFs = {
     memFiles.set(path, next);
   },
   exists(path) {
-    return memFiles.has(path) || this.isDir(path);
+    return memFiles.has(path) || memDirs.has(path) || this.isDir(path);
   },
   remove(path) {
+    memDirs.delete(path);
     return memFiles.delete(path);
   },
   size(path) {
@@ -797,6 +831,7 @@ const memFs = {
     return bytes ? bytes.length : -1;
   },
   isDir(path) {
+    if (memDirs.has(path)) return true;
     const prefix = path.endsWith("/") ? path : path + "/";
     for (const key of memFiles.keys()) {
       if (key.startsWith(prefix)) return true;
@@ -812,7 +847,26 @@ const memFs = {
       const slash = rest.indexOf("/");
       names.add(slash === -1 ? rest : rest.slice(0, slash));
     }
+    for (const dir of memDirs) {
+      if (!dir.startsWith(prefix)) continue;
+      const rest = dir.slice(prefix.length);
+      if (!rest) continue;
+      const slash = rest.indexOf("/");
+      names.add(slash === -1 ? rest : rest.slice(0, slash));
+    }
     return Array.from(names).sort();
+  },
+  mkdir(path) {
+    if (memFiles.has(path) || memDirs.has(path)) throw new Error(`EEXIST: '${path}'`);
+    memDirs.add(path);
+  },
+  mkdirAll(path) {
+    const parts = path.split("/").filter(Boolean);
+    let cur = path.startsWith("/") ? "" : "";
+    for (const part of parts) {
+      cur = cur === "" ? (path.startsWith("/") ? "/" + part : part) : cur + "/" + part;
+      if (!memDirs.has(cur) && !memFiles.has(cur)) memDirs.add(cur);
+    }
   },
 };
 
@@ -830,6 +884,8 @@ function nodeFsBackend() {
     size: (p) => { try { return Number(fs.statSync(p).size); } catch (_) { return -1; } },
     isDir: (p) => { try { return fs.statSync(p).isDirectory(); } catch (_) { return false; } },
     list: (p) => { try { return fs.readdirSync(p).sort(); } catch (_) { return []; } },
+    mkdir: (p) => { fs.mkdirSync(p); },
+    mkdirAll: (p) => { fs.mkdirSync(p, { recursive: true }); },
   };
   return _nodeFsBackend;
 }

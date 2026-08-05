@@ -37,4 +37,12 @@ extend float : Comparable<float> {
         }
         return other;
     }
+
+    // Parses a decimal float from `text`.
+    public static fun parse(text: string): Result<float, ParseError> {
+        return switch (double.parse(text)) {
+            Ok(d) => Result.Ok((float)d),
+            Err(e) => Result.Err(e),
+        };
+    }
 }

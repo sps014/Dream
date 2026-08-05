@@ -1,7 +1,7 @@
 module system.text;
 
 // Cursor produced by `string.iterator()`.
-public class StringIterator {
+public class StringIterator : Iterator<char> {
     text: string;
     idx: int;
 

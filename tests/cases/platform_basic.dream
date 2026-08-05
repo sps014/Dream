@@ -1,0 +1,15 @@
+import system;
+fun main(): void {
+    let p = System.platform();
+    System.println(p == Platform.Native);
+    System.println(System.is_browser());
+    switch (System.cwd()) {
+        Ok(cwd) => System.println(cwd.is_empty() == false),
+        Err(e) => System.println(e.message()),
+    }
+    switch (System.set_env("DREAM_PLATFORM_TEST", "ok")) {
+        Ok(v) => { },
+        Err(e) => System.println(e.message()),
+    }
+    System.println(System.env_or("DREAM_PLATFORM_TEST", "missing"));
+}

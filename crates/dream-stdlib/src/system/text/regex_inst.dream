@@ -1,6 +1,6 @@
 module system.text;
 
-public class RegexInst {
+internal class RegexInst {
     public opcode: RegexOp;
     public ranges: List<char>;
     public negate: bool;

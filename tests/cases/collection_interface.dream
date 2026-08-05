@@ -1,0 +1,15 @@
+import system;
+import system.collections;
+fun describe(xs: Collection<int>): string {
+    return xs.size().to_string() + ":" + xs.is_empty().to_string();
+}
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(2);
+    xs.push(3);
+    System.println(describe(xs));
+    System.println(xs.size());
+    System.println(xs.is_empty());
+}

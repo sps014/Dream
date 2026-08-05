@@ -1,7 +1,7 @@
 module system.collections;
 
 // Cursor produced by `List.iterator()`.
-public class ListIterator<T> {
+public class ListIterator<T> : Iterator<T> {
     list: List<T>;
     idx: int;
 

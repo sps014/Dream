@@ -31,7 +31,7 @@ fun main(): void {
 
     System.println(JSON.stringify_pretty(u.to_json(), 2));
 
-    let v = JSON.parse("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}");
+    let v = JSON.parse("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}").unwrap_or(JsonValue.none());
     System.println(JSON.stringify_pretty(v, 4));
 
     // indent 0 falls back to compact output.

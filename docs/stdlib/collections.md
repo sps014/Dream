@@ -54,6 +54,8 @@ for (let n in nums) {
 Methods:
 
 - `.push(value)` — append.
+- `.insert(index, value)` — insert at index.
+- `.remove(value)` — remove first equal element.
 - `.push_all(items)` — append every element of an array, in order (what the `[...]` literal desugars to).
 - `List<T>.from_array(items)` (static) — build a new list from an array; what the `[...]` literal desugars to.
 - `.pop()` — remove and return the last element as `Option<T>`.
@@ -125,3 +127,23 @@ Methods:
 - `.to_array()` — a new array of all elements.
 
 Sets iterate with `for..in`, and their element requirements match `Map` keys (working `hash_code` and `==`; classes use reference equality by default).
+
+
+## `Queue<T>` / `Stack<T>`
+
+FIFO and LIFO wrappers over `List`, both implementing `Collection<T>`:
+
+```dream
+let q = Queue<int>();
+q.enqueue(1);
+q.enqueue(2);
+System.println(q.dequeue().unwrap_or(-1));  // 1
+
+let s = Stack<int>();
+s.push(10);
+System.println(s.pop().unwrap_or(-1));  // 10
+```
+
+## Collection protocols
+
+`List` implements `IndexedCollection` and `Collection`. `Set`, `Map`, `Queue`, and `Stack` implement `Collection`. See [arrays](../language/arrays.md#collection-protocols).

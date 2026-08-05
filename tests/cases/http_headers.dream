@@ -1,0 +1,13 @@
+import system;
+import system.net;
+import system.collections;
+fun main(): void {
+    let h = HttpHeaders();
+    h.set("Content-Type", "application/json");
+    h.set("X-Trace", "abc");
+    System.println(h.get("content-type").unwrap_or("missing"));
+    System.println(h.contains("X-Trace"));
+    System.println(h.size());
+    h.remove("X-Trace");
+    System.println(h.size());
+}

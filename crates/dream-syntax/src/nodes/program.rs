@@ -88,13 +88,17 @@ pub struct EnumVariantNode {
 /// - Discriminated unions (Rust-style): `enum Shape { Circle(radius: float), Empty }` and
 ///   generic `enum Option<T> { Some(value: T), None }` (at least one variant carries a payload).
 #[derive(Debug, Clone)]
-pub struct EnumDeclarationNode {
+pub struct EnumDeclarationNode<'a> {
     /// Leading attributes (`@json`, ...). Carried so derives like `@json` can target unions.
     pub attributes: Vec<crate::nodes::AttributeNode>,
     pub name: SyntaxToken,
     /// Generic type parameters for a generic discriminated union (`enum Option<T> { ... }`).
     pub generic_parameters: Option<Vec<SyntaxToken>>,
+    /// Bounds on the generic parameters (`enum Box<T : Comparable<T>>`). Empty when unconstrained.
+    pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
     pub variants: Vec<EnumVariantNode>,
+    /// Instance/static methods declared in the enum body (same lowering as class/`extend` methods).
+    pub methods: Vec<crate::nodes::function::FunctionNode<'a>>,
     /// True when declared `sealed`: no `extend` block may target this enum (enforced in analysis).
     pub is_sealed: bool,
     /// Accessibility of the enum (`public`/`internal`/private, the default).
@@ -105,18 +109,20 @@ pub struct EnumDeclarationNode {
     pub file_path: Option<Rc<str>>,
 }
 
-impl EnumDeclarationNode {
+impl<'a> EnumDeclarationNode<'a> {
     pub fn new(
         attributes: Vec<crate::nodes::AttributeNode>,
         name: SyntaxToken,
         generic_parameters: Option<Vec<SyntaxToken>>,
         variants: Vec<EnumVariantNode>,
-    ) -> EnumDeclarationNode {
+    ) -> EnumDeclarationNode<'a> {
         EnumDeclarationNode {
             attributes,
             name,
             generic_parameters,
+            generic_constraints: Vec::new(),
             variants,
+            methods: Vec::new(),
             is_sealed: false,
             visibility: Visibility::Private,
             file_path: None,
@@ -185,7 +191,7 @@ pub struct ProgramNode<'a> {
     pub structs: Vec<StructDeclarationNode<'a>>,
     pub interfaces: Vec<InterfaceDeclarationNode<'a>>,
     pub functions: Vec<FunctionNode<'a>>,
-    pub enums: Vec<EnumDeclarationNode>,
+    pub enums: Vec<EnumDeclarationNode<'a>>,
     pub extends: Vec<ExtendNode<'a>>,
     /// Top-level `let`/`const` variables declared outside any class or function.
     pub globals: Vec<GlobalVariableNode<'a>>,
@@ -199,7 +205,7 @@ impl<'a> ProgramNode<'a> {
         structs: Vec<StructDeclarationNode<'a>>,
         interfaces: Vec<InterfaceDeclarationNode<'a>>,
         functions: Vec<FunctionNode<'a>>,
-        enums: Vec<EnumDeclarationNode>,
+        enums: Vec<EnumDeclarationNode<'a>>,
         extends: Vec<ExtendNode<'a>>,
         globals: Vec<GlobalVariableNode<'a>>,
     ) -> ProgramNode<'a> {

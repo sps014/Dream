@@ -1,0 +1,139 @@
+module system.net;
+
+// Parsed URL components.
+public class Url {
+    public scheme: string;
+    public host: string;
+    public port: Option<int>;
+    public path: string;
+    public query: string;
+    public fragment: string;
+
+    constructor(
+        scheme: string,
+        host: string,
+        port: Option<int>,
+        path: string,
+        query: string,
+        fragment: string
+    ) {
+        this.scheme = scheme;
+        this.host = host;
+        this.port = port;
+        this.path = path;
+        this.query = query;
+        this.fragment = fragment;
+    }
+
+    public static fun parse(text: string): Result<Url, ParseError> {
+        if (text.is_empty()) {
+            return Result.Err(ParseError.invalid("empty URL"));
+        }
+        let scheme = "";
+        let rest = text;
+        let scheme_end = text.index_of(':');
+        switch (scheme_end) {
+            Some(idx) => {
+                if ((idx + 2 < text.size()) && (text.char_at(idx + 1) == '/') && (text.char_at(idx + 2) == '/')) {
+                    scheme = text.substring(0, idx);
+                    rest = text.substring(idx + 3, text.size());
+                }
+            },
+            None => { },
+        }
+
+        let fragment = "";
+        let hash = rest.index_of('#');
+        switch (hash) {
+            Some(idx) => {
+                fragment = rest.substring(idx + 1, rest.size());
+                rest = rest.substring(0, idx);
+            },
+            None => { },
+        }
+
+        let query = "";
+        let q = rest.index_of('?');
+        switch (q) {
+            Some(idx) => {
+                query = rest.substring(idx + 1, rest.size());
+                rest = rest.substring(0, idx);
+            },
+            None => { },
+        }
+
+        let host = rest;
+        let path = "";
+        let slash = rest.index_of('/');
+        switch (slash) {
+            Some(idx) => {
+                host = rest.substring(0, idx);
+                path = rest.substring(idx, rest.size());
+            },
+            None => {
+                path = "/";
+            },
+        }
+
+        let port: Option<int> = Option.None;
+        let colon = host.index_of(':');
+        switch (colon) {
+            Some(idx) => {
+                let port_text = host.substring(idx + 1, host.size());
+                host = host.substring(0, idx);
+                switch (int.parse(port_text)) {
+                    Ok(p) => { port = Option.Some(p); },
+                    Err(e) => { return Result.Err(e); },
+                }
+            },
+            None => { },
+        }
+
+        if (path.is_empty()) {
+            path = "/";
+        }
+        return Result.Ok(Url(scheme, host, port, path, query, fragment));
+    }
+
+    @override
+    public fun to_string(): string {
+        let result = "";
+        if (this.scheme.is_empty() == false) {
+            result = this.scheme + "://" + this.host;
+        } else {
+            result = this.host;
+        }
+        switch (this.port) {
+            Some(p) => { result = result + ":" + p.to_string(); },
+            None => { },
+        }
+        result = result + this.path;
+        if (this.query.is_empty() == false) {
+            result = result + "?" + this.query;
+        }
+        if (this.fragment.is_empty() == false) {
+            result = result + "#" + this.fragment;
+        }
+        return result;
+    }
+
+    public fun with_path(path: string): Url {
+        return Url(this.scheme, this.host, this.port, path, this.query, this.fragment);
+    }
+
+    public fun join(relative: string): Result<Url, ParseError> {
+        if (relative.starts_with("http://") || relative.starts_with("https://")) {
+            return Url.parse(relative);
+        }
+        if (relative.starts_with("/")) {
+            return Result.Ok(this.with_path(relative));
+        }
+        let base = this.path;
+        let joined = base;
+        if ((base.ends_with("/") == false) && (base.is_empty() == false)) {
+            joined = base + "/";
+        }
+        joined = joined + relative;
+        return Result.Ok(this.with_path(joined));
+    }
+}

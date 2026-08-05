@@ -1,6 +1,6 @@
 module system.text;
 
-public class RegexCompiler {
+internal class RegexCompiler {
     prog: RegexInst[];
     pc: int;
     ignore_case: bool;

@@ -128,7 +128,7 @@ pub(super) fn generate_json_extend(
             let (to_inner, from_inner) = if base == "string" {
                 (
                     format!("JsonValue.from_string(__v_{f})", f = fname),
-                    format!("__src_{f}.as_string()", f = fname),
+                    format!("__src_{f}.as_string().unwrap_or(\"\")", f = fname),
                 )
             } else if json_names.contains(&base) {
                 (
@@ -202,9 +202,9 @@ pub(super) fn generate_json_extend(
             // `JSON.serialize`/`JSON.deserialize` intrinsics, which the analyzer resolves per
             // concrete instantiation (`T` -> the monomorphized type's `to_json`/`from_json`). A
             // static call on the bare parameter `T` cannot be named directly, so we round-trip via
-            // text: `JSON.parse(JSON.serialize(x))` yields the nested `JsonValue`.
+            // text: `JSON.parse(JSON.serialize(x)).unwrap_or(...)` yields the nested `JsonValue`.
             to_body.push_str(&format!(
-                "        __o.set(\"{k}\", JSON.parse(JSON.serialize(this.{f})));\n",
+                "        __o.set(\"{k}\", JSON.parse(JSON.serialize(this.{f})).unwrap_or(JsonValue.none()));\n",
                 k = json_key,
                 f = fname
             ));

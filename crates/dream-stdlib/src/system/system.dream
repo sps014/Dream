@@ -1,5 +1,20 @@
 module system;
 
+// Host runtime kind.
+public enum Platform {
+    Native,
+    Node,
+    Browser,
+    Unknown,
+}
+
+// Operating-system family (native hosts).
+public enum OsFamily {
+    Unix,
+    Windows,
+    Unknown,
+}
+
 // System utilities for console I/O, process control, and terminal colors.
 public class System {
     // Prints a value to standard output.
@@ -19,6 +34,31 @@ public class System {
     @js("Dream", "consoleExit")
     static extern fun host_exit(code: int): void;
 
+    @js("Dream", "processPlatform")
+    static extern fun host_platform(): int;
+
+    @js("Dream", "processOsFamily")
+    static extern fun host_os_family(): int;
+
+    @js("Dream", "processArgs")
+    static extern fun host_args(): string;
+
+    @js("Dream", "processExePath")
+    static extern fun host_exe_path(): string;
+
+    // Tagged: leading '1' + value when set, empty / other when unset.
+    @js("Dream", "processEnvGet")
+    static extern fun host_env_get(name: string): string;
+
+    @js("Dream", "processEnvSet")
+    static extern fun host_env_set(name: string, value: string): void;
+
+    @js("Dream", "processCwd")
+    static extern fun host_cwd(): string;
+
+    @js("Dream", "processSetCwd")
+    static extern fun host_set_cwd(path: string): bool;
+
     // Halts the program immediately with `message`, after printing it to standard output. Fatal
     // and non-recoverable (there is no catch/recover) — the same halt point every automatic
     // runtime check (bounds, division by zero, bad cast) already uses.
@@ -26,28 +66,121 @@ public class System {
     static extern fun panic(message: string): void;
 
     // Reads a line of input from stdin.
-    public static fun readLine(): string {
+    public static fun read_line(): string {
         return System.host_read_line();
     }
 
     // Reads a single keypress from stdin.
-    public static fun readKey(): char {
+    public static fun read_key(): char {
         return System.host_read_key();
     }
 
     // Reads a line from stdin and parses it as an integer.
-    public static fun readInt(): Result<int, string> {
-        return int.parse(System.readLine());
+    public static fun read_int(): Result<int, ParseError> {
+        return int.parse(System.read_line());
     }
 
     // Reads a line from stdin and parses it as a double.
-    public static fun readDouble(): Result<double, string> {
-        return double.parse(System.readLine());
+    public static fun read_double(): Result<double, ParseError> {
+        return double.parse(System.read_line());
     }
 
     // Terminates the process with the given exit code.
     public static fun exit(code: int): void {
         System.host_exit(code);
+    }
+
+    // The current host platform.
+    public static fun platform(): Platform {
+        let p = System.host_platform();
+        if (p == 0) {
+            return Platform.Native;
+        }
+        if (p == 1) {
+            return Platform.Node;
+        }
+        if (p == 2) {
+            return Platform.Browser;
+        }
+        return Platform.Unknown;
+    }
+
+    // The OS family on native hosts (Unknown elsewhere).
+    public static fun os_family(): OsFamily {
+        let f = System.host_os_family();
+        if (f == 0) {
+            return OsFamily.Unix;
+        }
+        if (f == 1) {
+            return OsFamily.Windows;
+        }
+        return OsFamily.Unknown;
+    }
+
+    // True when running under a browser JS host.
+    public static fun is_browser(): bool {
+        return System.platform() == Platform.Browser;
+    }
+
+    // Process arguments (excluding the executable name when the host provides one separately).
+    public static fun args(): string[] {
+        let joined = System.host_args();
+        if (joined.is_empty()) {
+            return Buffer.alloc<string>(0);
+        }
+        return joined.split('\n');
+    }
+
+    // Absolute path of the running executable when known.
+    public static fun exe_path(): Option<string> {
+        let path = System.host_exe_path();
+        if (path.is_empty()) {
+            return Option.None;
+        }
+        return Option.Some(path);
+    }
+
+    // Value of environment variable `name`, or `None` when unset.
+    public static fun env(name: string): Option<string> {
+        let raw = System.host_env_get(name);
+        if (raw.is_empty()) {
+            return Option.None;
+        }
+        if (raw.char_at(0) != '1') {
+            return Option.None;
+        }
+        return Option.Some(raw.substring(1, raw.size()));
+    }
+
+    // Value of environment variable `name`, or `fallback` when unset.
+    public static fun env_or(name: string, fallback: string): string {
+        return System.env(name).unwrap_or(fallback);
+    }
+
+    // Sets environment variable `name` to `value`.
+    public static fun set_env(name: string, value: string): Result<bool, ArgError> {
+        if (name.is_empty()) {
+            return Result.Err(ArgError.invalid("environment variable name must not be empty"));
+        }
+        System.host_env_set(name, value);
+        return Result.Ok(true);
+    }
+
+    // Current working directory.
+    public static fun cwd(): Result<string, IoError> {
+        let path = System.host_cwd();
+        if (path.is_empty()) {
+            return Result.Err(IoError.other(".", "current working directory is unavailable"));
+        }
+        return Result.Ok(path);
+    }
+
+    // Sets the current working directory.
+    public static fun set_cwd(path: string): Result<bool, IoError> {
+        if (System.host_set_cwd(path)) {
+            return Result.Ok(true);
+        }
+        return Result.Err(IoError.other(path, "failed to set current working directory: " + path));
     }
 
     // Clears the terminal screen.
@@ -96,7 +229,7 @@ public class System {
     }
 
     // Sets the foreground color for subsequent output.
-    public static fun setForeground(color: ConsoleColor): void {
+    public static fun set_foreground(color: ConsoleColor): void {
         System.print((char)27);
         System.print("[");
         System.print(System._fg_code(color));
@@ -104,7 +237,7 @@ public class System {
     }
 
     // Sets the background color for subsequent output.
-    public static fun setBackground(color: ConsoleColor): void {
+    public static fun set_background(color: ConsoleColor): void {
         System.print((char)27);
         System.print("[");
         System.print(System._fg_code(color) + 10);
@@ -112,15 +245,15 @@ public class System {
     }
 
     // Resets console colors to the terminal default.
-    public static fun resetColor(): void {
+    public static fun reset_color(): void {
         System.print((char)27);
         System.print("[0m");
     }
 
     // Prints a string in the specified color.
-    public static fun printColored(value: string, color: ConsoleColor): void {
-        System.setForeground(color);
+    public static fun print_colored(value: string, color: ConsoleColor): void {
+        System.set_foreground(color);
         System.print(value);
-        System.resetColor();
+        System.reset_color();
     }
 }

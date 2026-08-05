@@ -13,24 +13,41 @@ async fun main(): void {
     let api = HttpClient("https://example.com").set_header("Accept", "application/json");
 
     // Simple text body.
-    let body = await api.text("/hello");
-    System.println(body);
+    switch (await api.text("/hello")) {
+        Ok(body) => System.println(body),
+        Err(e) => System.println(e.message()),
+    }
 
     // Richer GET response: status + JSON body + a header.
-    let res = await api.get("/user");
-    System.println(res.status());
-    System.println(res.header("content-type"));
-
-    let data = res.json();
-    System.println(data.get("name").unwrap_or(JsonValue.none()).as_string());
+    switch (await api.get("/user")) {
+        Ok(res) => {
+            System.println(res.status());
+            System.println(res.header("content-type"));
+            switch (res.json()) {
+                Ok(data) => System.println(data.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("")),
+                Err(e) => System.println(e.message()),
+            }
+        },
+        Err(e) => System.println(e.message()),
+    }
 
     // POST a JSON body (any verb is available: get/post/put/patch/delete/head, or `request`).
-    let created = await api.post("/user", "{\"name\":\"Grace\"}");
-    System.println(created.status());
-    System.println(created.text());
+    switch (await api.post("/user", "{\"name\":\"Grace\"}")) {
+        Ok(created) => {
+            System.println(created.status());
+            System.println(created.text());
+        },
+        Err(e) => System.println(e.message()),
+    }
 
     // Binary round-trip: the body is byte-exact in both directions.
-    let bin = await api.get("/blob");
-    let echoed = await api.post_bytes("/upload", bin.bytes());
-    System.println(echoed.status());
+    switch (await api.get("/blob")) {
+        Ok(bin) => {
+            switch (await api.post_bytes("/upload", bin.bytes())) {
+                Ok(echoed) => System.println(echoed.status()),
+                Err(e) => System.println(e.message()),
+            }
+        },
+        Err(e) => System.println(e.message()),
+    }
 }

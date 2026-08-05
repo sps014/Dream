@@ -336,7 +336,7 @@ pub struct Analyzer<'a> {
     /// Layout of every registered (monomorphized) discriminated union.
     union_table: UnionTable,
     /// Generic discriminated-union templates (`enum Option<T> { ... }`), instantiated on demand.
-    generic_unions: HashMap<String, &'a EnumDeclarationNode>,
+    generic_unions: HashMap<String, &'a EnumDeclarationNode<'a>>,
     /// Generic `extend Type<...> { ... }` templates (e.g. `extend Option<T> { ... }`), keyed by
     /// the extended type's name. Their methods are monomorphized alongside each concrete
     /// instantiation of the target generic union or struct (see `ensure_*_instantiated`).

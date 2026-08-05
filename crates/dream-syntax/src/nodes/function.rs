@@ -116,6 +116,10 @@ pub struct FunctionNode<'a> {
     pub generic_parameters: Option<Vec<SyntaxToken>>,
     /// Bounds on the generic parameters (`fun min<T : Comparable<T>>(...)`). Empty when unconstrained.
     pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
+    /// Optional `where T : Comparable<T>` attachment constraints on a class/enum method: the method
+    /// is only registered for monomorphizations that satisfy every bound (same semantics as a
+    /// constrained `extend` block, but declared on the type itself).
+    pub where_constraints: Vec<crate::nodes::GenericConstraint>,
     pub return_type: Option<Type>,
     pub parameters: Vec<ParameterNode>,
     pub body: &'a [StatementNode<'a>],
@@ -160,6 +164,7 @@ impl<'a> FunctionNode<'a> {
             name,
             generic_parameters,
             generic_constraints: Vec::new(),
+            where_constraints: Vec::new(),
             return_type,
             parameters,
             body,

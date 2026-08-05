@@ -1,5 +1,5 @@
 import system;
-fun parse_or_propagate(s: string): Result<int, string> {
+fun parse_or_propagate(s: string): Result<int, ParseError> {
     let n = int.parse(s)?;
     return Result.Ok(n);
 }
@@ -7,10 +7,10 @@ fun parse_or_propagate(s: string): Result<int, string> {
 fun main(): void {
     switch (parse_or_propagate("42")) {
         Ok(n)  => System.println(n),
-        Err(e) => System.println("err: " + e),
+        Err(e) => System.println("err: " + e.message()),
     }
     switch (parse_or_propagate("nope")) {
         Ok(n)  => System.println(n),
-        Err(e) => System.println("err: " + e),
+        Err(e) => System.println("err: " + e.message()),
     }
 }

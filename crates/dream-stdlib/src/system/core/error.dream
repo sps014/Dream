@@ -1,0 +1,10 @@
+module system.core;
+
+// Shared contract for fallible stdlib/user errors. Prefer `Result<T, E>` with `E : Error`.
+public interface Error {
+    // Human-readable description.
+    fun message(): string;
+
+    // Stable machine code (`ENOENT`, `EPARSE`, `HTTP_404`, `EINVAL`, …).
+    fun code(): string;
+}

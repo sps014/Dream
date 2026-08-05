@@ -73,6 +73,26 @@ extend string : Comparable<string> {
         return Option.None;
     }
 
+    // The index of the first occurrence of substring `sub`, or `None`.
+    public fun index_of(sub: string): Option<int> {
+        let n = this.size();
+        let m = sub.size();
+        if (m == 0) {
+            return Option.Some(0);
+        }
+        if (m > n) {
+            return Option.None;
+        }
+        let i = 0;
+        while (i <= n - m) {
+            if (this._matches_at(sub, i) == true) {
+                return Option.Some(i);
+            }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
     // True if `sub` occurs anywhere in this string.
     public fun contains(sub: string): bool {
         let n = this.size();
@@ -197,6 +217,46 @@ extend string : Comparable<string> {
                 start = i + 1;
             }
             i = i + 1;
+        }
+        result[idx] = this.substring(start, n);
+        return result;
+    }
+
+    // Splits this string on every occurrence of substring `sep`.
+    public fun split(sep: string): string[] {
+        let m = sep.size();
+        if (m == 0) {
+            let one = Buffer.alloc<string>(1);
+            one[0] = this;
+            return one;
+        }
+        if (m == 1) {
+            return this.split(sep.char_at(0));
+        }
+        let n = this.size();
+        let parts = 1;
+        let i = 0;
+        while ((i + m) <= n) {
+            if (this._matches_at(sep, i)) {
+                parts = parts + 1;
+                i = i + m;
+            } else {
+                i = i + 1;
+            }
+        }
+        let result = Buffer.alloc<string>(parts);
+        let start = 0;
+        let idx = 0;
+        i = 0;
+        while ((i + m) <= n) {
+            if (this._matches_at(sep, i)) {
+                result[idx] = this.substring(start, i);
+                idx = idx + 1;
+                i = i + m;
+                start = i;
+            } else {
+                i = i + 1;
+            }
         }
         result[idx] = this.substring(start, n);
         return result;

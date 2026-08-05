@@ -118,7 +118,7 @@ public class HttpResponse {
     }
 
     // The response body parsed as JSON.
-    public fun json(): JsonValue {
+    public fun json(): Result<JsonValue, ParseError> {
         return JSON.parse(this.text());
     }
 }

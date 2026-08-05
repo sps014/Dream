@@ -39,10 +39,10 @@ extend double : Comparable<double> {
     }
 
     // Parses a decimal double from `text`.
-    public static fun parse(text: string): Result<double, string> {
+    public static fun parse(text: string): Result<double, ParseError> {
         let n = text.size();
         if (n == 0) {
-            return Result.Err("cannot parse double from empty string");
+            return Result.Err(ParseError.invalid("cannot parse double from empty string"));
         }
         let i = 0;
         let neg = false;
@@ -125,7 +125,7 @@ extend double : Comparable<double> {
             }
         }
         if (digits_seen == false) {
-            return Result.Err("cannot parse double: no digits");
+            return Result.Err(ParseError.invalid("cannot parse double: no digits"));
         }
         if (neg == true) {
             return Result.Ok(0.0d - result);

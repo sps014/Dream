@@ -195,19 +195,19 @@ public class DateTime {
     }
 
     // Parses an ISO-8601 datetime.
-    public static fun parse_iso8601(text: string): Result<DateTime, string> {
+    public static fun parse_iso8601(text: string): Result<DateTime, ParseError> {
         let n = text.size();
         if (n < 19) {
-            return Result.Err("invalid ISO-8601 datetime: " + text);
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
         if ((text.char_at(4) != '-') || (text.char_at(7) != '-')) {
-            return Result.Err("invalid ISO-8601 datetime: " + text);
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
         if ((text.char_at(10) != 'T') && (text.char_at(10) != ' ')) {
-            return Result.Err("invalid ISO-8601 datetime: " + text);
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
         if ((text.char_at(13) != ':') || (text.char_at(16) != ':')) {
-            return Result.Err("invalid ISO-8601 datetime: " + text);
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
 
         let year_r = DateTime._parse_digits(text, 0, 4);
@@ -217,7 +217,7 @@ public class DateTime {
         let minute_r = DateTime._parse_digits(text, 14, 2);
         let second_r = DateTime._parse_digits(text, 17, 2);
         if (year_r.is_none() || month_r.is_none() || day_r.is_none() || hour_r.is_none() || minute_r.is_none() || second_r.is_none()) {
-            return Result.Err("invalid ISO-8601 datetime: " + text);
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
 
         let year = year_r.unwrap_or(0);
@@ -227,7 +227,7 @@ public class DateTime {
         let minute = minute_r.unwrap_or(0);
         let second = second_r.unwrap_or(0);
         if ((month < 1) || (month > 12) || (day < 1) || (day > 31) || (hour > 23) || (minute > 59) || (second > 59)) {
-            return Result.Err("invalid ISO-8601 datetime: " + text);
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
 
         let pos = 19;
@@ -241,7 +241,7 @@ public class DateTime {
             let frac_len = end - start;
             let frac_r = DateTime._parse_digits(text, start, frac_len);
             if (frac_r.is_none()) {
-                return Result.Err("invalid ISO-8601 datetime: " + text);
+                return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
             }
             let frac = frac_r.unwrap_or(0);
             while (frac_len > 3) {
@@ -263,12 +263,12 @@ public class DateTime {
                 pos = pos + 1;
             } else if ((c == '+') || (c == '-')) {
                 if ((pos + 6 > n) || (text.char_at(pos + 3) != ':')) {
-                    return Result.Err("invalid ISO-8601 datetime: " + text);
+                    return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
                 }
                 let oh_r = DateTime._parse_digits(text, pos + 1, 2);
                 let om_r = DateTime._parse_digits(text, pos + 4, 2);
                 if (oh_r.is_none() || om_r.is_none()) {
-                    return Result.Err("invalid ISO-8601 datetime: " + text);
+                    return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
                 }
                 let total = oh_r.unwrap_or(0) * 60 + om_r.unwrap_or(0);
                 if (c == '-') {
@@ -277,12 +277,12 @@ public class DateTime {
                 offset_minutes = total;
                 pos = pos + 6;
             } else {
-                return Result.Err("invalid ISO-8601 datetime: " + text);
+                return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
             }
         }
 
         if (pos != n) {
-            return Result.Err("invalid ISO-8601 datetime: " + text);
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
 
         let days = DateTime._days_from_civil(year, month, day);

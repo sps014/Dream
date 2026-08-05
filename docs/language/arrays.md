@@ -130,18 +130,16 @@ ys.sort();                                   // 1, 2, 3
 System.println(ys.binary_search(2).unwrap_or(-1));  // 1
 ```
 
-### The `Collection<T>` interface
+### Collection protocols
 
-`List<T>` implements `Collection<T>`, which exposes `size()` and `get(index)` plus the defaults `is_empty()`, `first()`, and `last()`. A function can accept any collection by that interface and dispatch dynamically:
+`Iterator<T>`, `Collection<T>`, and `IndexedCollection<T>` live in bootstrap `system.core`.
+
+- `Collection<T>` — `size()` and `iterator()` (plus default `is_empty()`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`.
+- `IndexedCollection<T>` — ordered indexable sequences (`get(index)`, defaults `first`/`last`). Implemented by `List`.
+- `for (let x in xs)` still requires a concrete type with `@iterator`; through `Collection` call `.iterator()` and drive `.next()`, or accept `List`/`Set`/`Map` directly.
 
 ```dream
-fun sum(xs: Collection<int>): int {
-    let total = 0;
-    let i = 0;
-    while (i < xs.size()) {
-        total = total + xs.get(i).unwrap_or(0);
-        i = i + 1;
-    }
-    return total;
+fun total_size(xs: Collection<string>): int {
+    return xs.size();
 }
 ```

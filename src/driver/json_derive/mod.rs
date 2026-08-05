@@ -75,23 +75,23 @@ fn json_codec(elem_type: &str, json_names: &HashSet<String>) -> Option<JsonCodec
     let codec = match elem_type {
         "int" => JsonCodec {
             to: Box::new(|a| format!("JsonValue.from_int({})", a)),
-            from: Box::new(|j| format!("{}.as_int()", j)),
+            from: Box::new(|j| format!("{}.as_int().unwrap_or(0)", j)),
         },
         "double" => JsonCodec {
             to: Box::new(|a| format!("JsonValue.number({})", a)),
-            from: Box::new(|j| format!("{}.as_double()", j)),
+            from: Box::new(|j| format!("{}.as_double().unwrap_or(0.0d)", j)),
         },
         "float" => JsonCodec {
             to: Box::new(|a| format!("JsonValue.number((double){})", a)),
-            from: Box::new(|j| format!("(float){}.as_double()", j)),
+            from: Box::new(|j| format!("(float){}.as_double().unwrap_or(0.0d)", j)),
         },
         "bool" => JsonCodec {
             to: Box::new(|a| format!("JsonValue.boolean({})", a)),
-            from: Box::new(|j| format!("{}.as_bool()", j)),
+            from: Box::new(|j| format!("{}.as_bool().unwrap_or(false)", j)),
         },
         "string" => JsonCodec {
             to: Box::new(|a| format!("JsonValue.from_string({})", a)),
-            from: Box::new(|j| format!("{}.as_string()", j)),
+            from: Box::new(|j| format!("{}.as_string().unwrap_or(\"\")", j)),
         },
         c if json_names.contains(c) => {
             let cls = c.to_string();
@@ -200,7 +200,7 @@ fn has_json_attr<'a>(
 pub(crate) fn generate_json_derives<'a>(
     arena: &'a Bump,
     all_structs: &[dream_syntax::nodes::struct_node::StructDeclarationNode<'a>],
-    all_enums: &[dream_syntax::nodes::EnumDeclarationNode],
+    all_enums: &[dream_syntax::nodes::EnumDeclarationNode<'_>],
     all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,

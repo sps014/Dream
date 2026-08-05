@@ -4,10 +4,7 @@ module system.core;
 public enum Result<T, E> {
     Ok(value: T),
     Err(error: E),
-}
 
-// Ergonomic accessors.
-extend Result<T, E> {
     // True when this is `Ok`.
     public fun is_ok(): bool {
         return switch (this) {
@@ -29,6 +26,30 @@ extend Result<T, E> {
         return switch (this) {
             Ok(v)  => v,
             Err(e) => fallback,
+        };
+    }
+
+    // Maps the success value when `Ok`, otherwise preserves the error.
+    public fun map<U>(f: fun(T): U): Result<U, E> {
+        return switch (this) {
+            Ok(v)  => Result.Ok(f(v)),
+            Err(e) => Result.Err(e),
+        };
+    }
+
+    // Maps the error when `Err`, otherwise preserves the success value.
+    public fun map_err<F>(f: fun(E): F): Result<T, F> {
+        return switch (this) {
+            Ok(v)  => Result.Ok(v),
+            Err(e) => Result.Err(f(e)),
+        };
+    }
+
+    // Chains into another `Result` when `Ok`, otherwise preserves the error.
+    public fun and_then<U>(f: fun(T): Result<U, E>): Result<U, E> {
+        return switch (this) {
+            Ok(v)  => f(v),
+            Err(e) => Result.Err(e),
         };
     }
 }

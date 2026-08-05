@@ -1,12 +1,12 @@
 import system;
 import system.json;
 fun main(): void {
-    let v = JSON.parse("{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}");
+    let v = JSON.parse("{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}").unwrap_or(JsonValue.none());
     let none = JsonValue.none();
-    System.println(v.get("a").unwrap_or(none).get("b").unwrap_or(none).at(2).unwrap_or(none).as_int());
+    System.println(v.get("a").unwrap_or(none).get("b").unwrap_or(none).at(2).unwrap_or(none).as_int().unwrap_or(0));
     System.println(v.get("a").unwrap_or(none).get("b").unwrap_or(none).size());
-    System.println(v.get("n").unwrap_or(none).as_double());
-    System.println(v.get("ok").unwrap_or(none).as_bool());
+    System.println(v.get("n").unwrap_or(none).as_double().unwrap_or(0.0d));
+    System.println(v.get("ok").unwrap_or(none).as_bool().unwrap_or(false));
     System.println(v.get("missing").unwrap_or(none).is_null());
     System.println(JSON.stringify(v.get("s").unwrap_or(none)));
 }

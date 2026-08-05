@@ -1,0 +1,13 @@
+import system;
+import system.collections;
+fun main(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(3);
+    xs.insert(1, 2);
+    System.println(xs.get(0).unwrap_or(-1));
+    System.println(xs.get(1).unwrap_or(-1));
+    System.println(xs.get(2).unwrap_or(-1));
+    xs.remove(2);
+    System.println(xs.size());
+}

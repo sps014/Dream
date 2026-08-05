@@ -41,17 +41,17 @@ extend uint : Comparable<uint> {
     }
 
     // Parses an unsigned decimal integer from `text`.
-    public static fun parse(text: string): Result<uint, string> {
+    public static fun parse(text: string): Result<uint, ParseError> {
         let n = text.size();
         if (n == 0) {
-            return Result.Err("cannot parse uint from empty string");
+            return Result.Err(ParseError.invalid("cannot parse uint from empty string"));
         }
         let result = 0u;
         let i = 0;
         while (i < n) {
             let c = text.char_at(i);
             if ((c < '0') || (c > '9')) {
-                return Result.Err("cannot parse uint: invalid digit");
+                return Result.Err(ParseError.invalid("cannot parse uint: invalid digit"));
             }
             result = result * 10u + (uint)((int)c - 48);
             i = i + 1;

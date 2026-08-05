@@ -529,6 +529,7 @@ impl<'a> Analyzer<'a> {
             name: synthetic_token(TokenKind::IdentifierToken, &name),
             generic_parameters: lambda.generic_parameters.clone(),
             generic_constraints: lambda.generic_constraints.clone(),
+            where_constraints: Vec::new(),
             return_type: Some(body_ret.clone()),
             parameters,
             body,

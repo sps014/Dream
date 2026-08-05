@@ -1,6 +1,6 @@
 module system.text;
 
-public class RegexNode {
+internal class RegexNode {
     public kind: RegexNodeKind;
     public left: List<RegexNode>;
     public right: List<RegexNode>;

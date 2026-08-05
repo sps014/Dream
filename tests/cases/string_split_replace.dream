@@ -1,0 +1,10 @@
+import system;
+fun main(): void {
+    let s = "a,b,c";
+    let parts = s.split(',');
+    System.println(parts.size());
+    System.println(parts[0]);
+    System.println(parts[2]);
+    let t = "hello world";
+    System.println(t.replace("world", "dream"));
+}

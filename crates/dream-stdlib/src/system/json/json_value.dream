@@ -86,24 +86,36 @@ public class JsonValue {
         return this.kind == 5;
     }
 
-    // Returns the value as a boolean.
-    public fun as_bool(): bool {
-        return this.bool_val;
+    // Returns the value as a boolean when this is a JSON bool.
+    public fun as_bool(): Option<bool> {
+        if (this.kind != 1) {
+            return Option.None;
+        }
+        return Option.Some(this.bool_val);
     }
 
-    // Returns the value as a double.
-    public fun as_double(): double {
-        return this.num_val;
+    // Returns the value as a double when this is a JSON number.
+    public fun as_double(): Option<double> {
+        if (this.kind != 2) {
+            return Option.None;
+        }
+        return Option.Some(this.num_val);
     }
 
-    // Returns the value as an integer.
-    public fun as_int(): int {
-        return (int)this.num_val;
+    // Returns the value as an integer when this is a JSON number.
+    public fun as_int(): Option<int> {
+        if (this.kind != 2) {
+            return Option.None;
+        }
+        return Option.Some((int)this.num_val);
     }
 
-    // Returns the value as a string.
-    public fun as_string(): string {
-        return this.str_val;
+    // Returns the value as a string when this is a JSON string.
+    public fun as_string(): Option<string> {
+        if (this.kind != 3) {
+            return Option.None;
+        }
+        return Option.Some(this.str_val);
     }
 
     fun _find_key(key: string): int {

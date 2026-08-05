@@ -1,7 +1,7 @@
 module system.collections;
 
 // A generic open-addressing hash set.
-public class Set<T> {
+public class Set<T> : Collection<T> {
     keys: T[];
     states: int[];
     count: int;
@@ -32,13 +32,13 @@ public class Set<T> {
     }
 
     // Initial probe index for a value.
-    public fun home(value: T): int {
+    fun home(value: T): int {
         let h = value.hash_code();
         return h & (this.cap - 1);
     }
 
     // Index of an occupied slot holding a value, or -1.
-    public fun find(value: T): int {
+    fun find(value: T): int {
         let idx = this.home(value);
         let result = -1;
         let searching = true;

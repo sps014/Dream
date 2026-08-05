@@ -1,0 +1,35 @@
+module system.collections;
+
+// LIFO stack backed by `List<T>`.
+public class Stack<T> : Collection<T> {
+    items: List<T>;
+
+    constructor() {
+        this.items = List<T>();
+    }
+
+    public fun size(): int {
+        return this.items.size();
+    }
+
+    public fun push(value: T): void {
+        this.items.push(value);
+    }
+
+    public fun pop(): Option<T> {
+        return this.items.pop();
+    }
+
+    public fun peek(): Option<T> {
+        return this.items.get(this.items.size() - 1);
+    }
+
+    public fun clear(): void {
+        this.items.clear();
+    }
+
+    @iterator
+    public fun iterator(): ListIterator<T> {
+        return this.items.iterator();
+    }
+}

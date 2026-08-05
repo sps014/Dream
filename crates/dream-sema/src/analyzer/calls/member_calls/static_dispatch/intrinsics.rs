@@ -357,7 +357,7 @@ impl<'a> Analyzer<'a> {
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
             let text = arg_hirs.into_iter().next().flatten();
-            self.hir_set_call("JSON_parse", vec![text], &named("JsonValue"));
+            self.hir_set_call("JSON_parse_value", vec![text], &named("JsonValue"));
             let parsed = self.hir_take();
             self.hir_set_call(&method_fn(&struct_name, "from_json"), vec![parsed], &t_type);
             return Ok(t_type);

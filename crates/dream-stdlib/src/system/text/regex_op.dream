@@ -1,6 +1,6 @@
 module system.text;
 
-public enum RegexOp {
+internal enum RegexOp {
     CharClass,
     Capture,
     EmptyWidth,

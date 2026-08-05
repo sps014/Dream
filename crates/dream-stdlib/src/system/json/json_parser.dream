@@ -1,7 +1,7 @@
 module system.json;
 
 // A cursor over the input text used by the recursive-descent JSON parser.
-public class JsonParser {
+internal class JsonParser {
     src: string;
     pos: int;
     n: int;
@@ -26,6 +26,12 @@ public class JsonParser {
                 }
             }
         }
+    }
+
+    // True when the cursor has consumed the whole input (after skipping trailing whitespace).
+    public fun at_end(): bool {
+        this.skip_ws();
+        return this.pos >= this.n;
     }
 
     // Consumes a literal keyword (`true`/`false`/`null`) of the given length, returning `value`.

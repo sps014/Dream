@@ -1,0 +1,24 @@
+module system;
+
+// Invalid CLI / environment usage implementing `Error`.
+public class ArgError : Error {
+    _code: string;
+    _message: string;
+
+    constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    public fun message(): string {
+        return this._message;
+    }
+
+    public fun code(): string {
+        return this._code;
+    }
+
+    public static fun invalid(message: string): ArgError {
+        return ArgError("EINVAL", message);
+    }
+}
