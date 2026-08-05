@@ -50,6 +50,11 @@ public class HttpResponse {
         return this.slice_text(0, this.boundary);
     }
 
+    // Response head (status + headers) for cookie parsing.
+    public fun head_text_for_cookies(): string {
+        return this.head_text();
+    }
+
     // The HTTP status code.
     public fun status(): int {
         let n = this.data.size();

@@ -4,6 +4,8 @@
 
 `HttpClient` and `HttpResponse` are a small, instantiable HTTP client. Like [`File`](file.md), the capability is a pair of [`extern async fun`](../language/async.md) imports implemented once per host, so the same `.dream` runs unchanged everywhere. Each call performs the whole request and hands back the entire response — status, headers, and raw body — that you `await`.
 
+Fallible ops return `Result<_, HttpError>` (`message()` / `code()` such as `HTTP_0`, `HTTP_404`). Typed headers use `HttpHeaders`. `Url.parse` returns `Result<Url, ParseError>`.
+
 ## Runtime support
 
 | Runtime | HTTP backend |
@@ -13,8 +15,6 @@
 | Browser | The page's `fetch` |
 
 The API is identical across all three; only the transport differs. Unlike the dynamic [`js`](../language/references.md) type, there is nothing to release — the body bytes are in hand once the future resolves.
-
-Typed headers use `HttpHeaders` (set/get/contains). `Url.parse` returns `Result<Url, ParseError>`.
 
 ## Creating a client
 
@@ -64,7 +64,7 @@ async fun main(): void {
         Ok(res) => {
             if (res.ok()) {                          // 2xx
                 System.println(res.status());        // 200
-                System.println(res.header("content-type").unwrap_or(""));
+                System.println(res.header("content-type"));
                 switch (res.json()) {
                     Ok(data) => System.println(data.size()),
                     Err(e) => System.println(e.message()),
@@ -78,19 +78,21 @@ async fun main(): void {
 
 ## HTTP methods
 
-`get`/`delete`/`head` take a path; `post`/`put`/`patch` also take a body; `request` gives full control including per-call headers (a JSON-object string, merged over the client's defaults):
+`get`/`delete`/`head` take a path; `post`/`put`/`patch` also take a body; `request` gives full control including per-call `HttpHeaders` (merged over the client's defaults):
 
 ```dream
 async fun main(): void {
     let api = HttpClient("https://api.example.com");
+    let headers = HttpHeaders();
+    headers.set("Content-Type", "application/json");
 
     let created = await api.post("/users", "{\"name\":\"Grace\"}");
-    System.println(created.status());
+    switch (created) {
+        Ok(res) => System.println(res.status()),
+        Err(e) => System.println(e.message()),
+    }
 
-    let res = await api.request("PUT", "/users/1",
-                                "{\"name\":\"Ada\"}",
-                                "{\"Content-Type\":\"application/json\"}");
-    let updated = res.json();
+    let res = await api.request("PUT", "/users/1", "{\"name\":\"Ada\"}", headers);
 }
 ```
 
@@ -102,13 +104,12 @@ For non-text data, the response body is byte-exact via `bytes()`, and `request_b
 async fun main(): void {
     let http = HttpClient("");
 
-    let img = await http.get("https://example.com/logo.png");
-    await File.write_bytes("logo.png", img.bytes());
-
-    let read = await File.read_bytes("logo.png");
-    let payload = read.unwrap_or(Buffer.alloc<byte>(0));
-    let res = await http.post_bytes("https://example.com/upload", payload);
-    System.println(res.status());
+    switch (await http.get("https://example.com/logo.png")) {
+        Ok(img) => {
+            await File.write_bytes("logo.png", img.bytes());
+        },
+        Err(e) => System.println(e.message()),
+    }
 }
 ```
 
@@ -119,14 +120,33 @@ async fun main(): void {
 | Member | Description |
 | --- | --- |
 | `HttpClient(base_url)` | construct; `base_url` is prepended to relative paths (`""` for none) |
+| `with_timeout(ms): HttpClient` | request timeout in milliseconds (`0` = none) |
+| `with_cookie_jar(jar): HttpClient` | attach a `CookieJar` for Cookie / Set-Cookie |
 | `set_header(name, value): HttpClient` | add/overwrite a default header (chainable) |
-| `text(path): Future<string>` | GET and return the body as text |
-| `get(path): Future<HttpResponse>` | GET and return an `HttpResponse` |
-| `post/put/patch(path, body): Future<HttpResponse>` | send a text `body` with the given verb |
-| `delete/head(path): Future<HttpResponse>` | DELETE / HEAD request |
-| `request(method, path, body, headers): Future<HttpResponse>` | arbitrary verb; `headers` is a JSON-object string ("" for none) |
-| `request_bytes(method, path, body, headers): Future<HttpResponse>` | arbitrary verb with a binary `byte[]` body |
-| `post_bytes/put_bytes(path, body): Future<HttpResponse>` | POST / PUT a raw `byte[]` body |
+| `text(path): Future<Result<string, HttpError>>` | GET and return the body as text |
+| `get(path): Future<Result<HttpResponse, HttpError>>` | GET and return an `HttpResponse` |
+| `post/put/patch(path, body): Future<Result<HttpResponse, HttpError>>` | send a text `body` with the given verb |
+| `delete/head(path): Future<Result<HttpResponse, HttpError>>` | DELETE / HEAD request |
+| `request(method, path, body, headers): Future<Result<HttpResponse, HttpError>>` | arbitrary verb; `headers` is `HttpHeaders` |
+| `request_bytes(method, path, body, headers): Future<Result<HttpResponse, HttpError>>` | arbitrary verb with a binary `byte[]` body |
+| `post_bytes/put_bytes(path, body): Future<Result<HttpResponse, HttpError>>` | POST / PUT a raw `byte[]` body |
+| `post_multipart(path, form): Future<Result<HttpResponse, HttpError>>` | POST a `MultipartForm` |
+
+### CookieJar / MultipartForm
+
+`CookieJar.set`/`get`/`clear`/`to_header`/`store_from_response`. `MultipartForm.add_field`/`add_file`/`build()` → `MultipartBuilt` with headers + body.
+
+### HttpHeaders
+
+| Member | Description |
+| --- | --- |
+| `HttpHeaders()` | empty map |
+| `set` / `get` / `contains` / `remove` | case-insensitive name match |
+| `to_wire` / `from_wire` | JSON object string for the host bridge |
+
+### HttpError
+
+Implements [`Error`](option-result.md): `message()`, `code()`, plus `status` (0 for transport). Factories: `HttpError.transport(msg)`, `HttpError.status(code, msg)`.
 
 ### HttpResponse
 
@@ -139,6 +159,10 @@ A view over the raw response bytes. All reads are synchronous.
 | `header(name): string` | value of response header `name` (case-insensitive), or "" |
 | `text(): string` | body as UTF-8 text |
 | `bytes(): byte[]` | body as raw bytes (binary-safe) |
-| `json(): JsonValue` | body parsed as [JSON](json.md) |
+| `json(): Result<JsonValue, ParseError>` | body parsed as [JSON](json.md) |
+
+### Url
+
+`Url.parse(text): Result<Url, ParseError>` splits scheme/host/port/path/query/fragment. `to_string()`, `with_path`, and `join` rebuild or resolve relative paths.
 
 A runnable example lives in [`sample/interop/http.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/http.dream).

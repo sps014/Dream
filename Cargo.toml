@@ -38,6 +38,12 @@ crossterm = { version = "0.28", optional = true }
 # backing `DateTime.now()`/`DateTime.to_local()` (src/execution/host/datetime.rs). Calendar math
 # itself is implemented in pure Dream; chrono is only used for OS timezone-database lookups.
 chrono = { version = "0.4", optional = true }
+unicode-normalization = { version = "0.1", optional = true }
+unicode-segmentation = { version = "1.12", optional = true }
+# Host-backed digests and CSPRNG for `system.crypto` (src/execution/host/crypto.rs).
+sha2 = { version = "0.10", optional = true }
+hmac = { version = "0.12", optional = true }
+getrandom = { version = "0.2", optional = true }
 # Rust bindings to Binaryen's `wasm-opt`, backing the CLI's opt-in `-O`/`--optimize` post-processing
 # pass (src/driver/wasm_opt.rs) that shrinks/optimizes the emitted `.wasm` beyond what the MIR pass
 # pipeline + structural WAT DCE already do. Builds Binaryen from C++ source, so it is excluded from
@@ -49,7 +55,7 @@ default = ["native", "wasm-opt"]
 # `native` pulls in the wasmtime-backed WASM runtime used by the `dream` CLI to
 # execute compiled programs. It is excluded from the wasm32 analyzer build, whose
 # only need is the lexer/parser/analyzer front-end.
-native = ["wasmtime", "reqwest", "serde_json", "crossterm", "chrono"]
+native = ["wasmtime", "reqwest", "serde_json", "crossterm", "chrono", "sha2", "hmac", "getrandom", "unicode-normalization", "unicode-segmentation"]
 # `wasm-opt` pulls in Binaryen bindings for the CLI's `-O`/`--optimize` flag. Separate from `native`
 # since it's a build-time optimization concern rather than a runtime-execution one, but excluded
 # from the wasm32 analyzer build the same way.

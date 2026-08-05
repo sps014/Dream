@@ -9,4 +9,15 @@ extend bool {
         }
         return 0;
     }
+
+    // Parses `true` or `false` (case-sensitive, matching language literals).
+    public static fun parse(text: string): Result<bool, ParseError> {
+        if (text == "true") {
+            return Result.Ok(true);
+        }
+        if (text == "false") {
+            return Result.Ok(false);
+        }
+        return Result.Err(ParseError.invalid("cannot parse bool: expected true or false"));
+    }
 }

@@ -164,11 +164,12 @@ pub(super) fn strings_in_rvalue(rv: &Rvalue, out: &mut Vec<String>) {
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
+        | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::Discriminant(o)
         | Rvalue::UnionField { base: o, .. } => strings_in_operand(o, out),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
             strings_in_operand(a, out);
             strings_in_operand(b, out);
         }
@@ -281,7 +282,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
                 in_operand(a, out);
                 in_operand(b, out);
             }
-            Rvalue::CharAt(a, b) => {
+            Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) => {
                 out.push(panic_msgs::INDEX_OUT_OF_BOUNDS);
                 in_operand(a, out);
                 in_operand(b, out);
@@ -303,6 +304,7 @@ fn checked_bases_in_stmt(s: &Statement, out: &mut Vec<&'static str>) {
             | Rvalue::Unary(_, o)
             | Rvalue::ArrayLen(o)
             | Rvalue::StrLen(o)
+            | Rvalue::StrByteSize(o)
             | Rvalue::IsType(o, _)
             | Rvalue::Discriminant(o)
             | Rvalue::UnionField { base: o, .. } => in_operand(o, out),

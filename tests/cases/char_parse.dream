@@ -1,0 +1,21 @@
+import system;
+import system.text;
+
+fun main(): void {
+    switch (char.parse("A")) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.message()),
+    }
+    switch (char.parse("é")) {
+        Ok(v) => System.println(v.to_int()),
+        Err(e) => System.println(e.code()),
+    }
+    switch (char.parse("ab")) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.code()),
+    }
+    switch (char.parse("")) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.code()),
+    }
+}

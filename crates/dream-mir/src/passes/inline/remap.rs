@@ -111,13 +111,14 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
+        | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::Discriminant(o)
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => remap_operand(o, base),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
             remap_operand(a, base);
             remap_operand(b, base);
         }

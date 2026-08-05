@@ -1,0 +1,12 @@
+import system;
+import system.text;
+
+fun main(): void {
+    let s = "Straße";
+    System.println(s.normalize(UnicodeNormForm.Nfc));
+    System.println(s.to_lower_unicode());
+    let gs = s.graphemes();
+    System.println(gs.size());
+    System.println(gs[0]);
+    System.println(gs[gs.size() - 1]);
+}

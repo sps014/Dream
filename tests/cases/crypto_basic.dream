@@ -1,0 +1,25 @@
+import system;
+import system.crypto;
+import system.encoding;
+
+fun main(): void {
+    let empty = Sha256.hash(Buffer.alloc<byte>(0));
+    System.println(Encoding.hex_encode(empty));
+
+    let abc = Encoding.utf8_encode("abc");
+    System.println(Encoding.hex_encode(Sha256.hash(abc)));
+
+    let key = Encoding.utf8_encode("key");
+    let msg = Encoding.utf8_encode("The quick brown fox jumps over the lazy dog");
+    System.println(Encoding.hex_encode(HmacSha256.sign(key, msg)));
+
+    System.println(Encoding.hex_encode(Sha512.hash(Buffer.alloc<byte>(0))));
+    System.println(Encoding.hex_encode(Sha512.hash(abc)));
+
+    let rnd = SecureRandom.bytes(8);
+    System.println(rnd.size());
+
+    let buf = Buffer.alloc<byte>(16);
+    SecureRandom.fill(buf);
+    System.println(buf.size());
+}

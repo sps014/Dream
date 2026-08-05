@@ -98,6 +98,7 @@ impl Compiler {
             &mut acc.all_interfaces,
             &mut acc.all_enums,
             &mut acc.all_extends,
+            &mut acc.all_globals,
             &mut diagnostics,
             &mut acc.file_contents,
             &mut acc.file_modules,

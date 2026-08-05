@@ -32,7 +32,7 @@ These use ANSI escapes, supported by every macOS/Linux terminal and Windows 10+ 
 
 - `System.read_line()` — blocks until a full line is available on stdin, returns it without the trailing newline.
 - `System.read_key()` — blocks for a single keypress and returns its character code, without waiting for Enter or echoing. Keys with no character (e.g. arrows) yield `(char)0`. In the browser and for non-interactive stdin (piped input), it falls back to reading a single byte.
-- `System.read_int()` / `System.read_double()` — read a line and parse it, returning a `Result` so a malformed line is `Err` rather than a crash.
+- `System.read_int()` / `System.read_double()` / `System.read_bool()` — read a line and parse it, returning a `Result` so a malformed line is `Err` rather than a crash.
 
 ```dream
 System.print("age? ");

@@ -2,32 +2,34 @@
 
 **Package:** `system.text` — `import system.text;` (also pulled in by `import system;`)
 
-`string` is a built-in reference type: heap-allocated, length-prefixed UTF-8, so `size()` is O(1). Basic operations (`+`, `size()`, `char_at`, interpolation) need no import. Higher-level helpers (`substring`, `split`, `trim`, `StringBuilder`, `Regex`, …) require this package.
+`string` is a built-in reference type: heap-allocated, length-prefixed UTF-8. Basic operations (`+`, `size()`, `char_at`, interpolation) need no import. Higher-level helpers (`substring`, `split`, `trim`, `StringBuilder`, `Regex`, `Unicode`, …) require this package.
 
 Build strings with `+` concatenation or [interpolation](../language/operators.md#string-interpolation) (`$"hi {name}"`).
 
 ## Length and access
 
-`size()` returns the character count; `is_empty()` is `true` when there are none. Index with `s[i]` (read-only) or `char_at(i)` to get a `char`, and iterate with `for (let c in s)`:
+`size()` returns the **Unicode scalar** (code point) count; `byte_size()` returns the UTF-8 byte length (O(1)). `is_empty()` is `true` when there are no scalars. Index with `s[i]` (read-only) or `char_at(i)` to get the `i`th scalar as a `char`; use `byte_at(i)` for raw UTF-8 byte access. Iterate with `for (let c in s)` — each `c` is one scalar:
 
 ```dream
 import system;
 import system.text;
 
-let s = "abc";
-System.println(s.size());      // 3
-System.println(s[0]);          // 'a'
-System.println(s.char_at(1));  // 'b'
+let s = "aé🙂";
+System.println(s.size());       // 3 (scalars)
+System.println(s.byte_size());  // 7 (UTF-8 bytes)
+System.println(s[0]);           // 'a'
+System.println(s.char_at(1));   // 'é'
+System.println(s.byte_at(1));   // 195 (second byte of é)
 
 for (let c in s) {
-    System.println(c);         // 'a', 'b', 'c'
+    System.println(c);          // 'a', 'é', '🙂'
 }
 ```
 
-Indexing is read-only (no `s[i] = c`). Build derived strings with `substring`, `+`, or the low-level `String.alloc`/`String.set` helpers.
+Indexing is read-only (no `s[i] = c`). Build derived strings with `substring`, `+`, or the low-level `string.alloc`/`string.set` helpers (scalar indices).
 
 !!! note
-    `char_at` and `s[i]` [panic](../language/panics.md) on an out-of-range (including negative) index: the program prints a message and halts, rather than reading past the string's data.
+    `char_at`, `s[i]`, and `byte_at` [panic](../language/panics.md) on an out-of-range (including negative) index.
 
 ## Searching
 
@@ -48,16 +50,20 @@ let j = "hello".index_of('z').unwrap_or(0 - 1);   // -1 (absent)
 
 Each of these returns a **new** string:
 
-- `substring(start, end)` — the half-open range `[start, end)`; a non-positive length yields `""`.
+- `substring(start, end)` — the half-open scalar range `[start, end)`; a non-positive length yields `""`.
 - `to_lower()` / `to_upper()` — ASCII case conversion.
+- `to_lower_unicode()` — full Unicode lowercase (via `Unicode.to_lower_unicode`).
 - `trim()` — remove leading and trailing ASCII whitespace.
 - `repeat(times)` — the string repeated; `0` or less yields `""`.
+- `normalize(form)` — Unicode normalization (`UnicodeNormForm.Nfc`, `Nfd`, `Nfkc`, `Nfkd`).
+- `graphemes()` — split into user-perceived grapheme clusters (`string[]`).
 
 ```dream
 System.println("hello world".substring(6, 11));   // "world"
 System.println("Hello World".to_lower());         // "hello world"
 System.println("  hello  ".trim());               // "hello"
 System.println("ab".repeat(3));                   // "ababab"
+System.println("Straße".to_lower_unicode());      // "straße"
 ```
 
 ## Comparison
@@ -68,6 +74,20 @@ System.println("ab".repeat(3));                   // "ababab"
 System.println("hello".equals("hello"));   // true
 System.println("hello" == "hello");        // true
 ```
+
+## Unicode helpers: `Unicode`
+
+The `Unicode` class (same `system.text` package) exposes normalization, grapheme segmentation, and full case folding via host-backed intrinsics:
+
+```dream
+import system.text;
+
+let nfc = Unicode.normalize("e\u0301", UnicodeNormForm.Nfc);
+let lower = Unicode.to_lower_unicode("İ");  // Turkish I with dot
+let parts = Unicode.graphemes("👨‍👩‍👧");    // family emoji as graphemes
+```
+
+`string` also exposes `.normalize(form)`, `.to_lower_unicode()`, and `.graphemes()` as thin wrappers.
 
 ## Building strings incrementally: `StringBuilder`
 

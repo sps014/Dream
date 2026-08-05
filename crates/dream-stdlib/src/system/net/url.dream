@@ -2,13 +2,20 @@ module system.net;
 
 // Parsed URL components.
 public class Url {
+    // Scheme without trailing `://` (e.g. `https`); empty when absent.
     public scheme: string;
+    // Host name or address (without port).
     public host: string;
+    // Explicit port when present in the source text.
     public port: Option<int>;
+    // Path beginning with `/` (defaults to `/`).
     public path: string;
+    // Query string without the leading `?`.
     public query: string;
+    // Fragment without the leading `#`.
     public fragment: string;
 
+    // Builds a URL from already-split components.
     constructor(
         scheme: string,
         host: string,
@@ -25,6 +32,7 @@ public class Url {
         this.fragment = fragment;
     }
 
+    // Parses an absolute or scheme-relative URL; rejects empty input.
     public static fun parse(text: string): Result<Url, ParseError> {
         if (text.is_empty()) {
             return Result.Err(ParseError.invalid("empty URL"));
@@ -95,6 +103,7 @@ public class Url {
         return Result.Ok(Url(scheme, host, port, path, query, fragment));
     }
 
+    // Reconstructs the URL string from components.
     @override
     public fun to_string(): string {
         let result = "";
@@ -117,10 +126,12 @@ public class Url {
         return result;
     }
 
+    // Returns a copy with `path` replaced.
     public fun with_path(path: string): Url {
         return Url(this.scheme, this.host, this.port, path, this.query, this.fragment);
     }
 
+    // Resolves `relative` against this URL (absolute http(s) URLs replace entirely).
     public fun join(relative: string): Result<Url, ParseError> {
         if (relative.starts_with("http://") || relative.starts_with("https://")) {
             return Url.parse(relative);

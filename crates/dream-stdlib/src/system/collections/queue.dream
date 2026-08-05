@@ -4,18 +4,22 @@ module system.collections;
 public class Queue<T> : Collection<T> {
     items: List<T>;
 
+    // Creates an empty queue.
     constructor() {
         this.items = List<T>();
     }
 
+    // Number of elements currently stored.
     public fun size(): int {
         return this.items.size();
     }
 
+    // Appends `value` at the back of the queue.
     public fun enqueue(value: T): void {
         this.items.push(value);
     }
 
+    // Removes and returns the front element, or `None` when empty.
     public fun dequeue(): Option<T> {
         if (this.items.size() == 0) {
             return Option.None;
@@ -25,14 +29,17 @@ public class Queue<T> : Collection<T> {
         return v;
     }
 
+    // Returns the front element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
         return this.items.get(0);
     }
 
+    // Removes every element.
     public fun clear(): void {
         this.items.clear();
     }
 
+    // Iterates elements from front to back.
     @iterator
     public fun iterator(): ListIterator<T> {
         return this.items.iterator();

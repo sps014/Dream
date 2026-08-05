@@ -541,6 +541,7 @@ impl Emitter<'_> {
                 self.line("     (local.get $__obj)");
             }
             Rvalue::CharAt(s, i) => self.emit_char_at(s, i),
+            Rvalue::ByteAt(s, i) => self.emit_byte_at(s, i),
             Rvalue::Concat(a, b) => {
                 self.emit_operand(a);
                 self.emit_operand(b);
@@ -608,9 +609,11 @@ impl Emitter<'_> {
             }
             Rvalue::StrLen(o) => {
                 self.emit_operand(o);
-                self.line(
-                    "     (call $strlen) ;; O(1): length is stored at the string's data pointer",
-                );
+                self.line("     (call $str_scalar_len)");
+            }
+            Rvalue::StrByteSize(o) => {
+                self.emit_operand(o);
+                self.line("     (call $str_byte_size)");
             }
             Rvalue::Cast(o, from, to) => self.emit_cast(o, *from, *to),
             Rvalue::IsType(o, target) => {

@@ -69,4 +69,12 @@ extend char : Comparable<char> {
         string.set(result, 0, this);
         return result;
     }
+
+    // Parses exactly one Unicode scalar from `text`.
+    public static fun parse(text: string): Result<char, ParseError> {
+        if (text.size() != 1) {
+            return Result.Err(ParseError.invalid("char.parse requires exactly one Unicode scalar"));
+        }
+        return Result.Ok(text.char_at(0));
+    }
 }

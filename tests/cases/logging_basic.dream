@@ -1,0 +1,13 @@
+import system;
+import system.logging;
+
+fun main(): void {
+    let log = Logger.get("app");
+    log.add_handler(ConsoleHandler());
+    log.set_level(LogLevel.Debug);
+    log.debug("hello");
+    log.info("world");
+    log.trace("hidden");
+    let same = Logger.get("app");
+    same.warn("again");
+}

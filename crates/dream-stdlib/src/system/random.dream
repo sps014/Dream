@@ -4,6 +4,7 @@ module system;
 public class Random {
     state: uint;
 
+    // Creates a generator from `seed` (`0` is remapped to `1` so the state is never zero).
     constructor(seed: uint) {
         let s = seed;
         if (s == (uint)0) {

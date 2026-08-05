@@ -156,6 +156,21 @@ extend string : Comparable<string> {
         return result;
     }
 
+    // Full Unicode lowercase via `Unicode.to_lower_unicode`.
+    public fun to_lower_unicode(): string {
+        return Unicode.to_lower_unicode(this);
+    }
+
+    // User-perceived grapheme clusters via `Unicode.graphemes`.
+    public fun graphemes(): string[] {
+        return Unicode.graphemes(this);
+    }
+
+    // Unicode normalization to the requested form.
+    public fun normalize(form: UnicodeNormForm): string {
+        return Unicode.normalize(this, form);
+    }
+
     // A new string with leading and trailing whitespace removed.
     public fun trim(): string {
         let n = this.size();

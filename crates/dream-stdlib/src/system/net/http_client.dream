@@ -4,17 +4,42 @@ module system.net;
 public class HttpClient {
     base_url: string;
     default_headers: HttpHeaders;
+    // Request timeout in milliseconds; `0` means no timeout.
+    public timeout_ms: int;
+    cookie_jar: Option<CookieJar>;
+    cancel_token: Option<CancellationToken>;
 
     @js("Dream", "httpRequest")
-    static extern async fun http_request(url: string, method: string, headers: string, body: string): char[];
+    static extern async fun http_request(url: string, method: string, headers: string, body: string, timeout_ms: int): char[];
 
     @js("Dream", "httpRequestBytes")
-    static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[]): char[];
+    static extern async fun http_request_bytes(url: string, method: string, headers: string, body: byte[], timeout_ms: int): char[];
 
     // Creates an HTTP client with a base URL.
     constructor(base_url: string) {
         this.base_url = base_url;
         this.default_headers = HttpHeaders();
+        this.timeout_ms = 0;
+        this.cookie_jar = Option.None;
+        this.cancel_token = Option.None;
+    }
+
+    // Sets the request timeout in milliseconds (`0` = none).
+    public fun with_timeout(ms: int): HttpClient {
+        this.timeout_ms = ms;
+        return this;
+    }
+
+    // Attaches a cookie jar used for outbound `Cookie` and inbound `Set-Cookie`.
+    public fun with_cookie_jar(jar: CookieJar): HttpClient {
+        this.cookie_jar = Option.Some(jar);
+        return this;
+    }
+
+    // Attaches a cooperative cancellation token checked before each request.
+    public fun with_cancellation(token: CancellationToken): HttpClient {
+        this.cancel_token = Option.Some(token);
+        return this;
     }
 
     // Adds a default header sent with every request.
@@ -41,6 +66,15 @@ public class HttpClient {
         for (let pair in call) {
             merged.set(pair.key, pair.value);
         }
+        switch (this.cookie_jar) {
+            Some(jar) => {
+                let cookie = jar.to_header();
+                if (cookie.is_empty() == false) {
+                    merged.set("Cookie", cookie);
+                }
+            },
+            None => { },
+        }
         return merged.to_wire();
     }
 
@@ -49,12 +83,24 @@ public class HttpClient {
         if (res.status() == 0) {
             return Result.Err(HttpError.transport(res.text()));
         }
+        switch (this.cookie_jar) {
+            Some(jar) => { jar.store_from_response(res); },
+            None => { },
+        }
         return Result.Ok(res);
     }
 
     // Performs a request with a text body.
     public async fun request(method: string, path: string, body: string, headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        let raw = await HttpClient.http_request(this.resolve(path), method, this.merge_headers(headers), body);
+        switch (this.cancel_token) {
+            Some(tok) => {
+                if (tok.is_cancelled()) {
+                    return Result.Err(HttpError.transport("cancelled"));
+                }
+            },
+            None => { },
+        }
+        let raw = await HttpClient.http_request(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
         return this.wrap(raw);
     }
 
@@ -98,7 +144,15 @@ public class HttpClient {
 
     // Performs a request with a binary body.
     public async fun request_bytes(method: string, path: string, body: byte[], headers: HttpHeaders): Result<HttpResponse, HttpError> {
-        let raw = await HttpClient.http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body);
+        switch (this.cancel_token) {
+            Some(tok) => {
+                if (tok.is_cancelled()) {
+                    return Result.Err(HttpError.transport("cancelled"));
+                }
+            },
+            None => { },
+        }
+        let raw = await HttpClient.http_request_bytes(this.resolve(path), method, this.merge_headers(headers), body, this.timeout_ms);
         return this.wrap(raw);
     }
 
@@ -110,5 +164,11 @@ public class HttpClient {
     // Performs a PUT request with a binary body.
     public async fun put_bytes(path: string, body: byte[]): Result<HttpResponse, HttpError> {
         return await this.request_bytes("PUT", path, body, HttpHeaders());
+    }
+
+    // POSTs a multipart form via `request_bytes`.
+    public async fun post_multipart(path: string, form: MultipartForm): Result<HttpResponse, HttpError> {
+        let built = form.build();
+        return await this.request_bytes("POST", path, built.body, built.headers);
     }
 }

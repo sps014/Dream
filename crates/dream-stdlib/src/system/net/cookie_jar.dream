@@ -1,0 +1,92 @@
+module system.net;
+
+// In-memory cookie store for `HttpClient` (no OS cookie jar).
+public class CookieJar {
+    names: List<string>;
+    values: List<string>;
+
+    // Creates an empty jar.
+    constructor() {
+        this.names = List<string>();
+        this.values = List<string>();
+    }
+
+    // Stores or overwrites cookie `name`.
+    public fun set(name: string, value: string): void {
+        let i = this._find(name);
+        if (i >= 0) {
+            this.values.set(i, value);
+        } else {
+            this.names.push(name);
+            this.values.push(value);
+        }
+    }
+
+    // Value for `name`, or `None` when absent.
+    public fun get(name: string): Option<string> {
+        let i = this._find(name);
+        if (i >= 0) {
+            return this.values.get(i);
+        }
+        return Option.None;
+    }
+
+    // Removes every cookie.
+    public fun clear(): void {
+        this.names.clear();
+        this.values.clear();
+    }
+
+    // Number of stored cookies.
+    public fun size(): int {
+        return this.names.size();
+    }
+
+    // Builds a `Cookie` request header value (`name=value; …`).
+    public fun to_header(): string {
+        let out = "";
+        let i = 0;
+        while (i < this.names.size()) {
+            if (i > 0) {
+                out = out + "; ";
+            }
+            out = out + this.names.get(i).unwrap_or("") + "=" + this.values.get(i).unwrap_or("");
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Parses `Set-Cookie` lines from an HTTP response into this jar.
+    public fun store_from_response(res: HttpResponse): void {
+        let head = res.head_text_for_cookies();
+        let lines = head.split('\n');
+        let i = 0;
+        while (i < lines.size()) {
+            let line = lines[i];
+            let lower = line.to_lower();
+            if (lower.starts_with("set-cookie:")) {
+                let rest = line.substring(11, line.size()).trim();
+                let semi = rest.index_of(';').unwrap_or(rest.size());
+                let pair = rest.substring(0, semi);
+                let eq = pair.index_of('=').unwrap_or(0 - 1);
+                if (eq > 0) {
+                    let name = pair.substring(0, eq).trim();
+                    let value = pair.substring(eq + 1, pair.size()).trim();
+                    this.set(name, value);
+                }
+            }
+            i = i + 1;
+        }
+    }
+
+    fun _find(name: string): int {
+        let i = 0;
+        while (i < this.names.size()) {
+            if (this.names.get(i).unwrap_or("") == name) {
+                return i;
+            }
+            i = i + 1;
+        }
+        return 0 - 1;
+    }
+}

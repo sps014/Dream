@@ -1,0 +1,20 @@
+import system;
+
+fun main(): void {
+    switch (bool.parse("true")) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.message()),
+    }
+    switch (bool.parse("false")) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.message()),
+    }
+    switch (bool.parse("True")) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.code()),
+    }
+    switch (bool.parse("")) {
+        Ok(v) => System.println(v),
+        Err(e) => System.println(e.code()),
+    }
+}

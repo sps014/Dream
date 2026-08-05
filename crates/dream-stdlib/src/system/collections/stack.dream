@@ -4,30 +4,37 @@ module system.collections;
 public class Stack<T> : Collection<T> {
     items: List<T>;
 
+    // Creates an empty stack.
     constructor() {
         this.items = List<T>();
     }
 
+    // Number of elements currently stored.
     public fun size(): int {
         return this.items.size();
     }
 
+    // Pushes `value` onto the top of the stack.
     public fun push(value: T): void {
         this.items.push(value);
     }
 
+    // Removes and returns the top element, or `None` when empty.
     public fun pop(): Option<T> {
         return this.items.pop();
     }
 
+    // Returns the top element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
         return this.items.get(this.items.size() - 1);
     }
 
+    // Removes every element.
     public fun clear(): void {
         this.items.clear();
     }
 
+    // Iterates elements from bottom to top.
     @iterator
     public fun iterator(): ListIterator<T> {
         return this.items.iterator();

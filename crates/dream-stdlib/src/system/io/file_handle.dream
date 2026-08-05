@@ -1,0 +1,98 @@
+module system.io;
+
+// FileHandle - an OS-backed read/write/seek stream over an open file.
+// Host calls are synchronous; `*_async` methods wrap the same operations in a `Future` for
+// await-style call sites. `close` is sync-only.
+public class FileHandle {
+    _id: int;
+    public path: string;
+
+    constructor(id: int, path: string) {
+        this._id = id;
+        this.path = path;
+    }
+
+    @js("Dream", "fileOpen")
+    static extern fun file_open(path: string, mode: string): int;
+
+    @js("Dream", "fileHandleRead")
+    static extern fun file_handle_read(id: int, n: int): byte[];
+
+    @js("Dream", "fileHandleWrite")
+    static extern fun file_handle_write(id: int, data: byte[]): long;
+
+    @js("Dream", "fileHandleSeek")
+    static extern fun file_handle_seek(id: int, pos: long): int;
+
+    @js("Dream", "fileHandleClose")
+    static extern fun file_handle_close(id: int): void;
+
+    static fun open_result(path: string, mode: string): Result<FileHandle, IoError> {
+        let id = FileHandle.file_open(path, mode);
+        if (id < 0) {
+            if (id == (0 - 1)) {
+                return Result.Err(IoError.not_found(path));
+            }
+            if (id == (0 - 2)) {
+                return Result.Err(IoError.permission_denied(path));
+            }
+            if (id == (0 - 3)) {
+                return Result.Err(IoError.other(path, "invalid open mode: " + mode));
+            }
+            return Result.Err(IoError.other(path, "failed to open file: " + path));
+        }
+        return Result.Ok(FileHandle(id, path));
+    }
+
+    // Opens `path` with `mode` ("r", "w", "a", "r+", "w+", "a+").
+    public static fun open(path: string, mode: string): Result<FileHandle, IoError> {
+        return FileHandle.open_result(path, mode);
+    }
+
+    // Async wrapper around `open`.
+    public static async fun open_async(path: string, mode: string): Result<FileHandle, IoError> {
+        return FileHandle.open(path, mode);
+    }
+
+    // Reads up to `n` bytes from the current position, advancing the cursor.
+    public fun read(n: int): Result<byte[], IoError> {
+        return Result.Ok(FileHandle.file_handle_read(this._id, n));
+    }
+
+    // Async wrapper around `read`.
+    public async fun read_async(n: int): Result<byte[], IoError> {
+        return this.read(n);
+    }
+
+    // Writes `data` at the current position, advancing the cursor; returns bytes written.
+    public fun write(data: byte[]): Result<int, IoError> {
+        let n = FileHandle.file_handle_write(this._id, data);
+        if (n < 0L) {
+            return Result.Err(IoError.other(this.path, "write failed"));
+        }
+        return Result.Ok((int)n);
+    }
+
+    // Async wrapper around `write`.
+    public async fun write_async(data: byte[]): Result<int, IoError> {
+        return this.write(data);
+    }
+
+    // Seeks to absolute byte offset `pos` from the start of the file.
+    public fun seek(pos: long): Result<bool, IoError> {
+        if (FileHandle.file_handle_seek(this._id, pos) < 0) {
+            return Result.Err(IoError.other(this.path, "seek failed"));
+        }
+        return Result.Ok(true);
+    }
+
+    // Async wrapper around `seek`.
+    public async fun seek_async(pos: long): Result<bool, IoError> {
+        return this.seek(pos);
+    }
+
+    // Releases the OS handle (sync only).
+    public fun close(): void {
+        FileHandle.file_handle_close(this._id);
+    }
+}

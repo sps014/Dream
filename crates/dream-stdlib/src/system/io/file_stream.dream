@@ -1,66 +1,55 @@
 module system.io;
 
-// FileStream: a buffered, seekable cursor over a file's bytes.
+// FileStream - a seekable cursor over an open `FileHandle` (no whole-file preload).
 public class FileStream {
-    data: byte[];
+    handle: FileHandle;
     pos: int;
 
-    constructor(data: byte[]) {
-        this.data = data;
+    constructor(handle: FileHandle) {
+        this.handle = handle;
         this.pos = 0;
     }
 
-    // Clamps `end` to the buffer length and returns it (helper for the read methods).
-    fun _clamp(end: int): int {
-        if (end > this.data.size()) {
-            return this.data.size();
-        }
-        return end;
-    }
-
-    // Reads up to `n` raw bytes from the current position, advancing the cursor. No conversion.
+    // Reads up to `n` raw bytes from the current position, advancing the cursor.
     public fun read_bytes(n: int): byte[] {
-        let end = this._clamp(this.pos + n);
-        let count = end - this.pos;
-        if (count < 0) {
-            count = 0;
-        }
-        let out = Buffer.alloc<byte>(count);
-        let i = 0;
-        while (i < count) {
-            out[i] = this.data[this.pos + i];
-            i = i + 1;
-        }
-        this.pos = end;
-        return out;
+        let bytes = this.handle.read(n).unwrap_or(Buffer.alloc<byte>(0));
+        this.pos = this.pos + bytes.size();
+        return bytes;
     }
 
-    // Reads up to `n` bytes from the current position as text, advancing the cursor. Each raw
-    // byte is widened to a `char` code point for the string view.
+    // Reads up to `n` bytes from the current position as text, advancing the cursor.
     public fun read(n: int): string {
-        let end = this._clamp(this.pos + n);
-        let count = end - this.pos;
-        if (count < 0) {
-            count = 0;
-        }
+        let bytes = this.read_bytes(n);
+        let count = bytes.size();
         let out = string.alloc(count);
         let i = 0;
         while (i < count) {
-            string.set(out, i, (char)this.data[this.pos + i]);
+            string.set(out, i, (char)bytes[i]);
             i = i + 1;
         }
-        this.pos = end;
         return out;
     }
 
     // Reads everything remaining from the current position as text.
     public fun read_all(): string {
-        return this.read(this.data.size() - this.pos);
+        let sz = File.size(this.handle.path);
+        if (sz.is_none()) {
+            return "";
+        }
+        let remaining = (int)sz.unwrap_or(0L) - this.pos;
+        if (remaining < 0) {
+            remaining = 0;
+        }
+        return this.read(remaining);
     }
 
-    // True while there are unread bytes.
+    // True while the cursor has not reached the end of the file.
     public fun has_more(): bool {
-        return this.pos < this.data.size();
+        let sz = File.size(this.handle.path);
+        if (sz.is_none()) {
+            return false;
+        }
+        return this.pos < (int)sz.unwrap_or(0L);
     }
 
     // Current cursor offset (bytes from the start).
@@ -68,30 +57,28 @@ public class FileStream {
         return this.pos;
     }
 
-    // Total number of buffered bytes (the same `size()` every collection answers to).
+    // Total file size in bytes (`-1` when the path is missing).
     public fun size(): int {
-        return this.data.size();
+        let sz = File.size(this.handle.path);
+        if (sz.is_none()) {
+            return (0 - 1);
+        }
+        return (int)sz.unwrap_or(0L);
     }
 
-    // Moves the cursor to an absolute offset (clamped to [0, length]).
+    // Moves the cursor to an absolute offset from the start of the file.
     public fun seek(offset: int): void {
-        let target = offset;
-        if (target < 0) {
-            target = 0;
-        }
-        if (target > this.data.size()) {
-            target = this.data.size();
-        }
-        this.pos = target;
+        this.handle.seek((long)offset);
+        this.pos = offset;
     }
 
     // Rewinds the cursor to the start.
     public fun reset(): void {
-        this.pos = 0;
+        this.seek(0);
     }
 
-    // Releases the buffer (no-op for the buffered stream; present for API symmetry).
+    // Releases the underlying OS handle.
     public fun close(): void {
-        this.pos = this.data.size();
+        this.handle.close();
     }
 }

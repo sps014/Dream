@@ -438,17 +438,29 @@ impl Emitter<'_> {
         self.line("     (i32.add)");
     }
 
-    /// Emits a checked `s[i]` (`char At(int)`): a located bounds check (see
-    /// [`Self::emit_bounds_check`]) ahead of the raw `$char_at` byte read, which no longer checks
-    /// internally — moving the check to the call site gives string indexing the same precise
-    /// file:line attribution as array indexing, rather than the one bare message a shared runtime
-    /// helper could otherwise give every caller.
+    /// Emits a checked `s[i]` (`char At(int)`): a located scalar-index bounds check ahead of the raw
+    /// `$char_at` read.
     fn emit_char_at(&mut self, s: &Operand, i: &Operand) {
+        let s_for_check = s.clone();
+        self.emit_operand(i);
+        self.emit_operand(&s_for_check);
+        self.line("     (call $str_scalar_len)");
+        self.line("     (i32.ge_u)");
+        self.line("     (if (then");
+        self.emit_panic(super::panic_msgs::INDEX_OUT_OF_BOUNDS);
+        self.line("     ))");
+        self.emit_operand(s);
+        self.emit_operand(i);
+        self.line("     (call $char_at)");
+    }
+
+    /// Emits a checked `s.byte_at(i)`: bounds check against the UTF-8 byte length, then `$byte_at`.
+    fn emit_byte_at(&mut self, s: &Operand, i: &Operand) {
         let s_for_check = s.clone();
         self.emit_bounds_check(move |slf| slf.emit_operand(&s_for_check), i);
         self.emit_operand(s);
         self.emit_operand(i);
-        self.line("     (call $char_at)");
+        self.line("     (call $byte_at)");
     }
 
     /// The struct field's `(byte offset, type)` from the layout table, or `None` when `base` is not a

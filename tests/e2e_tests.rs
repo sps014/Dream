@@ -1,8 +1,9 @@
 use dream::driver::compiler::{Compiler, Target};
 use dream::execution::host::{
-    link_console_functions, link_datetime_functions, link_file_functions, link_http_functions,
-    link_math_functions, link_process_functions, link_worker_functions, read_string_from_memory,
-    set_worker_module,
+    link_console_functions, link_crypto_functions, link_datetime_functions, link_file_functions,
+    link_http_functions, link_math_functions, link_process_functions, link_text_functions,
+    link_worker_functions,
+    read_string_from_memory, set_worker_module,
 };
 use pretty_assertions::assert_eq;
 use rayon::prelude::*;
@@ -171,9 +172,11 @@ fn run_test_case(dream_file: &Path, release: bool, wat_ext: &str) {
     link_math_functions(&mut linker).unwrap();
     link_file_functions(&mut linker).unwrap();
     link_http_functions(&mut linker).unwrap();
+    link_crypto_functions(&mut linker).unwrap();
     link_console_functions(&mut linker).unwrap();
     link_datetime_functions(&mut linker).unwrap();
     link_process_functions(&mut linker).unwrap();
+    link_text_functions(&mut linker).unwrap();
     link_worker_functions(&mut linker).unwrap();
     linker
         .func_wrap("env", "strlen", |_: i32| -> i32 { 0 })

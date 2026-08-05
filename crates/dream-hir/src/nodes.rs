@@ -226,11 +226,14 @@ pub enum HExprKind {
     },
     /// `array.len()` — the length word stored at the array's data pointer.
     ArrayLen(Box<HExpr>),
-    /// `string.len()` — a runtime `$strlen` call (O(1): strings are length-prefixed, the length word
-    /// is stored at the data pointer, mirroring arrays).
+    /// `string.len()` — a runtime `$str_scalar_len` call (Unicode scalar count over the UTF-8 payload).
     StrLen(Box<HExpr>),
-    /// `string.char_at(i)` — a runtime `$char_at` read: `.0` is the string, `.1` the byte index.
+    /// `string.byte_size()` — a runtime `$str_byte_size` call (O(1) byte-length load).
+    StrByteSize(Box<HExpr>),
+    /// `string.char_at(i)` — a runtime `$char_at` read: `.0` is the string, `.1` the scalar index.
     CharAt(Box<HExpr>, Box<HExpr>),
+    /// `string.byte_at(i)` — a runtime `$byte_at` read: `.0` is the string, `.1` the byte index.
+    ByteAt(Box<HExpr>, Box<HExpr>),
     /// The object-protocol `x.hash_code()` (typed `int`) with no user override: dispatches on the
     /// receiver's static type to the matching hash helper.
     HashCode(Box<HExpr>),

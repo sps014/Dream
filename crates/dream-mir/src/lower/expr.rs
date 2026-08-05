@@ -167,7 +167,9 @@ impl Lowerer<'_> {
             },
             HExprKind::ArrayLen(a) => Rvalue::ArrayLen(self.lower_operand(a)),
             HExprKind::StrLen(a) => Rvalue::StrLen(self.lower_operand(a)),
+            HExprKind::StrByteSize(a) => Rvalue::StrByteSize(self.lower_operand(a)),
             HExprKind::CharAt(s, i) => Rvalue::CharAt(self.lower_operand(s), self.lower_operand(i)),
+            HExprKind::ByteAt(s, i) => Rvalue::ByteAt(self.lower_operand(s), self.lower_operand(i)),
             HExprKind::ArrayNew { elem_ty, len } => Rvalue::ArrayNew {
                 elem_ty: *elem_ty,
                 len: self.lower_operand(len),

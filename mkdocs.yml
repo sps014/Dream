@@ -65,6 +65,7 @@ nav:
     - Operators: language/operators.md
     - Control Flow: language/control-flow.md
     - Functions: language/functions.md
+    - Comments: language/comments.md
     - Panics: language/panics.md
     - Language Invariants: language/invariants.md
   - Types & Data:
@@ -89,14 +90,18 @@ nav:
     - Built-ins: stdlib/builtins.md
     - Strings: stdlib/string.md
     - Option & Result: stdlib/option-result.md
-    - Collections (List & Map): stdlib/collections.md
+    - Collections (List, Map, Queue, Stack): stdlib/collections.md
     - Lock & Semaphore: stdlib/sync.md
+    - Encoding: stdlib/encoding.md
+    - Random: stdlib/random.md
     - System & IO:
       - JSON: stdlib/json.md
       - File I/O: stdlib/file.md
       - HTTP: stdlib/http.md
       - Regex: stdlib/regex.md
       - DateTime: stdlib/datetime.md
+      - Logging: stdlib/logging.md
+      - Crypto: stdlib/crypto.md
   - Compiler Internals:
     - Overview: compiler/README.md
     - Pipeline: compiler/01-pipeline-overview.md

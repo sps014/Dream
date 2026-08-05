@@ -368,6 +368,43 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Records `recv.byte_size()` (typed `int`): UTF-8 byte length via `StrByteSize`.
+    pub(in crate::analyzer) fn hir_set_str_byte_size(&mut self, recv: Option<HExpr>) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match recv {
+            Some(e) => {
+                let int = self.type_ctx.interner.int();
+                self.hir.last = Some(HExpr::new(int, HExprKind::StrByteSize(Box::new(e))));
+            }
+            None => self.hir.last = None,
+        }
+    }
+
+    /// Records `recv.byte_at(idx)` (typed `int`): a runtime `$byte_at` read.
+    pub(in crate::analyzer) fn hir_set_byte_at(
+        &mut self,
+        recv: Option<HExpr>,
+        idx: Option<HExpr>,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        match (recv, idx) {
+            (Some(r), Some(i)) => {
+                let int = self.type_ctx.interner.int();
+                self.hir.last = Some(HExpr::new(
+                    int,
+                    HExprKind::ByteAt(Box::new(r), Box::new(i)),
+                ));
+            }
+            _ => self.hir.last = None,
+        }
+    }
+
     /// Records `recv.char_at(idx)` (typed `char`): a runtime `$char_at` read. Drops out of coverage
     /// if either the receiver or the index is not representable.
     pub(in crate::analyzer) fn hir_set_char_at(

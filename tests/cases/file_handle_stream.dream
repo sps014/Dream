@@ -1,0 +1,47 @@
+// Exercises FileHandle streaming and FileStream over a live handle (no whole-file preload).
+import system;
+import system.io;
+
+async fun main(): void {
+    let path = "dream_file_handle_e2e.tmp";
+
+    await File.write(path, "Dream\nrocks\n");
+
+    // FileStream via File.open (OS-backed; no whole-file preload).
+    let stream = switch (File.open(path)) {
+        Ok(s) => s,
+        Err(e) => FileStream(FileHandle(0, "")),
+    };
+    System.println(stream.read(5));
+    System.println(stream.position());
+    stream.seek(6);
+    System.println(stream.read_all());
+    stream.close();
+
+    // FileHandle write mode (sync primary API).
+    let write_path = "dream_file_handle_write.tmp";
+    let writer = switch (FileHandle.open(write_path, "w")) {
+        Ok(h) => h,
+        Err(e) => FileHandle(0, ""),
+    };
+    let data = Buffer.alloc<byte>(3);
+    data[0] = (byte)65;
+    data[1] = (byte)66;
+    data[2] = (byte)67;
+    writer.write(data);
+    writer.close();
+    let echoed = await File.read(write_path);
+    System.println(echoed.unwrap_or(""));
+
+    // Async variants still work.
+    let reader = switch (await FileHandle.open_async(path, "r")) {
+        Ok(h) => h,
+        Err(e) => FileHandle(0, ""),
+    };
+    let chunk = await reader.read_async(5);
+    System.println(chunk.unwrap_or(Buffer.alloc<byte>(0)).size());
+    reader.close();
+
+    await File.delete(path);
+    await File.delete(write_path);
+}

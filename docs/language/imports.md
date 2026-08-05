@@ -7,15 +7,18 @@ A Dream program can span several `.dream` files. `import` at the top of a file p
 Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain import loads that package (and its dependencies) into the program; public names are then usable unqualified:
 
 ```dream
-import system;                 // System, DateTime, Stopwatch, …
-import system.collections;     // List, Map, Set
+import system;                 // System, DateTime, Stopwatch, Random, …
+import system.collections;     // List, Map, Set, Queue, Stack
 import system.text;            // string methods, StringBuilder, Regex
 import system.json;            // JSON, JsonValue
-import system.net;             // HttpClient, HttpResponse
-import system.io;              // File, FileStream
+import system.net;             // HttpClient, HttpResponse, HttpHeaders, Url, …
+import system.io;              // File, FileStream, Path, IoError
+import system.encoding;        // Encoding (UTF-8 / hex / Base64)
+import system.logging;         // Logger, LogLevel, handlers
+import system.crypto;          // Sha256, HmacSha256, SecureRandom
 ```
 
-Always available without an import (bootstrap): `Option`, `Result`, `Buffer`, `Bytes`, `Span`, `Pointer`, `Promise`, `WebWorker`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).
+Always available without an import (bootstrap): `Option`, `Result`, `Error`, `ParseError`, `Buffer`, `Bytes`, `Span`, `Pointer`, `Promise`, `WebWorker`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, `bool.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).
 
 There is no `import system.*;` wildcard — import each package you need (the editor offers an auto-import quick fix when you type an unresolved stdlib name).
 

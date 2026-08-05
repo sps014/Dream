@@ -32,8 +32,9 @@ const HEAP_HEADER_SIZE: u32 = super::abi::HEAP_HEADER_SIZE;
 
 /// Base address (block start) of the interned string data segment. Each string is a heap-object
 /// block `[size=0][tag=STRING][ref_count=1][len: i32][utf8]`; the mapped address points at the
-/// length word (block start + header), with utf8 bytes at `ptr+4`. `$strlen` is a single load at
-/// `ptr`; there is no NUL terminator (the length prefix makes it redundant). The heap starts above.
+/// length word (block start + header), with utf8 bytes at `ptr+4`. `$str_byte_size` is a single load at
+/// `ptr`; `$str_scalar_len` counts Unicode scalars. There is no NUL terminator (the length prefix makes
+/// it redundant). The heap starts above.
 const STRING_BASE: u32 = super::abi::STRING_BASE;
 
 /// Bytes reserved for the shadow stack (inline value-`struct` locals). It grows *downward* from its
@@ -53,7 +54,7 @@ const WASM_PAGE_SIZE: u32 = super::abi::WASM_PAGE_SIZE;
 /// [`runtime_prelude`] (instrumentation on in debug builds, the default; off under `--release`).
 const RUNTIME_ALLOCATOR: &str = include_str!("../runtime/allocator.wat");
 
-/// The fixed string runtime (`$strlen`/`$char_at`/`$string_eq`/`$concat_strings`/`$string_alloc`/…).
+/// The fixed string runtime (`$str_scalar_len`/`$str_byte_size`/`$char_at`/`$byte_at`/`$string_eq`/`$concat_strings`/…).
 /// Self-contained given the allocator + memory.
 const RUNTIME_STRINGS: &str = include_str!("../runtime/strings.wat");
 

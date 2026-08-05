@@ -6,11 +6,13 @@
 //!   * [`memory`]   - shared string/`char[]` marshaling across the WASM boundary.
 //!   * [`file`]     - `src/stdlib/io/file.dream` (synchronous `std::fs`).
 //!   * [`http`]     - `src/stdlib/net/http_client.dream` (blocking `reqwest` + the async future bridge).
+//!   * [`crypto`]   - `system.crypto` digests and CSPRNG (`sha2` / `hmac` / `getrandom`).
 //!   * [`math`]     - the `Math.*` `env` builtins.
 //!   * [`console`]  - `src/stdlib/system/system.dream`'s `readLine`/`readKey`/`exit` (the `crossterm` crate).
 //!   * [`datetime`] - `src/stdlib/system/datetime.dream`'s wall clock + local timezone offset (the `chrono` crate).
 
 mod console;
+mod crypto;
 mod datetime;
 mod file;
 mod http;
@@ -18,9 +20,11 @@ mod math;
 mod memory;
 mod process;
 mod shared_memory;
+mod text;
 mod worker;
 
 pub use console::{enable_ansi_support, link_console_functions};
+pub use crypto::link_crypto_functions;
 pub use datetime::link_datetime_functions;
 pub use file::link_file_functions;
 pub use http::link_http_functions;
@@ -30,6 +34,7 @@ pub use memory::{
     write_string_to_memory,
 };
 pub use process::link_process_functions;
+pub use text::link_text_functions;
 pub use shared_memory::{shared_memory_for, threaded_wasm_config};
 pub use worker::{
     link_worker_functions, set_worker_debug, set_worker_module, set_worker_runtime, WorkerDebug,
@@ -51,10 +56,12 @@ mod contract_tests {
     /// "name", …)`). `math` binds only `env` builtins, so it is omitted.
     const HOST_SOURCES: &[&str] = &[
         include_str!("console.rs"),
+        include_str!("crypto.rs"),
         include_str!("datetime.rs"),
         include_str!("file.rs"),
         include_str!("http.rs"),
         include_str!("process.rs"),
+        include_str!("text.rs"),
         include_str!("worker.rs"),
     ];
 

@@ -13,4 +13,10 @@ public class Promise {
     // Returns the first promise to resolve or reject.
     @intrinsic("promise_race")
     static extern async fun race<T>(promises: T[]): T;
+
+    // Cancels a future (marks it cancelled and unlinks pending timers). Best-effort for
+    // in-flight native host HTTP; cooperative `CancellationToken` is preferred for app logic.
+    // Takes the future as `object` (futures are heap refs) so this can be a plain intrinsic.
+    @intrinsic("dream_cancel")
+    static extern fun cancel(future: object): void;
 }

@@ -75,6 +75,19 @@ let first = await Promise.any([work(10), work(20)]);
 
 `Time.sleep(ms: int): Future<void>` is an awaitable timer backed by the runtime's timer queue (a virtual clock natively, `setTimeout` in the browser). It composes with the combinators like any other future.
 
+## Cancellation
+
+Bootstrap types `CancellationSource` / `CancellationToken` / `CancelledError` support cooperative cancellation:
+
+```dream
+let src = CancellationSource();
+let tok = src.token();
+src.cancel();
+System.println(tok.check().is_err()); // true → ECANCELLED
+```
+
+`Promise.cancel(future)` marks a future cancelled (unlinks pending timers via `$dream_cancel`). Prefer tokens for app-level checks; native in-flight HTTP cancel remains best-effort (`HttpClient.with_cancellation` + `with_timeout`).
+
 ## Async methods
 
 Instance and `static` class methods can be `async`, so a type can own its asynchronous behavior. The call types as `Future<T>` just like a free async call:

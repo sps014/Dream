@@ -1,6 +1,9 @@
-//! HTTP host functions (the `Dream` module behind `src/stdlib/net/http_client.dream`). Each performs the whole
+//! HTTP host functions (the `Dream` module behind `system.net` `HttpClient`). Each performs the whole
 //! request synchronously (blocking `reqwest`) and bridges the serialized response into Dream's async
 //! runtime, so the same `.dream` works under wasmtime, Node, and the browser.
+
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use wasmtime::*;
 
@@ -8,6 +11,12 @@ use dream_mir::abi;
 use dream_mir::async_emit::{F_SLOTS, HOST_POLL_INDEX, KIND_HOST};
 
 use super::memory::{read_arg_bytes, read_arg_string, write_bytes_to_memory};
+
+/// Shared blocking client (one process-wide instance; per-request timeouts use `RequestBuilder::timeout`).
+fn http_client() -> &'static reqwest::blocking::Client {
+    static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::blocking::Client::new)
+}
 
 /// Calls an exported function on the caller's module by name with the given typed signature. A
 /// missing export, signature mismatch, or failed call becomes a wasm trap (propagated `Err`) rather
@@ -42,16 +51,18 @@ fn resolve_host_future_bytes(caller: &mut Caller<'_, ()>, bytes: &[u8]) -> Resul
 }
 
 /// Performs one blocking HTTP request and serializes the whole response into the wire format shared
-/// with `runtime/dream.js` (and parsed by `src/stdlib/net/http_response.dream`): an ASCII head ("<status>\n" plus
+/// with `runtime/dream.js` (and parsed by `HttpResponse`): an ASCII head ("<status>\n" plus
 /// "Name: value\n" lines), a blank line, then the raw body bytes. `body` is sent verbatim unless the
 /// verb is GET/HEAD or it is empty. Network/protocol errors come back as a status `0` response whose
-/// body is the error text.
-fn perform_http(method: &str, url: &str, headers_json: &str, body: Vec<u8>) -> Vec<u8> {
+/// body is the error text. `timeout_ms == 0` means no timeout.
+fn perform_http(method: &str, url: &str, headers_json: &str, body: Vec<u8>, timeout_ms: i32) -> Vec<u8> {
     let verb = method.to_uppercase();
     let http_method = reqwest::Method::from_bytes(verb.as_bytes()).unwrap_or(reqwest::Method::GET);
 
-    let client = reqwest::blocking::Client::new();
-    let mut builder = client.request(http_method, url);
+    let mut builder = http_client().request(http_method, url);
+    if timeout_ms > 0 {
+        builder = builder.timeout(Duration::from_millis(timeout_ms as u64));
+    }
 
     if !headers_json.is_empty() {
         if let Ok(serde_json::Value::Object(map)) =
@@ -89,15 +100,20 @@ fn perform_http(method: &str, url: &str, headers_json: &str, body: Vec<u8>) -> V
             out
         }
         Err(e) => {
+            let msg = if e.is_timeout() {
+                "timeout".to_string()
+            } else {
+                e.to_string()
+            };
             let mut out = b"0\n\n".to_vec(); // status 0 = transport error; body is the message
-            out.extend_from_slice(e.to_string().as_bytes());
+            out.extend_from_slice(msg.as_bytes());
             out
         }
     }
 }
 
 /// Registers the HTTP host functions on `linker`. `httpRequest` takes a text body; `httpRequestBytes`
-/// takes a binary `char[]` body.
+/// takes a binary `char[]` body. Both take `timeout_ms` (`0` = none).
 pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap(
         "Dream",
@@ -106,13 +122,14 @@ pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
          url_ptr: i32,
          method_ptr: i32,
          headers_ptr: i32,
-         body_ptr: i32|
+         body_ptr: i32,
+         timeout_ms: i32|
          -> Result<i32> {
             let url = read_arg_string(&mut caller, url_ptr)?;
             let method = read_arg_string(&mut caller, method_ptr)?;
             let headers = read_arg_string(&mut caller, headers_ptr)?;
             let body = read_arg_string(&mut caller, body_ptr)?.into_bytes();
-            let response = perform_http(&method, &url, &headers, body);
+            let response = perform_http(&method, &url, &headers, body, timeout_ms);
             resolve_host_future_bytes(&mut caller, &response)
         },
     )?;
@@ -124,13 +141,14 @@ pub fn link_http_functions(linker: &mut Linker<()>) -> Result<()> {
          url_ptr: i32,
          method_ptr: i32,
          headers_ptr: i32,
-         body_ptr: i32|
+         body_ptr: i32,
+         timeout_ms: i32|
          -> Result<i32> {
             let url = read_arg_string(&mut caller, url_ptr)?;
             let method = read_arg_string(&mut caller, method_ptr)?;
             let headers = read_arg_string(&mut caller, headers_ptr)?;
             let body = read_arg_bytes(&mut caller, body_ptr)?;
-            let response = perform_http(&method, &url, &headers, body);
+            let response = perform_http(&method, &url, &headers, body, timeout_ms);
             resolve_host_future_bytes(&mut caller, &response)
         },
     )?;

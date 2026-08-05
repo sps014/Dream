@@ -56,8 +56,14 @@ pub fn is_object_builtin(name: &str) -> bool {
 }
 
 /// The low-level character accessor `s.char_at(i)`, a builtin pseudo-method on `string` (like
-/// [`SIZE`]); lowered directly to the `$char_at` runtime helper.
+/// [`SIZE`]); lowered directly to the `$char_at` runtime helper (scalar index).
 pub const CHAR_AT: &str = "char_at";
+
+/// `s.byte_size()` — UTF-8 byte length of the payload (O(1)).
+pub const BYTE_SIZE: &str = "byte_size";
+
+/// `s.byte_at(i)` — raw byte at UTF-8 byte index `i`.
+pub const BYTE_AT: &str = "byte_at";
 
 /// The generic array-allocation builtin, surfaced as the static method `Buffer.alloc<T>(len)`.
 pub const ARRAY_NEW: &str = "array_new";

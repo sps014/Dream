@@ -808,7 +808,7 @@ fn exec_print_bool_via_to_string() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_string_len_via_strlen() {
-    // `str.size()` calls `$strlen`, an O(1) load of the length-prefixed string's length word.
+    // `str.size()` calls `$str_scalar_len` (Unicode scalar count over the UTF-8 payload).
     let code = format!(
         "{SYSTEM_STUB}
         fun main(): void {{
@@ -1577,7 +1577,7 @@ fn test_hir_emission_switch_statement_with_variant_binding() {
 
 #[test]
 fn test_hir_emission_len_builtin() {
-    // `arr.size()` reads the array's stored length word; `str.size()` calls the runtime `$strlen`
+    // `arr.size()` reads the array's stored length word; `str.size()` calls the runtime `$str_scalar_len`
     // (both are O(1) loads now that strings are length-prefixed heap objects).
     let code = "
         fun count(xs: int[]): int { return xs.size(); }
@@ -1596,13 +1596,13 @@ fn test_hir_emission_len_builtin() {
         wat
     );
     assert!(
-        wat.contains("(call $strlen)"),
-        "string len should use $strlen:\n{}",
+        wat.contains("(call $str_scalar_len)"),
+        "string len should use $str_scalar_len:\n{}",
         wat
     );
     // A full module (with the string runtime) must assemble, proving `$strlen` is provided.
     let module = emit_hir_to_module(code);
-    wat::parse_str(&module).expect("module using $strlen should assemble");
+    wat::parse_str(&module).expect("module using $str_scalar_len should assemble");
 }
 
 #[test]

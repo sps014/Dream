@@ -1,0 +1,39 @@
+import system;
+import system.net;
+import system.collections;
+
+fun main(): void {
+    let form = MultipartForm();
+    form.add_field("name", "Ada");
+    let bytes = Buffer.alloc<byte>(3);
+    bytes[0] = (byte)97;
+    bytes[1] = (byte)98;
+    bytes[2] = (byte)99;
+    form.add_file("file", "hi.txt", "text/plain", bytes);
+    let built = form.build();
+    System.println(built.headers.get("Content-Type").unwrap_or(""));
+    let body = Bytes.toWireString(built.body);
+    System.println(body.contains("name=\"name\""));
+    System.println(body.contains("Ada"));
+    System.println(body.contains("filename=\"hi.txt\""));
+    System.println(body.contains("abc"));
+
+    let jar = CookieJar();
+    jar.set("sid", "abc");
+    jar.set("theme", "dark");
+    System.println(jar.to_header());
+    System.println(jar.get("sid").unwrap_or(""));
+
+    // Fake response head with Set-Cookie
+    let wire = "200\nSet-Cookie: token=xyz; Path=/\nSet-Cookie: other=1\n\nok";
+    let chars = Buffer.alloc<char>(wire.size());
+    let i = 0;
+    while (i < wire.size()) {
+        chars[i] = wire.char_at(i);
+        i = i + 1;
+    }
+    let res = HttpResponse(chars);
+    jar.store_from_response(res);
+    System.println(jar.get("token").unwrap_or(""));
+    System.println(jar.get("other").unwrap_or(""));
+}

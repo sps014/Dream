@@ -73,6 +73,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/parse_error.dream"),
             ),
             (
+                "<std>/system/core/cancellation.dream",
+                include_str!("system/core/cancellation.dream"),
+            ),
+            (
                 "<std>/system/core/option.dream",
                 include_str!("system/core/option.dream"),
             ),
@@ -207,6 +211,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/text/string.dream"),
             ),
             (
+                "<std>/system/text/unicode.dream",
+                include_str!("system/text/unicode.dream"),
+            ),
+            (
                 "<std>/system/text/string_iterator.dream",
                 include_str!("system/text/string_iterator.dream"),
             ),
@@ -305,12 +313,16 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/io/path.dream"),
             ),
             (
-                "<std>/system/io/file.dream",
-                include_str!("system/io/file.dream"),
+                "<std>/system/io/file_handle.dream",
+                include_str!("system/io/file_handle.dream"),
             ),
             (
                 "<std>/system/io/file_stream.dream",
                 include_str!("system/io/file_stream.dream"),
+            ),
+            (
+                "<std>/system/io/file.dream",
+                include_str!("system/io/file.dream"),
             ),
         ],
     },
@@ -341,6 +353,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/net/http_response.dream"),
             ),
             (
+                "<std>/system/net/cookie_jar.dream",
+                include_str!("system/net/cookie_jar.dream"),
+            ),
+            (
+                "<std>/system/net/multipart.dream",
+                include_str!("system/net/multipart.dream"),
+            ),
+            (
                 "<std>/system/net/http_client.dream",
                 include_str!("system/net/http_client.dream"),
             ),
@@ -353,6 +373,16 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/encoding.dream",
                 include_str!("system/encoding.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.crypto",
+        deps: &["system.core", "system.primitives"],
+        files: &[
+            (
+                "<std>/system/crypto/crypto.dream",
+                include_str!("system/crypto/crypto.dream"),
             ),
         ],
     },
@@ -395,6 +425,22 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/debug.dream",
                 include_str!("system/debug.dream"),
+            ),
+        ],
+    },
+    StdPackage {
+        name: "system.logging",
+        deps: &[
+            "system.core",
+            "system.primitives",
+            "system.collections",
+            "system",
+            "system.io",
+        ],
+        files: &[
+            (
+                "<std>/system/logging/logging.dream",
+                include_str!("system/logging/logging.dream"),
             ),
         ],
     },

@@ -5,11 +5,13 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     keys: List<string>;
     values: List<string>;
 
+    // Creates an empty header map.
     constructor() {
         this.keys = List<string>();
         this.values = List<string>();
     }
 
+    // Sets header `name` to `value`, overwriting any existing entry (case-insensitive name match).
     public fun set(name: string, value: string): void {
         let i = this._find(name);
         if (i >= 0) {
@@ -20,6 +22,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         }
     }
 
+    // Value for `name`, or `None` when absent (case-insensitive).
     public fun get(name: string): Option<string> {
         let i = this._find(name);
         if (i >= 0) {
@@ -28,10 +31,12 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         return Option.None;
     }
 
+    // True when a header named `name` is present (case-insensitive).
     public fun contains(name: string): bool {
         return this._find(name) >= 0;
     }
 
+    // Removes `name` if present; returns whether a header was removed.
     public fun remove(name: string): bool {
         let i = this._find(name);
         if (i < 0) {
@@ -42,10 +47,12 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         return true;
     }
 
+    // Number of stored header pairs.
     public fun size(): int {
         return this.keys.size();
     }
 
+    // Iterates `(name, value)` pairs in insertion order.
     @iterator
     public fun iterator(): ListIterator<KeyValuePair<string, string>> {
         let pairs = List<KeyValuePair<string, string>>();
@@ -74,6 +81,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         return JSON.stringify(obj);
     }
 
+    // Rebuilds headers from the host bridge JSON object string.
     public static fun from_wire(text: string): HttpHeaders {
         let headers = HttpHeaders();
         if (text.is_empty()) {

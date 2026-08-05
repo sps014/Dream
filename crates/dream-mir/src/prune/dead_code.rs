@@ -290,6 +290,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         | Rvalue::Unary(_, o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
+        | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::Discriminant(o)
@@ -304,7 +305,7 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
             collect_global_reads_operand(array, out);
             collect_global_reads_operand(new_len, out);
         }
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
             collect_global_reads_operand(a, out);
             collect_global_reads_operand(b, out);
         }

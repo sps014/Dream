@@ -1,0 +1,44 @@
+module system.text;
+
+// Unicode normalization forms for `Unicode.normalize`.
+public enum UnicodeNormForm {
+    Nfc,
+    Nfd,
+    Nfkc,
+    Nfkd,
+}
+
+// ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
+public class Unicode {
+    @js("Dream", "unicodeNormalize")
+    static extern fun normalize_host(text: string, form: int): string;
+
+    @js("Dream", "unicodeToLower")
+    static extern fun to_lower_host(text: string): string;
+
+    @js("Dream", "unicodeGraphemes")
+    static extern fun graphemes_host(text: string): string[];
+
+    // Normalizes `text` to the requested Unicode form.
+    public static fun normalize(text: string, form: UnicodeNormForm): string {
+        let code = 0;
+        if (form == UnicodeNormForm.Nfd) {
+            code = 1;
+        } else if (form == UnicodeNormForm.Nfkc) {
+            code = 2;
+        } else if (form == UnicodeNormForm.Nfkd) {
+            code = 3;
+        }
+        return Unicode.normalize_host(text, code);
+    }
+
+    // Full Unicode lowercase (not limited to ASCII).
+    public static fun to_lower_unicode(text: string): string {
+        return Unicode.to_lower_host(text);
+    }
+
+    // Splits `text` into user-perceived grapheme clusters.
+    public static fun graphemes(text: string): string[] {
+        return Unicode.graphemes_host(text);
+    }
+}

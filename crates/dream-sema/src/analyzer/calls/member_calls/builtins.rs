@@ -49,6 +49,55 @@ impl<'a> Analyzer<'a> {
             }
         }
 
+        // `str.byte_size()`: UTF-8 byte length (distinct from scalar `size()`).
+        if method.text == intrinsics::BYTE_SIZE && obj_type.get_type() == "string" {
+            if !params.is_empty() {
+                diagnostics.report_error(
+                    format!("'byte_size' takes no arguments, got {}", params.len()),
+                    Some(method.position),
+                );
+            }
+            self.hir_set_str_byte_size(receiver.take());
+            return Ok(Some(Type::Integer(synthetic_token(
+                TokenKind::DataTypeToken,
+                "int",
+            ))));
+        }
+
+        // `str.byte_at(i)`: raw UTF-8 byte read at a byte index.
+        if method.text == intrinsics::BYTE_AT && obj_type.get_type() == "string" {
+            if params.len() != 1 {
+                diagnostics.report_error(
+                    format!(
+                        "'byte_at' expects exactly 1 argument (index), got {}",
+                        params.len()
+                    ),
+                    Some(method.position),
+                );
+            }
+            let mut idx_hir: Option<dream_hir::HExpr> = None;
+            for param in params.iter() {
+                let pt = self.analyze_expression(
+                    param,
+                    ctx.parent_function,
+                    ctx.symbol_table,
+                    diagnostics,
+                )?;
+                idx_hir = self.hir_take();
+                if !pt.is_int() && !pt.is_unknown() {
+                    diagnostics.report_error(
+                        format!("'byte_at' index must be int, got {}", pt.get_type()),
+                        param.position(),
+                    );
+                }
+            }
+            self.hir_set_byte_at(receiver.take(), idx_hir);
+            return Ok(Some(Type::Integer(synthetic_token(
+                TokenKind::DataTypeToken,
+                "int",
+            ))));
+        }
+
         // `str.char_at(i)`: built-in character accessor on strings (low-level read).
         if method.text == intrinsics::CHAR_AT && obj_type.get_type() == "string" {
             if params.len() != 1 {

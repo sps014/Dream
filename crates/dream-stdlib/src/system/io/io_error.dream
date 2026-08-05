@@ -2,36 +2,44 @@ module system.io;
 
 // Filesystem / path failure implementing `Error`.
 public class IoError : Error {
+    // Path involved in the failure (may be empty for non-path errors).
     public path: string;
     _code: string;
     _message: string;
 
+    // Creates an error with path, machine code, and message.
     constructor(path: string, code: string, message: string) {
         this.path = path;
         this._code = code;
         this._message = message;
     }
 
+    // Human-readable description.
     public fun message(): string {
         return this._message;
     }
 
+    // Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).
     public fun code(): string {
         return this._code;
     }
 
+    // File or directory does not exist.
     public static fun not_found(path: string): IoError {
         return IoError(path, "ENOENT", "file not found: " + path);
     }
 
+    // Permission was denied for the operation.
     public static fun permission_denied(path: string): IoError {
         return IoError(path, "EACCES", "permission denied: " + path);
     }
 
+    // Generic I/O failure with a custom message.
     public static fun other(path: string, message: string): IoError {
         return IoError(path, "EIO", message);
     }
 
+    // Path already exists when exclusive create was requested.
     public static fun exists(path: string): IoError {
         return IoError(path, "EEXIST", "already exists: " + path);
     }

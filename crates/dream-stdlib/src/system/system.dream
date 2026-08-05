@@ -85,6 +85,11 @@ public class System {
         return double.parse(System.read_line());
     }
 
+    // Reads a line from stdin and parses it as a bool (`true`/`false`).
+    public static fun read_bool(): Result<bool, ParseError> {
+        return bool.parse(System.read_line());
+    }
+
     // Terminates the process with the given exit code.
     public static fun exit(code: int): void {
         System.host_exit(code);

@@ -1,12 +1,13 @@
 module system.core;
 
 // Low-level string construction used by core/primitives (and `extend string` in system.text).
+// `alloc`/`set` use Unicode scalar indices; the backing store is always UTF-8.
 extend string {
-    // Allocates an uninitialized string of length `n`.
+    // Allocates an uninitialized string with capacity for `n` Unicode scalars.
     @intrinsic("string_alloc")
     static extern fun alloc(n: int): string;
 
-    // Writes character `c` at index `i` of string `s`.
+    // Writes scalar `c` at scalar index `i` of string `s`.
     @intrinsic("string_set")
     static extern fun set(s: string, i: int, c: char): void;
 }

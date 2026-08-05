@@ -2,6 +2,7 @@ module system.io;
 
 // Path helpers for joining and inspecting filesystem paths.
 public class Path {
+    // Joins two path segments with the platform separator, avoiding a double separator.
     public static fun join(a: string, b: string): string {
         if (a.is_empty()) {
             return b;
@@ -16,6 +17,7 @@ public class Path {
         return a + sep + b;
     }
 
+    // Joins every segment in `parts` left-to-right via `join`.
     public static fun of(parts: string[]): string {
         let result = "";
         let i = 0;
@@ -26,6 +28,7 @@ public class Path {
         return result;
     }
 
+    // Final path component after the last `/` or `\`, or `None` for a trailing separator.
     public static fun file_name(path: string): Option<string> {
         let n = path.size();
         if (n == 0) {
@@ -45,6 +48,7 @@ public class Path {
         return Option.Some(path);
     }
 
+    // Substring after the last `.` in the file name, or `None` when missing.
     public static fun extension(path: string): Option<string> {
         let name = Path.file_name(path).unwrap_or("");
         let n = name.size();
@@ -61,6 +65,7 @@ public class Path {
         return Option.None;
     }
 
+    // Directory portion of `path`, or `None` when there is no separator.
     public static fun parent(path: string): Option<string> {
         let n = path.size();
         if (n == 0) {
@@ -80,6 +85,7 @@ public class Path {
         return Option.None;
     }
 
+    // True for POSIX absolute paths (`/`…), Windows drive paths (`C:`…), or `\`-rooted paths.
     public static fun is_absolute(path: string): bool {
         if (path.is_empty()) {
             return false;

@@ -20,7 +20,7 @@ Common methods:
 - `.clamp(lo, hi)` — constrain to the inclusive range `[lo, hi]`.
 - `.abs()` — absolute value (signed types only).
 - `.signum()` — `-1`, `0`, or `1` by sign (signed types only).
-- `Type.parse(str)` — static; parses a string into that integer type, returning `Result<Type, string>`.
+- `Type.parse(str)` — static; parses a string into that integer type, returning `Result<Type, ParseError>`.
 
 ```dream
 println(15.clamp(0, 10));              // 10
@@ -64,29 +64,33 @@ Common methods:
 
 - `.abs()` — absolute value.
 - `.min(other)` / `.max(other)`.
-- `double.parse(str)` — static; parses a string into a `double`, returning `Result<double, string>`.
+- `double.parse(str)` — static; parses a string into a `double`, returning `Result<double, ParseError>`.
 
 ## Booleans
 
 `bool` is `true` or `false`.
 
 - `.to_int()` — `1` for `true`, `0` for `false`.
+- `bool.parse(str)` — static; accepts exactly `true` or `false` (case-sensitive), returning `Result<bool, ParseError>`.
 
 ```dream
 println(true.to_int());   // 1
+let b = bool.parse("true").unwrap_or(false);
 ```
 
 ## Characters
 
-`char` is a single character (one code point stored as an `i32`). Write literals in single quotes: `'A'`, `'\n'`.
+`char` is a single character (one Unicode scalar value stored as an `i32`). Write literals in single quotes: `'A'`, `'\n'`, `'é'`.
 
-- `.is_digit()` / `.is_alpha()` / `.is_whitespace()` — classify the character.
+- `.is_digit()` / `.is_alpha()` / `.is_whitespace()` — classify the character (ASCII rules).
 - `.to_lower()` / `.to_upper()` — ASCII case conversion.
 - `.to_int()` — the numeric code point.
 - `.as_string()` — a new single-character string.
+- `char.parse(str)` — static; requires exactly one Unicode scalar in `str`; returns `Result<char, ParseError>`.
 
 ```dream
 println('A'.is_alpha());   // true
 println('A'.to_lower());   // 'a'
 let s = 'H'.as_string();   // "H"
+let c = char.parse("é").unwrap_or('?');  // 'é'
 ```

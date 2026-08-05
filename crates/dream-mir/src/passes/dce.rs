@@ -86,6 +86,7 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
             | Rvalue::ArrayLen(_)
             | Rvalue::StrLen(_)
             | Rvalue::CharAt(..)
+            | Rvalue::ByteAt(..)
             | Rvalue::Concat(..)
             | Rvalue::EnumName { .. }
             | Rvalue::HashCode(_)
@@ -161,13 +162,14 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         Rvalue::Use(o)
         | Rvalue::ArrayLen(o)
         | Rvalue::StrLen(o)
+        | Rvalue::StrByteSize(o)
         | Rvalue::Cast(o, _, _)
         | Rvalue::IsType(o, _)
         | Rvalue::Discriminant(o)
         | Rvalue::HashCode(o)
         | Rvalue::ToString(o)
         | Rvalue::UnionField { base: o, .. } => read_operand(o, read),
-        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::Concat(a, b) => {
+        Rvalue::Binary(_, a, b) | Rvalue::CharAt(a, b) | Rvalue::ByteAt(a, b) | Rvalue::Concat(a, b) => {
             read_operand(a, read);
             read_operand(b, read);
         }

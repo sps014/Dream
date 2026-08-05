@@ -159,8 +159,10 @@ fn rvalue(r: &Rvalue) -> String {
         }
         Rvalue::ArrayLit { elems, .. } => format!("[{}]", ops(elems)),
         Rvalue::ArrayLen(o) => format!("len({})", operand(o)),
-        Rvalue::StrLen(o) => format!("strlen({})", operand(o)),
+        Rvalue::StrLen(o) => format!("str_scalar_len({})", operand(o)),
+        Rvalue::StrByteSize(o) => format!("str_byte_size({})", operand(o)),
         Rvalue::CharAt(s, i) => format!("char_at({}, {})", operand(s), operand(i)),
+        Rvalue::ByteAt(s, i) => format!("byte_at({}, {})", operand(s), operand(i)),
         Rvalue::ArrayNew { elem_ty, len } => {
             format!("array_new::<ty{}>({})", elem_ty.0, operand(len))
         }

@@ -1,0 +1,19 @@
+import system;
+
+async fun sleeper(): int {
+    await Time.sleep(10000);
+    return 1;
+}
+
+async fun main(): void {
+    let src = CancellationSource();
+    let tok = src.token();
+    System.println(tok.is_cancelled());
+    src.cancel();
+    System.println(tok.is_cancelled());
+    System.println(tok.check().is_err());
+
+    let f = sleeper();
+    Promise.cancel(f);
+    System.println("cancelled");
+}

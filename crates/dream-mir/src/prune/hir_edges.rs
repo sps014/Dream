@@ -155,7 +155,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(lhs, out);
             hir_expr_edges(rhs, out);
         }
-        K::CharAt(a, b) | K::Index { array: a, index: b } => {
+        K::CharAt(a, b) | K::ByteAt(a, b) | K::Index { array: a, index: b } => {
             hir_expr_edges(a, out);
             hir_expr_edges(b, out);
         }
@@ -163,6 +163,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         | K::Field { obj: x, .. }
         | K::ArrayLen(x)
         | K::StrLen(x)
+        | K::StrByteSize(x)
         | K::HashCode(x)
         | K::ToString(x)
         | K::EnumName { value: x, .. }

@@ -145,12 +145,16 @@ public class File {
         return File.file_is_dir(path);
     }
 
-    // Opens a buffered read stream over `path`.
-    public static async fun open(path: string): Result<FileStream, IoError> {
-        if (File.exists(path) == false) {
-            return Result.Err(IoError.not_found(path));
-        }
-        let bytes = await File.read_bytes(path);
-        return Result.Ok(FileStream(bytes.unwrap_or(Buffer.alloc<byte>(0))));
+    // Opens a seekable read stream over `path` (OS-backed; no whole-file preload).
+    public static fun open(path: string): Result<FileStream, IoError> {
+        return switch (FileHandle.open(path, "r")) {
+            Ok(h) => Result.Ok(FileStream(h)),
+            Err(e) => Result.Err(e),
+        };
+    }
+
+    // Async wrapper around `open`.
+    public static async fun open_async(path: string): Result<FileStream, IoError> {
+        return File.open(path);
     }
 }

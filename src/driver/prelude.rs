@@ -25,6 +25,7 @@ pub fn merge_prelude<'a>(
     all_interfaces: &mut Vec<dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
     all_enums: &mut Vec<dream_syntax::nodes::EnumDeclarationNode<'a>>,
     all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
+    all_globals: &mut Vec<dream_syntax::nodes::GlobalVariableNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
@@ -40,6 +41,7 @@ pub fn merge_prelude<'a>(
             all_interfaces,
             all_enums,
             all_extends,
+            all_globals,
             diagnostics,
             file_contents,
             file_modules,
@@ -58,6 +60,7 @@ pub fn merge_full_prelude<'a>(
     all_interfaces: &mut Vec<dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
     all_enums: &mut Vec<dream_syntax::nodes::EnumDeclarationNode<'a>>,
     all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
+    all_globals: &mut Vec<dream_syntax::nodes::GlobalVariableNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
@@ -73,6 +76,7 @@ pub fn merge_full_prelude<'a>(
         all_interfaces,
         all_enums,
         all_extends,
+        all_globals,
         diagnostics,
         file_contents,
         file_modules,
@@ -89,6 +93,7 @@ fn merge_package<'a>(
     all_interfaces: &mut Vec<dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
     all_enums: &mut Vec<dream_syntax::nodes::EnumDeclarationNode<'a>>,
     all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
+    all_globals: &mut Vec<dream_syntax::nodes::GlobalVariableNode<'a>>,
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
@@ -117,7 +122,6 @@ fn merge_package<'a>(
             );
         }
 
-        let mut globals = Vec::new();
         collect_declarations(
             program,
             &prelude_name,
@@ -126,7 +130,7 @@ fn merge_package<'a>(
             all_interfaces,
             all_enums,
             all_extends,
-            &mut globals,
+            all_globals,
         );
     }
     Ok(())
