@@ -7,23 +7,27 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub struct FunctionTable {
     pub functions: HashMap<String, FunctionTableInfo>,
-    /// Base name -> the emitted keys of every overload registered under it, in declaration
-    /// order. A base with a single entry keeps its bare name; a base with 2+ entries has each
-    /// overload stored under a signature-mangled key (see [`overload_key`]).
+    /// Overload namespace -> the emitted keys of every overload registered under it, in
+    /// declaration order. The namespace is the bare base when no cross-module collision occurred,
+    /// or `module::base` after promotion (see [`module_key`]). A namespace with a single entry
+    /// keeps that name as-is; a namespace with 2+ entries stores each under a signature-mangled
+    /// key (see [`overload_key`]).
     pub overloads: HashMap<String, Vec<String>>,
-    /// (declaring module, base name) -> the emitted key actually holding that module's
-    /// declaration, once a same-name collision across two *different* declared modules has
-    /// promoted both to module-qualified keys (see [`Self::add_overload`]/[`module_key`]). Absent
-    /// entries mean "no cross-module collision for this name": look it up by its bare name instead,
-    /// exactly as before `module` existed. Never populated for the unnamed root module (`None`),
-    /// so unmoded code keeps today's flat "same bare name always collides" behavior untouched.
+    /// (declaring module, base name) -> the overload *namespace* for that module's declarations
+    /// of `base`, once a same-name collision across two *different* declared modules has
+    /// promoted both to module-qualified namespaces (see [`Self::add_overload`]/[`module_key`]).
+    /// The value is `module::base` — overload mangling then appends `.TypeId…` onto that
+    /// namespace. Absent entries mean "no cross-module collision for this name": look it up by its
+    /// bare name instead. Never populated for the unnamed root module (`None`), so unmoded code
+    /// keeps today's flat "same bare name always collides" behavior untouched.
     by_module: HashMap<(Option<Rc<str>>, String), String>,
 }
 
-/// Builds the emitted key for a declaration named `base` once a same-name collision with a
-/// *different* declared module has forced both onto module-qualified keys, e.g. base `add` in
-/// module `utils.math` becomes `utils.math::add`. `::` is a valid WAT identifier character
-/// disjoint from the `.` [`overload_key`] uses, so the two mangling schemes never collide.
+/// Builds the overload namespace for a declaration named `base` once a same-name collision with a
+/// *different* declared module has forced both onto module-qualified namespaces, e.g. base `add`
+/// in module `utils.math` becomes `utils.math::add`. Overload mangling composes on top via
+/// [`overload_key`] (e.g. `utils.math::add.0.1`). `::` is a valid WAT identifier character
+/// disjoint from the `.` [`overload_key`] uses, so the two mangling schemes compose safely.
 fn module_key(base: &str, module: Option<&str>) -> String {
     match module {
         Some(m) => format!("{m}::{base}"),
@@ -38,10 +42,12 @@ pub enum OverloadResolution {
     Ambiguous(Vec<String>),
 }
 
-/// Builds the signature-mangled emitted name for one overload: the base name followed by each
-/// parameter type, joined with `.` — a valid WAT identifier character, distinct from the `_`
-/// used by generic monomorphization so the two schemes never collide. E.g. base `add` with
-/// `[int, int]` becomes `add.int.int`; a zero-parameter overload becomes `add.`.
+/// Builds the signature-mangled emitted name for one overload: the overload namespace followed by
+/// each parameter's interned [`TypeId`] (decimal), joined with `.` — a valid WAT identifier
+/// character, distinct from the `_` used by generic monomorphization so the two schemes never
+/// collide. E.g. namespace `add` with two params whose TypeIds are 0 and 0 becomes `add.0.0`; a
+/// zero-parameter overload becomes `add.`. When the namespace is already module-qualified the
+/// same rule composes: `utils.math::add.0.0`.
 pub fn overload_key(
     base: &str,
     parameters: &[String],
@@ -99,67 +105,201 @@ impl FunctionTable {
     }
 
     /// Registers one (possibly overloaded) declaration under `base`. The first declaration of a
-    /// base keeps the bare name; when a second declaration arrives the original is *promoted* to
+    /// namespace keeps that name; when a second declaration arrives the original is *promoted* to
     /// its signature-mangled key and the new one is mangled too, so non-overloaded code keeps its
-    /// original emitted names. Returns the emitted key chosen for `info`, or an error if an
-    /// identical signature was already registered under `base`.
+    /// original emitted names. A same-named declaration from a *different* declared module is not
+    /// an overload conflict — both sides are promoted to module-qualified namespaces
+    /// (`module::base`), and overload mangling composes on top (`module::base.TypeId…`). Returns
+    /// the emitted key chosen for `info`, or an error if an identical signature was already
+    /// registered under the resolved namespace.
     pub fn add_overload(
         &mut self,
         base: &str,
         info: FunctionTableInfo,
         type_ctx: &mut crate::types::TypeCtx,
     ) -> Result<String, SymbolError> {
-        // A same-named declaration from a *different* declared module is not an overload conflict
-        // (overloading is same-name-different-signature within one namespace) — it is two
-        // independent symbols that happen to share a bare name, resolved by module-qualifying both
-        // instead of erroring. Left alone (falls through to the ordinary error path below) once the
-        // name is already a genuine multi-signature overload set, since combining the two mangling
-        // schemes is not supported.
-        let is_plain_overload_set = self.overloads.get(base).map(|v| v.len()).unwrap_or(0) > 1;
-        if info.declaring_module.is_some() && !is_plain_overload_set {
-            let existing_module_differs = self.functions.get(base).is_some_and(|e| {
-                e.declaring_module.is_some() && e.declaring_module != info.declaring_module
-            });
-            let other_module_already_claimed_it = self
-                .by_module
-                .keys()
-                .any(|(m, n)| n == base && *m != info.declaring_module);
-            if existing_module_differs || other_module_already_claimed_it {
-                return self.register_cross_module(base, info);
+        if info.declaring_module.is_some() && self.needs_promote_bare(base, &info.declaring_module) {
+            self.promote_bare_to_modules(base, type_ctx)?;
+        }
+
+        let ns = self.namespace_for(base, info.declaring_module.as_ref());
+        if ns != base {
+            self.by_module.insert(
+                (info.declaring_module.clone(), base.to_string()),
+                ns.clone(),
+            );
+        }
+        self.register_under_namespace(&ns, info, type_ctx, base)
+    }
+
+    /// True when `base` is still held under its bare name/overload set by a *different* declared
+    /// module than `incoming`, so the bare entries must be rewritten to module-qualified
+    /// namespaces before `incoming` can register.
+    fn needs_promote_bare(&self, base: &str, incoming: &Option<Rc<str>>) -> bool {
+        // Already recorded under a module-qualified namespace for this module — nothing bare left
+        // to promote for the incoming side.
+        if self
+            .by_module
+            .contains_key(&(incoming.clone(), base.to_string()))
+        {
+            return false;
+        }
+        matches!(
+            self.bare_holder_module(base),
+            Some(holder) if holder.is_some() && holder != *incoming
+        )
+    }
+
+    /// The declaring module of whatever currently owns the bare `base` namespace (singleton or
+    /// overload set), if any.
+    fn bare_holder_module(&self, base: &str) -> Option<Option<Rc<str>>> {
+        if let Some(info) = self.functions.get(base) {
+            return Some(info.declaring_module.clone());
+        }
+        let keys = self.overloads.get(base)?;
+        let first = keys.first()?;
+        self.functions
+            .get(first)
+            .map(|info| info.declaring_module.clone())
+    }
+
+    /// Overload namespace for `base` as declared in `module`: the module-qualified namespace when a
+    /// cross-module collision has forced qualification, otherwise the bare base.
+    fn namespace_for(&self, base: &str, module: Option<&Rc<str>>) -> String {
+        if let Some(ns) = self.resolve_in_module(module, base) {
+            return ns.to_string();
+        }
+        // Another module already forced qualification for this bare name — this module must
+        // qualify too, even if it has not yet recorded a by_module entry.
+        if self.by_module.keys().any(|(_, n)| n == base) {
+            return module_key(base, module.map(|m| m.as_ref()));
+        }
+        base.to_string()
+    }
+
+    /// Rewrites every declaration currently stored under the bare `base` namespace into
+    /// module-qualified namespaces (`module::base` / `module::base.TypeId…`), recording each in
+    /// [`Self::by_module`]. Preserves per-module declaration order.
+    fn promote_bare_to_modules(
+        &mut self,
+        base: &str,
+        type_ctx: &mut crate::types::TypeCtx,
+    ) -> Result<(), SymbolError> {
+        let keys: Vec<String> = match self.overloads.remove(base) {
+            Some(keys) => keys,
+            None if self.functions.contains_key(base) => vec![base.to_string()],
+            None => return Ok(()),
+        };
+        let mut infos = Vec::with_capacity(keys.len());
+        for key in &keys {
+            if let Some(info) = self.functions.remove(key) {
+                infos.push(info);
             }
         }
-        let mut info = info;
-        let existing = self.overloads.entry(base.to_string()).or_default();
-        if existing.is_empty() {
-            if self.functions.contains_key(base) {
+
+        // Group by declaring module while preserving first-seen module order and per-group
+        // declaration order (HashMap iteration must not decide emit-facing order).
+        let mut module_order: Vec<Option<Rc<str>>> = Vec::new();
+        let mut groups: HashMap<Option<Rc<str>>, Vec<FunctionTableInfo>> = HashMap::new();
+        for info in infos {
+            let module = info.declaring_module.clone();
+            if !groups.contains_key(&module) {
+                module_order.push(module.clone());
+            }
+            groups.entry(module).or_default().push(info);
+        }
+
+        for module in module_order {
+            let group = groups.remove(&module).unwrap_or_default();
+            let ns = module_key(base, module.as_deref());
+            self.by_module
+                .insert((module, base.to_string()), ns.clone());
+            self.insert_group_under_namespace(&ns, group, type_ctx, base)?;
+        }
+        Ok(())
+    }
+
+    /// Inserts an already-collected same-module group under `ns` (singleton keeps `ns`; 2+
+    /// entries are signature-mangled).
+    fn insert_group_under_namespace(
+        &mut self,
+        ns: &str,
+        group: Vec<FunctionTableInfo>,
+        type_ctx: &mut crate::types::TypeCtx,
+        error_name: &str,
+    ) -> Result<(), SymbolError> {
+        if group.is_empty() {
+            return Ok(());
+        }
+        if group.len() == 1 {
+            let mut info = group.into_iter().next().unwrap();
+            if self.functions.contains_key(ns) {
                 return Err(SymbolError::new(format!(
-                    "Function already exists ({})",
-                    base
+                    "Function '{}' is already defined in module '{}'",
+                    error_name,
+                    info.declaring_module.as_deref().unwrap_or("")
                 )));
             }
-            info.name = base.to_string();
-            existing.push(base.to_string());
-            self.functions.insert(base.to_string(), info);
-            return Ok(base.to_string());
+            info.name = ns.to_string();
+            self.overloads
+                .insert(ns.to_string(), vec![ns.to_string()]);
+            self.functions.insert(ns.to_string(), info);
+            return Ok(());
         }
-        // Default parameter values are allowed on overloaded functions. A defaulted overload is
-        // viable for any argument count in `required..=total`; overload resolution
-        // ([`select_overload`]) prefers an exact-arity match over one that fills defaults, and
-        // reports genuinely ambiguous calls at the call site.
-        // Promote a lone bare singleton to its mangled key the moment a second overload appears.
-        if existing.len() == 1 && existing[0] == base {
-            if let Some(mut first) = self.functions.remove(base) {
-                let first_key = overload_key(base, &first.parameters, type_ctx);
+        let mut keys = Vec::with_capacity(group.len());
+        for mut info in group {
+            let key = overload_key(ns, &info.parameters, type_ctx);
+            if self.functions.contains_key(&key) {
+                return Err(SymbolError::new(format!(
+                    "Duplicate overload: '{}' with the same parameter types is already defined",
+                    error_name
+                )));
+            }
+            info.name = key.clone();
+            keys.push(key.clone());
+            self.functions.insert(key, info);
+        }
+        self.overloads.insert(ns.to_string(), keys);
+        Ok(())
+    }
+
+    /// Registers `info` under overload namespace `ns`, promoting a singleton to a signature-mangled
+    /// key when a second overload arrives. Default parameter values are allowed; overload
+    /// resolution ([`select_overload`]) prefers an exact-arity match over one that fills defaults.
+    fn register_under_namespace(
+        &mut self,
+        ns: &str,
+        mut info: FunctionTableInfo,
+        type_ctx: &mut crate::types::TypeCtx,
+        error_name: &str,
+    ) -> Result<String, SymbolError> {
+        let existing = self.overloads.entry(ns.to_string()).or_default();
+        if existing.is_empty() {
+            if self.functions.contains_key(ns) {
+                return Err(SymbolError::new(format!(
+                    "Function already exists ({})",
+                    error_name
+                )));
+            }
+            info.name = ns.to_string();
+            existing.push(ns.to_string());
+            self.functions.insert(ns.to_string(), info);
+            return Ok(ns.to_string());
+        }
+        // Promote a lone singleton to its mangled key the moment a second overload appears.
+        if existing.len() == 1 && existing[0] == ns {
+            if let Some(mut first) = self.functions.remove(ns) {
+                let first_key = overload_key(ns, &first.parameters, type_ctx);
                 first.name = first_key.clone();
                 self.functions.insert(first_key.clone(), first);
                 existing[0] = first_key;
             }
         }
-        let key = overload_key(base, &info.parameters, type_ctx);
+        let key = overload_key(ns, &info.parameters, type_ctx);
         if self.functions.contains_key(&key) {
             return Err(SymbolError::new(format!(
                 "Duplicate overload: '{}' with the same parameter types is already defined",
-                base
+                error_name
             )));
         }
         info.name = key.clone();
@@ -168,51 +308,37 @@ impl FunctionTable {
         Ok(key)
     }
 
-    /// Resolves a same-bare-name collision between declarations in two different declared
-    /// modules by promoting both to module-qualified keys (see [`module_key`]): if `base` is
-    /// currently registered under its bare name, that entry is renamed to its own module-qualified
-    /// key first, then `info` is registered under its. Returns the emitted key chosen for `info`,
-    /// or an error if that exact module already registered `base` (a real same-module collision).
-    fn register_cross_module(
-        &mut self,
-        base: &str,
-        mut info: FunctionTableInfo,
-    ) -> Result<String, SymbolError> {
-        if let Some(mut existing) = self.functions.remove(base) {
-            let existing_key = module_key(base, existing.declaring_module.as_deref());
-            existing.name = existing_key.clone();
-            self.by_module.insert(
-                (existing.declaring_module.clone(), base.to_string()),
-                existing_key.clone(),
-            );
-            self.functions.insert(existing_key, existing);
-            self.overloads.remove(base);
-        }
-        let new_key = module_key(base, info.declaring_module.as_deref());
-        if self.functions.contains_key(&new_key) {
-            return Err(SymbolError::new(format!(
-                "Function '{}' is already defined in module '{}'",
-                base,
-                info.declaring_module.as_deref().unwrap_or("")
-            )));
-        }
-        info.name = new_key.clone();
-        self.by_module.insert(
-            (info.declaring_module.clone(), base.to_string()),
-            new_key.clone(),
-        );
-        self.functions.insert(new_key.clone(), info);
-        Ok(new_key)
-    }
-
-    /// The emitted key registered for `base` as declared in `module`, if a cross-module collision
-    /// ever forced it onto a module-qualified key (see [`Self::register_cross_module`]). Returns
-    /// `None` when no such collision occurred for this name (the common case): callers should then
-    /// fall back to looking `base` up by its bare name, unchanged from before `module` existed.
+    /// The overload namespace registered for `base` as declared in `module`, if a cross-module
+    /// collision ever forced it onto a module-qualified namespace. Returns `None` when no such
+    /// collision occurred for this name (the common case): callers should then fall back to
+    /// looking `base` up by its bare name, unchanged from before `module` existed.
     pub fn resolve_in_module(&self, module: Option<&Rc<str>>, base: &str) -> Option<&str> {
         self.by_module
             .get(&(module.cloned(), base.to_string()))
             .map(|s| s.as_str())
+    }
+
+    /// Resolves `item` as declared in `module_path` to its overload namespace (module-qualified
+    /// after a cross-module collision, otherwise the bare name when that bare namespace belongs to
+    /// the requested module). Used by aliased imports, including overloaded items whose functions
+    /// table entries live under signature-mangled keys rather than the namespace itself.
+    pub fn resolve_item_namespace(&self, module_path: &str, item: &str) -> Option<String> {
+        let module: Rc<str> = Rc::from(module_path);
+        if let Some(ns) = self.resolve_in_module(Some(&module), item) {
+            return Some(ns.to_string());
+        }
+        if let Some(keys) = self.overloads.get(item) {
+            let first = keys.first()?;
+            let info = self.functions.get(first)?;
+            if info.declaring_module.as_deref() == Some(module_path) {
+                return Some(item.to_string());
+            }
+            return None;
+        }
+        self.functions
+            .get(item)
+            .filter(|info| info.declaring_module.as_deref() == Some(module_path))
+            .map(|info| info.name.clone())
     }
 
     /// Whether `base` has more than one overload (i.e. its declarations are signature-mangled).
@@ -238,10 +364,10 @@ impl FunctionTable {
         }
     }
 
-    /// The emitted name of the declaration of `base` as declared in `module`: the module-qualified
-    /// key when a cross-module collision promoted it (see [`Self::resolve_in_module`]), otherwise
-    /// [`Self::resolve_emitted_name`]'s ordinary bare-name/overload-mangled result, unchanged from
-    /// before `module` existed.
+    /// The emitted name of the declaration of `base` as declared in `module`: when a cross-module
+    /// collision promoted it, resolves against the module-qualified overload namespace (applying
+    /// signature mangling when that namespace is overloaded); otherwise
+    /// [`Self::resolve_emitted_name`]'s ordinary bare-name/overload-mangled result.
     pub fn resolve_emitted_name_scoped(
         &self,
         base: &str,
@@ -249,8 +375,8 @@ impl FunctionTable {
         parameters: &[String],
         type_ctx: &mut crate::types::TypeCtx,
     ) -> String {
-        if let Some(key) = self.resolve_in_module(module, base) {
-            return key.to_string();
+        if let Some(ns) = self.resolve_in_module(module, base) {
+            return self.resolve_emitted_name(ns, parameters, type_ctx);
         }
         self.resolve_emitted_name(base, parameters, type_ctx)
     }

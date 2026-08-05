@@ -1,0 +1,10 @@
+// Support file: `utils.math` with two `add` overloads (int and string).
+module utils.math;
+
+public fun add(a: int, b: int): int {
+    return a + b;
+}
+
+public fun add(a: string, b: string): string {
+    return a + b;
+}

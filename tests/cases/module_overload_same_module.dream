@@ -1,0 +1,9 @@
+// Two files share `module utils.math` and split an overload set across them — no
+// cross-module collision, so emitted names stay bare/overload-mangled (no `::`).
+import helpers.module_same_mod_add_int;
+import helpers.module_same_mod_add_string;
+
+fun main(): void {
+    System.println(add(2, 3));
+    System.println(add("x", "y"));
+}

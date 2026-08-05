@@ -1,0 +1,9 @@
+// Aliased import of an overloaded module item binds the whole overload set under the alias.
+import helpers.module_utils_math_overloads;
+
+import utils.math.add as add_u;
+
+fun main(): void {
+    System.println(add_u(10, 20));
+    System.println(add_u("hi", "!"));
+}

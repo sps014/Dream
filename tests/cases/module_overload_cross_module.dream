@@ -1,0 +1,13 @@
+// Overloads in utils.math plus a same-named singleton in vendor.math: module qualification
+// and overload mangling compose; aliased imports resolve both sides.
+import helpers.module_utils_math_overloads;
+import helpers.module_vendor_math;
+
+import utils.math.add as add_u;
+import vendor.math.add as add_v;
+
+fun main(): void {
+    System.println(add_u(2, 3));
+    System.println(add_u("a", "b"));
+    System.println(add_v(2, 3));
+}

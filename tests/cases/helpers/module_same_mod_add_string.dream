@@ -1,0 +1,6 @@
+// Partner for module_overload_same_module: string overload of `add` in `utils.math`.
+module utils.math;
+
+public fun add(a: string, b: string): string {
+    return a + b;
+}
