@@ -345,7 +345,7 @@ pub const CLOSURE_STUB: &str = "
     }
     class CaptureCell<T> {
         public value: T;
-        constructor(v: T) {
+        public constructor(v: T) {
             this.value = v;
         }
     }

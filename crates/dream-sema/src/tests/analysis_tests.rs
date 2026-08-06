@@ -559,7 +559,7 @@ fn test_class_indexer_get_set_ok() {
     let code = "
         class Cell {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             @get
             public fun get(index: int): int { return this.v + index; }
             @set
@@ -581,7 +581,7 @@ fn test_class_indexer_arbitrary_names_ok() {
     let code = "
         class Cell {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             @get
             public fun at(index: int): int { return this.v + index; }
             @set
@@ -603,7 +603,7 @@ fn test_class_indexer_bare_get_is_not_an_indexer() {
     let code = "
         class Box {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             public fun get(index: int): int { return index; }
         }
         fun main(): void {
@@ -625,7 +625,7 @@ fn test_class_indexer_void_get_attr_rejected() {
     let code = "
         class Box {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             @get
             public fun get(index: int): void { }
         }
@@ -645,7 +645,7 @@ fn test_class_void_get_still_callable_as_method() {
     let code = "
         class Box {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             public fun get(index: int): void { }
         }
         fun main(): void {
@@ -663,7 +663,7 @@ fn test_class_indexer_static_get_attr_rejected() {
     let code = "
         class Box {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             @get
             public static fun get(index: int): int { return index; }
         }
@@ -683,7 +683,7 @@ fn test_class_indexer_async_get_attr_rejected() {
     let code = "
         class Box {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             @get
             public async fun get(index: int): int { return index; }
         }
@@ -705,7 +705,7 @@ fn test_property_getter_ok() {
     let code = "
         class Box {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             public get value(): int { return this.v; }
             public set value(x: int) { this.v = x; }
         }
@@ -773,7 +773,7 @@ fn test_async_accessor_is_rejected() {
     let code = "
         class Box {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
             public async get value(): int { return this.v; }
         }
         fun main(): void {
@@ -796,7 +796,7 @@ fn test_class_foreach_with_option_enumerator_ok() {
         class RangeIter {
             cur: int;
             end: int;
-            constructor(s: int, e: int) { this.cur = s; this.end = e; }
+            public constructor(s: int, e: int) { this.cur = s; this.end = e; }
             @next
             public fun next(): Option<int> {
                 if (this.cur >= this.end) { return Option.None; }
@@ -808,7 +808,7 @@ fn test_class_foreach_with_option_enumerator_ok() {
         class Range {
             start: int;
             end: int;
-            constructor(s: int, e: int) { this.start = s; this.end = e; }
+            public constructor(s: int, e: int) { this.start = s; this.end = e; }
             @iterator
             public fun iterator(): RangeIter { return RangeIter(this.start, this.end); }
         }
@@ -831,12 +831,12 @@ fn test_class_foreach_next_not_option_errors() {
     let code = "
         class NumIter {
             n: int;
-            constructor() { this.n = 0; }
+            public constructor() { this.n = 0; }
             @next
             public fun next(): int { return 0; }
         }
         class Nums {
-            constructor() { }
+            public constructor() { }
             @iterator
             public fun iterator(): NumIter { return NumIter(); }
         }
@@ -858,7 +858,7 @@ fn test_class_foreach_missing_iterator_errors() {
     let code = "
         class Plain {
             v: int;
-            constructor() { this.v = 0; }
+            public constructor() { this.v = 0; }
         }
         fun main(): void {
             for (let x in Plain()) { }
@@ -942,7 +942,7 @@ fn test_generic_interface_monomorphized_ok() {
         }
         class Box<T> : Container<T> {
             public value: T;
-            constructor(value: T) { this.value = value; }
+            public constructor(value: T) { this.value = value; }
             public fun get(): T { return this.value; }
             public fun size(): int { return 1; }
         }
@@ -1302,7 +1302,7 @@ fn test_js_struct_marshaling() {
         class Point {{
             public x: int;
             public y: int;
-            constructor(x: int, y: int) {{ this.x = x; this.y = y; }}
+            public constructor(x: int, y: int) {{ this.x = x; this.y = y; }}
         }}
         fun main(): void {{
             let p = Point(1, 2);
@@ -1355,7 +1355,7 @@ fn test_js_await_promise() {
 #[test]
 fn test_extend_sealed_class_is_rejected() {
     // A `sealed` class may not be targeted by a user `extend` block.
-    let code = "sealed class Locked { public v: int; constructor() { this.v = 0; } } \
+    let code = "sealed class Locked { public v: int; public constructor() { this.v = 0; } } \
                 extend Locked { public fun bump(): int { return this.v + 1; } }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
@@ -1380,7 +1380,7 @@ fn test_extend_sealed_enum_is_rejected() {
 #[test]
 fn test_extend_non_sealed_class_is_allowed() {
     // The same extend on a non-sealed class analyzes cleanly (baseline for the sealed rejection).
-    let code = "class Open { public v: int; constructor() { this.v = 0; } } \
+    let code = "class Open { public v: int; public constructor() { this.v = 0; } } \
                 extend Open { public fun bump(): int { return this.v + 1; } }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
