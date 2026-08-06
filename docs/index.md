@@ -82,6 +82,14 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
 
     [:octicons-arrow-right-24: Model your data](language/types.md)
 
+-   :material-auto-fix: **Source Generators**
+
+    ---
+
+    Compile-time derives (`@json`) and custom syntax DSLs (`html { … }`).
+
+    [:octicons-arrow-right-24: Generators guide](language/generators.md)
+
 -   :material-package-variant: **Packages**
 
     ---
@@ -129,14 +137,45 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
     [Async/await](language/async.md) · [WebWorkers](language/webworkers.md) ·
     [Imports & modules](language/imports.md) · [Memory](language/memory.md)
 
--   :material-auto-fix: **Source generators**
+</div>
+
+## Source generators
+
+Compile-time code generation — no runtime reflection. Start with the overview, then pick a path:
+
+<div class="grid cards" markdown>
+
+-   :material-auto-fix: **Overview**
 
     ---
 
-    Compile-time derives and custom syntax DSLs (`html { … }`).
+    Registration, `emit_extend` / `replace`, symbols, and checklists.
 
-    [:octicons-arrow-right-24: Generators](language/generators.md) ·
-    [Syntax DSLs](language/syntax-dsls.md)
+    [:octicons-arrow-right-24: Source generators](language/generators.md)
+
+-   :material-code-tags: **Syntax DSLs**
+
+    ---
+
+    Custom `introducer { … }` blocks (sample: `html { }`).
+
+    [:octicons-arrow-right-24: Syntax DSLs](language/syntax-dsls.md)
+
+-   :material-hammer-wrench: **CodeBuilder**
+
+    ---
+
+    `system.codegen` helpers for building emitted Dream source.
+
+    [:octicons-arrow-right-24: Codegen API](stdlib/codegen.md)
+
+-   :material-code-json: **`@json` derive**
+
+    ---
+
+    Shipped generator: `to_json` / `from_json` for your types.
+
+    [:octicons-arrow-right-24: JSON](stdlib/json.md)
 
 </div>
 

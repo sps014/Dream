@@ -75,11 +75,14 @@ nav:
     - Enums & Unions: language/enums-unions.md
     - Classes & Structs: language/classes-structs.md
     - The object Type: language/objects.md
+  - Source Generators:
+    - Overview: language/generators.md
+    - Syntax DSLs: language/syntax-dsls.md
+    - CodeBuilder API: stdlib/codegen.md
+    - @json derive: stdlib/json.md
   - Advanced Features:
     - Generics: language/generics.md
     - Interfaces: language/interfaces.md
-    - Source Generators: language/generators.md
-    - Syntax DSLs: language/syntax-dsls.md
     - Async/Await: language/async.md
     - WebWorkers: language/webworkers.md
     - Imports & Modules: language/imports.md
@@ -115,5 +118,8 @@ nav:
     - Relooper & Backend: compiler/06-relooper-and-backend.md
     - Adding a Feature: compiler/07-adding-a-language-feature.md
     - Testing & Determinism: compiler/08-testing-and-determinism.md
+    - Design notes:
+      - Nullable purge: compiler/09-nullable-purge-design-note.md
+      - Stack alloc & mono: compiler/10-stack-alloc-and-mono-design-note.md
   - Tooling:
     - Package Manager (dreamer): tooling/package-manager.md
