@@ -1,22 +1,22 @@
-<div class="dream-home" markdown>
+---
+hide:
+  - navigation
+  - toc
+---
 
-<div class="dream-hero" markdown>
-
-<p class="dream-hero__brand">Dream</p>
-
-# Dream
-
-A fast, statically typed language that compiles to WebAssembly — TS/Rust-like syntax, automatic memory management, and a batteries-included standard library.
-
-<div class="dream-hero__actions" markdown>
-
-[Get started](getting-started.md){ .primary }
-[Language](language/variables.md){ .ghost }
-[Standard library](stdlib/builtins.md){ .ghost }
-
+<div class="dream-hero">
+  <h1 class="dream-gradient-text">Dream</h1>
+  <p class="dream-hero-subtitle">
+    A fast, statically typed language that compiles to WebAssembly — TS/Rust-like syntax,
+    automatic memory management, and a batteries-included standard library.
+  </p>
+  <div class="dream-hero-actions">
+    <a href="getting-started/" class="md-button md-button--primary">Get Started</a>
+    <a href="https://github.com/sps014/Dream" class="md-button">GitHub</a>
+  </div>
 </div>
 
-</div>
+<div class="dream-code-showcase" markdown>
 
 ```dream
 import system;
@@ -30,9 +30,7 @@ fun main() {
 }
 ```
 
-New here? Start with [Getting Started](getting-started.md). Comfortable with the basics? Jump to the [language reference](language/variables.md) or the [standard library](stdlib/builtins.md).
-
-Packages use `import system…;` — see [Imports & modules](language/imports.md).
+</div>
 
 ## Start here
 
@@ -192,7 +190,5 @@ Packages use `import system…;` — see [Imports & modules](language/imports.md
     Compiler handbook: pipeline, IRs, passes, and design notes.
 
     [:octicons-arrow-right-24: Handbook](compiler/README.md)
-
-</div>
 
 </div>

@@ -5,13 +5,16 @@ repo_name: sps014/Dream
 
 theme:
   name: material
+  custom_dir: docs/overrides
   font:
-    text: Outfit
+    text: Inter
     code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
   palette:
     scheme: slate
-    primary: teal
-    accent: cyan
+    primary: black
+    accent: deep-purple
   features:
     - content.action.edit
     - content.action.view
@@ -33,6 +36,9 @@ theme:
 
 extra_css:
   - stylesheets/extra.css
+
+extra:
+  announcement: "Dream compiles to WebAssembly — start with [Getting Started](getting-started/)."
 
 hooks:
   - tooling/docs/dream_lexer.py
