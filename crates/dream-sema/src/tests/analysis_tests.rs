@@ -555,14 +555,14 @@ fn test_try_propagation_rejects_option_result_mismatch() {
 
 #[test]
 fn test_class_indexer_get_set_ok() {
-    // A class with `@get`/`@set` methods is indexable (method names are free; `get`/`set` still fine).
+    // A class with `@get_indexer`/`@set_indexer` methods is indexable (method names are free; `get`/`set` still fine).
     let code = "
         class Cell {
             v: int;
             public constructor() { this.v = 0; }
-            @get
+            @get_indexer
             public fun get(index: int): int { return this.v + index; }
-            @set
+            @set_indexer
             public fun set(index: int, value: int): void { this.v = value; }
         }
         fun main(): void {
@@ -582,9 +582,9 @@ fn test_class_indexer_arbitrary_names_ok() {
         class Cell {
             v: int;
             public constructor() { this.v = 0; }
-            @get
+            @get_indexer
             public fun at(index: int): int { return this.v + index; }
-            @set
+            @set_indexer
             public fun put(index: int, value: int): void { this.v = value; }
         }
         fun main(): void {
@@ -599,7 +599,7 @@ fn test_class_indexer_arbitrary_names_ok() {
 
 #[test]
 fn test_class_indexer_bare_get_is_not_an_indexer() {
-    // Without `@get`, a method named `get` is ordinary — `obj[i]` errors.
+    // Without `@get_indexer`, a method named `get` is ordinary — `obj[i]` errors.
     let code = "
         class Box {
             v: int;
@@ -621,12 +621,12 @@ fn test_class_indexer_bare_get_is_not_an_indexer() {
 
 #[test]
 fn test_class_indexer_void_get_attr_rejected() {
-    // `@get` returning `void` is rejected at registration.
+    // `@get_indexer` returning `void` is rejected at registration.
     let code = "
         class Box {
             v: int;
             public constructor() { this.v = 0; }
-            @get
+            @get_indexer
             public fun get(index: int): void { }
         }
         fun main(): void { }
@@ -659,12 +659,12 @@ fn test_class_void_get_still_callable_as_method() {
 
 #[test]
 fn test_class_indexer_static_get_attr_rejected() {
-    // `@get` on a static method is rejected at registration.
+    // `@get_indexer` on a static method is rejected at registration.
     let code = "
         class Box {
             v: int;
             public constructor() { this.v = 0; }
-            @get
+            @get_indexer
             public static fun get(index: int): int { return index; }
         }
         fun main(): void { }
@@ -679,12 +679,12 @@ fn test_class_indexer_static_get_attr_rejected() {
 
 #[test]
 fn test_class_indexer_async_get_attr_rejected() {
-    // `@get` on an async method is rejected at registration.
+    // `@get_indexer` on an async method is rejected at registration.
     let code = "
         class Box {
             v: int;
             public constructor() { this.v = 0; }
-            @get
+            @get_indexer
             public async fun get(index: int): int { return index; }
         }
         fun main(): void { }

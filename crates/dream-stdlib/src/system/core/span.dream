@@ -36,7 +36,7 @@ public ref struct Span<T> {
     }
 
     // The element at `index` (relative to this span, not the backing array). Traps if out of range.
-    @get
+    @get_indexer
     public fun get(index: int): T {
         if ((index < 0) || (index >= this.length)) {
             System.panic("Span index out of range");
@@ -45,7 +45,7 @@ public ref struct Span<T> {
     }
 
     // Overwrites the element at `index` (relative to this span). Traps if out of range.
-    @set
+    @set_indexer
     public fun set(index: int, value: T): void {
         if ((index < 0) || (index >= this.length)) {
             System.panic("Span index out of range");

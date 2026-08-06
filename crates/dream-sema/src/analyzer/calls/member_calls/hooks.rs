@@ -1,4 +1,4 @@
-//! Indexer/enumerator protocol-hook resolution (`@get`/`@set`/`@iterator`/`@next`) shared by the
+//! Indexer/enumerator protocol-hook resolution (`@get_indexer`/`@set_indexer`/`@iterator`/`@next`) shared by the
 //! desugaring of `obj[i]`, `obj[i] = v`, and `for (let x in obj)`.
 
 use super::super::super::*;

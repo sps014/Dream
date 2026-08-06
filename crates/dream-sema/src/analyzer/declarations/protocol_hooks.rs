@@ -1,9 +1,10 @@
-//! `@get` / `@set` / `@iterator` / `@next` registration: recognizes the indexer/enumerator
-//! protocol attributes on a struct/class/`extend` method (their generic shape — no args,
-//! method-only placement — is already validated by [`dream_abi::attributes`]), checks role-specific
-//! arity/return rules, and records the mangled + surface method names so `obj[i]`, `obj[i] = v`,
-//! and `for..in` desugaring can dispatch without bare-name lookup. One [`ProtocolHooks`] table
-//! per registered type, keyed the same way as `register_methods_for`'s `target_type_str`.
+//! `@get_indexer` / `@set_indexer` / `@iterator` / `@next` registration: recognizes the
+//! indexer/enumerator protocol attributes on a struct/class/`extend` method (their generic shape —
+//! no args, method-only placement — is already validated by [`dream_abi::attributes`]), checks
+//! role-specific arity/return rules, and records the mangled + surface method names so `obj[i]`,
+//! `obj[i] = v`, and `for..in` desugaring can dispatch without bare-name lookup. One
+//! [`ProtocolHooks`] table per registered type, keyed the same way as `register_methods_for`'s
+//! `target_type_str`.
 
 use super::*;
 use dream_diagnostics::DiagnosticBag;
@@ -22,8 +23,8 @@ pub enum ProtocolRole {
 impl ProtocolRole {
     fn from_attr_name(name: &str) -> Option<Self> {
         match name {
-            "get" => Some(ProtocolRole::Get),
-            "set" => Some(ProtocolRole::Set),
+            "get_indexer" => Some(ProtocolRole::Get),
+            "set_indexer" => Some(ProtocolRole::Set),
             "iterator" => Some(ProtocolRole::Iterator),
             "next" => Some(ProtocolRole::Next),
             _ => None,
@@ -32,8 +33,8 @@ impl ProtocolRole {
 
     fn attr_name(self) -> &'static str {
         match self {
-            ProtocolRole::Get => "get",
-            ProtocolRole::Set => "set",
+            ProtocolRole::Get => "get_indexer",
+            ProtocolRole::Set => "set_indexer",
             ProtocolRole::Iterator => "iterator",
             ProtocolRole::Next => "next",
         }
@@ -87,9 +88,9 @@ impl ProtocolHooks {
 }
 
 impl<'a> Analyzer<'a> {
-    /// Recognizes `@get`/`@set`/`@iterator`/`@next` on `method` and records it against
-    /// `target_type_str`. Reports role-specific shape rules the generic attribute layer cannot
-    /// know, and rejects a second method claiming the same role on the same type.
+    /// Recognizes `@get_indexer`/`@set_indexer`/`@iterator`/`@next` on `method` and records it
+    /// against `target_type_str`. Reports role-specific shape rules the generic attribute layer
+    /// cannot know, and rejects a second method claiming the same role on the same type.
     pub(in crate::analyzer) fn validate_and_register_protocol_hook(
         &mut self,
         target_type_str: &str,
@@ -159,7 +160,7 @@ impl<'a> Analyzer<'a> {
                 if matches!(method.return_type, None | Some(Type::Void)) {
                     diagnostics.report_error(
                         format!(
-                            "'@get' method '{}' must return a non-void value",
+                            "'@get_indexer' method '{}' must return a non-void value",
                             method.name.text
                         ),
                         Some(method.name.position),

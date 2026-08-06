@@ -40,10 +40,10 @@ Their calling convention is fixed, so their shape is fixed.
 
 ## Indexers and enumerators
 
-- `@get` / `@set` / `@iterator` / `@next` mark protocol roles; method names are free (same model as
+- `@get_indexer` / `@set_indexer` / `@iterator` / `@next` mark protocol roles; method names are free (same model as
   `@operator`). See [Classes & Structs § Indexers and enumerators](classes-structs.md#indexers-and-enumerators).
-- `@get`: instance method, one parameter, non-void return, non-async — enables `obj[i]`.
-- `@set`: instance method, two parameters, non-async — enables `obj[i] = v`.
+- `@get_indexer`: instance method, one parameter, non-void return, non-async — enables `obj[i]`.
+- `@set_indexer`: instance method, two parameters, non-async — enables `obj[i] = v`.
 - `@iterator`: instance method, zero parameters, returns a class/struct — enables `for..in`.
 - `@next`: instance method, zero parameters, returns `Option<T>` — enumerator step.
 - A type may declare at most one method per role. Bare `get`/`set`/`iterator`/`next` without the

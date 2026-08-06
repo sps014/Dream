@@ -34,7 +34,7 @@ extend string : Comparable<string> {
     }
 
     // Gets the character at the specified index.
-    @get
+    @get_indexer
     public fun get(index: int): char {
         return this.char_at(index);
     }

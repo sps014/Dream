@@ -170,17 +170,17 @@ class App {
 ```
 
 A getter-only property is fine; a setter without a getter is allowed but unusual. These are
-distinct from bracket indexers (`@get` / `@set` methods) below.
+distinct from bracket indexers (`@get_indexer` / `@set_indexer` methods) below.
 ### Indexers and enumerators
 
-Opt into `obj[i]` / `obj[i] = v` by tagging methods with `@get` / `@set` (method names are free — they need not be called `get`/`set`). Opt into `for (let x in obj)` by tagging a zero-arg factory with `@iterator` (returning an enumerator object) and tagging that enumerator's step method with `@next` (returning `Option<T>`):
+Opt into `obj[i]` / `obj[i] = v` by tagging methods with `@get_indexer` / `@set_indexer` (method names are free — they need not be called `get`/`set`). Opt into `for (let x in obj)` by tagging a zero-arg factory with `@iterator` (returning an enumerator object) and tagging that enumerator's step method with `@next` (returning `Option<T>`):
 
 ```dream
 class Grid {
-    @get
+    @get_indexer
     public fun at(index: int): int { ... }
 
-    @set
+    @set_indexer
     public fun put(index: int, value: int): void { ... }
 
     @iterator

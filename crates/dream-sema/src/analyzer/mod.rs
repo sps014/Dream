@@ -387,7 +387,7 @@ pub struct Analyzer<'a> {
     /// by `expressions::operators`/`expressions::dispatch`/`expressions::casts` to dispatch
     /// operators and user-defined conversions to the right method.
     operator_overloads: HashMap<String, declarations::operator_overloads::OperatorOverloads>,
-    /// Type name (mangled for generic instances) -> `@get`/`@set`/`@iterator`/`@next` hooks,
+    /// Type name (mangled for generic instances) -> `@get_indexer`/`@set_indexer`/`@iterator`/`@next` hooks,
     /// populated by [`declarations::protocol_hooks`] and consulted by indexer/`for..in` desugar.
     protocol_hooks: HashMap<String, declarations::protocol_hooks::ProtocolHooks>,
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target

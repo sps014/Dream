@@ -9,7 +9,7 @@ extend T[] : IndexedCollection<T> {
         return this.size();
     }
 
-    @get
+    @get_indexer
     public fun get(index: int): Option<T> {
         if (index < 0 || index >= this.size()) {
             return Option.None;

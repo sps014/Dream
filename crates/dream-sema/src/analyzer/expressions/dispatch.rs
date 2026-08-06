@@ -594,7 +594,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Desugars a class indexer read `obj[index]` to a call of the type's `@get` method when
+    /// Desugars a class indexer read `obj[index]` to a call of the type's `@get_indexer` method when
     /// registered (see [`declarations::protocol_hooks`]): an accessible instance, non-async
     /// method taking one argument and returning a (non-`void`) value.
     fn analyze_index_get(
@@ -615,7 +615,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
             || {
                 format!(
-                    "type '{}' has no indexer (define '@get public fun ...(index): T' to allow obj[index])",
+                    "type '{}' has no indexer (define '@get_indexer public fun ...(index): T' to allow obj[index])",
                     obj_type.get_type()
                 )
             },
@@ -628,7 +628,7 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             diagnostics.report_error(
                 format!(
-                    "type '{}' has no indexer: its '@get' method must return a value",
+                    "type '{}' has no indexer: its '@get_indexer' method must return a value",
                     obj_type.get_type()
                 ),
                 array_expr.position(),

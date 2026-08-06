@@ -229,13 +229,13 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
     // the method name is free). Shape/arity are checked in
     // `declarations::protocol_hooks::validate_and_register_protocol_hook`.
     AttributeSpec {
-        name: "get",
+        name: "get_indexer",
         targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
         args: ArgShape::None,
         repeatable: false,
     },
     AttributeSpec {
-        name: "set",
+        name: "set_indexer",
         targets: &[AttributeTarget::Method],
         args: ArgShape::None,
         repeatable: false,

@@ -1,4 +1,4 @@
-// A user class opting into `obj[i]` / `obj[i] = v` via `@get`/`@set` methods.
+// A user class opting into `obj[i]` / `obj[i] = v` via `@get_indexer`/`@set_indexer` methods.
 
 import system;
 class Grid {
@@ -8,12 +8,12 @@ class Grid {
         this.cells = Buffer.alloc<int>(size);
     }
 
-    @get
+    @get_indexer
     public fun get(index: int): int {
         return this.cells[index];
     }
 
-    @set
+    @set_indexer
     public fun set(index: int, value: int): void {
         this.cells[index] = value;
     }

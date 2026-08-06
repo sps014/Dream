@@ -94,7 +94,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Inserts or updates the value for a key.
-    @set
+    @set_indexer
     public fun set(key: K, value: V): void {
         if ((this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num()) {
             this.rehash();
@@ -168,7 +168,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Gets the value for a key, or None.
-    @get
+    @get_indexer
     public fun get(key: K): Option<V> {
         let i = this.find(key);
         if (i >= 0) {

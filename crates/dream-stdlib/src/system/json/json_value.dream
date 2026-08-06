@@ -135,7 +135,7 @@ public class JsonValue {
     }
 
     // The value for `key`, or `None`.
-    @get
+    @get_indexer
     public fun get(key: string): Option<JsonValue> {
         let idx = this._find_key(key);
         if (idx >= 0) {
@@ -145,7 +145,7 @@ public class JsonValue {
     }
 
     // Sets the value for `key`.
-    @set
+    @set_indexer
     public fun set(key: string, value: JsonValue): void {
         let idx = this._find_key(key);
         if (idx >= 0) {

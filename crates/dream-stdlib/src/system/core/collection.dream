@@ -71,7 +71,7 @@ public interface Collection<T> {
 // Ordered, indexable sequences (`List`). Extends `Collection` so implementers are usable
 // wherever a `Collection` is expected without re-listing `size` / `iterator`.
 public interface IndexedCollection<T> : Collection<T> {
-    @get
+    @get_indexer
     fun get(index: int): Option<T>;
 
     public fun first(): Option<T> {

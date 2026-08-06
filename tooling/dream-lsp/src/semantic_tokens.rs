@@ -29,7 +29,7 @@ pub const TOKEN_TYPES: [SemanticTokenType; 15] = [
     SemanticTokenType::STRING,      // 11
     SemanticTokenType::NUMBER,      // 12
     SemanticTokenType::COMMENT,     // 13
-    SemanticTokenType::DECORATOR,   // 14 — `@json`, `@get`, …
+    SemanticTokenType::DECORATOR,   // 14 — `@json`, `@get_indexer`, …
 ];
 
 const COMMENT: u32 = 13;

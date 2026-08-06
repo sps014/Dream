@@ -31,13 +31,13 @@ public struct Pointer<T> {
     }
 
     // Bounds-checked read (traps if `index` is out of range, exactly like `T[]` indexing).
-    @get
+    @get_indexer
     public fun get(index: int): T {
         return this.buf[index];
     }
 
     // Bounds-checked write (traps if `index` is out of range).
-    @set
+    @set_indexer
     public fun set(index: int, value: T): void {
         this.buf[index] = value;
     }

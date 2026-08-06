@@ -18,7 +18,7 @@ pub enum SymKind {
     Param,
     Type,
     Keyword,
-    /// An `@attribute` name (`@json`, `@get`, …).
+    /// An `@attribute` name (`@json`, `@get_indexer`, …).
     Decorator,
 }
 

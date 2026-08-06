@@ -95,9 +95,9 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    /// Desugars a class index-assignment `obj[index] = value` to a call of the type's `@set`
-    /// method when registered (accessible instance, non-async method taking two arguments; its
-    /// return value is discarded).
+    /// Desugars a class index-assignment `obj[index] = value` to a call of the type's
+    /// `@set_indexer` method when registered (accessible instance, non-async method taking two
+    /// arguments; its return value is discarded).
     #[allow(clippy::too_many_arguments)]
     fn analyze_index_set(
         &mut self,
@@ -118,7 +118,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
             || {
                 format!(
-                    "type '{}' is not index-assignable (define '@set public fun ...(index, value)' to allow obj[index] = value)",
+                    "type '{}' is not index-assignable (define '@set_indexer public fun ...(index, value)' to allow obj[index] = value)",
                     obj_type.get_type()
                 )
             },

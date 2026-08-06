@@ -81,7 +81,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Returns the element at `index`, or `None` if `index` is out of range.
-    @get
+    @get_indexer
     public fun get(index: int): Option<T> {
         if ((index < 0) || (index >= this.count)) {
             return Option.None;
@@ -91,7 +91,7 @@ public class List<T> : IndexedCollection<T> {
 
     // Overwrites the element at `index`, returning true on success or false if `index` is out of
     // range (no value is written in that case).
-    @set
+    @set_indexer
     public fun set(index: int, value: T): bool {
         if ((index < 0) || (index >= this.count)) {
             return false;
