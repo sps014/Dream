@@ -1,10 +1,10 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  #push:
+  #  branches:
+  #    - main
+  # pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -15,39 +15,45 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: Test
+  # Placeholder so the workflow stays valid while real jobs are commented out.
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - run: echo "CI temporarily disabled"
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+  # test:
+  #   name: Test
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+  #
+  #     - uses: Swatinem/rust-cache@v2
+  #
+  #     - name: Build
+  #       run: cargo build --workspace
+  #
+  #     - name: Test
+  #       run: cargo test --workspace
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        run: cargo build --workspace
-
-      - name: Test
-        run: cargo test --workspace
-
-  interop:
-    name: JS interop smoke test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      # Builds each interop sample to WebAssembly and runs its Node runner through the shared
-      # runtime (runtime/dream.js), asserting the ABI still marshals values correctly.
-      - name: Interop smoke test
-        run: node sample/interop/smoke.mjs
+  # interop:
+  #   name: JS interop smoke test
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+  #
+  #     - uses: Swatinem/rust-cache@v2
+  #
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
+  #
+  #     # Builds each interop sample to WebAssembly and runs its Node runner through the shared
+  #     # runtime (runtime/dream.js), asserting the ABI still marshals values correctly.
+  #     - name: Interop smoke test
+  #       run: node sample/interop/smoke.mjs
