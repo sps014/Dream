@@ -41,10 +41,12 @@ impl<'a> Analyzer<'a> {
             return Ok(());
         }
 
-        // Class index-assignment: `obj[i] = v` on a struct receiver desugars to `obj.set(i, v)`
-        // when an eligible `set` exists. Arrays keep the built-in path.
+        // Class/string index-assignment: `obj[i] = v` on a struct or `string` receiver desugars
+        // to the `@set_indexer` method when registered. Arrays keep the built-in path; `Unknown`
+        // is a poison carried from an earlier error and must not cascade.
         if !matches!(array_type, Type::Array(_) | Type::Unknown)
-            && Self::resolve_struct_parts(&array_type).is_some()
+            && (Self::resolve_struct_parts(&array_type).is_some()
+                || matches!(array_type, Type::String(_)))
         {
             // The synthesized call re-evaluates the receiver, so drop the base HIR taken above.
             let _ = array_hir;

@@ -1,0 +1,14 @@
+// `s[i] = c` via `@set_indexer` on `extend string` (in-place UTF-8 write).
+
+import system;
+import system.text;
+
+fun main() {
+    // Concat allocates a fresh heap buffer — do not mutate interned literals.
+    let s = "hel" + "lo";
+    s[0] = 'H';
+    s[4] = 'O';
+    System.println(s);
+    System.println(s[0]);
+    System.println(s[4]);
+}

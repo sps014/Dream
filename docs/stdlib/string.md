@@ -2,34 +2,35 @@
 
 **Package:** `system.text` — `import system.text;` (also pulled in by `import system;`)
 
-`string` is a built-in reference type holding UTF-8 text. Basic operations (`+`, `size()`, `char_at`, interpolation) need no import. Higher-level helpers (`substring`, `split`, `trim`, `StringBuilder`, `Regex`, `Unicode`, …) require this package.
+`string` is a built-in reference type holding UTF-8 text. Basic operations (`+`, `.length`, `char_at`, interpolation) need no import. Higher-level helpers (`substring`, `split`, `trim`, `StringBuilder`, `Regex`, `Unicode`, …) require this package.
 
 Build strings with `+` concatenation or [interpolation](../language/operators.md#string-interpolation) (`$"hi {name}"`).
 
 ## Length and access
 
-`size()` returns the **Unicode scalar** (code point) count; `byte_size()` returns the UTF-8 byte length (O(1)). `is_empty()` is `true` when there are no scalars. Index with `s[i]` (read-only) or `char_at(i)` to get the `i`th scalar as a `char`; use `byte_at(i)` for raw UTF-8 byte access. Iterate with `for (let c in s)` — each `c` is one scalar:
+`.length` returns the **Unicode scalar** (code point) count; `byte_size()` returns the UTF-8 byte length (O(1)). `is_empty()` is `true` when there are no scalars. Index with `s[i]` / `char_at(i)` to get the `i`th scalar as a `char`, or assign with `s[i] = c` to overwrite in place; use `byte_at(i)` for raw UTF-8 byte access. Iterate with `for (let c in s)` — each `c` is one scalar:
 
 ```dream
 import system;
 import system.text;
 
-let s = "aé🙂";
+let s = "ab" + "c";             // heap string (not an interned literal)
 System.println(s.length);       // 3 (scalars)
-System.println(s.byte_size());  // 7 (UTF-8 bytes)
 System.println(s[0]);           // 'a'
-System.println(s.char_at(1));   // 'é'
-System.println(s.byte_at(1));   // 195 (second byte of é)
+s[0] = 'A';
+System.println(s);              // Abc
+System.println(s.char_at(1));   // 'b'
+System.println(("aé🙂").byte_at(1));  // 195 (second byte of é)
 
-for (let c in s) {
+for (let c in "aé🙂") {
     System.println(c);          // 'a', 'é', '🙂'
 }
 ```
 
-Indexing is read-only (no `s[i] = c`). Build derived strings with `substring`, `+`, or the low-level `string.alloc`/`string.set` helpers (scalar indices).
+`s[i] = c` is in-place mutation of the string's UTF-8 buffer (same as `string.set`). Because `string` is a reference type, every alias of that buffer sees the change — avoid writing into interned literals. Prefer same UTF-8 width replacements, or build via `string.alloc` / `StringBuilder` when the new scalar may need more bytes than the old one.
 
 !!! note
-    `char_at`, `s[i]`, and `byte_at` [panic](../language/panics.md) on an out-of-range (including negative) index.
+    `char_at`, `s[i]`, `s[i] = c`, and `byte_at` [panic](../language/panics.md) on an out-of-range (including negative) index.
 
 ## Searching
 

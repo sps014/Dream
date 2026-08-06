@@ -39,6 +39,16 @@ extend string : Comparable<string> {
         return this.char_at(index);
     }
 
+    // Overwrites the character at the specified index (panics if out of range).
+    // Named `set_at` (not `set`) so it does not collide with static `string.set`.
+    @set_indexer
+    public fun set_at(index: int, value: char): void {
+        // Force the same bounds panic as `char_at` / `s[i]` before the low-level write
+        // (which would otherwise append when `index == length`).
+        this.char_at(index);
+        string.set(this, index, value);
+    }
+
     // Gets an iterator for the string's characters.
     @iterator
     public fun iterator(): StringIterator {
