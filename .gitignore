@@ -4,12 +4,13 @@
 
 site/
 
-# Generated WASM artifacts emitted by the compiler/tests (e.g. tests/cases, sample/interop,
+# Generated WASM/GPU artifacts emitted by the compiler/tests (e.g. tests/cases, sample/interop,
 # and root scratch files). Hand-written runtime assets under src/ are NOT generated and are
 # re-included below.
 *.wat
 *.wasm
 *.abi.json
+*.wgsl
 
 # Keep the hand-written runtime WAT assets that the codegen embeds via include_str!.
 !/src/**/*.wat
