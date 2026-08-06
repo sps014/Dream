@@ -1,0 +1,451 @@
+/* Dream docs — glassmorphism tiles on an atmospheric dark canvas.
+   Loaded via mkdocs.yml `extra_css`. */
+
+:root {
+  --dream-bg0: #070b14;
+  --dream-bg1: #0c1220;
+  --dream-glass: rgba(255, 255, 255, 0.055);
+  --dream-glass-hover: rgba(255, 255, 255, 0.09);
+  --dream-border: rgba(255, 255, 255, 0.12);
+  --dream-border-strong: rgba(94, 234, 212, 0.35);
+  --dream-accent: #5eead4;
+  --dream-accent-2: #38bdf8;
+  --dream-accent-glow: rgba(94, 234, 212, 0.22);
+  --dream-text: #e8eef7;
+  --dream-muted: #9aa8bc;
+  --dream-radius: 1.1rem;
+  --dream-blur: 18px;
+}
+
+/* ---------- Atmospheric canvas ---------- */
+
+body {
+  background-color: var(--dream-bg0) !important;
+}
+
+.md-main,
+.md-content,
+.md-sidebar,
+.md-header,
+.md-tabs,
+.md-footer {
+  background: transparent !important;
+}
+
+.md-container {
+  background:
+    radial-gradient(1000px 520px at 12% -8%, rgba(56, 189, 248, 0.18), transparent 55%),
+    radial-gradient(900px 480px at 92% 8%, rgba(94, 234, 212, 0.14), transparent 50%),
+    radial-gradient(700px 420px at 50% 100%, rgba(14, 165, 233, 0.1), transparent 55%),
+    linear-gradient(180deg, var(--dream-bg1) 0%, var(--dream-bg0) 42%, #05080f 100%) !important;
+  background-attachment: fixed !important;
+  min-height: 100vh;
+}
+
+/* ---------- Header / tabs — frosted ---------- */
+
+.md-header {
+  background: rgba(7, 11, 20, 0.55) !important;
+  backdrop-filter: blur(var(--dream-blur)) saturate(1.35);
+  -webkit-backdrop-filter: blur(var(--dream-blur)) saturate(1.35);
+  border-bottom: 1px solid var(--dream-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+}
+
+.md-header--shadow {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35) !important;
+}
+
+.md-tabs {
+  background: rgba(7, 11, 20, 0.35) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.md-header__topic .md-ellipsis,
+.md-header__button,
+.md-tabs__link {
+  color: var(--dream-text) !important;
+}
+
+.md-tabs__link--active,
+.md-tabs__link:hover {
+  color: var(--dream-accent) !important;
+}
+
+.md-search__form {
+  background: var(--dream-glass) !important;
+  border: 1px solid var(--dream-border);
+  border-radius: 999px !important;
+  backdrop-filter: blur(10px);
+}
+
+.md-search__form:hover,
+.md-search__input:focus + .md-search__icon,
+.md-search__form:focus-within {
+  border-color: var(--dream-border-strong);
+  box-shadow: 0 0 0 3px var(--dream-accent-glow);
+}
+
+/* ---------- Sidebars ---------- */
+
+.md-sidebar__scrollwrap {
+  background: transparent;
+}
+
+.md-nav__title {
+  color: var(--dream-muted) !important;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.md-nav__link {
+  border-radius: 0.55rem;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.md-nav__link:hover {
+  background: var(--dream-glass);
+}
+
+.md-nav__link--active,
+.md-nav__item .md-nav__link--active {
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.16), rgba(56, 189, 248, 0.1));
+  color: var(--dream-accent) !important;
+  border: 1px solid rgba(94, 234, 212, 0.22);
+}
+
+/* ---------- Typography ---------- */
+
+.md-typeset {
+  color: var(--dream-text);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-size: 2.15rem;
+  background: linear-gradient(120deg, #fff 20%, var(--dream-accent) 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 0.6em;
+}
+
+.md-typeset h2 {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-top: 2.2em;
+}
+
+.md-typeset h2::after {
+  content: "";
+  display: block;
+  width: 3rem;
+  height: 3px;
+  margin-top: 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--dream-accent), var(--dream-accent-2));
+  opacity: 0.85;
+}
+
+.md-typeset a {
+  color: var(--dream-accent-2);
+}
+
+.md-typeset a:hover {
+  color: var(--dream-accent);
+}
+
+/* ---------- Glass cards / tiles ---------- */
+
+.md-typeset .grid.cards > ul,
+.md-typeset .grid.cards > ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+  gap: 1rem;
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+}
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  position: relative;
+  margin: 0 !important;
+  padding: 1.15rem 1.2rem 1.25rem !important;
+  border-radius: var(--dream-radius);
+  background: var(--dream-glass);
+  border: 1px solid var(--dream-border);
+  backdrop-filter: blur(var(--dream-blur)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--dream-blur)) saturate(1.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 40px rgba(0, 0, 0, 0.28);
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.22s ease,
+    background 0.22s ease,
+    box-shadow 0.22s ease;
+  overflow: hidden;
+}
+
+.md-typeset .grid.cards > ul > li::before,
+.md-typeset .grid.cards > ol > li::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    145deg,
+    rgba(94, 234, 212, 0.12) 0%,
+    transparent 42%,
+    rgba(56, 189, 248, 0.06) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  pointer-events: none;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid.cards > ol > li:hover {
+  transform: translateY(-4px);
+  background: var(--dream-glass-hover);
+  border-color: var(--dream-border-strong);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 22px 48px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(94, 234, 212, 0.08),
+    0 0 36px var(--dream-accent-glow);
+}
+
+.md-typeset .grid.cards > ul > li:hover::before,
+.md-typeset .grid.cards > ol > li:hover::before {
+  opacity: 1;
+}
+
+.md-typeset .grid.cards > ul > li > :first-child,
+.md-typeset .grid.cards > ol > li > :first-child {
+  margin-top: 0;
+}
+
+.md-typeset .grid.cards .twemoji,
+.md-typeset .grid.cards img.twemoji {
+  filter: drop-shadow(0 0 10px var(--dream-accent-glow));
+}
+
+.md-typeset .grid.cards hr {
+  border: none;
+  height: 1px;
+  margin: 0.75rem 0 0.9rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.18),
+    transparent
+  );
+}
+
+/* ---------- Code blocks — glass inset ---------- */
+
+.md-typeset pre > code,
+.md-typeset > pre {
+  border-radius: 0.9rem !important;
+}
+
+.md-typeset .highlight,
+.md-typeset pre:not(.md-mermaid) {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid var(--dream-border);
+  border-radius: 0.9rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.md-typeset code:not(.focus-visible) {
+  background: rgba(94, 234, 212, 0.1);
+  border: 1px solid rgba(94, 234, 212, 0.18);
+  border-radius: 0.35rem;
+  color: #c8fff4;
+  padding: 0.1em 0.35em;
+}
+
+.md-typeset .highlight code {
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0;
+}
+
+/* ---------- Admonitions / tables ---------- */
+
+.md-typeset .admonition,
+.md-typeset details {
+  background: var(--dream-glass);
+  border-radius: 0.9rem;
+  border: 1px solid var(--dream-border);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+}
+
+.md-typeset table:not([class]) {
+  border-radius: 0.9rem;
+  overflow: hidden;
+  border: 1px solid var(--dream-border);
+  background: var(--dream-glass);
+  backdrop-filter: blur(10px);
+}
+
+.md-typeset table:not([class]) th {
+  background: rgba(94, 234, 212, 0.08);
+}
+
+/* ---------- Content surface ---------- */
+
+.md-content__inner {
+  margin-bottom: 3rem;
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-content__inner {
+    padding-top: 0.5rem;
+  }
+}
+
+/* ---------- Footer ---------- */
+
+.md-footer {
+  background: rgba(7, 11, 20, 0.7) !important;
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--dream-border);
+}
+
+.md-footer-meta {
+  background: transparent !important;
+}
+
+/* ---------- Home hero ---------- */
+
+.dream-hero {
+  position: relative;
+  margin: 0 0 2rem;
+  padding: 2rem 1.75rem 1.85rem;
+  border-radius: calc(var(--dream-radius) + 0.25rem);
+  background: linear-gradient(
+    135deg,
+    rgba(94, 234, 212, 0.12) 0%,
+    rgba(56, 189, 248, 0.08) 45%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  border: 1px solid var(--dream-border);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 24px 60px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.dream-hero::after {
+  content: "";
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  right: -60px;
+  top: -80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(94, 234, 212, 0.35), transparent 68%);
+  pointer-events: none;
+}
+
+.dream-hero__brand {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dream-accent);
+  margin: 0 0 0.65rem;
+}
+
+.dream-hero h1 {
+  margin: 0 0 0.65rem !important;
+  font-size: clamp(2rem, 4vw, 2.75rem) !important;
+}
+
+.dream-hero p {
+  max-width: 40rem;
+  color: var(--dream-muted);
+  margin: 0 0 1.1rem;
+  font-size: 1.05rem;
+}
+
+.dream-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.dream-hero__actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  text-decoration: none !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.dream-hero__actions a.primary {
+  color: #041016 !important;
+  background: linear-gradient(120deg, var(--dream-accent), var(--dream-accent-2));
+  box-shadow: 0 8px 24px var(--dream-accent-glow);
+}
+
+.dream-hero__actions a.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px var(--dream-accent-glow);
+}
+
+.dream-hero__actions a.ghost {
+  color: var(--dream-text) !important;
+  background: var(--dream-glass);
+  border: 1px solid var(--dream-border);
+}
+
+.dream-hero__actions a.ghost:hover {
+  border-color: var(--dream-border-strong);
+  background: var(--dream-glass-hover);
+}
+
+/* Hide default H1 when hero supplies the brand title */
+.dream-home > h1:first-of-type {
+  display: none;
+}
+
+.dream-hero .md-typeset h1,
+.dream-hero h1 {
+  display: block !important;
+}
+
+/* ---------- Scrollbar polish ---------- */
+
+.md-sidebar__scrollwrap::-webkit-scrollbar,
+.md-typeset pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb,
+.md-typeset pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}

@@ -6,12 +6,12 @@ repo_name: sps014/Dream
 theme:
   name: material
   font:
-    text: Inter
+    text: Outfit
     code: JetBrains Mono
   palette:
     scheme: slate
-    primary: black
-    accent: deep-purple
+    primary: teal
+    accent: cyan
   features:
     - content.action.edit
     - content.action.view
@@ -30,6 +30,9 @@ theme:
     - navigation.tracking
     - navigation.expand
     - toc.follow
+
+extra_css:
+  - stylesheets/extra.css
 
 hooks:
   - tooling/docs/dream_lexer.py

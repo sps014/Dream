@@ -1,6 +1,22 @@
+<div class="dream-home" markdown>
+
+<div class="dream-hero" markdown>
+
+<p class="dream-hero__brand">Dream</p>
+
 # Dream
 
-Dream is a fast, statically typed language that compiles straight to WebAssembly. It has a clean, C-like syntax and manages memory for you with automatic reference counting (ARC) — no garbage collector pauses, no manual frees.
+A fast, statically typed language that compiles straight to WebAssembly — C-like syntax, deterministic ARC, zero-cost generics.
+
+<div class="dream-hero__actions" markdown>
+
+[Get started](getting-started.md){ .primary }
+[Source generators](language/generators.md){ .ghost }
+[Stdlib](stdlib/builtins.md){ .ghost }
+
+</div>
+
+</div>
 
 ```dream
 import system;
@@ -334,5 +350,7 @@ Dream runs inside the browser, Node.js, and native WASM runtimes. The `extern` k
     Pass functions in both directions across the boundary.
 
     [:octicons-arrow-right-24: Callbacks](language/callbacks.md)
+
+</div>
 
 </div>
