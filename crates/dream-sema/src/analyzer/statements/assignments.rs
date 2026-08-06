@@ -27,41 +27,6 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(Type::Unknown);
         let array_hir = self.hir_take();
 
-        // Tuple element write: `t[0] = v` — constant index → Field place.
-        if let Type::Tuple(elems) = &array_type {
-            let Some(idx) = Self::constant_nonneg_int(index) else {
-                diagnostics.report_error(
-                    "tuple index must be a constant non-negative integer literal".to_string(),
-                    index.position(),
-                );
-                self.hir_fail();
-                return Ok(());
-            };
-            if idx >= elems.len() {
-                diagnostics.report_error(
-                    format!(
-                        "tuple index {} is out of range for {}-element tuple",
-                        idx,
-                        elems.len()
-                    ),
-                    index.position(),
-                );
-                self.hir_fail();
-                return Ok(());
-            }
-            let elem_ty = elems[idx].clone();
-            let saved = self.current_expected_type.take();
-            self.current_expected_type = Some(elem_ty.clone());
-            let right_type = self
-                .analyze_expression(right, parent_function, symbol_table, diagnostics)
-                .unwrap_or(Type::Unknown);
-            let value = self.hir_take();
-            self.current_expected_type = saved;
-            self.compare_data_type(&elem_ty, &right_type, &empty_span(), diagnostics)?;
-            self.hir_assign_field(array_hir, idx, value);
-            return Ok(());
-        }
-
         // A `js`-typed receiver: `obj[key] = v` sets a JS property/element dynamically.
         if self.is_js_type(&array_type) {
             let _key_type = self
@@ -204,6 +169,44 @@ impl<'a> Analyzer<'a> {
             .analyze_expression(obj, parent_function, symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
         let obj_hir = self.hir_take();
+
+        // Tuple element write: `t.0 = v`.
+        if let Type::Tuple(elems) = &obj_type {
+            let Some(idx) = member.text.parse::<usize>().ok() else {
+                diagnostics.report_error(
+                    format!(
+                        "tuple has no member '{}'; use .0, .1, …",
+                        member.text
+                    ),
+                    Some(member.position),
+                );
+                self.hir_fail();
+                return Ok(());
+            };
+            if idx >= elems.len() {
+                diagnostics.report_error(
+                    format!(
+                        "tuple index {} is out of range for {}-element tuple",
+                        idx,
+                        elems.len()
+                    ),
+                    Some(member.position),
+                );
+                self.hir_fail();
+                return Ok(());
+            }
+            let elem_ty = elems[idx].clone();
+            let saved = self.current_expected_type.take();
+            self.current_expected_type = Some(elem_ty.clone());
+            let right_type = self
+                .analyze_expression(right, parent_function, symbol_table, diagnostics)
+                .unwrap_or(Type::Unknown);
+            let value = self.hir_take();
+            self.current_expected_type = saved;
+            self.compare_data_type(&elem_ty, &right_type, &member.position, diagnostics)?;
+            self.hir_assign_field(obj_hir, idx, value);
+            return Ok(());
+        }
 
         // A `js`-typed receiver: `obj.name = v` sets a JS property dynamically.
         if self.is_js_type(&obj_type) {

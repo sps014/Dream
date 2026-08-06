@@ -12,12 +12,15 @@ HTML and other syntax DSLs are **not** part of this package — see
 
 ## `CodeBuilder`
 
-Accumulates Dream source for `emit_extend` / `emit_file` bodies. Construct with `CodeBuilder()`.
+Accumulates Dream source for `emit_extend` / `emit_file` bodies. Construct with `CodeBuilder()`
+(4 spaces per indent level) or `CodeBuilder(n)` for `n` spaces per level.
 
 ```dream
 let b = CodeBuilder();
 b.line("public fun to_json(): JsonValue {");
-b.line("    return JsonValue.dict();");
+b.indent();
+b.line("return JsonValue.dict();");
+b.dedent();
 b.line("}");
 b.append("// trailing comment");
 let src = b.to_string();
@@ -25,10 +28,16 @@ let src = b.to_string();
 
 | Method | Role |
 |--------|------|
-| `CodeBuilder()` | Empty builder |
-| `line(text)` | Append a line (adds a trailing newline) |
-| `append(text)` | Append raw text with no extra newline |
+| `CodeBuilder()` | Empty builder, 4 spaces per indent level |
+| `CodeBuilder(spaces)` | Empty builder, `spaces` spaces per level (`<= 0` → no indent) |
+| `indent()` | Increase indent level by one |
+| `dedent()` | Decrease indent level by one (floored at 0) |
+| `line(text)` | Write indent (if at line start) + text + newline |
+| `append(text)` | Write indent (if at line start) + text (no extra newline) |
 | `to_string()` | Materialize the buffer |
+
+Indent is applied only at the start of a line (after `line`, or initially). Mid-line `append`
+does not re-prefix.
 
 ## Generator host API
 

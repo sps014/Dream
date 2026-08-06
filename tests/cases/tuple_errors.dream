@@ -2,6 +2,5 @@ import system;
 
 fun main() {
     let t = (1, 2);
-    let i = 0;
-    System.println(t[i]);
+    System.println(t[0]);
 }

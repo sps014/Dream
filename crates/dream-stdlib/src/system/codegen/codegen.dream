@@ -5,18 +5,71 @@ module system.codegen;
 // Dream source strings.
 
 /// Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
+/// Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth;
+/// `line` / `append` apply the current indent only at the start of a line.
 public class CodeBuilder {
     buf: StringBuilder;
+    indent_level: int;
+    indent_unit: string;
+    indent_pending: bool;
 
     constructor() {
         this.buf = StringBuilder();
+        this.indent_level = 0;
+        this.indent_unit = "    ";
+        this.indent_pending = true;
+    }
+
+    constructor(spaces: int) {
+        this.buf = StringBuilder();
+        this.indent_level = 0;
+        this.indent_unit = CodeBuilder._spaces(spaces);
+        this.indent_pending = true;
+    }
+
+    static fun _spaces(n: int): string {
+        if (n <= 0) {
+            return "";
+        }
+        let s = "";
+        let i = 0;
+        while (i < n) {
+            s = s + " ";
+            i = i + 1;
+        }
+        return s;
+    }
+
+    fun write_indent(): void {
+        if (!this.indent_pending) {
+            return;
+        }
+        let i = 0;
+        while (i < this.indent_level) {
+            this.buf.append(this.indent_unit);
+            i = i + 1;
+        }
+        this.indent_pending = false;
+    }
+
+    public fun indent(): void {
+        this.indent_level = this.indent_level + 1;
+    }
+
+    public fun dedent(): void {
+        if (this.indent_level > 0) {
+            this.indent_level = this.indent_level - 1;
+        }
     }
 
     public fun line(text: string): void {
+        this.write_indent();
         this.buf.append_line(text);
+        this.indent_pending = true;
     }
 
     public fun append(text: string): void {
+        this.write_indent();
         this.buf.append(text);
     }
 

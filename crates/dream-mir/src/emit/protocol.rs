@@ -17,14 +17,18 @@ pub(super) fn emit_object_protocol(
         mir.functions.iter().map(func_symbol).collect();
     let has_override =
         |name: &str, method: &str| user_syms.contains(&format!("{}_{}", name, method));
-    for layout in mir.layouts.structs.values() {
+    for (ty, layout) in &mir.layouts.structs {
         if !has_override(&layout.name, "to_string") {
-            emit_struct_to_string(out, layout, interner, strings);
+            if matches!(interner.kind(*ty), TyKind::Tuple(_)) {
+                emit_tuple_to_string(out, layout, &mir.layouts, interner, strings);
+            } else {
+                emit_struct_to_string(out, layout, &mir.layouts, interner, strings);
+            }
         }
     }
     for layout in mir.layouts.unions.values() {
         if !has_override(&layout.name, "to_string") {
-            emit_union_to_string(out, layout, interner, strings);
+            emit_union_to_string(out, layout, &mir.layouts, interner, strings);
         }
     }
     for elem in array_elem_types(mir, interner) {
@@ -84,12 +88,13 @@ fn emit_hash_fields(
 /// Appends one field/variant-field to the running `$res` string: `res = res + label + to_string(this
 /// [+offset] load)`, all at `indent`. `label` is the interned data address of the label piece (e.g.
 /// `"x: "` or `", x: "`). Shared by struct and union `to_string`, which differ only in the label
-/// pieces and indentation.
+/// pieces and indentation. Nested value types pass their inline address (no load) to `$<Type>_to_string`.
 fn emit_to_string_field(
     out: &mut String,
     indent: &str,
     label: u32,
     f: &dream_hir::FieldLayout,
+    layouts: &LayoutTable,
     interner: &TypeInterner,
 ) {
     let _ = writeln!(
@@ -100,9 +105,54 @@ fn emit_to_string_field(
     if f.offset > 0 {
         let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", f.offset);
     }
-    let _ = writeln!(out, "{indent}({})", load_instr_for(interner, f.ty));
-    if let Some(call) = value_to_string_call(interner, f.ty) {
-        let _ = writeln!(out, "{indent}(call {})", call);
+    if interner.is_value_type(f.ty) {
+        let name = layouts
+            .get(f.ty)
+            .map(|l| l.name.as_str())
+            .or_else(|| layouts.union(f.ty).map(|u| u.name.as_str()));
+        if let Some(name) = name {
+            let _ = writeln!(out, "{indent}(call ${}_to_string)", name);
+        } else {
+            let _ = writeln!(out, "{indent}({})", load_instr_for(interner, f.ty));
+            let _ = writeln!(out, "{indent}(call $object_to_string)");
+        }
+    } else {
+        let _ = writeln!(out, "{indent}({})", load_instr_for(interner, f.ty));
+        if let Some(call) = value_to_string_call(interner, f.ty) {
+            let _ = writeln!(out, "{indent}(call {})", call);
+        }
+    }
+    let _ = writeln!(out, "{indent}(call $concat_strings) (local.set $res)");
+}
+
+/// Like [`emit_to_string_field`] but with no field label — used for tuple elements `(e0, e1, …)`.
+fn emit_to_string_elem(
+    out: &mut String,
+    indent: &str,
+    f: &dream_hir::FieldLayout,
+    layouts: &LayoutTable,
+    interner: &TypeInterner,
+) {
+    let _ = write!(out, "{indent}(local.get $res)\n{indent}(local.get $this)\n");
+    if f.offset > 0 {
+        let _ = writeln!(out, "{indent}(i32.const {}) (i32.add)", f.offset);
+    }
+    if interner.is_value_type(f.ty) {
+        let name = layouts
+            .get(f.ty)
+            .map(|l| l.name.as_str())
+            .or_else(|| layouts.union(f.ty).map(|u| u.name.as_str()));
+        if let Some(name) = name {
+            let _ = writeln!(out, "{indent}(call ${}_to_string)", name);
+        } else {
+            let _ = writeln!(out, "{indent}({})", load_instr_for(interner, f.ty));
+            let _ = writeln!(out, "{indent}(call $object_to_string)");
+        }
+    } else {
+        let _ = writeln!(out, "{indent}({})", load_instr_for(interner, f.ty));
+        if let Some(call) = value_to_string_call(interner, f.ty) {
+            let _ = writeln!(out, "{indent}(call {})", call);
+        }
     }
     let _ = writeln!(out, "{indent}(call $concat_strings) (local.set $res)");
 }
@@ -199,6 +249,7 @@ pub(super) fn emit_object_hash_code(
 pub(super) fn emit_struct_to_string(
     out: &mut String,
     layout: &dream_hir::TypeLayout,
+    layouts: &LayoutTable,
     interner: &TypeInterner,
     strings: &IndexMap<String, u32>,
 ) {
@@ -216,12 +267,45 @@ pub(super) fn emit_struct_to_string(
         } else {
             format!(", {}: ", f.name)
         };
-        emit_to_string_field(out, "  ", strings[&label], f, interner);
+        emit_to_string_field(out, "  ", strings[&label], f, layouts, interner);
     }
     let _ = writeln!(
         out,
         "  (local.get $res) (i32.const {}) (call $concat_strings)",
         strings[" }"]
+    );
+    out.push_str(")\n");
+}
+
+/// Emits one tuple's `$<safe_name>_to_string` as `(e0, e1, …)` (no field labels).
+pub(super) fn emit_tuple_to_string(
+    out: &mut String,
+    layout: &dream_hir::TypeLayout,
+    layouts: &LayoutTable,
+    interner: &TypeInterner,
+    strings: &IndexMap<String, u32>,
+) {
+    let _ = writeln!(
+        out,
+        "(func ${}_to_string (param $this i32) (result i32)",
+        layout.name
+    );
+    out.push_str("  (local $res i32)\n");
+    let _ = writeln!(out, "  (i32.const {}) (local.set $res)", strings["("]);
+    for (i, f) in layout.fields.iter().enumerate() {
+        if i > 0 {
+            let _ = writeln!(
+                out,
+                "  (local.get $res) (i32.const {}) (call $concat_strings) (local.set $res)",
+                strings[", "]
+            );
+        }
+        emit_to_string_elem(out, "  ", f, layouts, interner);
+    }
+    let _ = writeln!(
+        out,
+        "  (local.get $res) (i32.const {}) (call $concat_strings)",
+        strings[")"]
     );
     out.push_str(")\n");
 }
@@ -232,6 +316,7 @@ pub(super) fn emit_struct_to_string(
 pub(super) fn emit_union_to_string(
     out: &mut String,
     layout: &dream_hir::UnionLayout,
+    layouts: &LayoutTable,
     interner: &TypeInterner,
     strings: &IndexMap<String, u32>,
 ) {
@@ -256,7 +341,7 @@ pub(super) fn emit_union_to_string(
         );
         let _ = writeln!(out, "    (i32.const {}) (local.set $res)", strings[&prefix]);
         for (idx, f) in variant.fields.iter().enumerate() {
-            emit_to_string_field(out, "    ", strings[&labels[idx]], f, interner);
+            emit_to_string_field(out, "    ", strings[&labels[idx]], f, layouts, interner);
         }
         let _ = writeln!(
             out,

@@ -279,6 +279,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             "system.primitives",
             "system.collections",
             "system.text",
+            "system.codegen",
         ],
         files: &[
             (

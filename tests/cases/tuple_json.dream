@@ -15,7 +15,7 @@ fun main(): void {
     System.println(text);
 
     let back = Json.deserialize<Row>(text).unwrap_or(r);
-    System.println(back.pair[0]);
-    System.print(back.pair[1]);
+    System.println(back.pair.0);
+    System.print(back.pair.1);
     System.println("");
 }

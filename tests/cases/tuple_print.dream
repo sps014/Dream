@@ -1,0 +1,9 @@
+import system;
+
+fun main() {
+    let t = (1, "x");
+    System.println(t);
+    System.println(t.to_string());
+    let n = ((3, 4), false);
+    System.println(n);
+}

@@ -224,34 +224,6 @@ impl<'a> Analyzer<'a> {
                 )?;
                 let array_hir = self.hir_take();
 
-                // Tuple index: `t[0]` requires a compile-time constant int; lowers to a Field.
-                if let Type::Tuple(elems) = &array_type {
-                    let Some(idx) = Self::constant_nonneg_int(index_expr) else {
-                        diagnostics.report_error(
-                            "tuple index must be a constant non-negative integer literal"
-                                .to_string(),
-                            index_expr.position(),
-                        );
-                        self.hir_fail();
-                        return Ok(Type::Unknown);
-                    };
-                    if idx >= elems.len() {
-                        diagnostics.report_error(
-                            format!(
-                                "tuple index {} is out of range for {}-element tuple",
-                                idx,
-                                elems.len()
-                            ),
-                            index_expr.position(),
-                        );
-                        self.hir_fail();
-                        return Ok(Type::Unknown);
-                    }
-                    let elem_ty = elems[idx].clone();
-                    self.hir_set_field(array_hir, idx, &elem_ty);
-                    return Ok(elem_ty);
-                }
-
                 // A `js`-typed receiver indexes dynamically (`obj[key]`), with a string or numeric
                 // key. Must precede the class/string indexer desugar, which would look for a `get`.
                 if self.is_js_type(&array_type) {
@@ -618,27 +590,6 @@ impl<'a> Analyzer<'a> {
                     Some(block.name.position),
                 ))
             }
-        }
-    }
-
-    /// Parses a non-negative integer constant from a literal expression (optionally parenthesized).
-    /// Used for tuple indexing, which requires a compile-time constant so the element type is known.
-    pub(in crate::analyzer) fn constant_nonneg_int(expr: &ExpressionNode<'_>) -> Option<usize> {
-        match expr {
-            ExpressionNode::Parenthesized(inner) => Self::constant_nonneg_int(inner),
-            ExpressionNode::Literal(Type::Integer(tok)) => {
-                let text = tok.text.trim_end_matches(|c: char| {
-                    matches!(c, 'u' | 'U' | 'l' | 'L' | 'b' | 'B')
-                });
-                text.parse::<i64>().ok().and_then(|n| {
-                    if n >= 0 {
-                        Some(n as usize)
-                    } else {
-                        None
-                    }
-                })
-            }
-            _ => None,
         }
     }
 

@@ -85,7 +85,9 @@ import system.codegen;
 
 let b = CodeBuilder();
 b.line("public fun describe(): string {");
-b.line("    return \"ok\";");
+b.indent();
+b.line("return \"ok\";");
+b.dedent();
 b.line("}");
 let body = b.to_string();
 // Host APIs: emit_extend(type_name, body) or emit_file(path, source)

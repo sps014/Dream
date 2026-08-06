@@ -1,19 +1,25 @@
 use super::*;
 
 /// The fixed runtime strings the object protocol references: the `null`/`<object>` fallbacks plus
-/// each struct's default `to_string` pieces (`"Point { "`, `"x: "`, `", y: "`, `" }"`). Interned
-/// alongside the program's own literals so `$<Type>_to_string` can reference their data pointers.
-pub(super) fn protocol_strings(mir: &crate::Mir) -> Vec<String> {
+/// each struct's default `to_string` pieces (`"Point { "`, `"x: "`, `", y: "`, `" }"`), and tuple
+/// pieces (`"("`, `")"` — `", "` is shared). Interned alongside the program's own literals so
+/// `$<Type>_to_string` can reference their data pointers.
+pub(super) fn protocol_strings(mir: &crate::Mir, interner: &TypeInterner) -> Vec<String> {
     let mut v = vec![
         "null".to_string(),
         "<object>".to_string(),
         "[".to_string(),
         "]".to_string(),
         ", ".to_string(),
+        "(".to_string(),
+        ")".to_string(),
     ];
     // `length` is the JS array-length key read by the generated `$js_to_array_t*` marshalers.
     v.push("length".to_string());
-    for layout in mir.layouts.structs.values() {
+    for (ty, layout) in &mir.layouts.structs {
+        if matches!(interner.kind(*ty), TyKind::Tuple(_)) {
+            continue;
+        }
         v.push(format!("{} {{ ", layout.name));
         for (i, f) in layout.fields.iter().enumerate() {
             v.push(if i == 0 {
@@ -128,7 +134,7 @@ pub(super) fn string_table(
         .iter()
         .map(|s| s.to_string())
         .chain(panic_msgs)
-        .chain(protocol_strings(mir))
+        .chain(protocol_strings(mir, interner))
         .chain(found);
     for s in found {
         if !map.contains_key(&s) {

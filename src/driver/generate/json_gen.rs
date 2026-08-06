@@ -310,6 +310,8 @@ fn harness_wat_path() -> Result<String, String> {
                     .hash(&mut h);
                 include_str!("../../../crates/dream-stdlib/src/system/json/json_gen_model.dream")
                     .hash(&mut h);
+                include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream")
+                    .hash(&mut h);
                 h.finish()
             };
             let dir = std::env::temp_dir().join(format!("dream-json-gen-harness-{fingerprint:x}"));

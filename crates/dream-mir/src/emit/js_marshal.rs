@@ -44,6 +44,9 @@ pub(super) fn emit_js_marshal(
     tags: &HashMap<TypeId, i32>,
 ) {
     for (ty, layout) in &mir.layouts.structs {
+        if matches!(interner.kind(*ty), TyKind::Tuple(_)) {
+            continue;
+        }
         emit_struct_to_js(out, layout, interner, mir, strings);
         emit_js_to_struct(out, *ty, layout, interner, mir, strings, tags);
     }

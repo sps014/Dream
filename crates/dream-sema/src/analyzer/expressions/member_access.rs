@@ -165,6 +165,36 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
+        // Tuple element access `t.0` / `t.1`: member text is a digit-only name from the parser.
+        if let Type::Tuple(elems) = &obj_type {
+            let Some(idx) = member.text.parse::<usize>().ok() else {
+                diagnostics.report_error(
+                    format!(
+                        "tuple has no member '{}'; use .0, .1, …",
+                        member.text
+                    ),
+                    Some(member.position),
+                );
+                self.hir_none();
+                return Ok(Type::Unknown);
+            };
+            if idx >= elems.len() {
+                diagnostics.report_error(
+                    format!(
+                        "tuple index {} is out of range for {}-element tuple",
+                        idx,
+                        elems.len()
+                    ),
+                    Some(member.position),
+                );
+                self.hir_none();
+                return Ok(Type::Unknown);
+            }
+            let elem_ty = elems[idx].clone();
+            self.hir_set_field(obj_hir, idx, &elem_ty);
+            return Ok(elem_ty);
+        }
+
         // A `js`-typed receiver has no static fields: `obj.name` reads a JS property dynamically.
         if self.is_js_type(&obj_type) {
             self.desugar_js_get(obj_hir, &member.text);

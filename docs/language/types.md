@@ -76,12 +76,14 @@ Positional product types `(T, U, …)` (arity ≥ 2) are always-inline value typ
 
 ```dream
 let t: (int, string) = (1, "hi");
-System.println(t[0]);   // index must be a constant int literal
-t[1] = "bye";
+System.println(t.0);
+t.1 = "bye";
 let (a, b) = t;         // destructure
 ```
 
-Nested tuples are allowed. There are no named tuple elements.
+Nested tuples are allowed. There are no named tuple elements. Access is via `.0`, `.1`, … (not
+`t[i]`). Tuples are not iterable — use destructuring or fixed projections; there is no `foreach`
+or `t.size()`.
 
 ## Optional values
 

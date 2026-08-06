@@ -33,6 +33,7 @@ impl<'a> Analyzer<'a> {
                 | TyKind::Enum(_)
                 | TyKind::Struct(..)
                 | TyKind::Union(..)
+                | TyKind::Tuple(_)
                 | TyKind::Array(_)
                 | TyKind::Object
                 | TyKind::Interface(..)

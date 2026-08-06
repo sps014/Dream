@@ -120,15 +120,56 @@ impl<'a, 'b> Parser<'a, 'b> {
             SyntaxToken::new(kind, err_pos, "".to_string())
         }
     }
-    /// Matches a member/method *name*: an identifier, or any identifier-shaped reserved word
-    /// (`object`, `type`, `default`, `in`, ... — all keyword/data-type tokens whose text is a valid
-    /// identifier). Reserved words are re-tagged as `IdentifierToken` so downstream analysis treats
-    /// them uniformly. This lets dynamic `js` interop access JS members named like Dream keywords
-    /// (`el.type`, `x.default`, `js.object()`) and lets such names be declared as methods.
+    /// Matches a member/method *name*: an identifier, any identifier-shaped reserved word
+    /// (`object`, `type`, `default`, `in`, ...), or a non-negative integer literal (`0`, `1`, …)
+    /// for tuple element access (`t.0`). Reserved words and digit-only number tokens are re-tagged
+    /// as `IdentifierToken` so downstream analysis treats them uniformly.
+    ///
+    /// Chained tuple access `t.0.1` lexes as `.` + `NumberToken("0.1")` (a float). Split that into
+    /// member `0`, then re-inject `.` + `1` so the postfix chain can continue.
     fn match_member_name(&mut self) -> SyntaxToken {
         let token = self.current_token();
         if token.kind == TokenKind::IdentifierToken {
             return self.next_token();
+        }
+        if token.kind == TokenKind::NumberToken {
+            if !token.text.is_empty() && token.text.chars().all(|c| c.is_ascii_digit()) {
+                let mut t = self.next_token();
+                t.kind = TokenKind::IdentifierToken;
+                return t;
+            }
+            if let Some(dot_at) = token.text.find('.') {
+                let head = &token.text[..dot_at];
+                let tail = &token.text[dot_at + 1..];
+                if !head.is_empty()
+                    && head.chars().all(|c| c.is_ascii_digit())
+                    && !tail.is_empty()
+                    && tail.chars().all(|c| c.is_ascii_digit())
+                {
+                    let full = self.next_token();
+                    let line_text = self.lexer.line_text();
+                    let head_end = full.position.start + head.len();
+                    let mut head_tok = SyntaxToken::new(
+                        TokenKind::IdentifierToken,
+                        TextSpan::new((full.position.start, head_end), &line_text),
+                        head.to_string(),
+                    );
+                    head_tok.leading_trivia = full.leading_trivia;
+                    let dot_tok = SyntaxToken::new(
+                        TokenKind::DotToken,
+                        TextSpan::new((head_end, head_end + 1), &line_text),
+                        ".".to_string(),
+                    );
+                    let tail_tok = SyntaxToken::new(
+                        TokenKind::NumberToken,
+                        TextSpan::new((head_end + 1, full.position.end), &line_text),
+                        tail.to_string(),
+                    );
+                    self.tokens.insert(self.current_token_index, dot_tok);
+                    self.tokens.insert(self.current_token_index + 1, tail_tok);
+                    return head_tok;
+                }
+            }
         }
         let is_word = !token.text.is_empty()
             && token
