@@ -8,6 +8,10 @@ use std::rc::Rc;
 /// interface by providing a matching method for each signature (defaults excepted). Interfaces
 /// cannot be instantiated; an interface-typed value is a tagged object pointer whose method calls
 /// dispatch dynamically through the object's runtime tag (see itable dispatch in codegen).
+///
+/// An interface may extend one or more parent interfaces (`interface Child : Parent + Other`):
+/// implementers of the child are subtypes of every parent, and the child's method set includes
+/// inherited parent methods (child declarations override same-named parents).
 #[derive(Debug, Clone)]
 pub struct InterfaceDeclarationNode<'a> {
     pub attributes: Vec<crate::nodes::AttributeNode>,
@@ -15,8 +19,13 @@ pub struct InterfaceDeclarationNode<'a> {
     pub generic_parameters: Option<Vec<SyntaxToken>>,
     /// Bounds on the generic parameters. Empty when unconstrained.
     pub generic_constraints: Vec<crate::nodes::GenericConstraint>,
+    /// Parent interfaces from `: Parent (+ Parent)*`. Empty when the interface stands alone.
+    /// Types are usually `Type::Struct` naming another interface (possibly with generic args).
+    pub parents: Vec<crate::nodes::Type>,
     /// The interface's method signatures. Each is a body-less [`FunctionNode`] (parsed like an
-    /// `extern fun ...;`); only the name/params/return type are meaningful.
+    /// `extern fun ...;`); only the name/params/return type are meaningful. Inherited parent
+    /// methods are *not* duplicated here — the analyzer flattens the parent closure at
+    /// registration / monomorphization time.
     pub methods: Vec<crate::nodes::function::FunctionNode<'a>>,
     /// Accessibility of the interface (`public`/`internal`/private, the default).
     pub visibility: Visibility,
@@ -38,6 +47,7 @@ impl<'a> InterfaceDeclarationNode<'a> {
             name,
             generic_parameters,
             generic_constraints: Vec::new(),
+            parents: Vec::new(),
             methods,
             visibility,
             file_path: None,

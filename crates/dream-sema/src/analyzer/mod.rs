@@ -353,14 +353,25 @@ pub struct Analyzer<'a> {
     generic_extends: HashMap<String, Vec<&'a ExtendNode<'a>>>,
     /// Interface name -> its method signatures in declaration order (the order is the interface's
     /// local method index, used for itable slot assignment). Each entry is a body-less
-    /// [`FunctionNode`] (no implicit `this`).
+    /// [`FunctionNode`] (no implicit `this`). For interfaces that extend parents, this list is the
+    /// flattened closure (parent methods, then own methods; child overrides replace parents).
     interface_methods: IndexMap<String, Vec<&'a FunctionNode<'a>>>,
     /// Generic interface templates (`interface Container<T> { ... }`), instantiated on demand into
     /// concrete `interface_methods` entries (e.g. `Container_int`) — mirrors `generic_structs`.
     generic_interfaces: HashMap<String, &'a dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
+    /// Interface base name -> parent interface types from `: Parent (+ Parent)*` (unsubstituted
+    /// when the interface is generic — substituted when building a concrete instance).
+    interface_parents: HashMap<String, Vec<Type>>,
+    /// All interface declarations by base name (generic templates and concrete interfaces), used
+    /// when flattening inheritance and looking up parent method defaults.
+    interface_decls: HashMap<String, &'a dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
+    /// Concrete interface name (mangled) -> immediate parent concrete interface names, recorded
+    /// when the child's method list is flattened. Used to expand `implements` transitively.
+    interface_parent_instances: HashMap<String, Vec<String>>,
     /// Class name -> the interfaces it implements (in `class C : A, B` order), recorded after the
     /// implements clause is validated. Names are mangled for generic instances (e.g. `Box_int` ->
-    /// `Container_int`). Drives interface-typed assignability and itable emission.
+    /// `Container_int`). Drives interface-typed assignability and itable emission. Includes
+    /// transitive parent interfaces of each explicitly implemented interface.
     implements: HashMap<String, Vec<String>>,
     /// Type name (mangled for generic instances, matching `implements`'s keys) -> its
     /// `@operator`/`@cast`-tagged methods, populated by
@@ -457,6 +468,9 @@ impl<'a> Analyzer<'a> {
             generic_extends: HashMap::new(),
             interface_methods: IndexMap::new(),
             generic_interfaces: HashMap::new(),
+            interface_parents: HashMap::new(),
+            interface_decls: HashMap::new(),
+            interface_parent_instances: HashMap::new(),
             sealed_types: std::collections::HashSet::new(),
             type_visibility: HashMap::new(),
             implements: HashMap::new(),

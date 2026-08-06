@@ -55,6 +55,31 @@ let b = (Animal)c;     // explicit upcast — same value
 
 An interface is an abstract contract, so instantiating it (`Animal()`) is an error.
 
+## Interface inheritance
+
+An interface may extend one or more parents with `: Parent` and `+` for multiples (same combinator as [generic bounds](generics.md)):
+
+```dream
+interface Collection<T> {
+    fun size(): int;
+    fun iterator(): Iterator<T>;
+}
+
+interface IndexedCollection<T> : Collection<T> {
+    fun get(index: int): Option<T>;
+}
+
+interface Readable { fun read(): int; }
+interface Writable { fun write(v: int): void; }
+interface ReadWrite : Readable + Writable {
+    fun flush(): void;
+}
+```
+
+A type that implements the child is a subtype of every parent — `List<T>` only needs to declare `IndexedCollection<T>` and is still usable as `Collection<T>`. Inherited methods (and their defaults) become part of the child's method set; a child method with the same name overrides the parent. Cycles among parents are a compile error. Ambiguous defaults from two parents (same method name, both with a default body, no override on the child) are rejected.
+
+Class `implements` lists stay comma-separated (`class Foo : A, B`); only interface parents use `+`.
+
 ## Default methods
 
 A method may carry a **default body** that implementers inherit unless they override it. A default can call the interface's other methods on `this`, which still dispatch to the concrete type:

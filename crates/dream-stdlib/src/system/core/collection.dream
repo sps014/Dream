@@ -7,8 +7,8 @@ public interface Iterator<T> {
 }
 
 // Sized collection — the type users pass into APIs that need a count.
-// `for (let x in xs)` still requires a concrete type with `@iterator`; through this interface,
-// call `.iterator()` and drive `.next()` explicitly (or accept a concrete `List`/`Set`/`Map`).
+// `for (let x in xs)` works for concrete `@iterator` types and for interface-typed
+// `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch).
 public interface Collection<T> {
     fun size(): int;
 
@@ -19,18 +19,11 @@ public interface Collection<T> {
     }
 }
 
-// Ordered, indexable sequences (`List`).
-public interface IndexedCollection<T> {
-    fun size(): int;
-
-    fun iterator(): Iterator<T>;
-
+// Ordered, indexable sequences (`List`). Extends `Collection` so implementers are usable
+// wherever a `Collection` is expected without re-listing `size` / `iterator`.
+public interface IndexedCollection<T> : Collection<T> {
     @get
     fun get(index: int): Option<T>;
-
-    public fun is_empty(): bool {
-        return this.size() == 0;
-    }
 
     public fun first(): Option<T> {
         return this.get(0);

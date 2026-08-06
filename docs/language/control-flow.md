@@ -63,11 +63,19 @@ for (let value in xs) {
 }
 ```
 
-`for..in` also works over a `string` (yielding each `char`) and over any type implementing the enumerator protocol — including `List` and `Map`. See [Indexers and enumerators](classes-structs.md#indexers-and-enumerators).
+`for..in` also works over a `string` (yielding each `char`), over any type implementing the enumerator protocol — including `List` and `Map` — and over interface-typed `Collection<T>`, `IndexedCollection<T>`, or `Iterator<T>` (dispatched through `.iterator()` / `.next()`). See [Indexers and enumerators](classes-structs.md#indexers-and-enumerators).
 
 ```dream
 for (let c in "abc") {
     println(c);   // 'a', 'b', 'c'
+}
+
+fun sum(xs: Collection<int>): int {
+    let total = 0;
+    for (let n in xs) {
+        total = total + n;
+    }
+    return total;
 }
 ```
 

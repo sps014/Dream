@@ -9,12 +9,18 @@ use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{FunctionNode, ProgramNode, Type};
 use dream_types::method_fn;
+use std::collections::HashMap;
 
 impl<'a> Analyzer<'a> {
     /// Pass: register every interface's `DefId` and its method signatures. Interfaces declare method
     /// signatures (no fields in v1); a method may carry a default body that implementers inherit (see
     /// `driver::interface_defaults`). Generic interfaces are stashed as templates and monomorphized on
     /// demand. The declaration order of methods is their local index (used later for itable slots).
+    ///
+    /// Interfaces may extend parents (`interface Child : Parent + Other`). Parent relationships are
+    /// recorded here; method lists for non-generic interfaces are flattened in
+    /// [`finalize_interface_inheritance`] after every interface name is known. Generic instances
+    /// flatten inside [`ensure_interface_instantiated`].
     pub(in crate::analyzer) fn register_interfaces(
         &mut self,
         node: &'a ProgramNode<'a>,
@@ -31,9 +37,6 @@ impl<'a> Analyzer<'a> {
                 &iface.name.text,
                 generic_param_names(&iface.generic_parameters),
             );
-            // `static` methods are rejected on any interface (interface methods are dynamically
-            // dispatched instance methods). `async` interface methods are supported: they dispatch
-            // to a concrete async implementation that returns a `Future<T>`.
             for method in iface.methods.iter() {
                 if method.is_static {
                     diagnostics.report_error(
@@ -46,8 +49,19 @@ impl<'a> Analyzer<'a> {
                 }
             }
 
-            // Generic interfaces are stashed as templates and monomorphized on demand (see
-            // `ensure_interface_instantiated`); only concrete instances get itable method slots.
+            if self
+                .interface_decls
+                .insert(iface.name.text.clone(), iface)
+                .is_some()
+            {
+                diagnostics.report_error(
+                    format!("Interface '{}' is already defined", iface.name.text),
+                    Some(iface.name.position),
+                );
+            }
+            self.interface_parents
+                .insert(iface.name.text.clone(), iface.parents.clone());
+
             if iface.generic_parameters.is_some() {
                 if self
                     .generic_interfaces
@@ -62,6 +76,7 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
 
+            // Own methods only for now; [`finalize_interface_inheritance`] merges parents.
             let methods: Vec<&'a FunctionNode<'a>> =
                 iface.methods.iter().filter(|m| !m.is_static).collect();
             if self
@@ -75,12 +90,28 @@ impl<'a> Analyzer<'a> {
                 );
             }
         }
+        self.finalize_interface_inheritance(diagnostics);
+    }
+
+    /// After every interface name is registered, flatten non-generic interfaces that extend parents
+    /// so their `interface_methods` entries include the inherited closure (and diagnose cycles /
+    /// ambiguous defaults).
+    fn finalize_interface_inheritance(&mut self, diagnostics: &mut DiagnosticBag) {
+        let names: Vec<String> = self
+            .interface_decls
+            .iter()
+            .filter(|(_, d)| d.generic_parameters.is_none())
+            .map(|(n, _)| n.clone())
+            .collect();
+        for name in names {
+            let _ = self.flatten_interface_methods(&name, &[], diagnostics, &mut Vec::new());
+        }
     }
 
     /// Instantiates a generic interface `base<args>` into a concrete `interface_methods` entry
     /// (e.g. `Container<int>` -> `Container_int`) by substituting the type parameters through every
-    /// method signature. Mirrors [`ensure_struct_instantiated`]; idempotent. The concrete instance
-    /// becomes an ordinary interface with its own itable slots at `hir_build_interfaces` time.
+    /// method signature (including inherited parents). Mirrors [`ensure_struct_instantiated`];
+    /// idempotent.
     pub(in crate::analyzer) fn ensure_interface_instantiated(
         &mut self,
         base_name: &str,
@@ -88,9 +119,11 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
+        if args.is_empty() {
+            // Non-generic interfaces are flattened in `finalize_interface_inheritance`.
+            return;
+        }
         let mangled = mangle_generic(base_name, args);
-        // Canonicalize the mangled name to the structured `(base def, args)` interface id, and
-        // register the mangled name as a nominal interface so `is_interface_name` recognizes it.
         self.type_ctx
             .register_instance(DefKind::Interface, base_name, args);
         self.type_ctx
@@ -98,7 +131,7 @@ impl<'a> Analyzer<'a> {
         if self.interface_methods.contains_key(&mangled) {
             return;
         }
-        let template = match self.generic_interfaces.get(base_name) {
+        let template = match self.interface_decls.get(base_name) {
             Some(t) => *t,
             None => return,
         };
@@ -111,14 +144,174 @@ impl<'a> Analyzer<'a> {
             position,
             diagnostics,
         );
-        let bindings = generic_bindings(params, args);
-        let mut methods: Vec<&'a FunctionNode<'a>> = Vec::new();
-        for method in template.methods.iter().filter(|m| !m.is_static) {
-            let mut m = method.clone();
-            Self::substitute_generic_signature(&mut m, &bindings);
-            methods.push(self.arena.alloc(m));
+        let _ = self.flatten_interface_methods(base_name, args, diagnostics, &mut Vec::new());
+    }
+
+    /// Builds (or rebuilds) the flattened method list for interface `base_name` with concrete
+    /// `args` (empty for non-generic). Returns the mangled/concrete interface name.
+    /// `stack` tracks the base names currently being flattened to diagnose inheritance cycles.
+    fn flatten_interface_methods(
+        &mut self,
+        base_name: &str,
+        args: &[Type],
+        diagnostics: &mut DiagnosticBag,
+        stack: &mut Vec<String>,
+    ) -> Option<String> {
+        let key = if args.is_empty() {
+            base_name.to_string()
+        } else {
+            mangle_generic(base_name, args)
+        };
+
+        if stack.iter().any(|s| s == base_name) {
+            if let Some(decl) = self.interface_decls.get(base_name) {
+                diagnostics.file_path = file_path_string(&decl.file_path);
+            }
+            diagnostics.report_error(
+                format!(
+                    "interface inheritance cycle involving '{}'",
+                    stack.join(" -> ") + " -> " + base_name
+                ),
+                self.interface_decls
+                    .get(base_name)
+                    .map(|d| d.name.position),
+            );
+            return None;
         }
-        self.interface_methods.insert(mangled, methods);
+
+        // Generic instance already flattened.
+        if !args.is_empty() && self.interface_methods.contains_key(&key) {
+            return Some(key);
+        }
+
+        let template = match self.interface_decls.get(base_name) {
+            Some(t) => *t,
+            None => return None,
+        };
+        let params = template.generic_parameters.as_deref().unwrap_or(&[]);
+        let bindings = if params.is_empty() {
+            Default::default()
+        } else {
+            generic_bindings(params, args)
+        };
+
+        stack.push(base_name.to_string());
+
+        let mut merged: Vec<&'a FunctionNode<'a>> = Vec::new();
+        let mut from_parent: HashMap<String, (bool, String)> = HashMap::new();
+        let mut parent_keys: Vec<String> = Vec::new();
+
+        let parents = template.parents.clone();
+        for parent_ty in &parents {
+            let Some((pbase, pargs_raw)) = Self::resolve_struct_parts(parent_ty) else {
+                diagnostics.report_error(
+                    format!(
+                        "interface '{}' parent must be an interface type, got {}",
+                        base_name,
+                        parent_ty.get_type()
+                    ),
+                    parent_ty.get_span().or(Some(template.name.position)),
+                );
+                continue;
+            };
+            if !self.interface_decls.contains_key(&pbase) {
+                diagnostics.report_error(
+                    format!(
+                        "interface '{}' cannot extend '{}': not an interface",
+                        base_name, pbase
+                    ),
+                    parent_ty.get_span().or(Some(template.name.position)),
+                );
+                continue;
+            }
+            let pargs: Vec<Type> = pargs_raw
+                .iter()
+                .map(|t| substitute_generic_type(t, &bindings))
+                .collect();
+            if !pargs.is_empty() {
+                self.type_ctx
+                    .register_instance(DefKind::Interface, &pbase, &pargs);
+                self.type_ctx.register(
+                    DefKind::Interface,
+                    &mangle_generic(&pbase, &pargs),
+                    Vec::new(),
+                );
+            }
+            let Some(parent_key) =
+                self.flatten_interface_methods(&pbase, &pargs, diagnostics, stack)
+            else {
+                continue;
+            };
+            if !parent_keys.contains(&parent_key) {
+                parent_keys.push(parent_key.clone());
+            }
+            let parent_methods = self
+                .interface_methods
+                .get(&parent_key)
+                .cloned()
+                .unwrap_or_default();
+            for pm in parent_methods {
+                let name = pm.name.text.clone();
+                if let Some((prev_default, prev_src)) = from_parent.get(&name) {
+                    if *prev_default && pm.is_default_impl {
+                        diagnostics.report_error(
+                            format!(
+                                "interface '{}': ambiguous default for method '{}' inherited from both '{}' and '{}'; override it on '{}'",
+                                base_name, name, prev_src, parent_key, base_name
+                            ),
+                            Some(template.name.position),
+                        );
+                    }
+                    continue;
+                }
+                from_parent.insert(name, (pm.is_default_impl, parent_key.clone()));
+                merged.push(pm);
+            }
+        }
+
+        let own: Vec<&'a FunctionNode<'a>> = if args.is_empty() {
+            template.methods.iter().filter(|m| !m.is_static).collect()
+        } else {
+            let mut owned = Vec::new();
+            for method in template.methods.iter().filter(|m| !m.is_static) {
+                let mut m = method.clone();
+                Self::substitute_generic_signature(&mut m, &bindings);
+                let method_ref: &'a FunctionNode<'a> = self.arena.alloc(m);
+                owned.push(method_ref);
+            }
+            owned
+        };
+
+        for om in own {
+            if let Some(pos) = merged.iter().position(|m| m.name.text == om.name.text) {
+                merged[pos] = om;
+            } else {
+                merged.push(om);
+            }
+        }
+
+        stack.pop();
+        self.interface_parent_instances
+            .insert(key.clone(), parent_keys);
+        self.interface_methods.insert(key.clone(), merged);
+        Some(key)
+    }
+
+    /// Appends `iface_name` and all interfaces it extends (transitively) into `out`.
+    pub(in crate::analyzer) fn collect_interface_ancestors(
+        &self,
+        iface_name: &str,
+        out: &mut Vec<String>,
+    ) {
+        if out.iter().any(|n| n == iface_name) {
+            return;
+        }
+        out.push(iface_name.to_string());
+        if let Some(parents) = self.interface_parent_instances.get(iface_name) {
+            for p in parents.clone() {
+                self.collect_interface_ancestors(&p, out);
+            }
+        }
     }
 
     /// Builds the interface dispatch metadata carried into codegen: the ordered interfaces (index =
@@ -196,7 +389,10 @@ impl<'a> Analyzer<'a> {
     /// Splits a mangled generic interface name (e.g. `Container_int`) into its base name and
     /// concrete type argument, choosing the split so the base is a registered generic interface.
     /// Mirrors [`demangle_generic_struct`].
-    fn demangle_generic_interface(&self, mangled: &str) -> Option<(String, String)> {
+    pub(in crate::analyzer) fn demangle_generic_interface(
+        &self,
+        mangled: &str,
+    ) -> Option<(String, String)> {
         let parts: Vec<&str> = mangled.split('_').collect();
         for split in 1..parts.len() {
             let base = parts[..split].join("_");
@@ -381,7 +577,14 @@ impl<'a> Analyzer<'a> {
                 }
             }
             if !validated.contains(&iface_name) {
-                validated.push(iface_name);
+                // Explicit implement plus every parent interface (subtype relationship).
+                let mut ancestors = Vec::new();
+                self.collect_interface_ancestors(&iface_name, &mut ancestors);
+                for a in ancestors {
+                    if !validated.contains(&a) {
+                        validated.push(a);
+                    }
+                }
             }
         }
         // Merge into any interfaces already recorded for this type (a class may gain further

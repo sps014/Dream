@@ -1,0 +1,36 @@
+import system;
+import system.collections;
+
+fun sum_collection(xs: Collection<int>): int {
+    let total = 0;
+    for (let n in xs) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun sum_indexed(xs: IndexedCollection<int>): int {
+    let total = 0;
+    for (let n in xs) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun sum_iterator(it: Iterator<int>): int {
+    let total = 0;
+    for (let n in it) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(10);
+    xs.push(20);
+    xs.push(30);
+    System.println(sum_collection(xs));
+    System.println(sum_indexed(xs));
+    System.println(sum_iterator(xs.iterator()));
+}

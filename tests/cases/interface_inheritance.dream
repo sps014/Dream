@@ -1,0 +1,59 @@
+import system;
+import system.collections;
+
+// IndexedCollection extends Collection: List only declares IndexedCollection but is usable
+// as Collection, and IndexedCollection-typed values expose inherited size/is_empty.
+
+fun as_collection(xs: Collection<int>): int {
+    return xs.size();
+}
+
+fun as_indexed(xs: IndexedCollection<int>): int {
+    let n = xs.size();
+    let first = xs.first().unwrap_or(-1);
+    return n + first;
+}
+
+interface Readable {
+    fun read(): int;
+}
+
+interface Writable {
+    fun write(v: int): void;
+}
+
+interface ReadWrite : Readable + Writable {
+    fun flush(): void;
+}
+
+class Store : ReadWrite {
+    value: int;
+    public constructor() { this.value = 0; }
+    public fun read(): int { return this.value; }
+    public fun write(v: int): void { this.value = v; }
+    public fun flush(): void { this.value = 0; }
+}
+
+fun use_readable(r: Readable): int {
+    return r.read();
+}
+
+fun use_writable(w: Writable): void {
+    w.write(42);
+}
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(10);
+    xs.push(20);
+    System.println(as_collection(xs));
+    System.println(as_indexed(xs));
+
+    let buf = Store();
+    use_writable(buf);
+    System.println(use_readable(buf));
+    let rw: ReadWrite = buf;
+    System.println(rw.read());
+    rw.flush();
+    System.println(rw.read());
+}

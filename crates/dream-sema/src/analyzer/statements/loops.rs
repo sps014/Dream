@@ -80,6 +80,19 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(Type::Unknown);
         let iter_hir = self.hir_take();
 
+        // Interface-typed `Collection` / `IndexedCollection` / `Iterator`: drive `.iterator()` /
+        // `.next()` through interface dispatch (no `@iterator`/`@next` hooks on the interface).
+        if self.is_foreach_interface_type(&iterable_type) {
+            return self.analyze_foreach_iface(
+                element,
+                &iterable_type,
+                iter_hir,
+                body,
+                ctx,
+                diagnostics,
+            );
+        }
+
         // A class or `string` receiver iterates through the enumerator protocol (`@iterator` ->
         // `@next`), lowered directly to a `while` loop (see `analyze_foreach_iter`). `string`
         // exposes `@iterator` via `extend string`, so `for (let c in s)` walks its chars. Arrays
@@ -105,7 +118,7 @@ impl<'a> Analyzer<'a> {
             _ => {
                 diagnostics.report_error(
                     format!(
-                        "for-each can only iterate over arrays or types with an '@iterator' method, got {}",
+                        "for-each can only iterate over arrays, Collection/Iterator interfaces, or types with an '@iterator' method, got {}",
                         iterable_type.get_type()
                     ),
                     iterable.position(),

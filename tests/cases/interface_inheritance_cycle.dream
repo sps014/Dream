@@ -1,0 +1,13 @@
+interface Left : Right {
+    fun left(): int;
+}
+interface Right : Left {
+    fun right(): int;
+}
+
+class Bad : Left {
+    public fun left(): int { return 1; }
+    public fun right(): int { return 2; }
+}
+
+fun main(): void {}

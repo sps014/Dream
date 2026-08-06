@@ -9,9 +9,8 @@ use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
 
-    /// Parses an `interface` declaration: `[public] interface Name [<T>] { method-signature* }`.
-    /// Interface members are body-less method signatures ending in `;` (default bodies are not
-    /// supported in v1).
+    /// Parses an `interface` declaration:
+    /// `[public] interface Name [<T>] [: Parent (+ Parent)*] { method* }`.
     pub(crate) fn parse_interface_declaration(
         &mut self,
     ) -> Result<crate::nodes::InterfaceDeclarationNode<'a>, Error> {
@@ -27,6 +26,25 @@ impl<'a, 'b> Parser<'a, 'b> {
         Self::splice_leading_trivia(&mut name, doc_trivia);
 
         let (generic_parameters, generic_constraints) = self.take_generic_params();
+
+        // Optional parent list: `: Collection<T> + Serializable`. Uses `+` (same as generic
+        // bounds); class `implements` lists stay comma-separated.
+        let mut parents = Vec::new();
+        if self.current_token().kind == TokenKind::ColonToken {
+            self.match_token(TokenKind::ColonToken);
+            loop {
+                let iter = self.current_token_index;
+                match self.parse_type() {
+                    Ok(t) => parents.push(t),
+                    Err(_) => break,
+                }
+                if self.current_token().kind != TokenKind::PlusToken {
+                    break;
+                }
+                self.match_token(TokenKind::PlusToken);
+                self.ensure_progress(iter);
+            }
+        }
 
         self.match_token(TokenKind::CurlyOpenBracketToken);
 
@@ -49,6 +67,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             visibility,
         );
         decl.generic_constraints = generic_constraints;
+        decl.parents = parents;
         Ok(decl)
     }
 
