@@ -1,14 +1,11 @@
-import system;
+import system.gpu;
 
 @compute(64)
-fun kernel(out: float[]): void {
-    let i = global_id.x;
-    if (i < 1) {
-        out[i] = 1.0;
-    }
+fun kernel(out: GpuBuffer<float>): void {
+    out[0] = 1.0;
 }
 
 fun main(): void {
-    let o: float[] = [0.0];
-    kernel(o);
+    // Must not call a @compute kernel like a CPU function.
+    kernel(GpuBuffer<float>.alloc(1));
 }

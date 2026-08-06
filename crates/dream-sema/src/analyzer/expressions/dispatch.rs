@@ -245,11 +245,21 @@ impl<'a> Analyzer<'a> {
                     return Ok(Self::js_type());
                 }
 
+                // Inside `@compute`, `GpuBuffer<T>` indexes like `T[]` (storage buffer elements).
+                // Do not use host `@get_indexer` — CPU GpuBuffer has no indexer by design.
+                let gpu_elem = if self.current_function_is_compute {
+                    crate::analyzer::declarations::functions::gpu_buffer_elem_type(&array_type)
+                        .cloned()
+                } else {
+                    None
+                };
+
                 // Class/string indexer: `obj[i]` on a struct or `string` receiver desugars to
                 // `obj.get(i)` when an eligible `get` exists (`string` exposes one via `extend
                 // string`, yielding a `char`). Arrays keep the built-in index path; `Unknown` is a
                 // poison carried from an earlier error and must not cascade.
-                if !matches!(array_type, Type::Array(_) | Type::Unknown)
+                if gpu_elem.is_none()
+                    && !matches!(array_type, Type::Array(_) | Type::Unknown)
                     && (Self::resolve_struct_parts(&array_type).is_some()
                         || matches!(array_type, Type::String(_)))
                 {
@@ -265,13 +275,14 @@ impl<'a> Analyzer<'a> {
                     );
                 }
 
-                let inner_type = match array_type {
-                    Type::Array(inner) => *inner,
+                let inner_type = match (gpu_elem, array_type) {
+                    (Some(elem), _) => elem,
+                    (_, Type::Array(inner)) => *inner,
                     // Don't cascade if the base was already poisoned by an earlier error.
-                    Type::Unknown => Type::Unknown,
-                    _ => {
+                    (_, Type::Unknown) => Type::Unknown,
+                    (_, other) => {
                         diagnostics.report_error(
-                            format!("Cannot index into non-array type {}", array_type.get_type()),
+                            format!("Cannot index into non-array type {}", other.get_type()),
                             array_expr.position(),
                         );
                         Type::Unknown

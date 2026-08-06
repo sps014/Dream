@@ -321,10 +321,7 @@ enum ParamClass {
 
 fn classify_param(ty: &Type) -> ParamClass {
     match ty {
-        Type::Array(inner) => ParamClass::Storage {
-            elem: dream_ty_to_wgsl(inner),
-            read_write: true,
-        },
+        // Bare `T[]` params are rejected in sema; only `GpuBuffer<T>` is storage.
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
             ParamClass::Storage {
                 elem: dream_ty_to_wgsl(&args[0]),

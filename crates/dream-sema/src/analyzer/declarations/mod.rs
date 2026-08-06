@@ -22,7 +22,7 @@
 use super::*;
 
 mod enums;
-mod functions;
+pub(in crate::analyzer) mod functions;
 mod globals;
 mod imports;
 pub(in crate::analyzer) mod operator_overloads;

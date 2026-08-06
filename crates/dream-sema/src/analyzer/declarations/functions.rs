@@ -72,7 +72,7 @@ impl<'a> Analyzer<'a> {
                     if !is_compute_param_type(&p.type_) {
                         diagnostics.report_error(
                             format!(
-                                "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, and T[] / GpuBuffer storage buffers are allowed",
+                                "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, and GpuBuffer<T> storage buffers are allowed",
                                 function.name.text,
                                 p.name.text,
                                 p.type_.get_type()
@@ -284,7 +284,17 @@ impl<'a> Analyzer<'a> {
     }
 }
 
-/// Kernel parameters: scalars (`int`/`uint`/`float`/`bool`/`byte`) or arrays / `GpuBuffer<T>` of those.
+/// Element type of `GpuBuffer<T>`, if `ty` is that form.
+pub(crate) fn gpu_buffer_elem_type(ty: &Type) -> Option<&Type> {
+    match ty {
+        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
+            Some(&args[0])
+        }
+        _ => None,
+    }
+}
+
+/// Kernel parameters: scalars (`int`/`uint`/`float`/`bool`/`byte`) or `GpuBuffer<T>` of those.
 fn is_compute_param_type(ty: &Type) -> bool {
     match ty {
         Type::Integer(_)
@@ -294,7 +304,6 @@ fn is_compute_param_type(ty: &Type) -> bool {
         | Type::UInt(_)
         | Type::Long(_)
         | Type::ULong(_) => true,
-        Type::Array(inner) => is_compute_elem_type(inner),
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
             is_compute_elem_type(&args[0])
         }
@@ -305,7 +314,7 @@ fn is_compute_param_type(ty: &Type) -> bool {
                 "string" | "List" | "Map" | "Set" | "object" | "js"
             )
         }
-        Type::String(_) | Type::Object(_) | Type::Char(_) => false,
+        Type::String(_) | Type::Object(_) | Type::Char(_) | Type::Array(_) => false,
         _ => false,
     }
 }

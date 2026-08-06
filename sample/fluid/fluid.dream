@@ -9,7 +9,7 @@ import system;
 import system.gpu;
 
 @compute(8, 8)
-fun add_force(vx: float[], vy: float[], dye: float[], n: int): void {
+fun add_force(vx: GpuBuffer<float>, vy: GpuBuffer<float>, dye: GpuBuffer<float>, n: int): void {
     let x = global_id.x;
     let y = global_id.y;
     if (x >= n || y >= n) { return; }
@@ -30,7 +30,7 @@ fun add_force(vx: float[], vy: float[], dye: float[], n: int): void {
 }
 
 @compute(8, 8)
-fun advect(src: float[], dst: float[], vx: float[], vy: float[], n: int): void {
+fun advect(src: GpuBuffer<float>, dst: GpuBuffer<float>, vx: GpuBuffer<float>, vy: GpuBuffer<float>, n: int): void {
     let x = global_id.x;
     let y = global_id.y;
     if (x >= n || y >= n) { return; }
@@ -57,7 +57,7 @@ fun advect(src: float[], dst: float[], vx: float[], vy: float[], n: int): void {
 }
 
 @compute(8, 8)
-fun divergence(vx: float[], vy: float[], div: float[], n: int): void {
+fun divergence(vx: GpuBuffer<float>, vy: GpuBuffer<float>, div: GpuBuffer<float>, n: int): void {
     let x = global_id.x;
     let y = global_id.y;
     if (x <= 0 || y <= 0 || x >= n - 1 || y >= n - 1) { return; }
@@ -66,7 +66,7 @@ fun divergence(vx: float[], vy: float[], div: float[], n: int): void {
 }
 
 @compute(8, 8)
-fun pressure_jacobi(div: float[], p: float[], p_out: float[], n: int): void {
+fun pressure_jacobi(div: GpuBuffer<float>, p: GpuBuffer<float>, p_out: GpuBuffer<float>, n: int): void {
     let x = global_id.x;
     let y = global_id.y;
     if (x <= 0 || y <= 0 || x >= n - 1 || y >= n - 1) { return; }
@@ -75,7 +75,7 @@ fun pressure_jacobi(div: float[], p: float[], p_out: float[], n: int): void {
 }
 
 @compute(8, 8)
-fun subtract_gradient(vx: float[], vy: float[], p: float[], n: int): void {
+fun subtract_gradient(vx: GpuBuffer<float>, vy: GpuBuffer<float>, p: GpuBuffer<float>, n: int): void {
     let x = global_id.x;
     let y = global_id.y;
     if (x <= 0 || y <= 0 || x >= n - 1 || y >= n - 1) { return; }

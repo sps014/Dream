@@ -1,7 +1,7 @@
 import system;
 
 @compute(64)
-fun reduce_sum(data: float[], out: float[], n: int): void {
+fun reduce_sum(data: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     @workgroup(64) let tile: float;
     let lid = local_id.x;
     let gid = global_id.x;

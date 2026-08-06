@@ -1,7 +1,8 @@
 module system.gpu;
 
 // GPU storage buffer of blittable `T` elements (`T : unmanaged`).
-public class GpuBuffer<T : unmanaged> {
+// Value-typed handle (id / length / stride); device memory lives on the host/WebGPU side.
+public struct GpuBuffer<T : unmanaged> {
     _id: int;
     _length: int;
     _stride: int;

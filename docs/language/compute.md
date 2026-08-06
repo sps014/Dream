@@ -8,9 +8,9 @@ Dream can compile ordinary-looking functions into **WebGPU compute shaders** (WG
 import system.gpu;
 
 @compute(64)
-fun add(a: float[], b: float[], out: float[], n: int): void {
+fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < n) {
+    if (i < a.length && i < n) {
         out[i] = a[i] + b[i];
     }
 }
@@ -40,6 +40,12 @@ Compiling emits a sibling `.wgsl` file and a `"gpu"` section in `.abi.json`. The
 
 Only **top-level** `fun`s may carry `@compute`. Kernels must return `void`, cannot be `async`/`extern`/generic, and are **not** callable as CPU functions — use `Compute.run_1d` / `Compute.run_2d` with the kernel **name**.
 
+## Storage parameters
+
+Kernel storage buffers are **`GpuBuffer<T>`** (not bare `T[]`). Inside a kernel you can index them (`a[i]`) and read **`a.length`** (WGSL `arrayLength`). Scalars and unmanaged value structs become uniforms.
+
+Host dispatch still passes `GpuBuffer` instances to `Compute.run_*` in binding order.
+
 ## Builtins
 
 Inside a kernel, these locals are in scope (typed as `GpuId3` with `.x`/`.y`/`.z`):
@@ -51,15 +57,15 @@ Inside a kernel, these locals are in scope (typed as `GpuId3` with `.x`/`.y`/`.z
 
 ## Language surface
 
-Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue` (including labels), early `return`, ternary, integer `switch`, arithmetic/bitwise, buffer indexing, unmanaged value structs, calls to other `@compute` helpers, `Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `GpuMath.*`.
+Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue` (including labels), early `return`, ternary, integer `switch`, arithmetic/bitwise, `GpuBuffer` indexing / `.length`, unmanaged value structs, calls to other `@compute` helpers, `Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `GpuMath.*`.
 
-Forbidden: `string`/`List`/`class`/`js`/`async`, `for..in`, union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions.
+Forbidden: bare `T[]` as a kernel param, `string`/`List`/`class`/`js`/`async`, `for..in`, union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions.
 
 ### Workgroup memory
 
 ```dream
 @compute(64)
-fun reduce(data: float[], out: float[]): void {
+fun reduce(data: GpuBuffer<float>, out: GpuBuffer<float>): void {
     @workgroup(64) let tile: float;
     let lid = local_id.x;
     tile[lid] = data[global_id.x];

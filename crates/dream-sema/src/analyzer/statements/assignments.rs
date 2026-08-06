@@ -41,10 +41,18 @@ impl<'a> Analyzer<'a> {
             return Ok(());
         }
 
+        // Inside `@compute`, `GpuBuffer<T>[i] = v` is a storage-buffer write (like `T[]`).
+        let gpu_elem = if self.current_function_is_compute {
+            crate::analyzer::declarations::functions::gpu_buffer_elem_type(&array_type).cloned()
+        } else {
+            None
+        };
+
         // Class/string index-assignment: `obj[i] = v` on a struct or `string` receiver desugars
         // to the `@set_indexer` method when registered. Arrays keep the built-in path; `Unknown`
         // is a poison carried from an earlier error and must not cascade.
-        if !matches!(array_type, Type::Array(_) | Type::Unknown)
+        if gpu_elem.is_none()
+            && !matches!(array_type, Type::Array(_) | Type::Unknown)
             && (Self::resolve_struct_parts(&array_type).is_some()
                 || matches!(array_type, Type::String(_)))
         {
@@ -61,12 +69,13 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        let inner_type = match array_type {
-            Type::Array(inner) => *inner,
-            _ => {
+        let inner_type = match (gpu_elem, array_type) {
+            (Some(elem), _) => elem,
+            (_, Type::Array(inner)) => *inner,
+            (_, other) => {
                 self.hir_fail();
                 diagnostics.report_error(
-                    format!("Cannot index into non-array type {}", array_type.get_type()),
+                    format!("Cannot index into non-array type {}", other.get_type()),
                     arr.position(),
                 );
                 return Ok(());

@@ -202,10 +202,21 @@ impl<'a> Analyzer<'a> {
         }
 
         // `arr.length` / `str.length`: builtin element-count property (same spelling collections use).
+        // Inside `@compute`, `GpuBuffer<T>.length` maps to WGSL `arrayLength` (not the host getter).
         if member.text == dream_abi::intrinsics::LENGTH {
             let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
                 self.hir_set_array_len(obj_hir);
+                return Ok(Type::Integer(synthetic_token(
+                    TokenKind::DataTypeToken,
+                    "int",
+                )));
+            }
+            if self.current_function_is_compute
+                && crate::analyzer::declarations::functions::gpu_buffer_elem_type(&obj_type)
+                    .is_some()
+            {
+                self.hir_none();
                 return Ok(Type::Integer(synthetic_token(
                     TokenKind::DataTypeToken,
                     "int",

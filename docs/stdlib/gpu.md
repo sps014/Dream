@@ -26,11 +26,14 @@ WebGPU compute and present from Dream. Auto-imported when any `@compute` kernel 
 | API | Role |
 |-----|------|
 | `GpuBuffer<T>.alloc` / `.from` | Allocate / seed |
+| `.length` / `.id` / `.stride` | Element count / host id / byte stride (properties) |
 | `write` / `write_at` | Full / partial CPU→GPU upload |
 | `read` / `read_at` | Full / partial readback |
 | `GpuSwap<T>` | Ping-pong `front` / `back` / `swap` |
 
-`T` must be `unmanaged`. Staging uses `Bytes.of` / `Bytes.to`.
+`T` must be `unmanaged`. Staging uses `Bytes.of` / `Bytes.to`. `GpuBuffer` is a value `struct` handle.
+
+In `@compute` kernels, storage params are **`GpuBuffer<T>`** (not bare `T[]`); index with `buf[i]` and use `buf.length`.
 
 ```dream
 let a = GpuBuffer<float>.from([1.0, 2.0, 3.0]);
@@ -48,7 +51,7 @@ let r = await Compute.run_1d("add", [a, /*…*/, out], 3);
 | `Uniforms.pack_i32` / `pack_f32` | Build uniform bytes |
 | `GpuShader` + `Compute.run_shader` | Raw WGSL escape hatch |
 
-Pass `GpuBuffer<float>[]` in kernel binding order (no raw buffer ids).
+Pass `GpuBuffer<float>[]` in kernel binding order (same order as `GpuBuffer` params in the kernel).
 
 ## Textures / present
 

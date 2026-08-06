@@ -1,0 +1,5 @@
+// Bare T[] is not a valid @compute storage parameter — use GpuBuffer<T>.
+@compute
+fun bad(a: float[]): void {
+    let i = global_id.x;
+}

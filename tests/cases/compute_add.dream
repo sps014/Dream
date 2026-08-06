@@ -2,9 +2,9 @@ import system;
 import system.gpu;
 
 @compute(64)
-fun add(a: float[], b: float[], out: float[], n: int): void {
+fun add(a: GpuBuffer<float>, b: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
-    if (i < n) {
+    if (i < a.length && i < n) {
         out[i] = a[i] + b[i];
     }
 }
