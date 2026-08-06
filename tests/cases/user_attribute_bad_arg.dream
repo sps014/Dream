@@ -1,0 +1,10 @@
+@attribute
+public fun route(path: string): void {
+}
+
+@route(42)
+public fun bad(): void {
+}
+
+fun main(): void {
+}

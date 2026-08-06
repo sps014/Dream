@@ -15,6 +15,7 @@ mod console;
 mod crypto;
 mod datetime;
 mod file;
+mod gpu;
 mod http;
 mod math;
 mod memory;
@@ -27,6 +28,7 @@ pub use console::{enable_ansi_support, link_console_functions};
 pub use crypto::link_crypto_functions;
 pub use datetime::link_datetime_functions;
 pub use file::link_file_functions;
+pub use gpu::link_gpu_functions;
 pub use http::link_http_functions;
 pub use math::link_math_functions;
 pub use memory::{
@@ -59,6 +61,7 @@ mod contract_tests {
         include_str!("crypto.rs"),
         include_str!("datetime.rs"),
         include_str!("file.rs"),
+        include_str!("gpu.rs"),
         include_str!("http.rs"),
         include_str!("process.rs"),
         include_str!("text.rs"),

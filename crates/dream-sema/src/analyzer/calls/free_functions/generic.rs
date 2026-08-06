@@ -60,6 +60,7 @@ impl<'a> Analyzer<'a> {
                 is_async: template.is_async,
                 is_static: template.is_static,
                 is_unsafe: template.attributes.iter().any(|a| a.name.text == "unsafe"),
+                is_compute: dream_abi::attributes::has_compute_attr(&template.attributes),
                 visibility: template.visibility,
                 intrinsic_name: intrinsics::intrinsic_key(&template.attributes),
                 declaring_file: template.file_path.clone(),

@@ -1,0 +1,8 @@
+import system;
+
+fun main(): void {
+    let x: double = 3.14;
+    let y: double = 0;
+    System.println(x);
+    System.println(y);
+}

@@ -53,10 +53,87 @@ impl Visibility {
     }
 }
 
+/// One constant argument to `@name(...)`. Attribute args are compile-time constants only —
+/// string/int/float/double/bool literals, or a dotted enum-member path (`HttpMethod.Get`).
+#[derive(Debug, Clone)]
+pub enum AttributeArg {
+    String(SyntaxToken),
+    Int(SyntaxToken),
+    Float(SyntaxToken),
+    Double(SyntaxToken),
+    Bool(SyntaxToken),
+    /// Dotted path of identifiers (e.g. `HttpMethod`, `Get`).
+    Enum(Vec<SyntaxToken>),
+}
+
+impl AttributeArg {
+    pub fn position(&self) -> dream_text::text_span::TextSpan {
+        match self {
+            AttributeArg::String(t)
+            | AttributeArg::Int(t)
+            | AttributeArg::Float(t)
+            | AttributeArg::Double(t)
+            | AttributeArg::Bool(t) => t.position,
+            AttributeArg::Enum(parts) => parts[0].position,
+        }
+    }
+
+    /// Source-facing text for diagnostics (keeps quotes on strings).
+    pub fn display(&self) -> String {
+        match self {
+            AttributeArg::String(t)
+            | AttributeArg::Int(t)
+            | AttributeArg::Float(t)
+            | AttributeArg::Double(t)
+            | AttributeArg::Bool(t) => t.text.clone(),
+            AttributeArg::Enum(parts) => parts
+                .iter()
+                .map(|t| t.text.as_str())
+                .collect::<Vec<_>>()
+                .join("."),
+        }
+    }
+
+    /// Unquoted string contents, if this is a string literal.
+    pub fn as_string(&self) -> Option<&str> {
+        match self {
+            AttributeArg::String(t) => {
+                let s = t.text.as_str();
+                if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+                    Some(&s[1..s.len() - 1])
+                } else {
+                    Some(s)
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Integer literal text (no suffix), if this is an int arg.
+    pub fn as_int_text(&self) -> Option<&str> {
+        match self {
+            AttributeArg::Int(t) => Some(t.text.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Value used by SemanticModel / codegen facades (strings unquoted; enum as dotted path).
+    pub fn semantic_value(&self) -> String {
+        match self {
+            AttributeArg::String(_) => self.as_string().unwrap_or("").to_string(),
+            AttributeArg::Int(t)
+            | AttributeArg::Float(t)
+            | AttributeArg::Double(t)
+            | AttributeArg::Bool(t) => t.text.clone(),
+            AttributeArg::Enum(_) => self.display(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AttributeNode {
     pub name: SyntaxToken,
-    pub args: Vec<SyntaxToken>,
+    pub args: Vec<AttributeArg>,
 }
 
 /// A *kind* bound on a generic parameter (C#-aligned): `T : struct` requires a non-nullable value

@@ -1,0 +1,11 @@
+// `@attribute` is only allowed on bare top-level functions, not classes.
+@attribute
+public class Route {
+    public path: string;
+    public constructor(path: string) {
+        this.path = path;
+    }
+}
+
+fun main(): void {
+}

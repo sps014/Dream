@@ -64,7 +64,7 @@ fn attrs_from(nodes: &[AttributeNode]) -> Vec<AttrInfo> {
             args: a
                 .args
                 .iter()
-                .map(|t| t.text.trim_matches('"').to_string())
+                .map(|t| t.semantic_value())
                 .collect(),
         })
         .collect()

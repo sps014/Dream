@@ -19,8 +19,9 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         match expression {
             ExpressionNode::Literal(number) => {
-                self.hir_set_literal(number);
-                Ok(number.clone())
+                let ty = Self::retarget_numeric_literal(number, self.current_expected_type.as_ref());
+                self.hir_set_literal(&ty);
+                Ok(ty)
             }
             ExpressionNode::ArrayLiteral(elements) => {
                 // `[e1, e2, ...]` lowers to `List<T>.from_array([e1, e2, ...])` (one bulk call, no
@@ -693,5 +694,16 @@ impl<'a> Analyzer<'a> {
             args,
         );
         self.analyze_expression(&call, ctx.parent_function, ctx.symbol_table, diagnostics)
+    }
+
+    /// When the surrounding context expects `double`, retarget unsuffixed float/int literals so
+    /// `let x: double = 3.14` and `Math` double overloads don't require a `d` suffix. Explicit
+    /// `f`/`d`/`L`/… suffixes are already classified by the parser; bare decimals arrive as
+    /// `Float`, bare integers as `Integer`.
+    fn retarget_numeric_literal(lit: &Type, expected: Option<&Type>) -> Type {
+        match (expected, lit) {
+            (Some(Type::Double(_)), Type::Float(t) | Type::Integer(t)) => Type::Double(t.clone()),
+            _ => lit.clone(),
+        }
     }
 }

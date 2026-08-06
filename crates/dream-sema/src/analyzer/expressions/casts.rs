@@ -25,8 +25,12 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        // Cast operands must not inherit an outer expected type (e.g. assignment-to-double), or
+        // integer literals inside `(double)((int)c - 48)` get retargeted incorrectly.
+        let saved_expected = self.current_expected_type.take();
         let expr_type =
             self.analyze_expression(expr, parent_function, symbol_table, diagnostics)?;
+        self.current_expected_type = saved_expected;
         let inner_hir = self.hir_take();
 
         let target_type_str = target_type.get_type();

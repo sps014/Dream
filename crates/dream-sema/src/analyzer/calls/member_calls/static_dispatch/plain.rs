@@ -136,6 +136,7 @@ impl<'a> Analyzer<'a> {
         }
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_compute_call(&store_sig, method.position, diagnostics);
 
         self.validate_ref_arguments(
             &format!("static method '{}'", base),

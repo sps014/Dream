@@ -1,0 +1,14 @@
+import system;
+
+@compute(64)
+fun kernel(out: float[]): void {
+    let i = global_id.x;
+    if (i < 1) {
+        out[i] = 1.0;
+    }
+}
+
+fun main(): void {
+    let o: float[] = [0.0];
+    kernel(o);
+}

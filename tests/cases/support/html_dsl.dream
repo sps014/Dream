@@ -1,4 +1,3 @@
-@generator_module
 module support.html_dsl;
 
 // Registers `html { ... }` and provides the runtime `Html` helpers the expander emits into.
@@ -19,7 +18,7 @@ public class Html {
     }
 }
 
-@generator("html")
+@generator
 @syntax_block("html")
-public fun expand_html(): void {
+public fun html(): void {
 }

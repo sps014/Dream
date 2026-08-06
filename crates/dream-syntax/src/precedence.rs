@@ -38,12 +38,15 @@ impl TokenKind {
             _ => 0,
         }
     }
+    /// Unary ops must outrank every binary op so Pratt accepts a leading `-`/`!`/`~`/`+` on the
+    /// RHS of a comparison or arithmetic op (`t > -2`, `a + -b`). With a lower value the loop
+    /// refuses unary when `unary_precedence < parent_precedence` (e.g. after `>` at 25).
     pub fn get_unary_precedence(&self) -> i32 {
         match self {
-            TokenKind::PlusToken => 6,
-            TokenKind::MinusToken => 6,
-            TokenKind::BangToken => 6,
-            TokenKind::TildeToken => 6,
+            TokenKind::PlusToken => 100,
+            TokenKind::MinusToken => 100,
+            TokenKind::BangToken => 100,
+            TokenKind::TildeToken => 100,
             _ => 0,
         }
     }

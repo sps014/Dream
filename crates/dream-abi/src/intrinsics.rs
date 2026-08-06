@@ -26,7 +26,7 @@ pub fn intrinsic_key(attributes: &[dream_syntax::nodes::AttributeNode]) -> Optio
         .and_then(|a| {
             a.args
                 .first()
-                .map(|arg| arg.text.trim_matches('"').to_string())
+                .and_then(|arg| arg.as_string().map(|s| s.to_string()))
         })
 }
 

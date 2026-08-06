@@ -41,7 +41,7 @@ does not re-prefix.
 
 ## Generator host API
 
-Generators discover work via `@generator_module` / attributes. The compile host exposes:
+Generators discover work via `@generator` functions / attributes. The compile host exposes:
 
 ### Discovery
 

@@ -317,6 +317,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
     },
     StdPackage {
+        name: "system.gpu",
+        deps: &["system.core", "system.primitives", "system"],
+        files: &[(
+            "<std>/system/gpu/gpu.dream",
+            include_str!("system/gpu/gpu.dream"),
+        )],
+    },
+    StdPackage {
         name: "system.io",
         deps: &[
             "system.core",

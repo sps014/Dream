@@ -1,0 +1,14 @@
+// Minimal @compute smoke sample (compile + print).
+import system.gpu;
+
+@compute(64)
+fun saxpy(a: float, x: float[], y: float[], out: float[], n: int): void {
+    let i = global_id.x;
+    if (i < n) {
+        out[i] = a * x[i] + y[i];
+    }
+}
+
+fun main(): void {
+    print("compute ok\n");
+}

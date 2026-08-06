@@ -138,7 +138,8 @@ impl<'a> Analyzer<'a> {
         // `(import ...)` (see `hir_build_imports`) and `@intrinsic` ones lower straight to their
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for
         // them would define a second `$string_alloc`, colliding with the runtime function.
-        if function.is_extern {
+        // `@compute` kernels are emitted as WGSL, not WASM — skip HIR collection the same way.
+        if function.is_extern || dream_abi::attributes::has_compute_attr(&function.attributes) {
             self.hir.collecting = false;
             return;
         }

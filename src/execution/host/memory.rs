@@ -76,7 +76,7 @@ pub fn read_string_from_memory(memory: &SharedMemory, ptr: i32) -> String {
 
 /// Resolves the caller module's exported linear `memory`, or a wasm trap (`Err`) if it is absent —
 /// so a malformed/foreign module traps the calling task instead of aborting the whole host process.
-fn required_memory(caller: &mut Caller<'_, ()>) -> Result<SharedMemory> {
+pub(crate) fn required_memory(caller: &mut Caller<'_, ()>) -> Result<SharedMemory> {
     caller
         .get_export(abi::EXPORT_MEMORY)
         .and_then(Extern::into_shared_memory)
@@ -85,7 +85,7 @@ fn required_memory(caller: &mut Caller<'_, ()>) -> Result<SharedMemory> {
 
 /// Resolves the caller module's exported `malloc` with the expected `(size, tag) -> ptr` signature,
 /// or a wasm trap (`Err`) if it is missing or mistyped.
-fn required_malloc(caller: &mut Caller<'_, ()>) -> Result<TypedFunc<(i32, i32), i32>> {
+pub(crate) fn required_malloc(caller: &mut Caller<'_, ()>) -> Result<TypedFunc<(i32, i32), i32>> {
     caller
         .get_export(abi::EXPORT_MALLOC)
         .and_then(Extern::into_func)

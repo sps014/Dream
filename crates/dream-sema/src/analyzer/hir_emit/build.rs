@@ -340,9 +340,16 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|p| self.type_ctx.lower(&p.type_))
                 .collect();
-            let ret = match func.return_type.as_ref() {
-                Some(t) if *t != Type::Void => Some(self.type_ctx.lower(t)),
-                _ => None,
+            // Async host imports always return a `Future` handle (`i32`), including `async …: void`.
+            // Sync imports omit a result only for void.
+            let ret = if func.is_async {
+                let base = func.return_type.clone().unwrap_or(Type::Void);
+                Some(self.type_ctx.lower(&Self::future_type(base)))
+            } else {
+                match func.return_type.as_ref() {
+                    Some(t) if *t != Type::Void => Some(self.type_ctx.lower(t)),
+                    _ => None,
+                }
             };
             imports.push(HImport {
                 def,

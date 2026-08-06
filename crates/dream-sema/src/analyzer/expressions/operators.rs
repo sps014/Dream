@@ -36,6 +36,9 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
+        // Don't leak an outer expected type (e.g. `double` from an assignment) into operands —
+        // that would retarget `48` in `(int)c - 48` when the sum is later cast/added to double.
+        let saved_expected = self.current_expected_type.take();
         let left_value =
             self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
         let left_hir = self.hir_take();
@@ -57,6 +60,7 @@ impl<'a> Analyzer<'a> {
             self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
         let right_hir = self.hir_take();
         self.is_binding_aliases.truncate(alias_mark);
+        self.current_expected_type = saved_expected;
 
         // `a ?? b`: pure sugar for `a.unwrap_or(b)` on an `Option<T>` left operand — the same
         // method the stdlib already exposes, just spelled as an operator for the common inline

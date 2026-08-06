@@ -1,4 +1,3 @@
-@generator_module
 module html;
 
 // Runtime `Html` helpers plus `@syntax_block("html")` registration in one module.
@@ -33,8 +32,8 @@ public class Html {
     }
 }
 
-@generator("html")
+@generator
 @syntax_block("html")
-public fun expand_html(): void {
+public fun html(): void {
     // Discovery stub: the compile host expands `html { }` sites for this introducer.
 }

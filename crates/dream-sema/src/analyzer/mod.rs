@@ -64,6 +64,7 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
     match statement {
         StatementNode::Assignment(tok, _)
         | StatementNode::Declaration(tok, _, _, _)
+        | StatementNode::WorkgroupDecl(tok, _, _)
         | StatementNode::FunctionInvocation(tok, _, _)
         | StatementNode::MethodInvocation(_, tok, _, _)
         | StatementNode::MemberAssignment(_, tok, _)
@@ -421,6 +422,9 @@ pub struct Analyzer<'a> {
     /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
     /// function/method — see `Analyzer::check_unsafe_call`.
     current_function_is_unsafe: bool,
+    /// True while analyzing the body of an `@compute` kernel. Gates calling non-compute functions
+    /// and accepting `@workgroup` declarations — see `Analyzer::check_compute_call`.
+    current_function_is_compute: bool,
     /// The source file of the function whose body is currently being analyzed, used for
     /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
     /// bare-identifier global reads). `None` outside any function body.
@@ -492,6 +496,7 @@ impl<'a> Analyzer<'a> {
             pending_loop_label: None,
             current_function_is_async: false,
             current_function_is_unsafe: false,
+            current_function_is_compute: false,
             current_file: None,
             file_modules: HashMap::new(),
             aliased_imports: Vec::new(),
@@ -741,6 +746,19 @@ impl<'a> Analyzer<'a> {
         self.current_function_is_unsafe = is_unsafe;
         let result = f(self);
         self.current_function_is_unsafe = saved;
+        result
+    }
+
+    /// Runs `f` with `current_function_is_compute` set to `on`, restoring the previous value
+    /// afterward so the flag cannot leak into a sibling function's analysis.
+    pub(super) fn with_compute_flag<F, R>(&mut self, on: bool, f: F) -> R
+    where
+        F: FnOnce(&mut Self) -> R,
+    {
+        let saved = self.current_function_is_compute;
+        self.current_function_is_compute = on;
+        let result = f(self);
+        self.current_function_is_compute = saved;
         result
     }
 

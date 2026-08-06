@@ -443,12 +443,39 @@ function marshalResult(inst, result, ret) {
   return ret;
 }
 
+/** True when marshaling `t` needs the live `DreamInstance` (strings, `js`, arrays, callbacks). */
+function typeNeedsInstance(t) {
+  if (!t || t === "void") return false;
+  if (isFunType(t)) return true;
+  const base = stripSuffix(t);
+  return base === "string" || base === "js" || base.endsWith("[]");
+}
+
+/** True when any param/result of an extern needs heap marshaling via `getInstance()`. */
+function signatureNeedsInstance(params, result) {
+  if (typeNeedsInstance(result)) return true;
+  if (params) {
+    for (const p of params) {
+      if (typeNeedsInstance(p)) return true;
+    }
+  }
+  return false;
+}
+
 /** Wraps a user-provided import implementation so its args/return are marshaled per the ABI. */
 function wrapImport(getInstance, fn, signature) {
   const params = signature ? signature.params : null;
   const result = signature ? signature.result : null;
+  // `(start $__runtime_init)` runs during `WebAssembly.instantiate`, before `DreamInstance` exists.
+  // Pure numeric externs (e.g. `gpuBufferAllocBytes`) must not call `getInstance()` or module-level
+  // constructors that touch the host die with "instance not ready".
+  const needsInst = signatureNeedsInstance(params, result);
 
   return (...rawArgs) => {
+    if (!needsInst) {
+      const ret = fn(...rawArgs);
+      return ret == null ? 0 : ret;
+    }
     const inst = getInstance();
     const args = marshalArgs(inst, params, rawArgs);
     const ret = fn(...args);
@@ -645,6 +672,7 @@ function decodeJsSlots(inst, ptr, argc) {
  */
 function defaultDreamModule(getInstance) {
   return {
+    ...makeGpuHost(getInstance),
     // --- entry points / value constructors --------------------------------
     jsGlobal: (name) => globalThis[name],
     jsGlobalThis: () => globalThis,
@@ -875,6 +903,10 @@ function defaultDreamModule(getInstance) {
         return BigInt(Math.floor(performance.now() * 1000000));
       }
     },
+    // Real wall-clock delay for browser animation loops. `Time.sleep` uses the in-module virtual
+    // clock (fires immediately when the ready queue is empty) and never yields to the event loop.
+    delayMs: (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms | 0))),
+    gpuAvailable: () => !!(globalThis.navigator && globalThis.navigator.gpu),
     // Console helpers (see src/stdlib/system/system.dream). Synchronous, mirroring
     // src/execution/host/console.rs. In Node, reads block on fd 0 via `fs.readSync`; there is no
     // synchronous stdin in a browser, so `readLine`/`readKey` fall back to `prompt()` there (and
@@ -912,6 +944,272 @@ function defaultDreamModule(getInstance) {
       try { process.chdir(path); return true; } catch (_) { return false; }
     },
   };
+}
+
+/**
+ * WebGPU host for `system.gpu`. Buffers are tracked by integer id; kernels come from the
+ * sibling `.wgsl` + `abi.gpu.kernels` metadata attached via `attachGpuAbi`.
+ */
+function makeGpuHost(getInstance) {
+  const buffers = new Map(); // id -> { gpuBuffer, nbytes, cpu: Uint8Array|null }
+  const shaders = new Map(); // id -> { module, entry }
+  const pipelineCache = new Map(); // kernelName -> { pipeline, layout, bindings }
+  let nextBuf = 1;
+  let nextShader = 1;
+  let devicePromise = null;
+  let device = null;
+  let gpuAbi = null;
+  let wgslSource = null;
+
+  async function ensureDevice() {
+    if (device) return device;
+    if (!devicePromise) {
+      devicePromise = (async () => {
+        if (!globalThis.navigator?.gpu) {
+          throw new Error("WebGPU is not available in this environment");
+        }
+        // Cap adapter acquisition so a missing/blocked GPU cannot hang the Dream scheduler forever.
+        const adapter = await Promise.race([
+          navigator.gpu.requestAdapter(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("WebGPU requestAdapter timed out")), 8000),
+          ),
+        ]);
+        if (!adapter) throw new Error("no WebGPU adapter");
+        device = await adapter.requestDevice();
+        return device;
+      })().catch((err) => {
+        devicePromise = null;
+        throw err;
+      });
+    }
+    return devicePromise;
+  }
+
+  function attachFromAbi(abi, sourceHint) {
+    gpuAbi = abi && abi.gpu ? abi.gpu : null;
+    if (gpuAbi && typeof sourceHint === "string") {
+      wgslSource = sourceHint.replace(/\.wasm$/, ".wgsl").replace(/\.abi\.json$/, ".wgsl");
+    }
+  }
+
+  // Stash attach helper on the host object for load() to call.
+  const host = {
+    __attachGpuAbi: attachFromAbi,
+
+    gpuBufferAllocBytes: (n) => {
+      const id = nextBuf++;
+      buffers.set(id, { gpuBuffer: null, nbytes: Math.max(0, n | 0), cpu: null });
+      return id;
+    },
+    gpuBufferWriteBytes: (id, data) => {
+      const b = buffers.get(id);
+      if (!b) throw new Error(`unknown GpuBuffer ${id}`);
+      const arr = data instanceof Uint8Array ? data : Uint8Array.from(data || []);
+      b.cpu = arr;
+      b.nbytes = arr.byteLength;
+      b.gpuBuffer = null; // force re-upload on next dispatch
+    },
+    gpuBufferReadBytes: async (id, n) => {
+      const b = buffers.get(id);
+      if (!b) throw new Error(`unknown GpuBuffer ${id}`);
+      const nbytes = Math.max(0, n | 0);
+      // CPU staging only — no WebGPU required. (Presenting a freshly `write()`n buffer before any
+      // dispatch used to hang forever on `requestAdapter` in environments without a working GPU.)
+      if (b.gpuBuffer) {
+        const dev = await ensureDevice();
+        await syncBufferToCpu(dev, b);
+      }
+      if (!(b.cpu instanceof Uint8Array) && !b.cpu) {
+        return Array(nbytes).fill(0);
+      }
+      const src = b.cpu instanceof Uint8Array ? b.cpu : new Uint8Array(b.cpu.buffer || []);
+      if (src.length >= nbytes) return Array.from(src.slice(0, nbytes));
+      const out = Array(nbytes).fill(0);
+      for (let i = 0; i < src.length; i++) out[i] = src[i];
+      return out;
+    },
+    gpuDispatch: async (kernel, bufferIds, ex, ey, ez) => {
+      const dev = await ensureDevice();
+      const meta = (gpuAbi && gpuAbi.kernels || []).find((k) => k.name === kernel);
+      if (!meta) throw new Error(`unknown @compute kernel '${kernel}' (is .abi.json/.wgsl loaded?)`);
+      // Prefer per-kernel WGSL from the ABI. A joined multi-kernel module redeclares the same
+      // @binding indices and fails WebGPU validation (or silently misbinds).
+      const code = (typeof meta.source === "string" && meta.source.length > 0)
+        ? meta.source
+        : await loadWgslText(wgslSource);
+      let pipe = pipelineCache.get(kernel);
+      if (!pipe) {
+        const module = dev.createShaderModule({ code });
+        // Surface WGSL errors — createShaderModule itself does not throw.
+        if (typeof module.getCompilationInfo === "function") {
+          const info = await module.getCompilationInfo();
+          const errs = (info.messages || []).filter((m) => m.type === "error");
+          if (errs.length) {
+            const detail = errs.map((m) =>
+              `${m.message} @${m.lineNum}:${m.linePos}`
+            ).join("\n");
+            throw new Error(`WGSL compile error in kernel '${kernel}':\n${detail}`);
+          }
+        }
+        const entries = (meta.bindings || []).map((b) => ({
+          binding: b.binding,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: b.kind === "uniform" ? "uniform" : (b.read_write ? "storage" : "read-only-storage") },
+        }));
+        // Deduplicate uniform binding entries sharing one binding index.
+        const seen = new Set();
+        const unique = [];
+        for (const e of entries) {
+          if (seen.has(e.binding)) continue;
+          seen.add(e.binding);
+          unique.push(e);
+        }
+        const layout = dev.createBindGroupLayout({ entries: unique });
+        const pipeline = await dev.createComputePipelineAsync({
+          layout: dev.createPipelineLayout({ bindGroupLayouts: [layout] }),
+          compute: { module, entryPoint: meta.entry },
+        });
+        pipe = { pipeline, layout, meta };
+        pipelineCache.set(kernel, pipe);
+      }
+      const ids = bufferIds || [];
+      const resources = [];
+      const usedBindings = new Set();
+      let storageIdx = 0;
+      for (const bind of meta.bindings || []) {
+        if (usedBindings.has(bind.binding)) continue;
+        usedBindings.add(bind.binding);
+        if (bind.kind === "uniform") {
+          // Pack dispatch extents into leading i32 fields of DreamUniforms
+          // (e.g. a single `n: int` gets `ex` from `Compute.run_2d(..., n, n)`).
+          const ubuf = dev.createBuffer({
+            size: 256,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+          });
+          const u32 = new Int32Array(64);
+          u32[0] = ex | 0;
+          u32[1] = ey | 0;
+          u32[2] = ez | 0;
+          dev.queue.writeBuffer(ubuf, 0, u32);
+          resources.push({ binding: bind.binding, resource: { buffer: ubuf } });
+        } else {
+          const id = ids[storageIdx++] | 0;
+          const b = buffers.get(id);
+          if (!b) throw new Error(`missing buffer id ${id} for binding ${bind.binding}`);
+          if (!b.gpuBuffer) {
+            b.gpuBuffer = dev.createBuffer({
+              size: Math.max(4, b.nbytes),
+              usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+            });
+            if (b.cpu) {
+              const bytes = b.cpu instanceof Uint8Array
+                ? b.cpu
+                : new Uint8Array(b.cpu.buffer, b.cpu.byteOffset, b.cpu.byteLength);
+              dev.queue.writeBuffer(b.gpuBuffer, 0, bytes);
+            }
+          }
+          resources.push({ binding: bind.binding, resource: { buffer: b.gpuBuffer } });
+        }
+      }
+      const bg = dev.createBindGroup({ layout: pipe.layout, entries: resources });
+      const wg = meta.workgroup || [64, 1, 1];
+      const gx = Math.max(1, Math.ceil((ex | 0) / (wg[0] || 64)));
+      const gy = Math.max(1, Math.ceil((ey | 0) / (wg[1] || 1)));
+      const gz = Math.max(1, Math.ceil((ez | 0) / (wg[2] || 1)));
+      const encoder = dev.createCommandEncoder();
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(pipe.pipeline);
+      pass.setBindGroup(0, bg);
+      pass.dispatchWorkgroups(gx, gy, gz);
+      pass.end();
+      dev.queue.submit([encoder.finish()]);
+      await dev.queue.onSubmittedWorkDone();
+    },
+    gpuShaderFromWgsl: (source, entry) => {
+      const id = nextShader++;
+      shaders.set(id, { source: String(source), entry: String(entry) });
+      return id;
+    },
+    gpuDispatchShader: async (shaderId, bufferIds, wx, wy, wz) => {
+      const s = shaders.get(shaderId);
+      if (!s) throw new Error(`unknown GpuShader ${shaderId}`);
+      // Treat as a one-off kernel named `__raw_${id}` by temporarily installing WGSL.
+      const prev = wgslSource;
+      const prevAbi = gpuAbi;
+      wgslSource = null;
+      gpuAbi = {
+        kernels: [{
+          name: `__raw_${shaderId}`,
+          entry: s.entry,
+          workgroup: [wx || 64, wy || 1, wz || 1],
+          bindings: (bufferIds || []).map((_, i) => ({
+            name: `b${i}`, binding: i, kind: "storage", type: "f32", read_write: true,
+          })),
+        }],
+      };
+      // Provide inline WGSL via a data URL-like cache.
+      const inline = s.source;
+      const oldLoad = loadWgslText;
+      loadWgslText = async () => inline;
+      try {
+        await host.gpuDispatch(`__raw_${shaderId}`, bufferIds, wx || 1, wy || 1, wz || 1);
+      } finally {
+        loadWgslText = oldLoad;
+        wgslSource = prev;
+        gpuAbi = prevAbi;
+      }
+    },
+    gpuPresentRgba: async (canvasId, pixels, width, height) => {
+      const w = width | 0;
+      const h = height | 0;
+      const data = Uint8ClampedArray.from(pixels || []);
+      let el = null;
+      if (typeof document !== "undefined") {
+        const id = canvasId != null ? String(canvasId) : "fluid";
+        el = document.getElementById(id) || document.querySelector("canvas");
+      }
+      if (el && typeof el.getContext === "function") {
+        const ctx = el.getContext("2d");
+        if (ctx) {
+          el.width = w;
+          el.height = h;
+          const img = new ImageData(data.slice(0, w * h * 4), w, h);
+          ctx.putImageData(img, 0, 0);
+          return;
+        }
+      }
+      throw new Error("gpuPresentRgba: canvas 2d context unavailable");
+    },
+  };
+
+  let loadWgslText = async (url) => {
+    if (!url) throw new Error("no .wgsl URL; compile with Dream to emit sibling .wgsl");
+    if (typeof fetch === "function") {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`failed to fetch ${url}`);
+      return await res.text();
+    }
+    throw new Error("fetch unavailable for .wgsl");
+  };
+
+  async function syncBufferToCpu(dev, b) {
+    if (!b.gpuBuffer) return;
+    const staging = dev.createBuffer({
+      size: b.nbytes,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const encoder = dev.createCommandEncoder();
+    encoder.copyBufferToBuffer(b.gpuBuffer, 0, staging, 0, b.nbytes);
+    dev.queue.submit([encoder.finish()]);
+    await staging.mapAsync(GPUMapMode.READ);
+    const copy = staging.getMappedRange().slice(0);
+    staging.unmap();
+    staging.destroy();
+    b.cpu = new Uint8Array(copy);
+  }
+
+  return host;
 }
 
 /** Blocks and returns one line from stdin (without the trailing newline), or "" if unavailable. */
@@ -1393,8 +1691,17 @@ function defaultEnv(getInstance, options) {
     print_char: (v) => writeOut(String.fromCharCode(v)),
     sin: Math.sin,
     cos: Math.cos,
+    tan: Math.tan,
+    asin: Math.asin,
+    acos: Math.acos,
+    atan: Math.atan,
+    atan2: Math.atan2,
     abs: Math.abs,
     sqrt: Math.sqrt,
+    pow: Math.pow,
+    floor: Math.floor,
+    ceil: Math.ceil,
+    round: Math.round,
   };
 }
 
@@ -1704,6 +2011,15 @@ export async function load(source, options = {}) {
     ...defaultDreamModule(getInstance),
     ...makeWorkerModule(wasmBytes, abi, () => sharedMemory),
   };
+  if (typeof builtinDream.__attachGpuAbi === "function") {
+    const hint =
+      typeof source === "string"
+        ? source
+        : typeof options.abi === "string"
+          ? options.abi
+          : null;
+    builtinDream.__attachGpuAbi(abi, hint);
+  }
 
   const wrapFor = (fn, sig) => {
     if (sig && sig.field === "cryptoSecureRandomFill") {

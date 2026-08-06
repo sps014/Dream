@@ -1,0 +1,186 @@
+module system.gpu;
+
+// WebGPU compute support. Auto-loaded whenever any `@compute` kernel is present.
+
+/// 3-component id used by compute builtins (`global_id`, `local_id`, …).
+public struct GpuId3 {
+    public x: int;
+    public y: int;
+    public z: int;
+}
+
+/// GPU storage buffer of blittable `T` elements (`T : unmanaged`).
+public class GpuBuffer<T : unmanaged> {
+    public id: int;
+    public length: int;
+    public stride: int;
+
+    public fun len(): int {
+        return this.length;
+    }
+
+    public fun buffer_id(): int {
+        return this.id;
+    }
+
+    public static fun alloc(n: int): GpuBuffer<T> {
+        let scratch = Buffer.alloc<T>(1);
+        let stride = Bytes.of(scratch[0]).size();
+        let b = GpuBuffer<T>();
+        b.id = Gpu.buffer_alloc_bytes(n * stride);
+        b.length = n;
+        b.stride = stride;
+        return b;
+    }
+
+    public static fun from(data: T[]): GpuBuffer<T> {
+        let b = GpuBuffer<T>.alloc(data.size());
+        b.write(data);
+        return b;
+    }
+
+    public fun write(data: T[]): void {
+        let n = data.size();
+        let out = Buffer.alloc<byte>(n * this.stride);
+        for (let i = 0; i < n; i = i + 1) {
+            let eb = Bytes.of(data[i]);
+            for (let j = 0; j < this.stride; j = j + 1) {
+                out[i * this.stride + j] = eb[j];
+            }
+        }
+        Gpu.buffer_write_bytes(this.id, out);
+    }
+
+    public async fun read(): T[] {
+        let bytes = await Gpu.buffer_read_bytes(this.id, this.length * this.stride);
+        let out = Buffer.alloc<T>(this.length);
+        for (let i = 0; i < this.length; i = i + 1) {
+            let slice = Buffer.alloc<byte>(this.stride);
+            for (let j = 0; j < this.stride; j = j + 1) {
+                slice[j] = bytes[i * this.stride + j];
+            }
+            out[i] = Bytes.to<T>(slice);
+        }
+        return out;
+    }
+}
+
+/// Raw WGSL shader handle (escape hatch).
+public class GpuShader {
+    public id: int;
+
+    public static fun from_wgsl(source: string, entry: string): GpuShader {
+        let s = GpuShader();
+        s.id = Gpu.shader_from_wgsl(source, entry);
+        return s;
+    }
+}
+
+/// High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
+public class Compute {
+    public static async fun run_1d(kernel: string, buffer_ids: int[], n: int): void {
+        await Gpu.dispatch(kernel, buffer_ids, n, 1, 1);
+    }
+
+    public static async fun run_2d(kernel: string, buffer_ids: int[], w: int, h: int): void {
+        await Gpu.dispatch(kernel, buffer_ids, w, h, 1);
+    }
+
+    public static async fun run_shader(
+        shader: GpuShader,
+        buffer_ids: int[],
+        wx: int,
+        wy: int,
+        wz: int
+    ): void {
+        await Gpu.dispatch_shader(shader.id, buffer_ids, wx, wy, wz);
+    }
+}
+
+/// Host bridges + kernel-only barrier stubs (lowered to WGSL inside `@compute`).
+public class Gpu {
+    @js("Dream", "gpuBufferAllocBytes")
+    static extern fun buffer_alloc_bytes(n: int): int;
+
+    @js("Dream", "gpuBufferWriteBytes")
+    static extern fun buffer_write_bytes(id: int, data: byte[]): void;
+
+    @js("Dream", "gpuBufferReadBytes")
+    static extern async fun buffer_read_bytes(id: int, n: int): byte[];
+
+    @js("Dream", "gpuDispatch")
+    static extern async fun dispatch(
+        kernel: string,
+        buffer_ids: int[],
+        ex: int,
+        ey: int,
+        ez: int
+    ): void;
+
+    @js("Dream", "gpuShaderFromWgsl")
+    static extern fun shader_from_wgsl(source: string, entry: string): int;
+
+    @js("Dream", "gpuDispatchShader")
+    static extern async fun dispatch_shader(
+        shader_id: int,
+        buffer_ids: int[],
+        wx: int,
+        wy: int,
+        wz: int
+    ): void;
+
+    @js("Dream", "gpuPresentRgba")
+    static extern async fun present_rgba(canvas_id: string, pixels: byte[], width: int, height: int): void;
+
+    public static fun workgroup_barrier(): void {}
+    public static fun storage_barrier(): void {}
+}
+
+/// Math helpers; inside `@compute` the WGSL emitter maps these names to WGSL builtins.
+public class GpuMath {
+    public static fun min(a: float, b: float): float {
+        if (a < b) { return a; }
+        return b;
+    }
+    public static fun max(a: float, b: float): float {
+        if (a > b) { return a; }
+        return b;
+    }
+    public static fun abs(a: float): float {
+        if (a < 0.0) { return 0.0 - a; }
+        return a;
+    }
+    public static fun clamp(x: float, lo: float, hi: float): float {
+        return GpuMath.max(lo, GpuMath.min(x, hi));
+    }
+    public static fun floor(x: float): float {
+        return (float)Math.floor((double)x);
+    }
+    public static fun ceil(x: float): float {
+        return (float)Math.ceil((double)x);
+    }
+    public static fun sqrt(x: float): float {
+        return (float)(Math.sqrt((double)x).unwrap_or(0.0d));
+    }
+    public static fun sin(x: float): float {
+        return (float)Math.sin((double)x);
+    }
+    public static fun cos(x: float): float {
+        return (float)Math.cos((double)x);
+    }
+    public static fun tan(x: float): float {
+        return (float)Math.tan((double)x);
+    }
+    public static fun asin(x: float): float {
+        return (float)Math.asin((double)x);
+    }
+    public static fun acos(x: float): float {
+        return (float)Math.acos((double)x);
+    }
+    public static fun atan(x: float): float {
+        return (float)Math.atan((double)x);
+    }
+    public static fun atan2(y: float, x: float): float {
+        return (float)Math.atan2((double)y, (double)x);
+    }
+}

@@ -307,9 +307,11 @@ impl Builder {
             // Attribute names are decorators, not types/classes.
             self.add_ref(&attr.name, SymKind::Decorator, scope);
             for arg in &attr.args {
-                // If the argument is an identifier (e.g. referencing a constant), record it.
-                if arg.kind == dream::syntax::token::token_kind::TokenKind::IdentifierToken {
-                    self.add_ref(arg, SymKind::Variable, scope);
+                // Enum-member paths (`HttpMethod.Get`) are identifier refs; other args are literals.
+                if let dream::syntax::nodes::AttributeArg::Enum(parts) = arg {
+                    for part in parts {
+                        self.add_ref(part, SymKind::Variable, scope);
+                    }
                 }
             }
         }
@@ -568,6 +570,7 @@ impl Builder {
                 self.walk_expr(target, scope);
                 self.walk_block(body, scope);
             }
+            StatementNode::WorkgroupDecl(_, _, _) => {}
         }
     }
 

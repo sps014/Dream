@@ -12,7 +12,7 @@ Dream is statically typed: every value has a type known at compile time. This pa
 | `ulong` | 64-bit unsigned integer | `42uL`, `42UL`, `42Lu` |
 | `byte` | 8-bit unsigned integer (0–255) | `255b`, `255B` |
 | `float` | 32-bit floating point | `3.14f`, `1.0` |
-| `double` | 64-bit floating point | `3.14d`, `1.0d` |
+| `double` | 64-bit floating point | `3.14d`, or bare `3.14` / `0` when the expected type is `double` |
 | `bool` | `true` or `false` | `true` |
 | `char` | A single character (code point) | `'A'`, `'\n'` |
 | `string` | UTF-8 text, heap allocated | `"hello"`, `$"hi {name}"` |
@@ -32,6 +32,10 @@ A plain integer literal is `int`; a literal with a decimal point is `float`. A c
 | `b` / `B` | `byte` | `255b` |
 | `f` / `F` | `float` | `3.14f` |
 | `d` / `D` | `double` | `3.0d` |
+
+Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed
+binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`
+so `let x: double = 3.14` works without a `d` suffix.
 
 `byte`, `uint`, and `ulong` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics; `int` and `long` are signed. In memory, `byte`/`char` take 1 byte, `int`/`uint`/`float` take 4, and `long`/`ulong`/`double` take 8.
 

@@ -101,6 +101,10 @@ impl Compiler {
             acc.requested_std_packages
                 .insert("system.json".to_string());
         }
+        if program_uses_compute_attr(&acc) {
+            acc.requested_std_packages
+                .insert("system.gpu".to_string());
+        }
         merge_prelude(
             &arena,
             &mut acc.all_functions,
@@ -131,7 +135,7 @@ impl Compiler {
             return Err(CompileError::Syntax);
         }
 
-        // Source generators: `@json` derive, `html { }` DSL, and registered `@generator_module`s.
+        // Source generators: `@json` derive, `html { }` DSL, and registered `@generator`s.
         // Nested harness compiles set `skip_generators` so this cannot recurse.
         if !self.skip_generators {
             debug_assert!(
@@ -266,7 +270,9 @@ impl Compiler {
 
         // Also emit a binary `.wasm` (what browsers/Node load) and an `.abi.json` sidecar
         // describing extern imports and exports so the JS runtime can auto-marshal values.
-        emit_wasm_and_abi(out_path, &text, ast.get_root())?;
+        // `@compute` kernels become a sibling `.wgsl` + `"gpu"` ABI section.
+        let kernels = crate::driver::compute_gen::collect_compute_kernels(ast.get_root());
+        emit_wasm_and_abi(out_path, &text, ast.get_root(), &kernels)?;
 
         if let Some(level) = self.optimize {
             let wasm_path = std::path::Path::new(out_path).with_extension("wasm");
@@ -322,5 +328,14 @@ fn program_uses_json_attr(acc: &ProgramAccumulator<'_>) -> bool {
         e.attributes
             .iter()
             .any(|a| a.name.text == "json")
+    })
+}
+
+/// True when any top-level function carries `@compute` (needs `system.gpu`).
+fn program_uses_compute_attr(acc: &ProgramAccumulator<'_>) -> bool {
+    acc.all_functions.iter().any(|f| {
+        f.attributes
+            .iter()
+            .any(|a| a.name.text == "compute")
     })
 }

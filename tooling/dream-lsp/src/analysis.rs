@@ -109,6 +109,10 @@ pub fn collect_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnosti
             acc.requested_std_packages
                 .insert("system.json".to_string());
         }
+        if program_uses_compute_attr(&acc) {
+            acc.requested_std_packages
+                .insert("system.gpu".to_string());
+        }
     }
 
     let _ = dream::driver::prelude::merge_prelude(
@@ -216,6 +220,12 @@ fn program_uses_json_attr(acc: &dream::driver::source_loader::ProgramAccumulator
     }) || acc.all_enums.iter().any(|e| {
         e.attributes.iter().any(|a| a.name.text == "json")
     })
+}
+
+fn program_uses_compute_attr(acc: &dream::driver::source_loader::ProgramAccumulator<'_>) -> bool {
+    acc.all_functions
+        .iter()
+        .any(|f| f.attributes.iter().any(|a| a.name.text == "compute"))
 }
 
 /// When editing a stdlib source file in-tree, drop the embedded twin so definitions don't duplicate.

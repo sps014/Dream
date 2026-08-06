@@ -1,0 +1,6 @@
+// `html { }` without a registered `@syntax_block("html")` generator must fail.
+fun main(): void {
+    let _s = html {
+        <div>x</div>
+    };
+}

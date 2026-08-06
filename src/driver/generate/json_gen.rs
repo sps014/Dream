@@ -205,7 +205,7 @@ fn snapshot_field(
     let mut property_name = String::new();
     if let Some(prop) = attrs.iter().find(|a| a.name.text == "property_name") {
         if let Some(arg) = prop.args.first() {
-            property_name = arg.text.trim_matches('"').to_string();
+            property_name = arg.as_string().unwrap_or("").to_string();
         }
     }
     let option_inner = match field_ty {

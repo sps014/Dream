@@ -1,0 +1,11 @@
+// User attribute arity must match the `@attribute` function parameters.
+@attribute
+public fun route(path: string): void {
+}
+
+@route("/a", "/b")
+public fun list(): void {
+}
+
+fun main(): void {
+}

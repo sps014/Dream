@@ -176,7 +176,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         if let Some(attr) = method.attributes.iter().find(|a| a.name.text == "operator") {
-            let Some(symbol_text) = attr.args.first().map(|a| a.text.trim_matches('"')) else {
+            let Some(symbol_text) = attr.args.first().and_then(|a| a.as_string()) else {
                 return;
             };
             let arity = method.parameters.len();
@@ -228,7 +228,7 @@ impl<'a> Analyzer<'a> {
         }
 
         if let Some(attr) = method.attributes.iter().find(|a| a.name.text == "cast") {
-            let Some(kind_text) = attr.args.first().map(|a| a.text.trim_matches('"')) else {
+            let Some(kind_text) = attr.args.first().and_then(|a| a.as_string()) else {
                 return;
             };
             let Some(kind) = CastKind::from_attr_str(kind_text) else {

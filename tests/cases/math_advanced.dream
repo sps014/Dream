@@ -20,4 +20,9 @@ fun main(): void {
 
     let z = Math.sin(0.0d);
     System.println(z);
+
+    // asin(0) / acos(1) / atan(0) — native inverses
+    System.println(Math.asin(0.0d));
+    System.println(Math.acos(1.0d));
+    System.println(Math.atan(0.0d));
 }

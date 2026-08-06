@@ -4,6 +4,7 @@
 use super::*;
 use crate::function_table::FunctionTableInfo;
 use dream_syntax::nodes::types::strip_array;
+use dream_syntax::nodes::Type;
 
 impl<'a> Analyzer<'a> {
     /// Pass 1: register every (non-generic) function signature; stash generic templates.
@@ -16,6 +17,15 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = file_path_string(&function.file_path);
             self.check_reserved_name(&function.name, "function", diagnostics);
             if function.generic_parameters.is_some() {
+                if dream_abi::attributes::has_compute_attr(&function.attributes) {
+                    diagnostics.report_error(
+                        format!(
+                            "@compute kernel '{}' cannot be generic",
+                            function.name.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
                 self.type_ctx.register(
                     DefKind::Function,
                     &function.name.text,
@@ -30,6 +40,48 @@ impl<'a> Analyzer<'a> {
             }
             let mut info = FunctionTableInfo::from(function);
             info.declaring_module = self.module_of(function.file_path.as_ref());
+            if info.is_compute {
+                if function.is_async {
+                    diagnostics.report_error(
+                        format!(
+                            "@compute kernel '{}' cannot be async",
+                            function.name.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
+                if function.is_extern {
+                    diagnostics.report_error(
+                        format!(
+                            "@compute kernel '{}' cannot be extern",
+                            function.name.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
+                if !matches!(info.return_type, None | Some(Type::Void)) {
+                    diagnostics.report_error(
+                        format!(
+                            "@compute kernel '{}' must return void",
+                            function.name.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
+                for p in function.parameters.iter() {
+                    if !is_compute_param_type(&p.type_) {
+                        diagnostics.report_error(
+                            format!(
+                                "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, and T[] / GpuBuffer storage buffers are allowed",
+                                function.name.text,
+                                p.name.text,
+                                p.type_.get_type()
+                            ),
+                            Some(p.name.position),
+                        );
+                    }
+                }
+            }
             if let Err(e) =
                 self.function_table
                     .add_overload(&function.name.text, info, &mut self.type_ctx)
@@ -229,5 +281,48 @@ impl<'a> Analyzer<'a> {
             }
         }
         Ok(())
+    }
+}
+
+/// Kernel parameters: scalars (`int`/`uint`/`float`/`bool`/`byte`) or arrays / `GpuBuffer<T>` of those.
+fn is_compute_param_type(ty: &Type) -> bool {
+    match ty {
+        Type::Integer(_)
+        | Type::Float(_)
+        | Type::Boolean(_)
+        | Type::Byte(_)
+        | Type::UInt(_)
+        | Type::Long(_)
+        | Type::ULong(_) => true,
+        Type::Array(inner) => is_compute_elem_type(inner),
+        Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
+            is_compute_elem_type(&args[0])
+        }
+        Type::Struct(tok, None) => {
+            // Allow unmanaged value structs by name; GpuId3 is synthetic. Reject known heap types.
+            !matches!(
+                tok.text.as_str(),
+                "string" | "List" | "Map" | "Set" | "object" | "js"
+            )
+        }
+        Type::String(_) | Type::Object(_) | Type::Char(_) => false,
+        _ => false,
+    }
+}
+
+fn is_compute_elem_type(ty: &Type) -> bool {
+    match ty {
+        Type::Integer(_)
+        | Type::Float(_)
+        | Type::Boolean(_)
+        | Type::Byte(_)
+        | Type::UInt(_)
+        | Type::Long(_)
+        | Type::ULong(_) => true,
+        Type::Struct(tok, None) => !matches!(
+            tok.text.as_str(),
+            "string" | "List" | "Map" | "Set" | "object" | "js"
+        ),
+        _ => false,
     }
 }

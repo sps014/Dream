@@ -48,8 +48,8 @@ pub struct ProgramAccumulator<'a> {
     /// Dotted stdlib package names requested via plain `import system.net;` (etc.). Fed to
     /// selective prelude merge together with bootstrap packages.
     pub requested_std_packages: IndexSet<String>,
-    /// Absolute paths of files whose `module` declaration carries `@generator_module`.
-    pub generator_module_files: Vec<String>,
+    /// Absolute paths of files that contain at least one `@generator` function.
+    pub generator_files: Vec<String>,
     /// Extra generator source paths from `dream.toml` `[[generators]]` (filled by the driver).
     pub manifest_generator_paths: Vec<String>,
 }
@@ -225,13 +225,13 @@ pub fn parse_file_recursive<'a>(
     if let Some(module_decl) = &program.module {
         acc.file_modules
             .insert(path_str.clone(), Rc::from(module_decl.path.text.as_str()));
-        if module_decl
-            .attributes
-            .iter()
-            .any(|a| a.name.text == "generator_module")
-        {
-            acc.generator_module_files.push(path_str.clone());
-        }
+    }
+    if program
+        .functions
+        .iter()
+        .any(|f| f.attributes.iter().any(|a| a.name.text == "generator"))
+    {
+        acc.generator_files.push(path_str.clone());
     }
     let parent_dir = path.parent().unwrap_or_else(|| Path::new(""));
 

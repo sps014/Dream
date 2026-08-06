@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dream Fluid</title>
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #05050a; }
+      canvas#fluid {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        image-rendering: auto;
+        touch-action: none;
+        cursor: crosshair;
+        background: #05050a;
+      }
+      #hud {
+        position: fixed;
+        left: 1rem;
+        bottom: 1rem;
+        z-index: 2;
+        color: #e8e8f0;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        font-size: 0.85rem;
+        opacity: 0.75;
+        pointer-events: none;
+        text-shadow: 0 1px 4px #000;
+      }
+      #hud.err { color: #ff8a8a; opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <canvas id="fluid" width="256" height="256"></canvas>
+    <div id="hud">loading…</div>
+    <script type="module">
+      import { run } from "../../runtime/dream.js";
+
+      const hud = document.getElementById("hud");
+      const setHud = (msg, err = false) => {
+        hud.textContent = msg;
+        hud.classList.toggle("err", err);
+      };
+
+      window.addEventListener("unhandledrejection", (e) => {
+        setHud(String(e.reason || e), true);
+      });
+
+      try {
+        await run("./fluid.wasm");
+        setHud("drag to paint · auto swirl");
+      } catch (e) {
+        console.error(e);
+        setHud(String(e && e.message ? e.message : e), true);
+      }
+    </script>
+  </body>
+</html>

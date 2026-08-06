@@ -209,4 +209,44 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Rejects calls that cross the CPU / `@compute` kernel boundary.
+    ///
+    /// - A `@compute` kernel cannot be called like a CPU function (use `Compute.run("name", ...)`).
+    /// - From inside a kernel, v1 only allows calling other `@compute` helpers — every other
+    ///   free/method call is rejected.
+    pub(super) fn check_compute_call(
+        &self,
+        callee: &crate::function_table::FunctionTableInfo,
+        position: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if callee.is_compute && !self.current_function_is_compute {
+            diagnostics.report_error(
+                format!(
+                    "cannot call @compute kernel '{}' like a CPU function; use Compute.run(\"{}\", ...) instead",
+                    callee.name, callee.name
+                ),
+                Some(position),
+            );
+            return;
+        }
+        if self.current_function_is_compute && !callee.is_compute {
+            // Kernel-safe host/math helpers live on `Gpu` / `GpuMath` (stdlib); their mangled
+            // names are `Gpu_*` / `GpuMath_*`. Everything else is a CPU function and is rejected.
+            let allowed_helper = callee.name.starts_with("Gpu_")
+                || callee.name.starts_with("GpuMath_")
+                || callee.name == "Gpu_workgroup_barrier"
+                || callee.name == "Gpu_storage_barrier";
+            if !allowed_helper {
+                diagnostics.report_error(
+                    format!(
+                        "cannot call non-@compute function '{}' from a @compute kernel; only other @compute helpers and Gpu/GpuMath builtins are allowed",
+                        callee.name
+                    ),
+                    Some(position),
+                );
+            }
+        }
+    }
+
 }

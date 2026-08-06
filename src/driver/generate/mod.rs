@@ -222,7 +222,10 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                 }
             }
             StatementNode::Labeled(_, inner) => walk_stmt(inner, diagnostics),
-            StatementNode::Return(None) | StatementNode::Break(_) | StatementNode::Continue(_) => {}
+            StatementNode::Return(None)
+            | StatementNode::Break(_)
+            | StatementNode::Continue(_)
+            | StatementNode::WorkgroupDecl(_, _, _) => {}
         }
     }
 

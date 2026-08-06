@@ -1,0 +1,22 @@
+import system;
+import system.gpu;
+
+@compute(64)
+fun add(a: float[], b: float[], out: float[], n: int): void {
+    let i = global_id.x;
+    if (i < n) {
+        out[i] = a[i] + b[i];
+    }
+}
+
+async fun main(): void {
+    let a = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
+    let b = GpuBuffer<float>.from([10.0, 20.0, 30.0, 40.0]);
+    let out = GpuBuffer<float>.alloc(4);
+    await Compute.run_1d("add", [a.buffer_id(), b.buffer_id(), out.buffer_id()], 4);
+    // Native host stages buffers but does not execute WGSL; round-trip `a` proves write/read.
+    let ra = await a.read();
+    System.println(a.len());
+    System.println((int)ra[0]);
+    System.println((int)ra[3]);
+}

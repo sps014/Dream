@@ -1,0 +1,14 @@
+import system;
+
+@attribute
+public fun route(path: string): void {
+}
+
+@route("/users")
+public fun list_users(): void {
+    System.println("users");
+}
+
+fun main(): void {
+    list_users();
+}

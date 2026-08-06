@@ -1,0 +1,5 @@
+// @compute kernels cannot contain string / heap types.
+@compute
+fun bad(s: string): void {
+    let i = global_id.x;
+}

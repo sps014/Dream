@@ -579,6 +579,10 @@ pub struct FunctionTableInfo {
     /// net. Calling it is only permitted from another `@unsafe` function/method — checked at every
     /// call site (see `Analyzer::check_unsafe_call`, `src/semantics/analyzer/calls/mod.rs`).
     pub is_unsafe: bool,
+    /// True when the declaration carries `@compute`: it is a WebGPU compute kernel (body emitted as
+    /// WGSL, not WASM). Calling it like a CPU function is rejected; kernels may only call other
+    /// `@compute` helpers (see `Analyzer::check_compute_call`).
+    pub is_compute: bool,
     pub intrinsic_name: Option<String>,
     /// Accessibility of the declaration. For methods this gates external calls (private methods
     /// may only be called from within their declaring type; `internal` ones from anywhere in the
@@ -617,6 +621,7 @@ impl FunctionTableInfo {
             is_async: false,
             is_static: false,
             is_unsafe: false,
+            is_compute: false,
             intrinsic_name: None,
             visibility: Visibility::Public,
             declaring_file: None,
@@ -654,6 +659,7 @@ impl FunctionTableInfo {
         info.is_async = func.is_async;
         info.is_static = func.is_static;
         info.is_unsafe = func.attributes.iter().any(|a| a.name.text == "unsafe");
+        info.is_compute = dream_abi::attributes::has_compute_attr(&func.attributes);
         info.intrinsic_name = intrinsic_name;
         // `extern` functions/methods are interop entry points (WASM imports): they cannot be
         // host-exported and privacy is meaningless for them, so they are always call-visible.

@@ -406,6 +406,7 @@ impl<'a> Analyzer<'a> {
         }
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_compute_call(&store_sig, method.position, diagnostics);
 
         let mut expected_params = store_sig.parameters.clone();
         let mut expected_defaults = store_sig.defaults.clone();
@@ -577,6 +578,7 @@ impl<'a> Analyzer<'a> {
         };
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_compute_call(&store_sig, method.position, diagnostics);
 
         let mut expected_params = store_sig.parameters.clone();
         let mut expected_defaults = store_sig.defaults.clone();

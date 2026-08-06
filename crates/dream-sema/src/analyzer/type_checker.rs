@@ -3,7 +3,8 @@ use dream_diagnostics::DiagnosticBag;
 use crate::errors::SemanticError;
 use crate::function_control_flow::FunctionControlGraph;
 use crate::symbol_table::SymbolTable;
-use dream_syntax::nodes::{FunctionNode, StatementNode};
+use dream_syntax::nodes::{FunctionNode, StatementNode, Type};
+use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -20,19 +21,22 @@ impl<'a> Analyzer<'a> {
         let errors_before = diagnostics.errors().count();
         self.hir_begin_function(function);
         let is_unsafe = function.attributes.iter().any(|a| a.name.text == "unsafe");
+        let is_compute = dream_abi::attributes::has_compute_attr(&function.attributes);
         self.with_unsafe_flag(is_unsafe, |s| {
-            s.with_async_flag(function.is_async, |s| {
-                s.analyze_body(
-                    function.body,
-                    function,
-                    Some(&param_table),
-                    false,
-                    diagnostics,
-                )?;
-                // Enforce the v1 `await` placement rules (only in async functions, only at statement
-                // position) and that non-async functions contain no `await` at all.
-                s.check_await_positions(function, diagnostics);
-                Ok(())
+            s.with_compute_flag(is_compute, |s| {
+                s.with_async_flag(function.is_async, |s| {
+                    s.analyze_body(
+                        function.body,
+                        function,
+                        Some(&param_table),
+                        false,
+                        diagnostics,
+                    )?;
+                    // Enforce the v1 `await` placement rules (only in async functions, only at statement
+                    // position) and that non-async functions contain no `await` at all.
+                    s.check_await_positions(function, diagnostics);
+                    Ok(())
+                })
             })
         })?;
         self.hir_finish_function(diagnostics, errors_before);
@@ -66,6 +70,17 @@ impl<'a> Analyzer<'a> {
         if let Some(captures) = self.closure_captures.get(&function.name.text) {
             for (cap_name, cap_ty) in captures.clone() {
                 let _ = param_table.add_symbol(cap_name, cap_ty);
+            }
+        }
+        // Compute kernels get WGSL builtins as ordinary locals (`global_id.x`, …). `GpuId3` is
+        // defined in `system.gpu` (auto-loaded whenever any `@compute` is present).
+        if dream_abi::attributes::has_compute_attr(&function.attributes) {
+            let id3 = Type::Struct(
+                super::synthetic_token(TokenKind::IdentifierToken, "GpuId3"),
+                None,
+            );
+            for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
+                let _ = param_table.add_symbol(name.to_string(), id3.clone());
             }
         }
         Ok(param_table)
@@ -141,11 +156,29 @@ impl<'a> Analyzer<'a> {
             | StatementNode::FunctionInvocation(..)
             | StatementNode::MethodInvocation(..)
             | StatementNode::AwaitStmt(..)
-            | StatementNode::Lock(..) => {}
+            | StatementNode::Lock(..)
+            | StatementNode::WorkgroupDecl(..) => {}
         }
         match statement {
             StatementNode::Declaration(left, type_annotation, right, is_const) => self
                 .analyze_declaration(left, type_annotation, right, *is_const, &ctx, diagnostics)?,
+            StatementNode::WorkgroupDecl(name, ty, _size) => {
+                if !self.current_function_is_compute {
+                    diagnostics.report_error(
+                        "'@workgroup' declarations are only allowed inside '@compute' kernels"
+                            .to_string(),
+                        Some(name.position),
+                    );
+                } else {
+                    let arr_ty = Type::Array(Box::new(ty.clone()));
+                    if let Err(e) = symbol_table
+                        .borrow_mut()
+                        .add_symbol(name.text.clone(), arr_ty)
+                    {
+                        diagnostics.report_error(e.to_string(), Some(name.position));
+                    }
+                }
+            }
             StatementNode::TupleDeclaration {
                 names,
                 ty,

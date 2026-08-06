@@ -10,7 +10,7 @@ registers `@syntax_block("html")` (this sample does that in `html.dream`).
 
 | File | Role |
 |------|------|
-| `html.dream` | `@generator_module` + `@syntax_block("html")` + runtime `Html` helpers |
+| `html.dream` | `@generator` + `@syntax_block("html")` + runtime `Html` helpers |
 | `app.dream` | Tiny program that uses the DSL |
 | `dream.toml` | `[[generators]]` so you need not import the gen module |
 

@@ -504,7 +504,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    /// True when the cursor is on `@...` that precedes a `module` keyword (for `@generator_module`).
+    /// True when the cursor is on `@...` that precedes a `module` keyword.
     fn peek_past_attributes_is_module(&self) -> bool {
         self.core_keyword_after_attrs() == TokenKind::ModuleToken
     }
@@ -523,7 +523,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         // enforced simply by only ever looking for it here, before the `import`/declaration loops:
         // a second occurrence anywhere else in the file falls through to the "expected a
         // declaration" error below instead of being treated as a module decl. Leading `@attrs`
-        // (e.g. `@generator_module`) are allowed immediately before `module`.
+        // Attributes are allowed immediately before `module`.
         let module = if self.current_token().kind == TokenKind::ModuleToken
             || (self.current_token().kind == TokenKind::AtToken
                 && self.peek_past_attributes_is_module())

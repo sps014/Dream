@@ -3,14 +3,17 @@ use std::io::Error;
 use std::path::Path;
 use tracing::{error, info};
 
+use crate::driver::compute_gen::{self, GpuKernelInfo};
 use dream_syntax::nodes::ProgramNode;
 
 /// Emits a binary `.wasm` next to the `.wat`, plus an `.abi.json` describing the module's
-/// extern imports (for JS interop marshaling) and exported functions.
+/// extern imports (for JS interop marshaling) and exported functions. When `kernels` is
+/// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
     wat_text: &str,
     program: &ProgramNode,
+    kernels: &[GpuKernelInfo],
 ) -> Result<(), Error> {
     let base = Path::new(wat_path);
 
@@ -21,13 +24,18 @@ pub(crate) fn emit_wasm_and_abi(
             info!("created file: {}", wasm_path.display());
         }
         Err(e) => {
-            // Non-fatal: the `.wat` is still valid output; just warn.
             error!("could not assemble binary wasm: {}", e);
         }
     }
 
+    if !kernels.is_empty() {
+        let wgsl_path = base.with_extension("wgsl");
+        fs::write(&wgsl_path, compute_gen::join_wgsl_module(kernels))?;
+        info!("created file: {}", wgsl_path.display());
+    }
+
     let abi_path = base.with_extension("abi.json");
-    fs::write(&abi_path, build_abi_json(program))?;
+    fs::write(&abi_path, build_abi_json(program, kernels))?;
     info!("created file: {}", abi_path.display());
     Ok(())
 }
@@ -51,7 +59,7 @@ fn json_escape(s: &str) -> String {
 
 /// Builds the `.abi.json` describing extern imports and exported functions. The JS runtime uses
 /// this to wrap user-supplied import implementations with the correct value marshaling.
-pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
+pub(crate) fn build_abi_json(program: &ProgramNode, kernels: &[GpuKernelInfo]) -> String {
     fn type_name(t: Option<&dream_syntax::nodes::Type>) -> String {
         match t {
             Some(t) => t.get_type(),
@@ -59,9 +67,6 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         }
     }
 
-    // Emits one extern's ABI entry, or `None` for non-externs and `@intrinsic` declarations (which
-    // are lowered by the compiler and emit no WASM import). Shared by top-level functions and class
-    // / `extend` static externs so a host bridge keeps its ABI entry wherever it is declared.
     fn extern_entry(func: &dream_syntax::nodes::FunctionNode) -> Option<String> {
         if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
             return None;
@@ -89,8 +94,6 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         ))
     }
 
-    // Walk top-level externs plus class (`structs[].methods`) and `extend` (`extends[].methods`)
-    // static externs, so host bridges moved onto their owning class still appear in the sidecar.
     let mut externs = Vec::new();
     let class_methods = program.structs.iter().flat_map(|s| s.methods.iter());
     let extend_methods = program.extends.iter().flat_map(|e| e.methods.iter());
@@ -110,14 +113,25 @@ pub(crate) fn build_abi_json(program: &ProgramNode) -> String {
         if func.is_extern || func.generic_parameters.is_some() {
             continue;
         }
+        // `@compute` kernels are not WASM exports.
+        if dream_abi::attributes::has_compute_attr(&func.attributes) {
+            continue;
+        }
         if func.visibility.is_public() || func.name.text == dream_mir::abi::ENTRY_FN {
             exports.push(format!("\"{}\"", json_escape(&func.name.text)));
         }
     }
 
+    let gpu_section = if kernels.is_empty() {
+        String::new()
+    } else {
+        format!(",\n  \"gpu\": {{ {} }}", compute_gen::gpu_abi_json(kernels))
+    };
+
     format!(
-        "{{\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}]\n}}\n",
+        "{{\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}]{}\n}}\n",
         externs.join(",\n"),
         exports.join(", "),
+        gpu_section,
     )
 }

@@ -324,7 +324,10 @@ impl SyntaxTreeView {
                 }
             }
             StatementNode::Labeled(_, inner) => self.walk_stmt(inner, parent),
-            StatementNode::Return(None) | StatementNode::Break(_) | StatementNode::Continue(_) => {}
+            StatementNode::Return(None)
+            | StatementNode::Break(_)
+            | StatementNode::Continue(_)
+            | StatementNode::WorkgroupDecl(_, _, _) => {}
         }
     }
 }

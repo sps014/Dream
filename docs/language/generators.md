@@ -11,12 +11,12 @@ Generators inspect declarations and either:
 ## Register a generator
 
 ```dream
-@generator_module
-module myapp.gen.routes;
+import system.codegen;
 
-@generator("routes")
-public fun expand_routes(): void {
-    // Discovery stub — the compiler finds this module via import or dream.toml.
+@generator
+public fun routes(): void {
+    // Discovery stub — name is the function name (`routes`).
+    // Use CodeBuilder / types_with("Route") / emit_extend …
 }
 ```
 
@@ -30,9 +30,23 @@ path = "gen/routes.dream"
 
 | Attribute | Where | Meaning |
 |-----------|--------|---------|
-| `@generator_module` | `module` decl | This file participates in generator discovery |
-| `@generator("name")` | function | Named generator entry |
+| `@generator` | function | This function is a generator entry; name = function name |
 | `@syntax_block("intro")` | same function | Claims expression DSL `intro { … }` |
+
+### User-defined attributes
+
+Mark a bare top-level function `@attribute`. The function name is the attribute name (exact
+casing); its parameters are the `@name(...)` argument schema:
+
+```dream
+@attribute
+public fun route(path: string): void { }
+
+@route("/users")
+public fun list_users(): void { }
+```
+
+Generators query with `functions_with("route")` / `attribute_args("route")`.
 
 Trigger attributes such as `@json` must be known to the language. Generators query attributes by
 name on declaration symbols.
@@ -101,16 +115,16 @@ let body = b.to_string();
 
 Useful queries on declarations (see [CodeBuilder](../stdlib/codegen.md)):
 
-- `types()` / `types_with("attr")`
+- `types()` / `types_with("attr")` / `functions_with("attr")`
 - `fields()` / `methods()` / `constructors()` / `variants()`
-- `has_attribute("name")` / `attribute_string("name")`
+- `has_attribute("name")` / `attribute_string("name")` / `attribute_args("name")`
 - `is_async` / `is_ref` / `is_static`
 
 ## Checklist
 
 1. Decide **emit** (derive) vs **replace** (DSL) vs both.
-2. Use only attributes the language already recognizes (or get them added).
-3. Mark a module `@generator_module` and a function `@generator("…")` (plus `@syntax_block` if needed).
+2. Use builtin attributes, or define your own with `@attribute` on a top-level function.
+3. Mark a function `@generator` (plus `@syntax_block` if needed).
 4. Register via import or `[[generators]]`.
 5. Prefer `CodeBuilder` for multi-line bodies.
 6. Add a sample under `sample/generators/` or a golden test.
@@ -118,5 +132,4 @@ Useful queries on declarations (see [CodeBuilder](../stdlib/codegen.md)):
 ## See also
 
 - [CodeBuilder](../stdlib/codegen.md)
-- [JSON](../stdlib/json.md)
-- [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html)
+- [Attributes](attributes.md) (if present) / language overview

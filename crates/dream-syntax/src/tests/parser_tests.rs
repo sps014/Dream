@@ -103,6 +103,42 @@ fn test_parse_binary_expression_precedence() {
 }
 
 #[test]
+fn test_parse_unary_minus_after_comparison_and_arithmetic() {
+    // Unary must outrank binary so these parse without parentheses (see precedence.rs).
+    let cases = [
+        "fun f(t: int): bool { return t > -2; }",
+        "fun f(t: int): bool { return t >= -1; }",
+        "fun f(t: int): bool { return t == -1; }",
+        "fun f(a: int, b: int): int { return a + -b; }",
+        "fun f(a: int, b: int): int { return a * -b; }",
+        "fun f(t: float): bool { return t > -2.0; }",
+    ];
+    for code in cases {
+        let arena = bumpalo::Bump::new();
+        let (_, diagnostics) = parse_code(code, &arena);
+        assert!(
+            !diagnostics.has_errors(),
+            "expected clean parse for `{code}`, got errors"
+        );
+    }
+
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code("fun f(t: int): bool { return t > -2; }", &arena);
+    assert!(!diagnostics.has_errors());
+    let StatementNode::Return(Some(ExpressionNode::Binary(left, op, right))) =
+        &program.functions[0].body[0]
+    else {
+        panic!("expected `return t > -2`");
+    };
+    assert_eq!(op.kind, TokenKind::GreaterThanToken);
+    assert!(matches!(**left, ExpressionNode::Identifier(_)));
+    match &**right {
+        ExpressionNode::Unary(tok, _) => assert_eq!(tok.kind, TokenKind::MinusToken),
+        other => panic!("RHS of `>` should be unary minus, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_parse_extern_function() {
     let code = "extern fun alert(msg: string): void;";
     let arena = bumpalo::Bump::new();
@@ -135,8 +171,8 @@ fn test_parse_extern_with_js_attribute() {
         .iter()
         .find(|a| a.name.text == "js")
         .unwrap();
-    assert_eq!(js_attr.args.first().unwrap().text, "\"dom\"");
-    assert_eq!(js_attr.args.get(1).unwrap().text, "\"setText\"");
+    assert_eq!(js_attr.args.first().unwrap().display(), "\"dom\"");
+    assert_eq!(js_attr.args.get(1).unwrap().display(), "\"setText\"");
 }
 
 #[test]

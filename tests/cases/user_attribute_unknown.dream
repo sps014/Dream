@@ -1,0 +1,7 @@
+// `@route` without a matching `@attribute fun route(...)` is unknown.
+@route("/users")
+public fun list(): void {
+}
+
+fun main(): void {
+}

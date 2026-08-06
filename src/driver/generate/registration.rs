@@ -1,4 +1,4 @@
-//! Generator registration: `@generator_module`, imports, optional `dream.toml` [[generators]].
+//! Generator registration: `@generator` functions, imports, optional `dream.toml` [[generators]].
 
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::lexer::Lexer;
@@ -15,13 +15,13 @@ pub struct RegisteredGenerator {
     pub syntax_blocks: Vec<String>,
 }
 
-/// Discovers generators from `@generator_module` files and manifest paths.
+/// Discovers generators from files that contain `@generator` functions and manifest paths.
 pub fn discover_generators(
     acc: &ProgramAccumulator<'_>,
     diagnostics: &mut DiagnosticBag,
 ) -> Vec<RegisteredGenerator> {
     let mut out = Vec::new();
-    let mut paths: Vec<String> = acc.generator_module_files.clone();
+    let mut paths: Vec<String> = acc.generator_files.clone();
     paths.extend(acc.manifest_generator_paths.iter().cloned());
     paths.sort();
     paths.dedup();
@@ -74,20 +74,15 @@ fn scan_generator_file(
 
     let mut out = Vec::new();
     for f in &program.functions {
-        let gen_name = f
-            .attributes
-            .iter()
-            .find(|a| a.name.text == "generator")
-            .and_then(|a| a.args.first())
-            .map(|t| t.text.trim_matches('"').to_string());
-        let Some(name) = gen_name else {
+        if !f.attributes.iter().any(|a| a.name.text == "generator") {
             continue;
-        };
+        }
+        let name = f.name.text.clone();
         let syntax_blocks: Vec<String> = f
             .attributes
             .iter()
             .filter(|a| a.name.text == "syntax_block")
-            .filter_map(|a| a.args.first().map(|t| t.text.trim_matches('"').to_string()))
+            .filter_map(|a| a.args.first().and_then(|t| t.as_string().map(|s| s.to_string())))
             .collect();
         out.push(RegisteredGenerator {
             name,

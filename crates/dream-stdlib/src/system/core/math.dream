@@ -1,126 +1,68 @@
 module system.core;
 
-// Mathematical functions.
+// Mathematical functions. Trig and most transcendentals are host-native (`env.*`);
+// thin public wrappers expose them (Dream forbids `public` + `extern` on one symbol).
 public class Math {
-    // Returns the absolute value of `x`.
-    public static fun abs(x: double): double {
-        if (x < 0.0d) {
-            return 0.0d - x;
-        }
-        return x;
-    }
+    @js("env", "abs")
+    static extern fun abs_host(x: double): double;
+    public static fun abs(x: double): double { return Math.abs_host(x); }
 
-    // Returns the largest integer less than or equal to `x`.
-    public static fun floor(x: double): double {
-        let i = (double) (int) x;
-        if ((x < 0.0d) && (x != i)) {
-            return i - 1.0d;
-        }
-        return i;
-    }
+    @js("env", "floor")
+    static extern fun floor_host(x: double): double;
+    public static fun floor(x: double): double { return Math.floor_host(x); }
 
-    // Returns the smallest integer greater than or equal to `x`.
-    public static fun ceil(x: double): double {
-        let i = (double) (int) x;
-        if ((x > 0.0d) && (x != i)) {
-            return i + 1.0d;
-        }
-        return i;
-    }
+    @js("env", "ceil")
+    static extern fun ceil_host(x: double): double;
+    public static fun ceil(x: double): double { return Math.ceil_host(x); }
 
-    // Returns the value of `x` rounded to the nearest integer.
-    public static fun round(x: double): double {
-        if (x >= 0.0d) {
-            return Math.floor(x + 0.5d);
-        }
-        return Math.ceil(x - 0.5d);
-    }
+    @js("env", "round")
+    static extern fun round_host(x: double): double;
+    public static fun round(x: double): double { return Math.round_host(x); }
+
+    @js("env", "sqrt")
+    static extern fun sqrt_host(x: double): double;
 
     // Returns the square root of `x` or None.
     public static fun sqrt(x: double): Option<double> {
         if (x < 0.0d) {
             return Option.None;
         }
-        if ((x == 0.0d) || (x == 1.0d)) {
-            return Option.Some(x);
-        }
-        let guess = x / 2.0d;
-        let prev = 0.0d;
-        while (Math.abs(guess - prev) > 0.000001d) {
-            prev = guess;
-            guess = (guess + (x / guess)) / 2.0d;
-        }
-        return Option.Some(guess);
+        return Option.Some(Math.sqrt_host(x));
     }
 
-    // Returns `base` to the exponent power.
+    @js("env", "pow")
+    static extern fun pow_host(base: double, exponent: double): double;
     public static fun pow(base: double, exponent: double): double {
-        if (exponent == 0.0d) {
-            return 1.0d;
-        }
-        let e = (int) Math.abs(exponent);
-        let result = 1.0d;
-        let i = 0;
-        while (i < e) {
-            result = result * base;
-            i = i + 1;
-        }
-        if (exponent < 0.0d) {
-            return 1.0d / result;
-        }
-        return result;
+        return Math.pow_host(base, exponent);
     }
 
-    // Returns the sine of `x`.
-    public static fun sin(x: double): double {
-        let pi = 3.141592653589793d;
-        let normalized = x;
-        while (normalized > pi) {
-            normalized = normalized - (2.0d * pi);
-        }
-        while (normalized < (0.0d - pi)) {
-            normalized = normalized + (2.0d * pi);
-        }
+    @js("env", "sin")
+    static extern fun sin_host(x: double): double;
+    public static fun sin(x: double): double { return Math.sin_host(x); }
 
-        let term = normalized;
-        let sum = term;
-        let n = 1;
-        
-        while (Math.abs(term) > 0.000001d) {
-            term = (0.0d - term) * normalized * normalized / (double) ((2 * n) * ((2 * n) + 1));
-            sum = sum + term;
-            n = n + 1;
-            if (n > 10) { break; }
-        }
-        return sum;
-    }
+    @js("env", "cos")
+    static extern fun cos_host(x: double): double;
+    public static fun cos(x: double): double { return Math.cos_host(x); }
 
-    // Returns the cosine of `x`.
-    public static fun cos(x: double): double {
-        let pi = 3.141592653589793d;
-        let normalized = x;
-        while (normalized > pi) {
-            normalized = normalized - (2.0d * pi);
-        }
-        while (normalized < (0.0d - pi)) {
-            normalized = normalized + (2.0d * pi);
-        }
+    @js("env", "tan")
+    static extern fun tan_host(x: double): double;
+    public static fun tan(x: double): double { return Math.tan_host(x); }
 
-        let term = 1.0d;
-        let sum = term;
-        let n = 1;
+    @js("env", "asin")
+    static extern fun asin_host(x: double): double;
+    public static fun asin(x: double): double { return Math.asin_host(x); }
 
-        while (Math.abs(term) > 0.000001d) {
-            term = (0.0d - term) * normalized * normalized / (double) (((2 * n) - 1) * (2 * n));
-            sum = sum + term;
-            n = n + 1;
-            if (n > 10) { break; }
-        }
-        return sum;
-    }
+    @js("env", "acos")
+    static extern fun acos_host(x: double): double;
+    public static fun acos(x: double): double { return Math.acos_host(x); }
 
-    // Returns the tangent of `x`.
-    public static fun tan(x: double): double {
-        return Math.sin(x) / Math.cos(x);
+    @js("env", "atan")
+    static extern fun atan_host(x: double): double;
+    public static fun atan(x: double): double { return Math.atan_host(x); }
+
+    @js("env", "atan2")
+    static extern fun atan2_host(y: double, x: double): double;
+    public static fun atan2(y: double, x: double): double {
+        return Math.atan2_host(y, x);
     }
 }
