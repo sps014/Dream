@@ -63,7 +63,8 @@ impl<'a> Analyzer<'a> {
         let iface = expected;
         if self.is_interface_name(iface) {
             let given_class = given;
-            return self.implements_as_interface_ref(given_class, iface);
+            let mut sink = dream_diagnostics::DiagnosticBag::new(None);
+            return self.implements_as_interface_ref(given_class, iface, &mut sink);
         }
         false
     }

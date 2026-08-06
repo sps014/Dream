@@ -226,6 +226,11 @@ impl<'a> Analyzer<'a> {
         let mut mangled_name = method_fn(struct_name, &method.text);
         let mut effective_struct = struct_name.to_string();
 
+        // Concrete array: instantiate `extend T[]` so `arr.is_empty()` / query helpers resolve.
+        if struct_name.ends_with("[]") {
+            self.ensure_array_collection(struct_name, diagnostics);
+        }
+
         // Concrete class missing the method: try package extensions on implemented interfaces.
         let missing = self.function_table.get_function(&mangled_name).is_err()
             && !self.generic_functions.contains_key(&mangled_name);

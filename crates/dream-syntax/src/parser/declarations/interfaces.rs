@@ -129,20 +129,32 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> Result<crate::nodes::ExtendNode<'a>, Error> {
         self.match_token(TokenKind::ExtendToken);
 
+        // Track whether the bare target was an identifier (e.g. `T` / `Point`) vs a data-type
+        // keyword (`int`). `extend T[]` is the generic array template; `extend int[]` would be a
+        // concrete one-off (discouraged — use `T[]`).
+        let target_was_ident = self.current_token().kind == TokenKind::IdentifierToken;
         let mut target = if self.current_token().kind == TokenKind::DataTypeToken {
             self.match_token(TokenKind::DataTypeToken)
         } else {
             self.match_token(TokenKind::IdentifierToken)
         };
-        // Optional `[]` suffix so `extend int[] : IndexedCollection<int>` is a valid target.
-        // Nested arrays (`int[][]`) are allowed the same way as in `parse_type`.
+        let mut array_depth = 0usize;
         while self.current_token().kind == TokenKind::OpenBracketToken {
             self.match_token(TokenKind::OpenBracketToken);
             self.match_token(TokenKind::CloseBracketToken);
             target.text.push_str("[]");
+            array_depth += 1;
         }
 
-        let (generic_parameters, generic_constraints) = self.take_generic_params();
+        let (mut generic_parameters, generic_constraints) = self.take_generic_params();
+
+        // `extend T[]` — no `<T>` clause; the element name *is* the type parameter.
+        if generic_parameters.is_none() && array_depth == 1 && target_was_ident {
+            let elem = crate::nodes::types::strip_array(&target.text).to_string();
+            let mut param = target.clone();
+            param.text = elem;
+            generic_parameters = Some(vec![param]);
+        }
 
         // Optional `: Iface1, Comparable<int>, ...` implements clause: an `extend` block may declare
         // that its target satisfies one or more interfaces (e.g. `extend int : Comparable<int>`),

@@ -7,7 +7,7 @@
 use super::*;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::types::mangle_generic;
-use dream_syntax::nodes::{FunctionNode, ProgramNode, Type};
+use dream_syntax::nodes::{ExtendNode, FunctionNode, ProgramNode, Type};
 use dream_types::method_fn;
 use std::collections::HashMap;
 
@@ -421,28 +421,133 @@ impl<'a> Analyzer<'a> {
     /// True when a value of type `value` may be implicitly converted to interface-typed `target`
     /// (an upcast): `target` names an interface and `value`'s concrete class implements it.
     pub(in crate::analyzer) fn value_assignable_to_interface(
-        &self,
+        &mut self,
         target: &Type,
         value: &Type,
+        diagnostics: &mut DiagnosticBag,
     ) -> bool {
         let iface = target.get_type();
         if !self.is_interface_name(&iface) {
             return false;
         }
         let val = value.get_type();
-        self.implements_as_interface_ref(&val, &iface)
+        self.implements_as_interface_ref(&val, &iface, diagnostics)
     }
 
     /// True when `class_name` may be implicitly/explicitly widened to an interface *reference*
     /// (`iface_name`). A reference class upcasts by identity (same tagged pointer); a value
     /// (`struct`) type is *boxed* into a fresh tagged heap object at the upcast site (see the value
     /// struct case in `emit_cast`), so it too may become an interface reference.
+    ///
+    /// Array types (`int[]`, `Point[]`, …) are instantiated from `extend T[]` on first probe so
+    /// they participate in `Collection`/`IndexedCollection` assignability.
     pub(in crate::analyzer) fn implements_as_interface_ref(
-        &self,
+        &mut self,
         class_name: &str,
         iface_name: &str,
+        diagnostics: &mut DiagnosticBag,
     ) -> bool {
+        if class_name.ends_with("[]") {
+            self.ensure_array_collection(class_name, diagnostics);
+        }
         self.class_implements(class_name, iface_name)
+    }
+
+    /// Monomorphizes `extend T[] : IndexedCollection<T>` onto a concrete array type (`int[]`,
+    /// `Point[]`, …): required methods, `implements` recording, interface defaults, and package
+    /// `extend Collection` helpers.
+    pub(in crate::analyzer) fn ensure_array_collection(
+        &mut self,
+        array_ty: &str,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        use dream_syntax::nodes::types::{strip_array, ARRAY_EXTEND_KEY};
+
+        if !array_ty.ends_with("[]") {
+            return;
+        }
+        if !self.array_collections_attached.insert(array_ty.to_string()) {
+            return;
+        }
+        if !self.generic_extends.contains_key(ARRAY_EXTEND_KEY) {
+            return;
+        }
+
+        let elem_name = strip_array(array_ty);
+        let elem_ty = Self::concrete_type_from_str(elem_name);
+        let args = vec![elem_ty];
+
+        self.register_generic_extension_methods(ARRAY_EXTEND_KEY, array_ty, &args, diagnostics);
+
+        let exts: Vec<&'a ExtendNode<'a>> = self
+            .generic_extends
+            .get(ARRAY_EXTEND_KEY)
+            .cloned()
+            .unwrap_or_default();
+        for ext in exts {
+            if ext.implements.is_empty() {
+                continue;
+            }
+            let params = ext.generic_parameters.as_deref().unwrap_or(&[]);
+            let bindings = generic_bindings(params, &args);
+            let sub_impls: Vec<Type> = ext
+                .implements
+                .iter()
+                .map(|t| substitute_generic_type(t, &bindings))
+                .collect();
+            self.validate_implements(
+                array_ty,
+                &sub_impls,
+                &ext.methods,
+                &bindings,
+                ext.target.position,
+                diagnostics,
+            );
+        }
+
+        self.attach_array_interface_defaults(array_ty, diagnostics);
+    }
+
+    /// Registers inherited interface default bodies (`is_empty`, `all`, `first`, …) onto a
+    /// concrete array type after its `implements` entry is recorded.
+    fn attach_array_interface_defaults(
+        &mut self,
+        array_ty: &str,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let ifaces = self.implements.get(array_ty).cloned().unwrap_or_default();
+        let mut owned: Vec<FunctionNode<'a>> = Vec::new();
+        for iface in &ifaces {
+            let methods = self
+                .interface_methods
+                .get(iface)
+                .cloned()
+                .unwrap_or_default();
+            for m in methods {
+                if !m.is_default_impl || m.is_static {
+                    continue;
+                }
+                let mangled = method_fn(array_ty, &m.name.text);
+                if self.function_table.get_function(&mangled).is_ok() {
+                    continue;
+                }
+                if owned.iter().any(|p| p.name.text == m.name.text) {
+                    continue;
+                }
+                let mut cloned = (*m).clone();
+                cloned.is_default_impl = false;
+                owned.push(cloned);
+            }
+        }
+        for method in owned {
+            let node: &'a FunctionNode<'a> = self.arena.alloc(method);
+            self.register_methods_for(
+                array_ty,
+                std::slice::from_ref(node),
+                &GenericBindings::new(),
+                diagnostics,
+            );
+        }
     }
 
     /// True when `iface_method` and `class_method` have matching signatures (same parameter types

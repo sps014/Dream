@@ -77,7 +77,7 @@ impl<'a> Analyzer<'a> {
             // pointer); only the static type changes.
             let src = &expr_type_str;
             if self.is_interface_name(src)
-                || self.implements_as_interface_ref(src, &target_type_str)
+                || self.implements_as_interface_ref(src, &target_type_str, diagnostics)
             {
                 Ok(target_type.clone())
             } else {
@@ -127,7 +127,7 @@ impl<'a> Analyzer<'a> {
 
         // Implicit upcast to an interface: a value whose concrete class implements the interface
         // `left` is assignable to it (`let a: Animal = cat;`).
-        if self.value_assignable_to_interface(left, right) {
+        if self.value_assignable_to_interface(left, right, diagnostics) {
             return Ok(());
         }
 

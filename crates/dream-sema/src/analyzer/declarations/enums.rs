@@ -358,15 +358,16 @@ impl<'a> Analyzer<'a> {
     /// satisfied by the concrete bindings of one instantiation. Unlike class/function constraints,
     /// an unsatisfied attachment constraint is not an error — the methods simply do not attach.
     pub(in crate::analyzer) fn extension_constraints_satisfied(
-        &self,
+        &mut self,
         constraints: &[dream_syntax::nodes::GenericConstraint],
         bindings: &GenericBindings,
     ) -> bool {
+        let mut sink = DiagnosticBag::new(None);
         constraints.iter().all(|c| {
             bindings.get(&c.param.text).is_some_and(|concrete| {
                 c.bounds
                     .iter()
-                    .all(|bound| self.type_satisfies_bound(concrete, bound, bindings))
+                    .all(|bound| self.type_satisfies_bound(concrete, bound, bindings, &mut sink))
                     && c.kinds
                         .iter()
                         .all(|kind| self.type_satisfies_kind(concrete, *kind))

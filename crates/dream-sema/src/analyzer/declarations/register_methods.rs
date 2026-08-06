@@ -184,10 +184,14 @@ impl<'a> Analyzer<'a> {
             if ext.generic_parameters.is_some() {
                 // Generic extend blocks were stashed by `stash_generic_extensions` and are attached
                 // per instantiation in `ensure_*_instantiated`; here we only validate the target is
-                // a known generic union, struct, or interface.
-                if !self.generic_unions.contains_key(&target)
-                    && !self.generic_structs.contains_key(&target)
-                    && !self.generic_interfaces.contains_key(&target)
+                // a known generic union, struct, interface, or the `T[]` array template.
+                let target = &ext.target.text;
+                if target.ends_with("[]") {
+                    continue;
+                }
+                if !self.generic_unions.contains_key(target)
+                    && !self.generic_structs.contains_key(target)
+                    && !self.generic_interfaces.contains_key(target)
                 {
                     diagnostics.report_error(
                         format!(
@@ -228,19 +232,22 @@ impl<'a> Analyzer<'a> {
     /// name, so the methods are available to monomorphize at the first instantiation of that type
     /// (which can happen as early as `register_enums`). Validation of the target is deferred to
     /// `register_extensions`, once all type templates are registered.
+    ///
+    /// Generic array templates (`extend T[] { … }`) are keyed under [`ARRAY_EXTEND_KEY`] (`"[]"`),
+    /// not under the spelling `T[]`, so every concrete `Elem[]` shares one template.
     pub(in crate::analyzer) fn stash_generic_extensions(
         &mut self,
         node: &'a ProgramNode<'a>,
     ) {
+        use dream_syntax::nodes::types::ARRAY_EXTEND_KEY;
         for ext in node.extends.iter() {
             if ext.generic_parameters.is_some() {
-                // A generic type may have several `extend` blocks (e.g. a base `extend List<T>` plus a
-                // constrained `extend List<T : Comparable<T>>`); keep them all and attach each whose
-                // constraints the concrete instance satisfies.
-                self.generic_extends
-                    .entry(ext.target.text.clone())
-                    .or_default()
-                    .push(ext);
+                let key = if ext.target.text.ends_with("[]") {
+                    ARRAY_EXTEND_KEY.to_string()
+                } else {
+                    ext.target.text.clone()
+                };
+                self.generic_extends.entry(key).or_default().push(ext);
             }
         }
     }

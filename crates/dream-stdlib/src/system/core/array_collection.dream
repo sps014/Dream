@@ -1,18 +1,16 @@
 module system.core;
 
-// Primitive (and string) arrays implement `IndexedCollection` so they upcast to
-// `Collection`/`IndexedCollection` and share query defaults. Element types beyond this set still
-// need `List.from_array` until generic `extend T[]` exists.
-// `this.size()` inside these methods resolves to the builtin `ArrayLen` (checked before instance
-// dispatch), so the interface `size` slot does not recurse.
+// Every `T[]` implements `IndexedCollection<T>` (and thus `Collection<T>`). Instantiated on demand
+// for each concrete element type (`int[]`, `Point[]`, …).
+// `this.size()` resolves to the builtin `ArrayLen` (checked before instance dispatch).
 
-extend int[] : IndexedCollection<int> {
+extend T[] : IndexedCollection<T> {
     public fun size(): int {
         return this.size();
     }
 
     @get
-    public fun get(index: int): Option<int> {
+    public fun get(index: int): Option<T> {
         if (index < 0 || index >= this.size()) {
             return Option.None;
         }
@@ -20,178 +18,7 @@ extend int[] : IndexedCollection<int> {
     }
 
     @iterator
-    public fun iterator(): Iterator<int> {
-        return ArrayIterator<int>(this);
-    }
-}
-
-extend long[] : IndexedCollection<long> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<long> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<long> {
-        return ArrayIterator<long>(this);
-    }
-}
-
-extend uint[] : IndexedCollection<uint> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<uint> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<uint> {
-        return ArrayIterator<uint>(this);
-    }
-}
-
-extend ulong[] : IndexedCollection<ulong> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<ulong> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<ulong> {
-        return ArrayIterator<ulong>(this);
-    }
-}
-
-extend byte[] : IndexedCollection<byte> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<byte> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<byte> {
-        return ArrayIterator<byte>(this);
-    }
-}
-
-extend bool[] : IndexedCollection<bool> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<bool> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<bool> {
-        return ArrayIterator<bool>(this);
-    }
-}
-
-extend float[] : IndexedCollection<float> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<float> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<float> {
-        return ArrayIterator<float>(this);
-    }
-}
-
-extend double[] : IndexedCollection<double> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<double> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<double> {
-        return ArrayIterator<double>(this);
-    }
-}
-
-extend char[] : IndexedCollection<char> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<char> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<char> {
-        return ArrayIterator<char>(this);
-    }
-}
-
-extend string[] : IndexedCollection<string> {
-    public fun size(): int {
-        return this.size();
-    }
-
-    @get
-    public fun get(index: int): Option<string> {
-        if (index < 0 || index >= this.size()) {
-            return Option.None;
-        }
-        return Option.Some(this[index]);
-    }
-
-    @iterator
-    public fun iterator(): Iterator<string> {
-        return ArrayIterator<string>(this);
+    public fun iterator(): Iterator<T> {
+        return ArrayIterator<T>(this);
     }
 }

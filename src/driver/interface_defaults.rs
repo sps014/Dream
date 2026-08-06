@@ -181,12 +181,12 @@ pub(crate) fn generate_interface_default_impls<'a>(
         );
     }
 
-    // Snapshot extends that declare `implements` (e.g. `extend int[] : IndexedCollection<int>`).
-    // Walk a copy of indices so we can append more extends without borrowing conflicts.
+    // Snapshot extends that declare `implements` (e.g. concrete `extend int : Comparable<int>`).
+    // Generic templates (`extend T[]`, `extend Collection<T>`) are skipped — they instantiate lazily.
     let extend_impl_indices: Vec<usize> = all_extends
         .iter()
         .enumerate()
-        .filter(|(_, e)| !e.implements.is_empty())
+        .filter(|(_, e)| !e.implements.is_empty() && e.generic_parameters.is_none())
         .map(|(i, _)| i)
         .collect();
     for idx in extend_impl_indices {

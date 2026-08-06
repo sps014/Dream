@@ -38,7 +38,7 @@ With `import system.collections;`, package methods attach via `extend Collection
 
 `Seq<T>` is a small chaining wrapper (`.filter` / `.map` / `.take` / `.skip` / `.distinct` / `.order_by` / `.flat_map` / `.to_list`) over an eager `List` snapshot.
 
-Primitive and `string` arrays (`int[]`, `string[]`, …) implement `IndexedCollection` (and thus `Collection`) in bootstrap — pass them anywhere a collection is expected, and call query helpers after importing `system.collections`. Other element types still need `List.from_array(arr)` until generic `extend T[]` exists.
+Primitive and `string` arrays — and any `T[]` — implement `IndexedCollection` (and thus `Collection`) via a single bootstrap `extend T[]` template, instantiated per concrete element type.
 
 ## `List<T>`
 

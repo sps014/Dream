@@ -231,7 +231,7 @@ impl<'a> Analyzer<'a> {
     /// substituted with the same bindings so `Comparable<T>` becomes `Comparable<int>` before the
     /// `implements` lookup; the concrete argument must implement that (mangled) interface.
     pub(super) fn verify_generic_constraints(
-        &self,
+        &mut self,
         constraints: &[dream_syntax::nodes::GenericConstraint],
         bindings: &GenericBindings,
         position: &TextSpan,
@@ -242,7 +242,7 @@ impl<'a> Analyzer<'a> {
                 continue;
             };
             for bound in &constraint.bounds {
-                if !self.type_satisfies_bound(concrete, bound, bindings) {
+                if !self.type_satisfies_bound(concrete, bound, bindings, diagnostics) {
                     diagnostics.report_error(
                         format!(
                             "type '{}' does not satisfy the constraint '{}' on generic parameter '{}' (it does not implement that interface)",
@@ -438,10 +438,11 @@ impl<'a> Analyzer<'a> {
     /// True when `concrete` implements the interface named by `bound` (after substituting the
     /// monomorphization `bindings` into `bound`, e.g. `Comparable<T>` -> `Comparable<int>`).
     pub(super) fn type_satisfies_bound(
-        &self,
+        &mut self,
         concrete: &Type,
         bound: &Type,
         bindings: &GenericBindings,
+        diagnostics: &mut DiagnosticBag,
     ) -> bool {
         let bound = substitute_generic_type(bound, bindings);
         let iface = match Self::resolve_struct_parts(&bound) {
@@ -453,7 +454,7 @@ impl<'a> Analyzer<'a> {
             Some((base, args)) => mangle_generic(&base, &args),
             None => concrete.get_type(),
         };
-        self.class_implements(&concrete_name, &iface)
+        self.implements_as_interface_ref(&concrete_name, &iface, diagnostics)
     }
 
     /// Builds the implicit `this` parameter injected as the first argument of every method.

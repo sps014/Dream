@@ -88,6 +88,12 @@ pub fn strip_array(type_name: &str) -> &str {
     type_name.strip_suffix("[]").unwrap_or(type_name)
 }
 
+/// Key under which generic `extend T[] { … }` templates are stashed in the analyzer's
+/// `generic_extends` map. Concrete element types (`int[]`, `Point[]`, …) instantiate from this
+/// entry on demand — there is no per-primitive copy of the array Collection impl.
+pub const ARRAY_EXTEND_KEY: &str = "[]";
+
+
 /// The reserved member name of a type's constructor declaration (`constructor(...) { ... }`).
 /// The parser recognizes it, semantics validates it, and codegen mangles it (via the backend
 /// `constructor_fn`). Single source of truth so the spelling never drifts between layers.

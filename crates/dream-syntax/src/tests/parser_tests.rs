@@ -256,19 +256,21 @@ fn test_parse_extend_implements() {
 
 #[test]
 fn test_parse_extend_array_target() {
-    let code = "extend int[] : IndexedCollection<int> { public fun size(): int { return this.size(); } }";
+    let code = "extend T[] : IndexedCollection<T> { public fun size(): int { return this.size(); } }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
 
     assert!(
         !diagnostics.has_errors(),
-        "extend int[] should parse cleanly"
+        "extend T[] should parse cleanly"
     );
     assert_eq!(program.extends.len(), 1);
     let ext = &program.extends[0];
-    assert_eq!(ext.target.text, "int[]");
+    assert_eq!(ext.target.text, "T[]");
+    assert!(ext.generic_parameters.is_some());
+    assert_eq!(ext.generic_parameters.as_ref().unwrap()[0].text, "T");
     assert_eq!(ext.implements.len(), 1);
-    assert_eq!(ext.implements[0].get_type(), "IndexedCollection_int");
+    assert_eq!(ext.implements[0].display_name(), "IndexedCollection<T>");
 }
 
 #[test]
