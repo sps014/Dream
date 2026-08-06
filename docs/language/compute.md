@@ -16,10 +16,13 @@ fun add(a: float[], b: float[], out: float[], n: int): void {
 }
 
 async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) { return; }
     let a = GpuBuffer<float>.from([1.0, 2.0, 3.0]);
     let b = GpuBuffer<float>.from([10.0, 20.0, 30.0]);
     let out = GpuBuffer<float>.alloc(3);
-    await Compute.run_1d("add", [a.buffer_id(), b.buffer_id(), out.buffer_id()], 3);
+    let r = await Compute.run_1d("add", [a, b, out], 3);
+    if (r.is_err()) { return; }
     print(await out.read());
 }
 ```
@@ -79,7 +82,7 @@ WebGPU has **no** global barrier across workgroups. Algorithms that need one (e.
 
 ```dream
 let shader = GpuShader.from_wgsl(WGSL_SOURCE, "main");
-await Compute.run_shader(shader, buffer_ids, 64, 1, 1);
+let r = await Compute.run_shader(shader, [buf], 64, 1, 1);
 ```
 
 See also [stdlib GPU](../stdlib/gpu.md).

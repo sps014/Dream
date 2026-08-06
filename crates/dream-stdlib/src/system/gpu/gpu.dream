@@ -1,6 +1,48 @@
 module system.gpu;
 
-// WebGPU compute support. Auto-loaded whenever any `@compute` kernel is present.
+// WebGPU compute + present. Auto-loaded when any `@compute` kernel is present.
+
+/// Failure from GPU init / dispatch / present.
+public class GpuError : Error {
+    _code: string;
+    _message: string;
+
+    public constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    public fun message(): string {
+        return this._message;
+    }
+
+    public fun code(): string {
+        return this._code;
+    }
+
+    public static fun unavailable(message: string): GpuError {
+        return GpuError("UNAVAILABLE", message);
+    }
+
+    public static fun timeout(message: string): GpuError {
+        return GpuError("TIMEOUT", message);
+    }
+
+    public static fun validation(message: string): GpuError {
+        return GpuError("VALIDATION", message);
+    }
+
+    public static fun other(message: string): GpuError {
+        return GpuError("EIO", message);
+    }
+
+    public static fun from_code(code: int, detail: string): GpuError {
+        if (code == 1) { return GpuError.unavailable(detail); }
+        if (code == 2) { return GpuError.timeout(detail); }
+        if (code == 3) { return GpuError.validation(detail); }
+        return GpuError.other(detail);
+    }
+}
 
 /// 3-component id used by compute builtins (`global_id`, `local_id`, …).
 public struct GpuId3 {
@@ -17,10 +59,6 @@ public class GpuBuffer<T : unmanaged> {
 
     public fun len(): int {
         return this.length;
-    }
-
-    public fun buffer_id(): int {
-        return this.id;
     }
 
     public static fun alloc(n: int): GpuBuffer<T> {
@@ -51,15 +89,102 @@ public class GpuBuffer<T : unmanaged> {
         Gpu.buffer_write_bytes(this.id, out);
     }
 
+    /// Partial CPU→GPU write starting at element `offset`.
+    public fun write_at(offset: int, data: T[]): void {
+        if (offset < 0 || data.size() < 0) { return; }
+        if (offset + data.size() > this.length) {
+            System.println("GpuBuffer.write_at: out of bounds");
+            return;
+        }
+        let n = data.size();
+        let out = Buffer.alloc<byte>(n * this.stride);
+        for (let i = 0; i < n; i = i + 1) {
+            let eb = Bytes.of(data[i]);
+            for (let j = 0; j < this.stride; j = j + 1) {
+                out[i * this.stride + j] = eb[j];
+            }
+        }
+        Gpu.buffer_write_bytes_at(this.id, offset * this.stride, out);
+    }
+
     public async fun read(): T[] {
         let bytes = await Gpu.buffer_read_bytes(this.id, this.length * this.stride);
-        let out = Buffer.alloc<T>(this.length);
-        for (let i = 0; i < this.length; i = i + 1) {
-            let slice = Buffer.alloc<byte>(this.stride);
-            for (let j = 0; j < this.stride; j = j + 1) {
-                slice[j] = bytes[i * this.stride + j];
+        return GpuBuffer<T>.decode(bytes, this.length, this.stride);
+    }
+
+    public async fun read_at(offset: int, count: int): T[] {
+        if (offset < 0 || count < 0 || offset + count > this.length) {
+            return Buffer.alloc<T>(0);
+        }
+        let bytes = await Gpu.buffer_read_bytes_at(
+            this.id,
+            offset * this.stride,
+            count * this.stride
+        );
+        return GpuBuffer<T>.decode(bytes, count, this.stride);
+    }
+
+    static fun decode(bytes: byte[], count: int, stride: int): T[] {
+        let out = Buffer.alloc<T>(count);
+        for (let i = 0; i < count; i = i + 1) {
+            let slice = Buffer.alloc<byte>(stride);
+            for (let j = 0; j < stride; j = j + 1) {
+                slice[j] = bytes[i * stride + j];
             }
             out[i] = Bytes.to<T>(slice);
+        }
+        return out;
+    }
+}
+
+/// Ping-pong pair of storage buffers.
+public class GpuSwap<T : unmanaged> {
+    public a: GpuBuffer<T>;
+    public b: GpuBuffer<T>;
+    public use_a: bool;
+
+    public static fun alloc(n: int): GpuSwap<T> {
+        let s = GpuSwap<T>();
+        s.a = GpuBuffer<T>.alloc(n);
+        s.b = GpuBuffer<T>.alloc(n);
+        s.use_a = true;
+        return s;
+    }
+
+    public fun front(): GpuBuffer<T> {
+        return this.use_a ? this.a : this.b;
+    }
+
+    public fun back(): GpuBuffer<T> {
+        return this.use_a ? this.b : this.a;
+    }
+
+    public fun swap(): void {
+        this.use_a = !this.use_a;
+    }
+}
+
+/// Pack little-endian scalar uniforms for `Compute.run_*` extra uniform blobs.
+public class Uniforms {
+    public static fun pack_i32(values: int[]): byte[] {
+        let out = Buffer.alloc<byte>(values.size() * 4);
+        for (let i = 0; i < values.size(); i = i + 1) {
+            let v = values[i];
+            out[i * 4] = (byte)(v & 255);
+            out[i * 4 + 1] = (byte)((v >> 8) & 255);
+            out[i * 4 + 2] = (byte)((v >> 16) & 255);
+            out[i * 4 + 3] = (byte)((v >> 24) & 255);
+        }
+        return out;
+    }
+
+    public static fun pack_f32(values: float[]): byte[] {
+        let out = Buffer.alloc<byte>(values.size() * 4);
+        for (let i = 0; i < values.size(); i = i + 1) {
+            let eb = Bytes.of(values[i]);
+            for (let j = 0; j < 4; j = j + 1) {
+                out[i * 4 + j] = eb[j];
+            }
         }
         return out;
     }
@@ -78,35 +203,191 @@ public class GpuShader {
 
 /// High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
 public class Compute {
-    public static async fun run_1d(kernel: string, buffer_ids: int[], n: int): void {
-        await Gpu.dispatch(kernel, buffer_ids, n, 1, 1);
+    public static async fun run_1d(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        n: int
+    ): Result<bool, GpuError> {
+        return await Compute.run_3d(kernel, buffers, n, 1, 1, Buffer.alloc<byte>(0));
     }
 
-    public static async fun run_2d(kernel: string, buffer_ids: int[], w: int, h: int): void {
-        await Gpu.dispatch(kernel, buffer_ids, w, h, 1);
+    public static async fun run_2d(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        w: int,
+        h: int
+    ): Result<bool, GpuError> {
+        return await Compute.run_3d(kernel, buffers, w, h, 1, Buffer.alloc<byte>(0));
+    }
+
+    public static async fun run_2d_uniforms(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        w: int,
+        h: int,
+        uniforms: byte[]
+    ): Result<bool, GpuError> {
+        return await Compute.run_3d(kernel, buffers, w, h, 1, uniforms);
+    }
+
+    public static async fun run_3d(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        sx: int,
+        sy: int,
+        sz: int,
+        uniforms: byte[]
+    ): Result<bool, GpuError> {
+        let ids = Buffer.alloc<int>(buffers.size());
+        for (let i = 0; i < buffers.size(); i = i + 1) {
+            ids[i] = buffers[i].id;
+        }
+        let code = await Gpu.dispatch(kernel, ids, sx, sy, sz, uniforms);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
     }
 
     public static async fun run_shader(
         shader: GpuShader,
-        buffer_ids: int[],
+        buffers: GpuBuffer<float>[],
         wx: int,
         wy: int,
         wz: int
-    ): void {
-        await Gpu.dispatch_shader(shader.id, buffer_ids, wx, wy, wz);
+    ): Result<bool, GpuError> {
+        let ids = Buffer.alloc<int>(buffers.size());
+        for (let i = 0; i < buffers.size(); i = i + 1) {
+            ids[i] = buffers[i].id;
+        }
+        let code = await Gpu.dispatch_shader(shader.id, ids, wx, wy, wz);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "shader dispatch failed"));
     }
 }
 
-/// Host bridges + kernel-only barrier stubs (lowered to WGSL inside `@compute`).
+/// RGBA8 texture (storage / blit source).
+public class GpuTexture {
+    public id: int;
+    public width: int;
+    public height: int;
+
+    public static fun rgba8(width: int, height: int): GpuTexture {
+        let t = GpuTexture();
+        t.id = Gpu.texture_create_rgba8(width, height);
+        t.width = width;
+        t.height = height;
+        return t;
+    }
+
+    public async fun write_rgba(pixels: byte[]): Result<bool, GpuError> {
+        let code = await Gpu.texture_write_rgba(this.id, pixels, 0, 0, this.width, this.height);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "texture write failed"));
+    }
+
+    public async fun write_rgba_at(
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        pixels: byte[]
+    ): Result<bool, GpuError> {
+        let code = await Gpu.texture_write_rgba(this.id, pixels, x, y, w, h);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "texture write_at failed"));
+    }
+
+    public async fun read_rgba(): byte[] {
+        return await Gpu.texture_read_rgba(this.id);
+    }
+}
+
+/// Canvas-backed WebGPU swapchain.
+public class GpuSurface {
+    public id: int;
+
+    public static fun from_canvas(canvas_id: string): Result<GpuSurface, GpuError> {
+        let sid = Gpu.surface_from_canvas(canvas_id);
+        if (sid < 0) {
+            return Result.Err(GpuError.unavailable("GpuSurface.from_canvas failed"));
+        }
+        let s = GpuSurface();
+        s.id = sid;
+        return Result.Ok(s);
+    }
+
+    public fun configure(width: int, height: int): void {
+        Gpu.surface_configure(this.id, width, height);
+    }
+
+    public async fun present(): Result<bool, GpuError> {
+        let code = await Gpu.surface_present(this.id);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "surface present failed"));
+    }
+}
+
+/// Fixed-function render helpers (v1: fullscreen blit only).
+public class GpuRenderPass {
+    public static async fun blit(surface: GpuSurface, source: GpuTexture): Result<bool, GpuError> {
+        let code = await Gpu.render_blit(surface.id, source.id);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "blit failed"));
+    }
+}
+
+/// Device lifecycle, host bridges, kernel barriers.
 public class Gpu {
+    @js("Dream", "gpuIsAvailable")
+    static extern fun is_available_host(): bool;
+
+    @js("Dream", "gpuTryInit")
+    static extern async fun try_init_host(): int;
+
+    @js("Dream", "gpuReady")
+    static extern fun ready_host(): bool;
+
+    @js("Dream", "gpuFrame")
+    static extern async fun frame_host(): void;
+
+    @js("Dream", "gpuTimestamp")
+    static extern async fun timestamp_host(): long;
+
+    public static fun is_available(): bool {
+        return Gpu.is_available_host();
+    }
+
+    public static fun ready(): bool {
+        return Gpu.ready_host();
+    }
+
+    public static async fun try_init(): Result<bool, GpuError> {
+        let code = await Gpu.try_init_host();
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "Gpu.try_init failed"));
+    }
+
+    public static async fun frame(): void {
+        await Gpu.frame_host();
+    }
+
+    public static async fun timestamp(): long {
+        return await Gpu.timestamp_host();
+    }
+
     @js("Dream", "gpuBufferAllocBytes")
     static extern fun buffer_alloc_bytes(n: int): int;
 
     @js("Dream", "gpuBufferWriteBytes")
     static extern fun buffer_write_bytes(id: int, data: byte[]): void;
 
+    @js("Dream", "gpuBufferWriteBytesAt")
+    static extern fun buffer_write_bytes_at(id: int, byte_offset: int, data: byte[]): void;
+
     @js("Dream", "gpuBufferReadBytes")
     static extern async fun buffer_read_bytes(id: int, n: int): byte[];
+
+    @js("Dream", "gpuBufferReadBytesAt")
+    static extern async fun buffer_read_bytes_at(id: int, byte_offset: int, n: int): byte[];
 
     @js("Dream", "gpuDispatch")
     static extern async fun dispatch(
@@ -114,8 +395,9 @@ public class Gpu {
         buffer_ids: int[],
         ex: int,
         ey: int,
-        ez: int
-    ): void;
+        ez: int,
+        uniforms: byte[]
+    ): int;
 
     @js("Dream", "gpuShaderFromWgsl")
     static extern fun shader_from_wgsl(source: string, entry: string): int;
@@ -127,10 +409,35 @@ public class Gpu {
         wx: int,
         wy: int,
         wz: int
-    ): void;
+    ): int;
 
-    @js("Dream", "gpuPresentRgba")
-    static extern async fun present_rgba(canvas_id: string, pixels: byte[], width: int, height: int): void;
+    @js("Dream", "gpuTextureCreateRgba8")
+    static extern fun texture_create_rgba8(width: int, height: int): int;
+
+    @js("Dream", "gpuTextureWriteRgba")
+    static extern async fun texture_write_rgba(
+        id: int,
+        pixels: byte[],
+        x: int,
+        y: int,
+        w: int,
+        h: int
+    ): int;
+
+    @js("Dream", "gpuTextureReadRgba")
+    static extern async fun texture_read_rgba(id: int): byte[];
+
+    @js("Dream", "gpuSurfaceFromCanvas")
+    static extern fun surface_from_canvas(canvas_id: string): int;
+
+    @js("Dream", "gpuSurfaceConfigure")
+    static extern fun surface_configure(id: int, width: int, height: int): void;
+
+    @js("Dream", "gpuSurfacePresent")
+    static extern async fun surface_present(id: int): int;
+
+    @js("Dream", "gpuRenderBlit")
+    static extern async fun render_blit(surface_id: int, texture_id: int): int;
 
     public static fun workgroup_barrier(): void {}
     public static fun storage_barrier(): void {}

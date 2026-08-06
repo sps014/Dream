@@ -2,9 +2,14 @@ module system;
 
 // Timing utilities.
 public class Time {
-    // Sleeps for `ms` milliseconds.
+    // Cooperative / virtual-clock sleep (scheduler timer queue). Prefer `Time.delay` for
+    // wall-clock animation pacing in the browser.
     @intrinsic("sleep")
     static extern async fun sleep(ms: int): void;
+
+    // Wall-clock delay (`setTimeout` in the browser; real sleep natively).
+    @js("Dream", "delayMs")
+    static extern async fun delay(ms: int): void;
 
     // Returns a high-resolution, monotonically increasing timestamp in nanoseconds.
     // Useful for benchmarking and measuring elapsed time.

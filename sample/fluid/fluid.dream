@@ -262,10 +262,15 @@ fun decay(field: float[], n: int, factor: float): void {
     }
 }
 
-@js("Dream", "delayMs")
-extern async fun delay_ms(ms: int): void;
-
-async fun present_density(dens: float[], vx: float[], vy: float[], n: int, cells: int): void {
+async fun present_density(
+    surface: GpuSurface,
+    tex: GpuTexture,
+    dens: float[],
+    vx: float[],
+    vy: float[],
+    n: int,
+    cells: int
+): void {
     let bytes = Buffer.alloc<byte>(cells * 4);
     for (let i = 0; i < cells; i = i + 1) {
         let d = dens[i];
@@ -310,13 +315,32 @@ async fun present_density(dens: float[], vx: float[], vy: float[], n: int, cells
         bytes[i * 4 + 2] = (byte)b;
         bytes[i * 4 + 3] = (byte)255;
     }
-    await Gpu.present_rgba("fluid", bytes, n, n);
+    let wr = await tex.write_rgba(bytes);
+    if (wr.is_err()) { return; }
+    let bl = await GpuRenderPass.blit(surface, tex);
+    if (bl.is_err()) { return; }
+    let _p = await surface.present();
 }
 
 async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("WebGPU unavailable — fluid needs Gpu.try_init");
+        return;
+    }
+
     app.init_fields();
     let n = app.n;
     let cells = n * n;
+
+    let surface_r = GpuSurface.from_canvas("fluid");
+    if (surface_r.is_err()) {
+        System.println("GpuSurface.from_canvas failed");
+        return;
+    }
+    let surface = surface_r.unwrap_or(GpuSurface());
+    surface.configure(n, n);
+    let tex = GpuTexture.rgba8(n, n);
 
     // Seed a bright dye block so the first frame is never empty.
     for (let y = n / 3; y < (2 * n) / 3; y = y + 1) {
@@ -331,16 +355,14 @@ async fun main(): void {
     canvas.addEventListener("pointerup", on_pointer_up);
     canvas.addEventListener("pointercancel", on_pointer_up);
     canvas.addEventListener("pointermove", on_pointer_move);
-    // Mouse fallbacks for browsers that are picky about pointer events.
     canvas.addEventListener("mousedown", on_pointer_down);
     canvas.addEventListener("mouseup", on_pointer_up);
     canvas.addEventListener("mousemove", on_pointer_move);
 
     System.println("fluid running — drag to paint");
-    await present_density(app.dens, app.vx, app.vy, n, cells);
+    await present_density(surface, tex, app.dens, app.vx, app.vy, n, cells);
 
     while (true) {
-        // Self-drive: orbiting force so the sim moves without input.
         let ang: double = (double)app.frame * 0.07d;
         let ox = n / 2 + (int)(Math.cos(ang) * (double)(n / 5));
         let oy = n / 2 + (int)(Math.sin(ang) * (double)(n / 5));
@@ -363,7 +385,6 @@ async fun main(): void {
         let dt: float = 0.9;
         advect_field(app.vx, app.vx_tmp, app.vx, app.vy, n, dt);
         advect_field(app.vy, app.vy_tmp, app.vx, app.vy, n, dt);
-        // Swap velocity into primary buffers.
         for (let i = 0; i < cells; i = i + 1) {
             app.vx[i] = app.vx_tmp[i];
             app.vy[i] = app.vy_tmp[i];
@@ -378,8 +399,8 @@ async fun main(): void {
         decay(app.vx, n, 0.995);
         decay(app.vy, n, 0.995);
 
-        await present_density(app.dens, app.vx, app.vy, n, cells);
+        await present_density(surface, tex, app.dens, app.vx, app.vy, n, cells);
         app.frame = app.frame + 1;
-        await delay_ms(16);
+        await Gpu.frame();
     }
 }

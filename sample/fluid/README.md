@@ -19,7 +19,7 @@ npx serve .
 # open http://localhost:3000/sample/fluid/fluid.html
 ```
 
-Requires a modern browser. The live loop is a CPU Stam-style sim (auto orbit + drag splat);
-`@compute` kernels are still compiled to WGSL in the sibling `.wgsl` / `.abi.json` for the
-WebGPU codegen demo. Native `dream run` stages GPU host stubs without drawing
-(see `docs/stdlib/gpu.md`).
+Requires a modern browser with WebGPU. The live loop is a CPU Stam-style sim (auto orbit +
+drag splat) presented via `GpuTexture` + `GpuRenderPass.blit` + `GpuSurface`. `@compute`
+kernels are still compiled to WGSL in the sibling `.wgsl` / `.abi.json`. Native `dream run`
+stages GPU host stubs without drawing (see `docs/stdlib/gpu.md`).
