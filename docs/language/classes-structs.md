@@ -114,9 +114,25 @@ Both classes and structs support all of the following.
 
 ### Visibility
 
-Members are **class-private by default** — reachable only from the type's own methods, regardless of file. Mark a member `public` to expose it. Separately, the type itself is **file-private by default** and needs `public` to be used from another file. See [Imports > Visibility](imports.md#visibility) for how the two axes combine.
+Members (fields, methods, static members, accessors, constructors) are **class-private by
+default** — reachable only from the type's own methods, regardless of file. Mark a member
+`internal` (module-wide) or `public` (everywhere the type is reachable) to expose it. `static`
+never implies visibility. Separately, the type itself is **file-private by default** and needs
+`public` (or `internal`) to be used from another file. Full rules: [Imports > Visibility](imports.md#visibility).
 
-A field may also carry `weak` or `unowned` (combinable with `public` in any order) to opt a strong-reference-cycle-prone field out of the compiler's cycle check — see [Memory > Reference cycles](memory.md#advanced-reference-cycles).
+```dream
+module utils.math;
+
+public class Counter {
+    count: int;                 // private: only Counter's methods
+    internal step: int;         // visible anywhere in module utils.math
+    public fun value(): int { return this.count; }
+}
+```
+
+A field may also carry `weak` or `unowned` (combinable with visibility in any order) to opt a
+strong-reference-cycle-prone field out of the compiler's cycle check — see
+[Memory > Reference cycles](memory.md#advanced-reference-cycles).
 
 ### Methods
 
@@ -131,14 +147,30 @@ class Counter {
 
 ### Properties
 
-Define computed properties with `get` / `set` accessors:
+Computed properties use TypeScript-style `get` / `set` accessors. Reading `obj.name` calls the
+getter; assigning `obj.name = v` calls the setter. They take the same visibility modifiers as
+methods (`public` / `internal` / private) and may be `static`:
 
 ```dream
-class Config {
-    public get version(): int { return 1; }
+class Temperature {
+    celsius: float;
+
+    public get fahrenheit(): float {
+        return this.celsius * 9.0f / 5.0f + 32.0f;
+    }
+
+    public set fahrenheit(value: float) {
+        this.celsius = (value - 32.0f) * 5.0f / 9.0f;
+    }
+}
+
+class App {
+    public static get version(): int { return 1; }
 }
 ```
 
+A getter-only property is fine; a setter without a getter is allowed but unusual. These are
+distinct from bracket indexers (`@get` / `@set` methods) below.
 ### Indexers and enumerators
 
 Opt into `obj[i]` / `obj[i] = v` by tagging methods with `@get` / `@set` (method names are free — they need not be called `get`/`set`). Opt into `for (let x in obj)` by tagging a zero-arg factory with `@iterator` (returning an enumerator object) and tagging that enumerator's step method with `@next` (returning `Option<T>`):
