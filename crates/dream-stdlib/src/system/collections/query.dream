@@ -1,0 +1,179 @@
+module system.collections;
+
+// Package query helpers on `Collection<T>`: available after `import system.collections;`.
+// Attached via `extend Collection<T>` so bootstrap `system.core` never depends on `List`/`Set`.
+
+extend Collection<T> {
+    public fun to_list(): List<T> {
+        let result = List<T>();
+        for (let x in this) {
+            result.push(x);
+        }
+        return result;
+    }
+
+    public fun filter(pred: fun(T): bool): List<T> {
+        let result = List<T>();
+        for (let x in this) {
+            if (pred(x)) {
+                result.push(x);
+            }
+        }
+        return result;
+    }
+
+    public fun map<U>(f: fun(T): U): List<U> {
+        let result = List<U>();
+        for (let x in this) {
+            result.push(f(x));
+        }
+        return result;
+    }
+
+    public fun reduce<A>(init: A, f: fun(A, T): A): A {
+        let acc = init;
+        for (let x in this) {
+            acc = f(acc, x);
+        }
+        return acc;
+    }
+
+    public fun collect_set(): Set<T> {
+        let result = Set<T>();
+        for (let x in this) {
+            result.add(x);
+        }
+        return result;
+    }
+
+    public fun distinct(): List<T> {
+        let seen = Set<T>();
+        let result = List<T>();
+        for (let x in this) {
+            if (!seen.contains(x)) {
+                seen.add(x);
+                result.push(x);
+            }
+        }
+        return result;
+    }
+
+    public fun flat_map<U>(f: fun(T): List<U>): List<U> {
+        let result = List<U>();
+        for (let x in this) {
+            let inner = f(x);
+            for (let y in inner) {
+                result.push(y);
+            }
+        }
+        return result;
+    }
+
+    public fun take(n: int): List<T> {
+        let result = List<T>();
+        let i = 0;
+        for (let x in this) {
+            if (i >= n) {
+                break;
+            }
+            result.push(x);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    public fun skip(n: int): List<T> {
+        let result = List<T>();
+        let i = 0;
+        for (let x in this) {
+            if (i >= n) {
+                result.push(x);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    public fun order_by(cmp: fun(T, T): int): List<T> {
+        let result = this.to_list();
+        result.sort_by(cmp);
+        return result;
+    }
+
+    public fun seq(): Seq<T> {
+        let items = List<T>();
+        for (let x in this) {
+            items.push(x);
+        }
+        return Seq<T>(items);
+    }
+}
+
+// Eager materializing query wrapper. Chain filter/map/take/skip, then read `.items` or use
+// Collection defaults via the list inside.
+public class Seq<T> {
+    public items: List<T>;
+
+    public constructor(items: List<T>) {
+        this.items = items;
+    }
+
+    public fun filter(pred: fun(T): bool): Seq<T> {
+        let result = List<T>();
+        for (let x in this.items) {
+            if (pred(x)) {
+                result.push(x);
+            }
+        }
+        return Seq<T>(result);
+    }
+
+    public fun map<U>(f: fun(T): U): Seq<U> {
+        let result = List<U>();
+        for (let x in this.items) {
+            result.push(f(x));
+        }
+        return Seq<U>(result);
+    }
+
+    public fun take(n: int): Seq<T> {
+        let result = List<T>();
+        let i = 0;
+        for (let x in this.items) {
+            if (i >= n) {
+                break;
+            }
+            result.push(x);
+            i = i + 1;
+        }
+        return Seq<T>(result);
+    }
+
+    public fun skip(n: int): Seq<T> {
+        let result = List<T>();
+        let i = 0;
+        for (let x in this.items) {
+            if (i >= n) {
+                result.push(x);
+            }
+            i = i + 1;
+        }
+        return Seq<T>(result);
+    }
+
+    public fun distinct(): Seq<T> {
+        return Seq<T>(this.items.distinct());
+    }
+
+    public fun order_by(cmp: fun(T, T): int): Seq<T> {
+        return Seq<T>(this.items.order_by(cmp));
+    }
+
+    public fun flat_map<U>(f: fun(T): List<U>): Seq<U> {
+        return Seq<U>(this.items.flat_map(f));
+    }
+
+    public fun to_list(): List<T> {
+        return this.items;
+    }
+}

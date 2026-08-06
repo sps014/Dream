@@ -18,9 +18,12 @@ impl<'a> Analyzer<'a> {
         if !self.is_interface_name(&name) {
             return false;
         }
-        let base = Self::resolve_struct_parts(ty)
+        // Prefer demangling the concrete name (`Collection_int` → `Collection`): a mangled
+        // `Type::Struct` token may spell the full instance name with no separate generic args.
+        let base = self
+            .demangle_generic_interface(&name)
             .map(|(b, _)| b)
-            .or_else(|| self.demangle_generic_interface(&name).map(|(b, _)| b))
+            .or_else(|| Self::resolve_struct_parts(ty).map(|(b, _)| b))
             .unwrap_or_else(|| name.clone());
         matches!(
             base.as_str(),

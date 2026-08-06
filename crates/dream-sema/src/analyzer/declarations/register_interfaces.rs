@@ -128,23 +128,27 @@ impl<'a> Analyzer<'a> {
             .register_instance(DefKind::Interface, base_name, args);
         self.type_ctx
             .register(DefKind::Interface, &mangled, Vec::new());
-        if self.interface_methods.contains_key(&mangled) {
-            return;
+        if !self.interface_methods.contains_key(&mangled) {
+            let template = match self.interface_decls.get(base_name) {
+                Some(t) => *t,
+                None => return,
+            };
+            let params = template.generic_parameters.as_deref().unwrap_or(&[]);
+            Self::check_generic_arity(
+                "interface",
+                base_name,
+                params.len(),
+                args.len(),
+                position,
+                diagnostics,
+            );
+            self.flatten_interface_methods(base_name, args, diagnostics, &mut Vec::new());
         }
-        let template = match self.interface_decls.get(base_name) {
-            Some(t) => *t,
-            None => return,
-        };
-        let params = template.generic_parameters.as_deref().unwrap_or(&[]);
-        Self::check_generic_arity(
-            "interface",
-            base_name,
-            params.len(),
-            args.len(),
-            position,
-            diagnostics,
-        );
-        let _ = self.flatten_interface_methods(base_name, args, diagnostics, &mut Vec::new());
+        // Parent flattening (IndexedCollection → Collection) may have created `Collection_int`
+        // already; still attach package `extend Collection<T>` methods onto that name.
+        if self.interface_extensions_attached.insert(mangled.clone()) {
+            self.register_generic_extension_methods(base_name, &mangled, args, diagnostics);
+        }
     }
 
     /// Builds (or rebuilds) the flattened method list for interface `base_name` with concrete
@@ -586,6 +590,9 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             }
+            // Attach `extend Collection<T>`-style package methods onto this class so
+            // `list.to_list()` resolves without going through the interface receiver.
+            self.attach_interface_extension_methods(&base, &args, class_name, diagnostics);
         }
         // Merge into any interfaces already recorded for this type (a class may gain further
         // interfaces through an `extend : Iface` block) rather than replacing them.
@@ -593,6 +600,52 @@ impl<'a> Analyzer<'a> {
         for iface in validated {
             if !entry.contains(&iface) {
                 entry.push(iface);
+            }
+        }
+    }
+
+    /// Registers package `extend Iface<…>` methods onto `target` (a concrete class or interface
+    /// instance name), walking parent interfaces so `extend Collection<T>` applies when the class
+    /// only declares `IndexedCollection<T>`.
+    fn attach_interface_extension_methods(
+        &mut self,
+        base_name: &str,
+        args: &[Type],
+        target: &str,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let mut stack = vec![(base_name.to_string(), args.to_vec())];
+        let mut seen = Vec::new();
+        while let Some((base, args)) = stack.pop() {
+            if seen.iter().any(|s| s == &base) {
+                continue;
+            }
+            seen.push(base.clone());
+            self.register_generic_extension_methods(&base, target, &args, diagnostics);
+            let parents = self
+                .interface_parents
+                .get(&base)
+                .cloned()
+                .unwrap_or_default();
+            let params = self
+                .interface_decls
+                .get(&base)
+                .and_then(|d| d.generic_parameters.clone())
+                .unwrap_or_default();
+            let bindings = if params.is_empty() {
+                Default::default()
+            } else {
+                generic_bindings(&params, &args)
+            };
+            for parent_ty in &parents {
+                let Some((pbase, pargs_raw)) = Self::resolve_struct_parts(parent_ty) else {
+                    continue;
+                };
+                let pargs: Vec<Type> = pargs_raw
+                    .iter()
+                    .map(|t| substitute_generic_type(t, &bindings))
+                    .collect();
+                stack.push((pbase, pargs));
             }
         }
     }

@@ -144,13 +144,19 @@ impl<'a> Analyzer<'a> {
 
     /// Returns true if `name` is a type that an `extend` block may attach methods to: a
     /// primitive (the shared [`PRIMITIVE_TYPE_NAMES`] list), the dynamic `object`/`js` reference
-    /// types, a registered struct, a generic struct template, or an enum.
+    /// types, an array of an extendable element (`int[]`), a registered struct, a generic struct
+    /// template, an enum, or an interface (including generic interface templates —
+    /// `extend Collection<T> { ... }`).
     pub(in crate::analyzer) fn is_extendable_target(&self, name: &str) -> bool {
+        if let Some(elem) = name.strip_suffix("[]") {
+            return self.is_extendable_target(elem);
+        }
         PRIMITIVE_TYPE_NAMES.contains(&name)
             || matches!(name, "object" | "js")
             || self.struct_table.get_struct(name).is_some()
             || self.generic_structs.contains_key(name)
             || self.enum_table.contains_key(name)
+            || self.interface_decls.contains_key(name)
     }
 
     /// Pass: register every `extend Type { ... }` block's methods. Extension methods are lowered
@@ -178,13 +184,14 @@ impl<'a> Analyzer<'a> {
             if ext.generic_parameters.is_some() {
                 // Generic extend blocks were stashed by `stash_generic_extensions` and are attached
                 // per instantiation in `ensure_*_instantiated`; here we only validate the target is
-                // a known generic union or struct.
+                // a known generic union, struct, or interface.
                 if !self.generic_unions.contains_key(&target)
                     && !self.generic_structs.contains_key(&target)
+                    && !self.generic_interfaces.contains_key(&target)
                 {
                     diagnostics.report_error(
                         format!(
-                            "Cannot extend unknown generic type '{}' (no generic union or class by that name)",
+                            "Cannot extend unknown generic type '{}' (no generic union, class, or interface by that name)",
                             target
                         ),
                         Some(ext.target.position),

@@ -9,6 +9,8 @@ public interface Iterator<T> {
 // Sized collection — the type users pass into APIs that need a count.
 // `for (let x in xs)` works for concrete `@iterator` types and for interface-typed
 // `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch).
+// List-returning query helpers (`to_list`, `filter`, `map`, …) live in `system.collections`
+// as `extend Collection<T>` so bootstrap does not depend on `List`.
 public interface Collection<T> {
     fun size(): int;
 
@@ -16,6 +18,53 @@ public interface Collection<T> {
 
     public fun is_empty(): bool {
         return this.size() == 0;
+    }
+
+    public fun all(pred: fun(T): bool): bool {
+        for (let x in this) {
+            if (!pred(x)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public fun any(pred: fun(T): bool): bool {
+        for (let x in this) {
+            if (pred(x)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public fun none(pred: fun(T): bool): bool {
+        return !this.any(pred);
+    }
+
+    public fun count_where(pred: fun(T): bool): int {
+        let n = 0;
+        for (let x in this) {
+            if (pred(x)) {
+                n = n + 1;
+            }
+        }
+        return n;
+    }
+
+    public fun find_where(pred: fun(T): bool): Option<T> {
+        for (let x in this) {
+            if (pred(x)) {
+                return Option.Some(x);
+            }
+        }
+        return Option.None;
+    }
+
+    public fun for_each(action: fun(T): void): void {
+        for (let x in this) {
+            action(x);
+        }
     }
 }
 

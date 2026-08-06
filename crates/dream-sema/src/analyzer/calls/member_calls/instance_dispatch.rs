@@ -7,6 +7,7 @@ use crate::errors::SemanticError;
 use dream_syntax::nodes::types::mangle_generic;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
+use dream_syntax::token::token_kind::TokenKind;
 use dream_types::method_fn;
 
 impl<'a> Analyzer<'a> {
@@ -151,12 +152,28 @@ impl<'a> Analyzer<'a> {
                 self.ensure_interface_instantiated(&base, &args, &method.position, diagnostics);
             }
         }
-        // Interface-typed receiver: the concrete implementation is unknown statically, so dispatch
-        // dynamically through the interface's method table rather than resolving a static method.
+        // Interface-typed receiver: package `extend Iface` methods (`Collection_int_to_list`) are
+        // ordinary `{iface}_{method}` entries — prefer those over itable dispatch.
         if let Some(iface_name) = self.interface_receiver_name(obj_type) {
-            return self.analyze_interface_method(
+            let ext_mangled = method_fn(&iface_name, &method.text);
+            let has_extension = self.function_table.get_function(&ext_mangled).is_ok()
+                || self.generic_functions.contains_key(&ext_mangled);
+            if !has_extension {
+                return self.analyze_interface_method(
+                    &iface_name,
+                    method,
+                    params,
+                    ctx,
+                    receiver,
+                    diagnostics,
+                );
+            }
+            // Resolve as an instance method on the interface type name itself.
+            return self.analyze_instance_method_resolved(
                 &iface_name,
+                obj_type,
                 method,
+                generic_args,
                 params,
                 ctx,
                 receiver,
@@ -181,7 +198,55 @@ impl<'a> Analyzer<'a> {
             None => obj_type.get_type(),
         };
 
-        let mangled_name = method_fn(&struct_name, &method.text);
+        self.analyze_instance_method_resolved(
+            &struct_name,
+            obj_type,
+            method,
+            generic_args,
+            params,
+            ctx,
+            receiver,
+            diagnostics,
+        )
+    }
+
+    /// Core instance-method resolution once `struct_name` (mangled receiver type) is known.
+    #[allow(clippy::too_many_arguments)]
+    fn analyze_instance_method_resolved(
+        &mut self,
+        struct_name: &str,
+        obj_type: &Type,
+        method: &SyntaxToken,
+        generic_args: &Option<Vec<Type>>,
+        params: &Vec<ExpressionNode<'a>>,
+        ctx: &super::super::super::AnalyzerContext<'a, '_>,
+        mut receiver: Option<dream_hir::HExpr>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        let mut mangled_name = method_fn(struct_name, &method.text);
+        let mut effective_struct = struct_name.to_string();
+
+        // Concrete class missing the method: try package extensions on implemented interfaces.
+        let missing = self.function_table.get_function(&mangled_name).is_err()
+            && !self.generic_functions.contains_key(&mangled_name);
+        if missing {
+            if let Some(ifaces) = self.implements.get(struct_name).cloned() {
+                for iface in ifaces {
+                    let ext = method_fn(&iface, &method.text);
+                    if self.function_table.get_function(&ext).is_ok()
+                        || self.generic_functions.contains_key(&ext)
+                    {
+                        let iface_ty =
+                            Type::Struct(synthetic_token(TokenKind::IdentifierToken, &iface), None);
+                        self.hir_set_cast(receiver.take(), &iface_ty);
+                        receiver = self.hir_take();
+                        mangled_name = ext;
+                        effective_struct = iface;
+                        break;
+                    }
+                }
+            }
+        }
 
         // Method-level generics (`pool.dispatch<TIn, TOut>(...)`): monomorphize before the plain
         // `function_table` path, which only knows the unbound template signature.
@@ -189,7 +254,7 @@ impl<'a> Analyzer<'a> {
             return self.analyze_generic_instance_method(
                 template,
                 &mangled_name,
-                &struct_name,
+                &effective_struct,
                 method,
                 generic_args,
                 params,
@@ -269,7 +334,7 @@ impl<'a> Analyzer<'a> {
                 })
         };
 
-        let call_target = format!("{}.{}", struct_name, method.text);
+        let call_target = format!("{}.{}", effective_struct, method.text);
         let saved_call_target = self.current_call_target_name.take();
         self.current_call_target_name = Some(call_target);
 
@@ -287,7 +352,7 @@ impl<'a> Analyzer<'a> {
 
         let store_sig = if self.function_table.is_overloaded(&mangled_name) {
             let mut selection_args = Vec::with_capacity(arg_types.len() + 1);
-            selection_args.push(struct_name.clone());
+            selection_args.push(effective_struct.clone());
             selection_args.extend(arg_types.iter().cloned());
             match self.select_function_overload(&mangled_name, &selection_args) {
                 Ok(sig) => sig,

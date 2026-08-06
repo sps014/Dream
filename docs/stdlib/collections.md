@@ -26,6 +26,20 @@ let scores: Map<string, int> = {"alice": 95, "bob": 80};
 
 You can also build collections with the bulk factories `List.from_array`, `Set.from_array`, and `Map.from_arrays`, or the instance methods `push_all` / `add_all` / `set_all`.
 
+## Query helpers (`Collection<T>`)
+
+Bootstrap [`Collection<T>`](../language/arrays.md#collection-protocols) provides eager predicates that work on any implementer (and on a `Collection<T>`-typed value):
+
+- `.all(pred)` / `.any(pred)` / `.none(pred)` / `.count_where(pred)` / `.find_where(pred)` / `.for_each(action)`
+
+With `import system.collections;`, package methods attach via `extend Collection<T>`:
+
+- `.to_list()` / `.filter(pred)` / `.map(f)` / `.flat_map(f)` / `.reduce(init, f)` / `.collect_set()` / `.distinct()` / `.take(n)` / `.skip(n)` / `.order_by(cmp)` / `.seq()`
+
+`Seq<T>` is a small chaining wrapper (`.filter` / `.map` / `.take` / `.skip` / `.distinct` / `.order_by` / `.flat_map` / `.to_list`) over an eager `List` snapshot.
+
+Primitive and `string` arrays (`int[]`, `string[]`, …) implement `IndexedCollection` (and thus `Collection`) in bootstrap — pass them anywhere a collection is expected, and call query helpers after importing `system.collections`. Other element types still need `List.from_array(arr)` until generic `extend T[]` exists.
+
 ## `List<T>`
 
 A growable sequence with O(1) random access and amortized O(1) append:

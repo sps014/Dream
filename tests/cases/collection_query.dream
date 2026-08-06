@@ -1,0 +1,45 @@
+import system;
+import system.collections;
+
+fun is_positive(n: int): bool { return n > 0; }
+fun is_three(n: int): bool { return n == 3; }
+fun gt_two(n: int): bool { return n > 2; }
+fun is_even(n: int): bool { return n % 2 == 0; }
+fun times_two(n: int): int { return n * 2; }
+fun add(a: int, b: int): int { return a + b; }
+fun gt_one(n: int): bool { return n > 1; }
+fun plus_ten(n: int): int { return n + 10; }
+fun asc(a: int, b: int): int { return a.compare(b); }
+
+fun sum_evens(xs: Collection<int>): int {
+    let evens = xs.filter(is_even);
+    return evens.reduce(0, add);
+}
+
+fun main(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(2);
+    xs.push(3);
+    xs.push(4);
+
+    System.println(xs.all(is_positive));
+    System.println(xs.any(is_three));
+    System.println(xs.count_where(gt_two));
+    System.println(xs.find_where(gt_two).unwrap_or(-1));
+
+    let doubled = xs.map(times_two);
+    System.println(doubled.size());
+    System.println(doubled.get(0).unwrap_or(-1));
+
+    System.println(sum_evens(xs));
+
+    let filtered = xs.seq().filter(gt_one).map(plus_ten).to_list();
+    System.println(filtered.reduce(0, add));
+
+    let from_iface: Collection<int> = xs;
+    System.println(from_iface.to_list().size());
+
+    System.println(xs.distinct().size());
+    System.println(xs.order_by(asc).get(0).unwrap_or(-1));
+}

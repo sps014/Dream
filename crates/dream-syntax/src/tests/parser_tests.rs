@@ -255,6 +255,23 @@ fn test_parse_extend_implements() {
 }
 
 #[test]
+fn test_parse_extend_array_target() {
+    let code = "extend int[] : IndexedCollection<int> { public fun size(): int { return this.size(); } }";
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(code, &arena);
+
+    assert!(
+        !diagnostics.has_errors(),
+        "extend int[] should parse cleanly"
+    );
+    assert_eq!(program.extends.len(), 1);
+    let ext = &program.extends[0];
+    assert_eq!(ext.target.text, "int[]");
+    assert_eq!(ext.implements.len(), 1);
+    assert_eq!(ext.implements[0].get_type(), "IndexedCollection_int");
+}
+
+#[test]
 fn test_parse_switch_expression_with_patterns() {
     let code = "fun f(s: Shape): int { return switch (s) { Circle(r) => r, Empty => 0, _ => 1 }; }";
     let arena = bumpalo::Bump::new();

@@ -122,18 +122,25 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     /// Parses an `extend Type { ... }` block: a set of methods attached to an existing type
-    /// (a primitive, `object`, or a struct). The body holds method declarations only (no
-    /// fields, no `constructor`/`del`).
+    /// (a primitive, `object`, array `T[]`, or a struct). The body holds method declarations only
+    /// (no fields, no `constructor`/`del`).
     pub(crate) fn parse_extend_declaration(
         &mut self,
     ) -> Result<crate::nodes::ExtendNode<'a>, Error> {
         self.match_token(TokenKind::ExtendToken);
 
-        let target = if self.current_token().kind == TokenKind::DataTypeToken {
+        let mut target = if self.current_token().kind == TokenKind::DataTypeToken {
             self.match_token(TokenKind::DataTypeToken)
         } else {
             self.match_token(TokenKind::IdentifierToken)
         };
+        // Optional `[]` suffix so `extend int[] : IndexedCollection<int>` is a valid target.
+        // Nested arrays (`int[][]`) are allowed the same way as in `parse_type`.
+        while self.current_token().kind == TokenKind::OpenBracketToken {
+            self.match_token(TokenKind::OpenBracketToken);
+            self.match_token(TokenKind::CloseBracketToken);
+            target.text.push_str("[]");
+        }
 
         let (generic_parameters, generic_constraints) = self.take_generic_params();
 

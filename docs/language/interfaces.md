@@ -80,6 +80,25 @@ A type that implements the child is a subtype of every parent — `List<T>` only
 
 Class `implements` lists stay comma-separated (`class Foo : A, B`); only interface parents use `+`.
 
+## Extending an interface
+
+An `extend` block may target an interface — including a generic one — to add **package methods** that are not part of the interface contract:
+
+```dream
+// in system.collections
+extend Collection<T> {
+    public fun to_list(): List<T> {
+        let result = List<T>();
+        for (let x in this) {
+            result.push(x);
+        }
+        return result;
+    }
+}
+```
+
+After `import system.collections;`, those methods are available on the interface type and on every implementer (`list.to_list()`, `(Collection<int>)xs.to_list()`). Implementers do not need to override them.
+
 ## Default methods
 
 A method may carry a **default body** that implementers inherit unless they override it. A default can call the interface's other methods on `this`, which still dispatch to the concrete type:

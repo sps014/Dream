@@ -1,0 +1,23 @@
+module system.core;
+
+// Cursor produced by `T[].iterator()` when an array participates as `Collection` /
+// `IndexedCollection`. Concrete `for (let x in arr)` still uses the native index loop.
+public class ArrayIterator<T> : Iterator<T> {
+    items: T[];
+    idx: int;
+
+    public constructor(items: T[]) {
+        this.items = items;
+        this.idx = 0;
+    }
+
+    @next
+    public fun next(): Option<T> {
+        if (this.idx >= this.items.size()) {
+            return Option.None;
+        }
+        let value = this.items[this.idx];
+        this.idx = this.idx + 1;
+        return Option.Some(value);
+    }
+}

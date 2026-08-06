@@ -134,9 +134,9 @@ System.println(ys.binary_search(2).unwrap_or(-1));  // 1
 
 `Iterator<T>`, `Collection<T>`, and `IndexedCollection<T>` live in bootstrap `system.core`.
 
-- `Collection<T>` — `size()` and `iterator()` (plus default `is_empty()`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`.
-- `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`get(index)`, defaults `first`/`last`). Implemented by `List` (which is therefore also a `Collection`).
-- `for (let x in xs)` works for arrays, concrete `@iterator` types, and interface-typed `Collection` / `IndexedCollection` / `Iterator`.
+- `Collection<T>` — `size()` and `iterator()` (plus default `is_empty()` and query helpers like `all` / `any`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`, and primitive/`string` arrays.
+- `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`get(index)`, defaults `first`/`last`). Implemented by `List` and by `int[]` / `string[]` / other scalar arrays.
+- `for (let x in xs)` works for arrays (native index loop), concrete `@iterator` types, and interface-typed `Collection` / `IndexedCollection` / `Iterator`.
 
 ```dream
 fun total_size(xs: Collection<string>): int {
@@ -149,5 +149,15 @@ fun sum(xs: Collection<int>): int {
         n = n + x;
     }
     return n;
+}
+
+fun from_array(xs: IndexedCollection<int>): int {
+    return xs.first().unwrap_or(0);
+}
+
+fun main(): void {
+    let arr: int[] = [1, 2, 3];
+    System.println(sum(arr));       // arrays upcast to Collection
+    System.println(from_array(arr));
 }
 ```

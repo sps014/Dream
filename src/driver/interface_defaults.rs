@@ -8,11 +8,15 @@
 //!
 //! Parent interfaces (`interface Child : Parent`) contribute their defaults too: implementing the
 //! child inherits defaults from the full ancestor closure unless the child overrides the method.
+//!
+//! The same inheritance applies to `extend Target : Iface` blocks (e.g. `extend int[] :
+//! IndexedCollection<int>`), so array/primitive implementers pick up `is_empty` / `all` / …
 
 use dream_sema::analyzer::{generic_bindings, substitute_generic_type};
 use dream_syntax::nodes::interface_node::InterfaceDeclarationNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{ExtendNode, FunctionNode, Type};
+use dream_syntax::token::syntax_token::SyntaxToken;
 
 /// The declared base name of an implemented interface type (`Container<int>` -> `"Container"`),
 /// read from the identifier token so it matches the interface's declared name. (Note `get_type()`
@@ -70,8 +74,78 @@ fn collect_iface_closure(
     }
 }
 
-/// For each class that implements an interface with default methods it does not itself define,
-/// appends a synthesized `extend <Class> { ... }` block carrying the inherited default bodies.
+fn collect_inherited_defaults<'a>(
+    implements: &[Type],
+    all_interfaces: &[InterfaceDeclarationNode<'a>],
+    mut defines: impl FnMut(&str) -> bool,
+) -> Vec<FunctionNode<'a>> {
+    let mut inherited: Vec<FunctionNode<'a>> = Vec::new();
+    let mut seen_methods: Vec<String> = Vec::new();
+    for impl_ty in implements {
+        let Some(iface_name) = interface_base_name(impl_ty) else {
+            continue;
+        };
+        let Some(iface_idx) = all_interfaces.iter().position(|i| i.name.text == iface_name) else {
+            continue;
+        };
+        let mut visited = Vec::new();
+        let mut closure = Vec::new();
+        collect_iface_closure(
+            iface_idx,
+            implemented_args(impl_ty),
+            all_interfaces,
+            &mut visited,
+            &mut closure,
+        );
+        for (idx, args) in closure {
+            let iface = &all_interfaces[idx];
+            let bindings = match &iface.generic_parameters {
+                Some(params) => generic_bindings(params, &args),
+                None => Default::default(),
+            };
+            for method in iface.methods.iter() {
+                if !method.is_default_impl || method.is_static {
+                    continue;
+                }
+                if defines(&method.name.text) || seen_methods.iter().any(|n| n == &method.name.text)
+                {
+                    continue;
+                }
+                seen_methods.push(method.name.text.clone());
+                let mut m = method.clone();
+                m.is_default_impl = false;
+                if !bindings.is_empty() {
+                    if let Some(ret) = &m.return_type {
+                        m.return_type = Some(substitute_generic_type(ret, &bindings));
+                    }
+                    for param in &mut m.parameters {
+                        param.type_ = substitute_generic_type(&param.type_, &bindings);
+                    }
+                }
+                inherited.push(m);
+            }
+        }
+    }
+    inherited
+}
+
+fn push_default_extend<'a>(
+    target: SyntaxToken,
+    generic_parameters: Option<Vec<SyntaxToken>>,
+    inherited: Vec<FunctionNode<'a>>,
+    out: &mut Vec<ExtendNode<'a>>,
+) {
+    if inherited.is_empty() {
+        return;
+    }
+    let mut ext = ExtendNode::new(target, generic_parameters, inherited);
+    ext.is_synthesized = true;
+    out.push(ext);
+}
+
+/// For each class (and each `extend Target : Iface` block) that implements an interface with
+/// default methods it does not itself define, appends a synthesized `extend` block carrying the
+/// inherited default bodies.
 ///
 /// Generic interfaces are supported: the interface's type parameters are substituted with the
 /// arguments spelled in the `implements` clause (`Container<int>` binds the interface's `T` to
@@ -89,77 +163,55 @@ pub(crate) fn generate_interface_default_impls<'a>(
         if class.implements.is_empty() {
             continue;
         }
-        let defines = |name: &str| -> bool {
+        let class_name = class.name.text.as_str();
+        let inherited = collect_inherited_defaults(&class.implements, all_interfaces, |name| {
             class.methods.iter().any(|m| m.name.text == name)
                 || all_extends.iter().any(|e| {
-                    e.target.text == class.name.text
-                        && e.methods.iter().any(|m| m.name.text == name)
+                    e.target.text == class_name && e.methods.iter().any(|m| m.name.text == name)
                 })
                 || synthesized.iter().any(|e| {
-                    e.target.text == class.name.text
-                        && e.methods.iter().any(|m| m.name.text == name)
+                    e.target.text == class_name && e.methods.iter().any(|m| m.name.text == name)
                 })
-        };
+        });
+        push_default_extend(
+            class.name.clone(),
+            class.generic_parameters.clone(),
+            inherited,
+            &mut synthesized,
+        );
+    }
 
-        let mut inherited: Vec<FunctionNode<'a>> = Vec::new();
-        let mut seen_methods: Vec<String> = Vec::new();
-        for impl_ty in &class.implements {
-            let Some(iface_name) = interface_base_name(impl_ty) else {
-                continue;
-            };
-            let Some(iface_idx) = all_interfaces.iter().position(|i| i.name.text == iface_name)
-            else {
-                continue;
-            };
-            let mut visited = Vec::new();
-            let mut closure = Vec::new();
-            collect_iface_closure(
-                iface_idx,
-                implemented_args(impl_ty),
-                all_interfaces,
-                &mut visited,
-                &mut closure,
-            );
-            for (idx, args) in closure {
-                let iface = &all_interfaces[idx];
-                let bindings = match &iface.generic_parameters {
-                    Some(params) => generic_bindings(params, &args),
-                    None => Default::default(),
-                };
-                for method in iface.methods.iter() {
-                    if !method.is_default_impl || method.is_static {
-                        continue;
-                    }
-                    if defines(&method.name.text)
-                        || seen_methods.iter().any(|n| n == &method.name.text)
-                    {
-                        continue;
-                    }
-                    seen_methods.push(method.name.text.clone());
-                    let mut m = method.clone();
-                    m.is_default_impl = false;
-                    if !bindings.is_empty() {
-                        if let Some(ret) = &m.return_type {
-                            m.return_type = Some(substitute_generic_type(ret, &bindings));
-                        }
-                        for param in &mut m.parameters {
-                            param.type_ = substitute_generic_type(&param.type_, &bindings);
-                        }
-                    }
-                    inherited.push(m);
-                }
-            }
-        }
-
-        if !inherited.is_empty() {
-            let mut ext = ExtendNode::new(
-                class.name.clone(),
-                class.generic_parameters.clone(),
-                inherited,
-            );
-            ext.is_synthesized = true;
-            synthesized.push(ext);
-        }
+    // Snapshot extends that declare `implements` (e.g. `extend int[] : IndexedCollection<int>`).
+    // Walk a copy of indices so we can append more extends without borrowing conflicts.
+    let extend_impl_indices: Vec<usize> = all_extends
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| !e.implements.is_empty())
+        .map(|(i, _)| i)
+        .collect();
+    for idx in extend_impl_indices {
+        let target_name = all_extends[idx].target.text.clone();
+        let implements = all_extends[idx].implements.clone();
+        let own_methods: Vec<String> = all_extends[idx]
+            .methods
+            .iter()
+            .map(|m| m.name.text.clone())
+            .collect();
+        let inherited = collect_inherited_defaults(&implements, all_interfaces, |name| {
+            own_methods.iter().any(|m| m == name)
+                || all_extends.iter().any(|e| {
+                    e.target.text == target_name && e.methods.iter().any(|m| m.name.text == name)
+                })
+                || synthesized.iter().any(|e| {
+                    e.target.text == target_name && e.methods.iter().any(|m| m.name.text == name)
+                })
+        });
+        push_default_extend(
+            all_extends[idx].target.clone(),
+            all_extends[idx].generic_parameters.clone(),
+            inherited,
+            &mut synthesized,
+        );
     }
 
     all_extends.extend(synthesized);

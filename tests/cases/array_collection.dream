@@ -1,0 +1,46 @@
+import system;
+import system.collections;
+
+fun is_even(n: int): bool { return n % 2 == 0; }
+fun times_two(n: int): int { return n * 2; }
+fun add(a: int, b: int): int { return a + b; }
+fun asc(a: int, b: int): int { return a.compare(b); }
+
+fun sum(xs: IndexedCollection<int>): int {
+    let total = 0;
+    let i = 0;
+    while (i < xs.size()) {
+        total = total + xs.get(i).unwrap_or(0);
+        i = i + 1;
+    }
+    return total;
+}
+
+fun sum_collection(xs: Collection<int>): int {
+    return xs.to_list().reduce(0, add);
+}
+
+fun main(): void {
+    let arr: int[] = [10, 20, 30];
+    System.println(sum(arr));
+    System.println(arr.is_empty());
+    System.println(arr.first().unwrap_or(-1));
+    System.println(arr.last().unwrap_or(-1));
+
+    let c: Collection<int> = arr;
+    System.println(sum_collection(c));
+    for (let x in c) {
+        System.println(x);
+    }
+
+    System.println(arr.filter(is_even).size());
+    System.println(arr.map(times_two).reduce(0, add));
+
+    let xs = List<int>();
+    xs.push(3);
+    xs.push(1);
+    xs.push(2);
+    xs.push(1);
+    System.println(xs.distinct().size());
+    System.println(xs.order_by(asc).get(0).unwrap_or(-1));
+}

@@ -368,6 +368,10 @@ pub struct Analyzer<'a> {
     /// Concrete interface name (mangled) -> immediate parent concrete interface names, recorded
     /// when the child's method list is flattened. Used to expand `implements` transitively.
     interface_parent_instances: HashMap<String, Vec<String>>,
+    /// Mangled interface instances that already received `extend Iface<T>` package methods. Parent
+    /// flattening can create `Collection_int` before `ensure_interface_instantiated("Collection")`
+    /// runs; without this set the early-return would skip attaching `to_list`/`filter`/….
+    interface_extensions_attached: std::collections::HashSet<String>,
     /// Class name -> the interfaces it implements (in `class C : A, B` order), recorded after the
     /// implements clause is validated. Names are mangled for generic instances (e.g. `Box_int` ->
     /// `Container_int`). Drives interface-typed assignability and itable emission. Includes
@@ -471,6 +475,7 @@ impl<'a> Analyzer<'a> {
             interface_parents: HashMap::new(),
             interface_decls: HashMap::new(),
             interface_parent_instances: HashMap::new(),
+            interface_extensions_attached: std::collections::HashSet::new(),
             sealed_types: std::collections::HashSet::new(),
             type_visibility: HashMap::new(),
             implements: HashMap::new(),

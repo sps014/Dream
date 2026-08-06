@@ -85,6 +85,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/collection.dream"),
             ),
             (
+                "<std>/system/core/array_iterator.dream",
+                include_str!("system/core/array_iterator.dream"),
+            ),
+            (
+                "<std>/system/core/array_collection.dream",
+                include_str!("system/core/array_collection.dream"),
+            ),
+            (
                 "<std>/system/core/result.dream",
                 include_str!("system/core/result.dream"),
             ),
@@ -199,6 +207,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/collections/stack.dream",
                 include_str!("system/collections/stack.dream"),
+            ),
+            (
+                "<std>/system/collections/query.dream",
+                include_str!("system/collections/query.dream"),
             ),
         ],
     },

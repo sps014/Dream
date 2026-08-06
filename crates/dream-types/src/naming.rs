@@ -9,10 +9,12 @@ use super::PrimTy;
 use dream_syntax::nodes::types::CONSTRUCTOR_NAME;
 
 /// The internal name under which a struct method is registered in the function table and emitted in
-/// codegen: the struct name and method name joined with `_` (e.g. `User_greet`). Single source of
-/// truth for method-name mangling; the derived-method helpers below build on it.
+/// codegen: the struct name and method name joined with `_` (e.g. `User_greet`). Array targets
+/// (`int[]`) replace `[]` with `__arr` so the symbol is a valid WAT identifier (`int__arr_size`).
+/// Single source of truth for method-name mangling; the derived-method helpers below build on it.
 pub fn method_fn(struct_name: &str, method_name: &str) -> String {
-    format!("{}_{}", struct_name, method_name)
+    let safe_struct = struct_name.replace("[]", "__arr");
+    format!("{}_{}", safe_struct, method_name)
 }
 
 /// The internal name under which a struct's user-defined constructor is registered/emitted
