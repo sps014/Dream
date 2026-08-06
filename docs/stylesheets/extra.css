@@ -36,6 +36,13 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Sticky TOC title: Material paints a bg + soft box-shadow so scrolled
+   links don't show through. That reads as a gray selection bar — drop it. */
+.md-nav--secondary .md-nav__title {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 .md-main__inner {
   margin-top: 0;
 }
