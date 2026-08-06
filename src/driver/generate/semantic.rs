@@ -85,6 +85,14 @@ fn type_display(t: &Type) -> String {
         Type::Void => "void".into(),
         Type::Object(_) => "object".into(),
         Type::Array(e) => format!("{}[]", type_display(e)),
+        Type::Tuple(elems) => {
+            let inner = elems
+                .iter()
+                .map(type_display)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({})", inner)
+        }
         Type::Struct(tok, args) => {
             if tok.text == "js" {
                 return "js".into();

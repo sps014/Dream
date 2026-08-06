@@ -97,6 +97,7 @@ pub const ATTR_PROMISE_ANY: &str = "promise_any";
 pub const ATTR_PROMISE_RACE: &str = "promise_race";
 pub const ATTR_JSON_SERIALIZE: &str = "json_serialize";
 pub const ATTR_JSON_DESERIALIZE: &str = "json_deserialize";
+pub const ATTR_JSON_FROM_VALUE: &str = "json_from_value";
 /// `Buffer.alloc<T>(len)` — allocate a zero-initialized array.
 pub const ATTR_ARRAY_NEW: &str = "array_new";
 /// `Time.sleep(ms)` — the async timer (yields `Future<void>`).
@@ -147,10 +148,12 @@ pub enum IntrinsicOp {
     PromiseAny,
     /// `Promise.race(xs)` — first to settle, yield `Future<T>`.
     PromiseRace,
-    /// `JSON.serialize<T>(x)` — `T` to its JSON string.
+    /// `Json.serialize<T>(x)` — `T` to its JSON string.
     JsonSerialize,
-    /// `JSON.deserialize<T>(s)` — JSON string to `T`.
+    /// `Json.deserialize<T>(s)` — JSON string to `Result<T, ParseError>`.
     JsonDeserialize,
+    /// `Json.from_value<T>(v)` — already-parsed `JsonValue` to `T`.
+    JsonFromValue,
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]`.
     ArrayNew,
     /// `Time.sleep(ms)` — async timer yielding `Future<void>`.
@@ -195,6 +198,7 @@ impl IntrinsicOp {
             ATTR_PROMISE_RACE => IntrinsicOp::PromiseRace,
             ATTR_JSON_SERIALIZE => IntrinsicOp::JsonSerialize,
             ATTR_JSON_DESERIALIZE => IntrinsicOp::JsonDeserialize,
+            ATTR_JSON_FROM_VALUE => IntrinsicOp::JsonFromValue,
             ATTR_ARRAY_NEW => IntrinsicOp::ArrayNew,
             ATTR_SLEEP => IntrinsicOp::Sleep,
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,

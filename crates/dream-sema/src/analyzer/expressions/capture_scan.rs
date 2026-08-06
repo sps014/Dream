@@ -77,7 +77,8 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(a, out);
             walk_expr_for_ref_targets(v, out);
         }
-        StatementNode::Declaration(_, _, e, _) => walk_expr_for_ref_targets(e, out),
+        StatementNode::Declaration(_, _, e, _)
+        | StatementNode::TupleDeclaration { init: e, .. } => walk_expr_for_ref_targets(e, out),
         StatementNode::FunctionInvocation(_, _, args) => {
             for a in args {
                 walk_expr_for_ref_targets(a, out);
@@ -158,7 +159,9 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             }
             walk_expr_for_ref_targets(inner, out);
         }
-        ExpressionNode::ArrayLiteral(es) | ExpressionNode::SetLiteral(es) => {
+        ExpressionNode::ArrayLiteral(es)
+        | ExpressionNode::SetLiteral(es)
+        | ExpressionNode::TupleLiteral(es) => {
             for e in es {
                 walk_expr_for_ref_targets(e, out);
             }
@@ -256,7 +259,8 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_expr_for_lambdas(a, out);
             walk_expr_for_lambdas(v, out);
         }
-        StatementNode::Declaration(_, _, e, _) => walk_expr_for_lambdas(e, out),
+        StatementNode::Declaration(_, _, e, _)
+        | StatementNode::TupleDeclaration { init: e, .. } => walk_expr_for_lambdas(e, out),
         StatementNode::FunctionInvocation(_, _, args) => {
             for a in args {
                 walk_expr_for_lambdas(a, out);
@@ -331,7 +335,9 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
 fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
     match expr {
         ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
-        ExpressionNode::ArrayLiteral(es) | ExpressionNode::SetLiteral(es) => {
+        ExpressionNode::ArrayLiteral(es)
+        | ExpressionNode::SetLiteral(es)
+        | ExpressionNode::TupleLiteral(es) => {
             for e in es {
                 walk_expr_for_lambdas(e, out);
             }
@@ -499,6 +505,12 @@ fn collect_names_stmt(
             collect_names_expr(e, scopes, referenced);
             bind_here(scopes, name.text.clone());
         }
+        StatementNode::TupleDeclaration { names, init, .. } => {
+            collect_names_expr(init, scopes, referenced);
+            for name in names {
+                bind_here(scopes, name.text.clone());
+            }
+        }
         StatementNode::FunctionInvocation(name, _, args) => {
             if !is_bound(scopes, &name.text) {
                 referenced.insert(name.text.clone());
@@ -592,7 +604,9 @@ fn collect_names_expr(
                 referenced.insert(tok.text.clone());
             }
         }
-        ExpressionNode::ArrayLiteral(es) | ExpressionNode::SetLiteral(es) => {
+        ExpressionNode::ArrayLiteral(es)
+        | ExpressionNode::SetLiteral(es)
+        | ExpressionNode::TupleLiteral(es) => {
             for e in es {
                 collect_names_expr(e, scopes, referenced);
             }

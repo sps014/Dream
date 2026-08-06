@@ -189,6 +189,7 @@ impl SyntaxTreeView {
             }
             ExpressionNode::FunctionCall(_, _, args)
             | ExpressionNode::ArrayLiteral(args)
+            | ExpressionNode::TupleLiteral(args)
             | ExpressionNode::SetLiteral(args) => {
                 for a in args {
                     self.walk_expr(a, parent);
@@ -235,7 +236,8 @@ impl SyntaxTreeView {
             | StatementNode::AwaitStmt(e)
             | StatementNode::Return(Some(e))
             | StatementNode::Assignment(_, e)
-            | StatementNode::Declaration(_, _, e, _) => self.walk_expr(e, parent),
+            | StatementNode::Declaration(_, _, e, _)
+            | StatementNode::TupleDeclaration { init: e, .. } => self.walk_expr(e, parent),
             StatementNode::IndexAssignment(a, i, v) => {
                 self.walk_expr(a, parent);
                 self.walk_expr(i, parent);

@@ -227,14 +227,14 @@ This works with `WebWorker.map` and `WebWorkerPool.dispatch` / `dispatch_async` 
 
 ## Structured messages
 
-Messages are strings. For structured payloads, serialize at the call site with the [`JSON`](../stdlib/json.md) helpers (any `@json` class/struct or `string`):
+Messages are strings. For structured payloads, serialize at the call site with the [`Json`](../stdlib/json.md) helpers (any `@json` class/struct or `string`):
 
 ```dream
 @json
 class Task { public id: int; public payload: string; }
 
 fun handle(msg: string): string {
-    let t = JSON.deserialize<Task>(msg);
+    let t = Json.deserialize<Task>(msg).unwrap_or(Task());
     return "done:" + t.id.to_string();
 }
 
@@ -243,7 +243,7 @@ async fun main(): void {
     let t = Task();
     t.id = 7;
     t.payload = "hi";
-    System.println(await w.send(JSON.serialize(t)));   // done:7
+    System.println(await w.send(Json.serialize(t)));   // done:7
     w.terminate();
 }
 ```

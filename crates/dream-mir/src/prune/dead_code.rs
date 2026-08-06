@@ -100,7 +100,9 @@ fn prune_functions(mir: &mut Mir) {
                                 iface_uses.push((*iface_id, *method_slot));
                             }
                             match rv {
-                                Rvalue::New { ty, .. } | Rvalue::UnionNew { ty, .. } => {
+                                Rvalue::New { ty, .. }
+                                | Rvalue::UnionNew { ty, .. }
+                                | Rvalue::Tuple { ty, .. } => {
                                     type_worklist.push(*ty)
                                 }
                                 _ => {}
@@ -332,7 +334,8 @@ fn collect_global_reads_rvalue(rv: &Rvalue, out: &mut HashSet<Global>) {
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
-        | Rvalue::ArrayLit { elems: args, .. } => args
+        | Rvalue::ArrayLit { elems: args, .. }
+        | Rvalue::Tuple { elems: args, .. } => args
             .iter()
             .for_each(|a| collect_global_reads_operand(a, out)),
         Rvalue::IndirectCall { target, args } => {

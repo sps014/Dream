@@ -441,6 +441,30 @@ impl Builder {
                 }
                 self.walk_expr(expr, scope);
             }
+            StatementNode::TupleDeclaration {
+                names,
+                ty,
+                init,
+                ..
+            } => {
+                if let Some(t) = ty {
+                    self.add_type_ref(t, scope);
+                }
+                self.walk_expr(init, scope);
+                for name in names {
+                    let type_str = ty
+                        .as_ref()
+                        .map(|t| t.display_name())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    self.push_decl(
+                        name,
+                        SymKind::Variable,
+                        type_str.clone(),
+                        scope,
+                        Some(type_str),
+                    );
+                }
+            }
             StatementNode::Assignment(name, expr) => {
                 self.add_ref(name, SymKind::Variable, scope);
                 self.walk_expr(expr, scope);
@@ -651,7 +675,9 @@ impl Builder {
                 self.walk_expr(t, scope);
                 self.walk_expr(e, scope);
             }
-            ExpressionNode::ArrayLiteral(elems) | ExpressionNode::SetLiteral(elems) => {
+            ExpressionNode::ArrayLiteral(elems)
+            | ExpressionNode::SetLiteral(elems)
+            | ExpressionNode::TupleLiteral(elems) => {
                 for elem in elems {
                     self.walk_expr(elem, scope);
                 }

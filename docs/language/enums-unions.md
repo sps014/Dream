@@ -165,5 +165,5 @@ Mark a union `@json` to derive `to_json` / `from_json`. Each value serializes to
 @json
 enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
 
-let text = JSON.serialize(Shape.Circle(7));   // {"type":"Circle","radius":7}
+let text = Json.serialize(Shape.Circle(7));   // {"type":"Circle","radius":7}
 ```

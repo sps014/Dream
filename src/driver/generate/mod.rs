@@ -89,6 +89,7 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
             }
             ExpressionNode::FunctionCall(_, _, args)
             | ExpressionNode::ArrayLiteral(args)
+            | ExpressionNode::TupleLiteral(args)
             | ExpressionNode::SetLiteral(args) => {
                 for a in args {
                     walk_expr(a, diagnostics);
@@ -133,7 +134,8 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
             | StatementNode::AwaitStmt(e)
             | StatementNode::Return(Some(e))
             | StatementNode::Assignment(_, e)
-            | StatementNode::Declaration(_, _, e, _) => walk_expr(e, diagnostics),
+            | StatementNode::Declaration(_, _, e, _)
+            | StatementNode::TupleDeclaration { init: e, .. } => walk_expr(e, diagnostics),
             StatementNode::IndexAssignment(a, i, v) => {
                 walk_expr(a, diagnostics);
                 walk_expr(i, diagnostics);

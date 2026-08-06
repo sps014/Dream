@@ -190,6 +190,13 @@ fn rewrite_expr<'a>(
             }
             ExpressionNode::ArrayLiteral(nargs)
         }
+        ExpressionNode::TupleLiteral(args) => {
+            let mut nargs = Vec::new();
+            for a in args {
+                nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed)?);
+            }
+            ExpressionNode::TupleLiteral(nargs)
+        }
         ExpressionNode::SetLiteral(args) => {
             let mut nargs = Vec::new();
             for a in args {
@@ -278,6 +285,17 @@ fn rewrite_stmt<'a>(
             rewrite_expr(arena, e, by_site, diagnostics, changed)?,
             *c,
         ),
+        StatementNode::TupleDeclaration {
+            names,
+            ty,
+            init,
+            is_const,
+        } => StatementNode::TupleDeclaration {
+            names: names.clone(),
+            ty: ty.clone(),
+            init: rewrite_expr(arena, init, by_site, diagnostics, changed)?,
+            is_const: *is_const,
+        },
         StatementNode::IndexAssignment(a, i, v) => StatementNode::IndexAssignment(
             arena.alloc(rewrite_expr(arena, a, by_site, diagnostics, changed)?),
             arena.alloc(rewrite_expr(arena, i, by_site, diagnostics, changed)?),

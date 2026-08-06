@@ -134,7 +134,8 @@ fn remap_rvalue(rv: &mut Rvalue, base: u32) {
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
-        | Rvalue::ArrayLit { elems: args, .. } => {
+        | Rvalue::ArrayLit { elems: args, .. }
+        | Rvalue::Tuple { elems: args, .. } => {
             for a in args {
                 remap_operand(a, base);
             }

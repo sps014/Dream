@@ -113,6 +113,13 @@ impl TypeCtx {
                 let e = self.lower_with(inner, bindings);
                 self.interner.array(e)
             }
+            Type::Tuple(elems) => {
+                let ids = elems
+                    .iter()
+                    .map(|e| self.lower_with(e, bindings))
+                    .collect();
+                self.interner.tuple_ty(ids)
+            }
             Type::Function(params, ret) => {
                 let ps = params
                     .iter()

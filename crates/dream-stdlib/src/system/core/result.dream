@@ -21,6 +21,7 @@ public enum Result<T, E> {
         };
     }
 
+
     // The success value when `Ok`, otherwise `fallback`.
     public fun unwrap_or(fallback: T): T {
         return switch (this) {

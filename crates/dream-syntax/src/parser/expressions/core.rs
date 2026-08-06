@@ -218,10 +218,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// expression-starting token. Parenthesized expressions allow a postfix chain so method calls
     /// on literals work (e.g. `(7).hash_code()`, `(arr)[0]`).
     pub(crate) fn parse_paren_or_cast(&mut self) -> Result<ExpressionNode<'a>, Error> {
-        let is_cast = if self.peek_token(1).kind == TokenKind::DataTypeToken {
-            true
-        } else if self.peek_token(1).kind == TokenKind::IdentifierToken {
-            // Could be `(Node)0` or `(x) + 1`
+        // Casts are a single type in parens, never a comma-separated tuple type.
+        let is_cast = if self.peek_token(1).kind == TokenKind::DataTypeToken
+            || self.peek_token(1).kind == TokenKind::IdentifierToken
+        {
+            // Could be `(Node)0` or `(x) + 1` or `(int, string)` (tuple type / not a cast).
             // Let's check token after `)`
             let mut i = 2;
             // Skip a generic argument list so `(Container<int>)b` (and nested forms like
@@ -272,6 +273,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                         )
                     }
                 } else {
+                    // Comma (or anything else) after the type means this is not a cast —
+                    // e.g. `(int, string)` or `(a, b)`.
                     false
                 }
             }
@@ -292,13 +295,32 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         //eat the open parenthesis
         self.match_token(TokenKind::OpenParenthesisToken);
-        let expression = self.parse_expression(0)?;
+        let first = self.parse_expression(0)?;
+        if self.current_token().kind == TokenKind::CommaToken {
+            let mut elems = vec![first];
+            while self.current_token().kind == TokenKind::CommaToken {
+                self.match_token(TokenKind::CommaToken);
+                if self.current_token().kind == TokenKind::CloseParenthesisToken {
+                    break;
+                }
+                elems.push(self.parse_expression(0)?);
+            }
+            self.match_token(TokenKind::CloseParenthesisToken);
+            if elems.len() < 2 {
+                self.diagnostics.report_error(
+                    "Tuple literals require at least two elements".to_string(),
+                    elems.first().and_then(|e| e.position()),
+                );
+            }
+            let tuple = ExpressionNode::TupleLiteral(elems);
+            return self.parse_postfix_chain(tuple);
+        }
         //eat the close parenthesis
         self.match_token(TokenKind::CloseParenthesisToken);
         // Allow postfix access on a parenthesized expression, e.g. `(7).hash_code()`,
         // `("x" + y).len()`, or `(arr)[0]`. This is required for method calls on literals
         // whose bare form would mis-lex (`7.hash_code()` reads `7.` as a float).
-        let parenthesized = ExpressionNode::Parenthesized(self.arena.alloc(expression));
+        let parenthesized = ExpressionNode::Parenthesized(self.arena.alloc(first));
         self.parse_postfix_chain(parenthesized)
     }
 

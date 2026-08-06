@@ -59,6 +59,32 @@ impl<'a, 'b> Parser<'a, 'b> {
             return Ok(Type::Function(params, Box::new(ret)));
         }
 
+        // Positional tuple type: `(T, U, …)` with arity ≥ 2.
+        if self.current_token().kind == TokenKind::OpenParenthesisToken {
+            self.match_token(TokenKind::OpenParenthesisToken);
+            let elems = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
+                p.parse_type()
+            })?;
+            if elems.len() < 2 {
+                let span = elems
+                    .first()
+                    .and_then(|t| t.get_span())
+                    .or_else(|| Some(self.current_token().position));
+                self.diagnostics.report_error(
+                    "Tuple types require at least two elements".to_string(),
+                    span,
+                );
+                return Ok(Type::Unknown);
+            }
+            let mut parsed_type = Type::Tuple(elems);
+            while self.current_token().kind == TokenKind::OpenBracketToken {
+                self.match_token(TokenKind::OpenBracketToken);
+                self.match_token(TokenKind::CloseBracketToken);
+                parsed_type = Type::Array(Box::new(parsed_type));
+            }
+            return Ok(parsed_type);
+        }
+
         let type_token = if self.current_token().kind == TokenKind::DataTypeToken {
             self.match_token(TokenKind::DataTypeToken)
         } else {

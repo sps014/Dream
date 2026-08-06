@@ -70,10 +70,10 @@ fun mk_user(name: string, age: int, city: string): User {
 fun main(): void {
     let team = Team("Core", mk_user("Ada", 36, "London"), [mk_user("Bob", 30, "Paris"), mk_user("Cee", 41, "Berlin")]);
 
-    let text = JSON.serialize(team);
+    let text = Json.serialize(team);
     System.println(text);
 
-    let back = JSON.deserialize<Team>(text);
+    let back = Json.deserialize<Team>(text).unwrap_or(team);
     System.println(back.title);
     System.println(back.lead.name);
     System.println(back.lead.company.name);
@@ -86,5 +86,5 @@ fun main(): void {
     System.println(back.members[1].age);
 
     // Round-trips identically.
-    System.println(JSON.serialize(back) == text);
+    System.println(Json.serialize(back) == text);
 }

@@ -1,0 +1,9 @@
+import system;
+
+fun main() {
+    let a = (1, 2);
+    let b = a;
+    b[0] = 99;
+    System.println(a[0]);
+    System.println(b[0]);
+}

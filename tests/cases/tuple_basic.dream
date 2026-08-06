@@ -1,0 +1,22 @@
+import system;
+
+fun main() {
+    let t = (10, "hi");
+    System.println(t[0]);
+    System.print(t[1]);
+    System.println("");
+
+    let u: (int, int, bool) = (1, 2, true);
+    System.println(u[0]);
+    System.println(u[1]);
+    System.println(u[2]);
+
+    let nested = ((3, 4), false);
+    System.println(nested[0][0]);
+    System.println(nested[0][1]);
+    System.println(nested[1]);
+
+    t[1] = "bye";
+    System.print(t[1]);
+    System.println("");
+}

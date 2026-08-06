@@ -1,0 +1,21 @@
+import system;
+import system.json;
+
+@json
+class Row {
+    public pair: (int, string);
+    constructor(pair: (int, string)) {
+        this.pair = pair;
+    }
+}
+
+fun main(): void {
+    let r = Row((3, "hi"));
+    let text = Json.serialize(r);
+    System.println(text);
+
+    let back = Json.deserialize<Row>(text).unwrap_or(r);
+    System.println(back.pair[0]);
+    System.print(back.pair[1]);
+    System.println("");
+}

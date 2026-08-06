@@ -14,6 +14,14 @@ pub enum StatementNode<'a> {
     MemberAssignment(&'a ExpressionNode<'a>, SyntaxToken, ExpressionNode<'a>),
     /// `let`/`const` declaration. The final `bool` marks `const` (immutable) bindings.
     Declaration(SyntaxToken, Option<Type>, ExpressionNode<'a>, bool),
+    /// `let (a, b) = expr;` / `const (a, b): (T, U) = expr;` — positional tuple destructure.
+    /// Names are identifiers only (no nested patterns). Arity ≥ 2.
+    TupleDeclaration {
+        names: Vec<SyntaxToken>,
+        ty: Option<Type>,
+        init: ExpressionNode<'a>,
+        is_const: bool,
+    },
     FunctionInvocation(SyntaxToken, Option<Vec<Type>>, Vec<ExpressionNode<'a>>),
     MethodInvocation(
         &'a ExpressionNode<'a>,

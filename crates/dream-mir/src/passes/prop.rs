@@ -145,7 +145,8 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
-        | Rvalue::ArrayLit { elems: args, .. } => args
+        | Rvalue::ArrayLit { elems: args, .. }
+        | Rvalue::Tuple { elems: args, .. } => args
             .iter_mut()
             .fold(false, |c, a| c | subst_operand(a, known)),
         Rvalue::IndirectCall { target, args } => {

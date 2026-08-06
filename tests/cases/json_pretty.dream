@@ -29,11 +29,11 @@ class User {
 fun main(): void {
     let u = User("Ada", 36, Address("London", "NW1"), ["dev", "math"]);
 
-    System.println(JSON.stringify_pretty(u.to_json(), 2));
+    System.println(Json.stringify_pretty(u.to_json(), 2));
 
-    let v = JSON.parse("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}").unwrap_or(JsonValue.none());
-    System.println(JSON.stringify_pretty(v, 4));
+    let v = Json.parse("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}").unwrap_or(JsonValue.none());
+    System.println(Json.stringify_pretty(v, 4));
 
     // indent 0 falls back to compact output.
-    System.println(JSON.stringify_pretty(v, 0));
+    System.println(Json.stringify_pretty(v, 0));
 }

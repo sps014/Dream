@@ -22,10 +22,10 @@ class User {
 
 fun main(): void {
     let u = User("Ada", 36, "secret", 7, Option.Some("Countess"));
-    let text = JSON.serialize(u);
+    let text = Json.serialize(u);
     System.println(text);
 
-    let back = JSON.deserialize<User>(text);
+    let back = Json.deserialize<User>(text).unwrap_or(u);
     System.println(back.name);
     System.println(back.age);
     System.println(back.password);

@@ -10,6 +10,9 @@ use dream_text::text_span::TextSpan;
 pub enum ExpressionNode<'a> {
     Literal(Type),
     ArrayLiteral(Vec<ExpressionNode<'a>>),
+    /// `(e1, e2, …)` — a positional tuple literal (arity ≥ 2). Distinguised from
+    /// [`Parenthesized`] by a comma after the first element.
+    TupleLiteral(Vec<ExpressionNode<'a>>),
     /// `{e1, e2, ...}` — a Set literal. Parsed whenever `{` opens a primary expression (never
     /// ambiguous with a statement block, since blocks never appear in expression position) and a
     /// `:` does not follow the first element (see `MapLiteral`). Always requires an expected
@@ -180,6 +183,7 @@ impl<'a> ExpressionNode<'a> {
                 target_type.get_span().or_else(|| expr.position())
             }
             ExpressionNode::ArrayLiteral(elements) => elements.first().and_then(|e| e.position()),
+            ExpressionNode::TupleLiteral(elements) => elements.first().and_then(|e| e.position()),
             ExpressionNode::SetLiteral(elements) => elements.first().and_then(|e| e.position()),
             ExpressionNode::MapLiteral(entries) => entries.first().and_then(|(k, _)| k.position()),
             ExpressionNode::Lambda(l) => Some(l.open_paren_position),
@@ -210,6 +214,9 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::Switch(subject, _) => subject.start_position(),
             ExpressionNode::Ternary(cond, _, _) => cond.start_position(),
             ExpressionNode::ArrayLiteral(elements) => {
+                elements.first().and_then(|e| e.start_position())
+            }
+            ExpressionNode::TupleLiteral(elements) => {
                 elements.first().and_then(|e| e.start_position())
             }
             // Token-led forms (identifier, call name, unary operator, cast type, literal, lambda)

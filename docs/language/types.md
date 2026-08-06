@@ -70,6 +70,19 @@ nums[1] = 99;
 
 For a growable sequence, use [`List<T>`](../stdlib/collections.md). See [Arrays](arrays.md) for the full story.
 
+## Tuples
+
+Positional product types `(T, U, …)` (arity ≥ 2) are always-inline value types — no heap allocation for the tuple itself:
+
+```dream
+let t: (int, string) = (1, "hi");
+System.println(t[0]);   // index must be a constant int literal
+t[1] = "bye";
+let (a, b) = t;         // destructure
+```
+
+Nested tuples are allowed. There are no named tuple elements.
+
 ## Optional values
 
 Absence is expressed with [`Option<T>`](../stdlib/option-result.md), not a nullable `T?` suffix.

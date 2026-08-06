@@ -118,6 +118,11 @@ impl TypeInterner {
         self.intern(TyKind::Func(params, ret))
     }
 
+    /// Interns a positional tuple type. `elems` must have arity ≥ 2 (enforced by the analyzer).
+    pub fn tuple_ty(&mut self, elems: Vec<TypeId>) -> TypeId {
+        self.intern(TyKind::Tuple(elems))
+    }
+
     // Accessors for the pre-interned nullary types. These rely on the construction order above.
     pub fn int(&self) -> TypeId {
         self.find(&TyKind::Prim(PrimTy::Int))
@@ -221,13 +226,17 @@ impl TypeInterner {
         self.value_unions.contains(&id)
     }
 
-    /// True if `id` names a value type — a value (`struct`) type or a value union. Both are stored
-    /// inline with copy semantics rather than as heap references.
+    /// True if `id` names a value type — a value (`struct`) type, a value union, or a tuple. All
+    /// are stored inline with copy semantics rather than as heap references.
     pub fn is_value_type(&self, id: TypeId) -> bool {
         if self.value_unions.contains(&id) {
             return true;
         }
-        matches!(self.kind(id), TyKind::Struct(def, _) if self.value_defs.contains(def))
+        match self.kind(id) {
+            TyKind::Tuple(_) => true,
+            TyKind::Struct(def, _) => self.value_defs.contains(def),
+            _ => false,
+        }
     }
 
     /// Records the inline `(size, align)` of a value (`struct`) type. Idempotent.

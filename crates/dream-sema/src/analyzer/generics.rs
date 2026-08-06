@@ -206,6 +206,12 @@ impl<'a> Analyzer<'a> {
                 ),
             ),
             Type::Array(inner) => Type::Array(Box::new(Self::monomorphize_type(inner, bindings))),
+            Type::Tuple(elems) => Type::Tuple(
+                elems
+                    .iter()
+                    .map(|e| Self::monomorphize_type(e, bindings))
+                    .collect(),
+            ),
             // First-class function types (`fun(T, T): int`) must substitute inside their parameter
             // and return types so a monomorphized callback param (e.g. `sort_by`'s comparator)
             // type-checks against concrete arguments.
@@ -287,6 +293,17 @@ impl<'a> Analyzer<'a> {
         concrete: &Type,
         kind: dream_syntax::nodes::ConstraintKind,
     ) -> bool {
+        if let Type::Tuple(elems) = concrete {
+            return match kind {
+                dream_syntax::nodes::ConstraintKind::Struct => {
+                    elems.iter().all(|e| self.type_satisfies_kind(e, kind))
+                }
+                dream_syntax::nodes::ConstraintKind::Unmanaged => elems
+                    .iter()
+                    .all(|e| self.type_satisfies_kind(e, dream_syntax::nodes::ConstraintKind::Unmanaged)),
+                dream_syntax::nodes::ConstraintKind::Class => false,
+            };
+        }
         let name = concrete.get_type();
         match kind {
             dream_syntax::nodes::ConstraintKind::Struct => self.name_is_value_type(&name),

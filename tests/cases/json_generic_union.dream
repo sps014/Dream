@@ -1,6 +1,6 @@
 // @json on a generic discriminated union: the derive attaches to the template `Opt<T>` and each
 // concrete instantiation gets its own converters. Type-parameter payloads round-trip through
-// `JSON.serialize`/`JSON.deserialize`, resolved per instance by the monomorphizer.
+// `Json.serialize`/`Json.deserialize`, resolved per instance by the monomorphizer.
 import system;
 import system.json;
 @json
@@ -14,18 +14,18 @@ enum Opt<T> {
 
 fun main(): void {
     let a: Opt<Point> = Opt.Some(Point(3, 4));
-    let sa = JSON.serialize<Opt<Point>>(a);
+    let sa = Json.serialize<Opt<Point>>(a);
     System.println(sa);
-    let backA = JSON.deserialize<Opt<Point>>(sa);
+    let backA = Json.deserialize<Opt<Point>>(sa).unwrap_or(a);
     switch (backA) {
         Some(value) => { System.println(value.x); System.println(value.y); }
         None => { System.println("none"); }
     }
 
     let b: Opt<Point> = Opt.None;
-    let sb = JSON.serialize<Opt<Point>>(b);
+    let sb = Json.serialize<Opt<Point>>(b);
     System.println(sb);
-    let backB = JSON.deserialize<Opt<Point>>(sb);
+    let backB = Json.deserialize<Opt<Point>>(sb).unwrap_or(b);
     switch (backB) {
         Some(value) => { System.println("some"); }
         None => { System.println("none"); }

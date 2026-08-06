@@ -68,6 +68,10 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
         | StatementNode::MethodInvocation(_, tok, _, _)
         | StatementNode::MemberAssignment(_, tok, _)
         | StatementNode::ForEach(tok, _, _, _, _) => Some(tok.position.line_no),
+        StatementNode::TupleDeclaration { names, init, .. } => names
+            .first()
+            .map(|n| n.position.line_no)
+            .or_else(|| line(init.position())),
         StatementNode::IndexAssignment(arr, _, _) => line(arr.position()),
         StatementNode::Return(Some(e))
         | StatementNode::ExpressionStatement(e)
@@ -139,6 +143,12 @@ fn substitute_generic_token(token: &SyntaxToken, bindings: &GenericBindings) -> 
 pub fn substitute_generic_type(ty: &Type, bindings: &GenericBindings) -> Type {
     match ty {
         Type::Array(inner) => Type::Array(Box::new(substitute_generic_type(inner, bindings))),
+        Type::Tuple(elems) => Type::Tuple(
+            elems
+                .iter()
+                .map(|e| substitute_generic_type(e, bindings))
+                .collect(),
+        ),
         Type::Function(params, ret) => Type::Function(
             params
                 .iter()

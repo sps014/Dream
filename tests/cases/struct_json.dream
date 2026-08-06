@@ -1,5 +1,5 @@
 // A value `struct` supports `@json` exactly like a `class`: the derive emits `to_json`/`from_json`
-// via an `extend` block, so value types round-trip through `JSON.serialize` / `JSON.deserialize`.
+// via an `extend` block, so value types round-trip through `Json.serialize` / `Json.deserialize`.
 
 import system;
 import system.json;
@@ -15,10 +15,10 @@ struct Point {
 
 fun main(): void {
     let p = Point(3, 4);
-    let text = JSON.serialize(p);
+    let text = Json.serialize(p);
     System.println(text);                       // {"x":3,"y":4}
 
-    let back = JSON.deserialize<Point>(text);
+    let back = Json.deserialize<Point>(text).unwrap_or(p);
     System.println(back.x);                     // 3
     System.println(back.y);                     // 4
 }

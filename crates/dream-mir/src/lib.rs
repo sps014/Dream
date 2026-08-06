@@ -406,6 +406,12 @@ pub enum Rvalue {
         ctor: Option<DefId>,
         args: Vec<Operand>,
     },
+    /// Inline positional tuple construction: zero the destination then store each element at its
+    /// layout field offset. Always a value type (never heap-allocated).
+    Tuple {
+        ty: TypeId,
+        elems: Vec<Operand>,
+    },
     /// Construct a union variant. `ty` is the union's interned type (the layout key).
     UnionNew {
         def: DefId,

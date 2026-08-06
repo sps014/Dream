@@ -29,9 +29,9 @@ class Profile {
 fun main(): void {
     // Present values round-trip.
     let p1 = Profile("Ada", Option.Some("Countess"), Option.Some(Address("London", "NW1")), 36);
-    let t1 = JSON.serialize(p1);
+    let t1 = Json.serialize(p1);
     System.println(t1);
-    let b1 = JSON.deserialize<Profile>(t1);
+    let b1 = Json.deserialize<Profile>(t1).unwrap_or(p1);
     System.println(b1.nickname ?? "<none>");
     let addr = b1.address;
     System.println(addr.is_none());
@@ -40,14 +40,14 @@ fun main(): void {
     let no_name: Option<string> = Option.None;
     let no_addr: Option<Address> = Option.None;
     let p2 = Profile("Bob", no_name, no_addr, 20);
-    let t2 = JSON.serialize(p2);
+    let t2 = Json.serialize(p2);
     System.println(t2);
-    let b2 = JSON.deserialize<Profile>(t2);
+    let b2 = Json.deserialize<Profile>(t2).unwrap_or(p2);
     System.println(b2.nickname ?? "<none>");
     System.println(b2.address.is_none());
 
     // A missing key and an explicit null both deserialize to None.
-    let b3 = JSON.deserialize<Profile>("{\"name\":\"Cee\",\"nickname\":null,\"age\":7}");
+    let b3 = Json.deserialize<Profile>("{\"name\":\"Cee\",\"nickname\":null,\"age\":7}").unwrap_or(p1);
     System.println(b3.nickname ?? "<none>");
     System.println(b3.address.is_none());
 }

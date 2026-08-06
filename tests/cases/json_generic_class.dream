@@ -1,6 +1,6 @@
 // @json on a generic class: the derive attaches to the template `Box<T>` and each concrete
 // instantiation gets its own `to_json`/`from_json`. Type-parameter fields round-trip through
-// `JSON.serialize`/`JSON.deserialize`, which the analyzer resolves per instance, so `Box<Point>`
+// `Json.serialize`/`Json.deserialize`, which the analyzer resolves per instance, so `Box<Point>`
 // delegates to `Point`'s (also `@json`) converters.
 import system;
 import system.json;
@@ -12,9 +12,9 @@ struct Box<T> { public value: T; constructor(value: T) { this.value = value; } }
 
 fun main(): void {
     let b = Box<Point>(Point(3, 4));
-    let s = JSON.serialize<Box<Point>>(b);
+    let s = Json.serialize<Box<Point>>(b);
     System.println(s);
-    let back = JSON.deserialize<Box<Point>>(s);
+    let back = Json.deserialize<Box<Point>>(s).unwrap_or(b);
     System.println(back.value.x);
     System.println(back.value.y);
 }

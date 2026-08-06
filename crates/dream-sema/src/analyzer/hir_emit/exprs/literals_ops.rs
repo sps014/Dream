@@ -287,4 +287,26 @@ impl<'a> Analyzer<'a> {
             },
         ));
     }
+
+    /// Records the HIR for a positional tuple literal. `result_ty` must be `Type::Tuple`.
+    pub(in crate::analyzer) fn hir_set_tuple_lit(
+        &mut self,
+        elems: Vec<Option<HExpr>>,
+        result_ty: &Type,
+    ) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        if !matches!(result_ty, Type::Tuple(_)) {
+            self.hir.last = None;
+            return;
+        }
+        let Some(collected) = Self::collect_hir_args(elems) else {
+            self.hir.last = None;
+            return;
+        };
+        let ty = self.type_ctx.lower(result_ty);
+        self.hir.last = Some(HExpr::new(ty, HExprKind::Tuple { elems: collected }));
+    }
 }

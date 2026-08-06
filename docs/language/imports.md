@@ -10,7 +10,7 @@ Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain impo
 import system;                 // System, DateTime, Stopwatch, Random, …
 import system.collections;     // List, Map, Set, Queue, Stack
 import system.text;            // string methods, StringBuilder, Regex
-import system.json;            // JSON, JsonValue
+import system.json;            // Json, JsonValue
 import system.net;             // HttpClient, HttpResponse, HttpHeaders, Url, …
 import system.io;              // File, FileStream, Path, IoError
 import system.encoding;        // Encoding (UTF-8 / hex / Base64)

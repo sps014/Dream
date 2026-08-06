@@ -284,6 +284,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     /// Parses a variable declaration (e.g., `let x = 5;` or `let x: int[] = [1];`)
+    /// or a tuple destructure (`let (a, b) = t;`).
     pub(super) fn parse_declaration(&mut self) -> Result<StatementNode<'a>, Error> {
         // Consume `let` or `const`; `const` marks the binding immutable.
         let is_const = self.current_token().kind == TokenKind::ConstToken;
@@ -292,6 +293,41 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else {
             self.match_token(TokenKind::LetToken);
         }
+
+        if self.current_token().kind == TokenKind::OpenParenthesisToken {
+            self.match_token(TokenKind::OpenParenthesisToken);
+            let mut names = Vec::new();
+            names.push(self.match_token(TokenKind::IdentifierToken));
+            while self.current_token().kind == TokenKind::CommaToken {
+                self.match_token(TokenKind::CommaToken);
+                if self.current_token().kind == TokenKind::CloseParenthesisToken {
+                    break;
+                }
+                names.push(self.match_token(TokenKind::IdentifierToken));
+            }
+            self.match_token(TokenKind::CloseParenthesisToken);
+            if names.len() < 2 {
+                self.diagnostics.report_error(
+                    "Tuple destructuring requires at least two bindings".to_string(),
+                    names.first().map(|n| n.position),
+                );
+            }
+            let mut type_annotation = None;
+            if self.current_token().kind == TokenKind::ColonToken {
+                self.match_token(TokenKind::ColonToken);
+                type_annotation = Some(self.parse_type()?);
+            }
+            self.match_token(TokenKind::EqualToken);
+            let expression = self.parse_expression(0)?;
+            self.match_token(TokenKind::SemicolonToken);
+            return Ok(StatementNode::TupleDeclaration {
+                names,
+                ty: type_annotation,
+                init: expression,
+                is_const,
+            });
+        }
+
         let identifier = self.match_token(TokenKind::IdentifierToken);
 
         // Optional type annotation

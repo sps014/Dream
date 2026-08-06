@@ -73,6 +73,7 @@ pub enum TyKind {
     Interface(DefId, Vec<TypeId>),
     Enum(DefId),
     Func(Vec<TypeId>, TypeId),     // (params, return)
+    Tuple(Vec<TypeId>),            // positional (T, U, …); always a value type
     Js,                            // dynamic JS-interop handle
 }
 ```

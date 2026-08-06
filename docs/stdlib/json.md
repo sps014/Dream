@@ -2,7 +2,7 @@
 
 **Package:** `system.json` — `import system.json;` (also auto-loaded when any type carries `@json`)
 
-Native JSON: a `JsonValue` data model, `JSON.parse` / `JSON.stringify`, and a `@json` attribute that derives converters for your own types. Pure Dream — no JS interop — so it runs on every host.
+Native JSON: a `JsonValue` data model, `Json.parse` / `Json.stringify`, and a `@json` attribute that derives converters for your own types. Pure Dream — no JS interop — so it runs on every host.
 
 Most of the time you want `@json` auto-derive. Reach for `JsonValue` when you need to build or inspect arbitrary, untyped JSON.
 
@@ -23,16 +23,24 @@ class User { name: string; age: int; address: Address; tags: string[]; }
 fun main(): void {
     let u = User("Ada", 36, Address("London", "NW1"), ["dev", "math"]);
 
-    let text = JSON.serialize(u);              // to_json + stringify
-    let back = JSON.deserialize<User>(text);   // parse + from_json
+    let text = Json.serialize(u);              // to_json + stringify
+    let back = Json.deserialize<User>(text).unwrap_or(u);   // Result<User, ParseError>
     System.println(back.address.city);         // London
 }
 ```
 
-- `JSON.serialize(x): string` — stringify any `@json` value.
-- `JSON.deserialize<T>(text): T` — parse and reconstruct a `T`.
+- `Json.serialize(x): string` — stringify any `@json` value.
+- `Json.deserialize<T>(text): Result<T, ParseError>` — parse and reconstruct a `T`.
+- `Json.from_value<T>(value): T` — reconstruct from an already-parsed `JsonValue` (no parse step).
 
-Field types may be primitives, `string`, other `@json` classes, arrays of those, and `Option<string>`, `Option<@json class>`, or `Option<T[]>` of a supported element type. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
+Field types may be primitives, `string`, other `@json` classes, arrays of those, positional **tuples** of supported element types (serialized as JSON arrays), and `Option<string>`, `Option<@json class>`, or `Option<T[]>` of a supported element type. A field whose type is a class/struct/union that is *not* `@json` is a compile error naming the type.
+
+```dream
+@json
+class Row {
+    pair: (int, string);   // JSON: { "pair": [1, "hi"] }
+}
+```
 
 ### Custom keys
 
@@ -89,9 +97,9 @@ enum Shape { Circle(radius: int), Rect(width: int, height: int), Empty }
 @json
 enum Tags { Many(items: string[]), Empty }
 
-let text = JSON.serialize(Shape.Rect(3, 4));   // {"type":"Rect","width":3,"height":4}
-let back = JSON.deserialize<Shape>(text);       // Shape.Rect(3, 4)
-System.println(JSON.serialize(Shape.Empty));           // {"type":"Empty"}
+let text = Json.serialize(Shape.Rect(3, 4));   // {"type":"Rect","width":3,"height":4}
+let back = Json.deserialize<Shape>(text).unwrap_or(Shape.Empty);  // Ok(Shape.Rect(3, 4))
+System.println(Json.serialize(Shape.Empty));           // {"type":"Empty"}
 ```
 
 On deserialize, an unrecognized `"type"` falls back to the first variant. `@json` also works on **generic** classes and unions: each instantiation (e.g. `Box<Point>`) derives its own converters.
@@ -134,12 +142,12 @@ user.set("tags", tags);
 
 `get`, `at`, and `key_at` return an `Option` rather than a sentinel, so a miss is explicit. Read with `unwrap_or(JsonValue.none())` or `switch`.
 
-## `JSON.parse` and `JSON.stringify`
+## `Json.parse` and `Json.stringify`
 
 ```dream
-let text = JSON.stringify(user);     // {"name":"Ada","age":36,"tags":["dev"]}
+let text = Json.stringify(user);     // {"name":"Ada","age":36,"tags":["dev"]}
 
-switch (JSON.parse(text)) {
+switch (Json.parse(text)) {
     Ok(v) => {
         let none = JsonValue.none();
         System.println(v.get("name").unwrap_or(none).as_string().unwrap_or(""));  // Ada
@@ -149,12 +157,12 @@ switch (JSON.parse(text)) {
 }
 ```
 
-`JSON.parse` returns `Result<JsonValue, ParseError>`. It is a recursive-descent parser. A JSON `null` reads back as a `JsonValue` whose `is_null()` is `true`; a missing object key yields `None` from `get`, so a miss is distinguishable from a present `null`.
+`Json.parse` returns `Result<JsonValue, ParseError>`. It is a recursive-descent parser. A JSON `null` reads back as a `JsonValue` whose `is_null()` is `true`; a missing object key yields `None` from `get`, so a miss is distinguishable from a present `null`.
 
-`JSON.stringify_pretty(value, indent)` formats with newlines and `indent` spaces per level; an `indent` of `0` matches compact `JSON.stringify`:
+`Json.stringify_pretty(value, indent)` formats with newlines and `indent` spaces per level; an `indent` of `0` matches compact `Json.stringify`:
 
 ```dream
-System.println(JSON.stringify_pretty(v, 2));
+System.println(Json.stringify_pretty(v, 2));
 // {
 //   "name": "Ada",
 //   "tags": [

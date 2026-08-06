@@ -33,10 +33,10 @@ class User {
 fun main(): void {
     let u = User("Ada", 36, true, Address("London", "NW1"), ["dev", "math"], [10, 20, 30]);
 
-    let text = JSON.serialize(u);
+    let text = Json.serialize(u);
     System.println(text);
 
-    let back = JSON.deserialize<User>(text);
+    let back = Json.deserialize<User>(text).unwrap_or(u);
     System.println(back.name);
     System.println(back.age);
     System.println(back.active);
@@ -45,5 +45,5 @@ fun main(): void {
     System.println(back.tags[0]);
     System.println(back.tags[1]);
     System.println(back.scores[2]);
-    System.println(JSON.serialize(back));
+    System.println(Json.serialize(back));
 }

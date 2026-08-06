@@ -165,6 +165,46 @@ impl Emitter<'_> {
         }
     }
 
+    /// Constructs a tuple in place at `dst`: zero the block, then store each element at its field
+    /// offset (value elements are copied; references are stored and retained).
+    fn construct_value_tuple(
+        &mut self,
+        dst: impl Fn(&mut Self),
+        ty: TypeId,
+        elems: &[Operand],
+    ) {
+        let size = self.value_size(ty);
+        dst(self);
+        self.line("     (i32.const 0)");
+        self.line(&format!("     (i32.const {})", size));
+        self.line("     (memory.fill)");
+        let fields: Vec<(u32, TypeId)> = self
+            .layouts
+            .get(ty)
+            .map(|l| l.fields.iter().map(|f| (f.offset, f.ty)).collect())
+            .unwrap_or_default();
+        for (i, arg) in elems.iter().enumerate() {
+            let Some(&(off, fty)) = fields.get(i) else {
+                continue;
+            };
+            let field_addr = |s: &mut Self| {
+                dst(s);
+                if off > 0 {
+                    s.line(&format!("     (i32.const {}) (i32.add)", off));
+                }
+            };
+            if self.interner.is_value_type(fty) {
+                let arg = arg.clone();
+                self.emit_value_copy(field_addr, |s| s.emit_operand_addr(&arg), fty);
+            } else {
+                field_addr(self);
+                self.emit_operand(arg);
+                self.line(&format!("     ({})", self.store_instr(fty)));
+                self.retain_container_value(fty, arg);
+            }
+        }
+    }
+
     /// Emits a direct call to a value-struct-returning function using the sret ABI: the destination
     /// address (produced by `dst`) is passed as the hidden leading argument, then the real arguments.
     fn emit_value_sret_call(
@@ -245,6 +285,7 @@ impl Emitter<'_> {
                 ty: nty,
                 ..
             } => self.construct_value_new(&dst, *ctor, args, *nty),
+            Rvalue::Tuple { ty: tty, elems } => self.construct_value_tuple(&dst, *tty, elems),
             Rvalue::UnionNew {
                 ty: uty,
                 variant,

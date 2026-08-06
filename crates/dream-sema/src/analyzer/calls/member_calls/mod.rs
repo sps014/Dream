@@ -1,6 +1,6 @@
 //! Analysis of method-call expressions (`obj.method(args)`), split by dispatch shape:
 //! - [`static_dispatch`]: `Type.method(args)` static/namespaced calls (union-variant construction,
-//!   generic static-method monomorphization, `Math.*`/`JSON.*`/async intrinsics, plain statics).
+//!   generic static-method monomorphization, `Math.*`/`Json.*`/async intrinsics, plain statics).
 //! - [`builtins`]: the `size()`/`char_at()`/`to_string()`/`hash_code()` object protocol available on
 //!   every (or every primitive/array) receiver.
 //! - [`instance_dispatch`]: ordinary and interface instance-method resolution once the receiver type

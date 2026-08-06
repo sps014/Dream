@@ -4,7 +4,7 @@
 //
 // Each worker body is a top-level `fun(string): string`. A worker runs on its own OS thread
 // (native) / Web Worker (browser) with its OWN linear memory - nothing is shared, so messages are
-// copied across the boundary as strings. Use `JSON.serialize`/`JSON.deserialize` at the call site
+// copied across the boundary as strings. Use `Json.serialize`/`Json.deserialize` at the call site
 // for structured payloads.
 
 import system;

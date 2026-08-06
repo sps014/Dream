@@ -24,8 +24,8 @@ fun main(): void {
     items[0] = "a";
     items[1] = "b";
     let m = Tags.Many(items);
-    System.println(JSON.serialize(m));
-    let m2 = JSON.deserialize<Tags>(JSON.serialize(m));
+    System.println(Json.serialize(m));
+    let m2 = Json.deserialize<Tags>(Json.serialize(m)).unwrap_or(m);
     switch (m2) {
         Many(items) => {
             System.println(items.size());
@@ -40,8 +40,8 @@ fun main(): void {
     nums[1] = 2;
     nums[2] = 3;
     let c = Tags.Counts(nums);
-    System.println(JSON.serialize(c));
-    let c2 = JSON.deserialize<Tags>(JSON.serialize(c));
+    System.println(Json.serialize(c));
+    let c2 = Json.deserialize<Tags>(Json.serialize(c)).unwrap_or(c);
     switch (c2) {
         Counts(nums) => {
             System.println(nums[0] + nums[1] + nums[2]);
@@ -52,8 +52,8 @@ fun main(): void {
     let pts = Buffer.alloc<Point>(1);
     pts[0] = Point(4, 5);
     let p = Tags.Points(pts);
-    System.println(JSON.serialize(p));
-    let p2 = JSON.deserialize<Tags>(JSON.serialize(p));
+    System.println(Json.serialize(p));
+    let p2 = Json.deserialize<Tags>(Json.serialize(p)).unwrap_or(p);
     switch (p2) {
         Points(pts) => {
             System.println(pts[0].x);

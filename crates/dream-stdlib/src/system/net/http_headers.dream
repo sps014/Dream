@@ -78,7 +78,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
             );
             i = i + 1;
         }
-        return JSON.stringify(obj);
+        return Json.stringify(obj);
     }
 
     // Rebuilds headers from the host bridge JSON object string.
@@ -87,7 +87,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         if (text.is_empty()) {
             return headers;
         }
-        let obj = JSON.parse(text);
+        let obj = Json.parse(text);
         switch (obj) {
             Ok(v) => {
                 let keys = v.keys();

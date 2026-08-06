@@ -89,7 +89,7 @@ async fun main(): void {
     let text_res = await File.read(path);
     switch (text_res) {
         Ok(text) => {
-            let parsed = JSON.parse(text);
+            let parsed = Json.parse(text);
             switch (parsed) {
                 Ok(root) => {
                     let types = types_from_json(root.get("types").unwrap_or(JsonValue.array()));

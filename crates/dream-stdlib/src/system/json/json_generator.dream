@@ -148,6 +148,157 @@ public class JsonGenerator {
         return "let " + src_var + " = " + jexpr + ";\n        let " + out_var + " = Buffer.alloc<" + elem + ">(" + src_var + ".size());\n        let " + idx_var + " = 0;\n        while (" + idx_var + " < " + src_var + ".size()) {\n            " + out_var + "[" + idx_var + "] = " + from_e + ";\n            " + idx_var + " = " + idx_var + " + 1;\n        }\n";
     }
 
+    static fun is_tuple_type(ftype: string): bool {
+        return ftype.starts_with("(") && ftype.ends_with(")") && ftype.size() > 2;
+    }
+
+    // Split a tuple type spelling `(T,U,…)` / `((T,U),V)` into element type spellings at depth 0.
+    static fun tuple_elems(ftype: string): List<string> {
+        let out = List<string>();
+        if (JsonGenerator.is_tuple_type(ftype) == false) {
+            return out;
+        }
+        let inner = ftype.substring(1, ftype.size() - 1);
+        let cur = "";
+        let depth = 0;
+        let i = 0;
+        while (i < inner.size()) {
+            let ch = inner.char_at(i);
+            if (ch == '(') {
+                depth = depth + 1;
+                cur = cur + "(";
+            } else if (ch == ')') {
+                depth = depth - 1;
+                cur = cur + ")";
+            } else if (ch == ',' && depth == 0) {
+                if (cur.size() > 0) {
+                    out.push(cur);
+                }
+                cur = "";
+            } else if (ch == ' ' && depth == 0 && cur.size() == 0) {
+                // skip leading spaces after commas
+            } else {
+                cur = cur + inner.substring(i, i + 1);
+            }
+            i = i + 1;
+        }
+        if (cur.size() > 0) {
+            out.push(cur);
+        }
+        return out;
+    }
+
+    static fun tuple_to_stmts(
+        ftype: string,
+        access: string,
+        arr_var: string,
+        json_names: List<string>
+    ): string {
+        let elems = JsonGenerator.tuple_elems(ftype);
+        if (elems.size() < 2) {
+            return "";
+        }
+        let s = "let " + arr_var + " = JsonValue.array();\n";
+        let i = 0;
+        while (i < elems.size()) {
+            let elem = elems.get(i).unwrap_or("");
+            let acc = access + "[" + i.to_string() + "]";
+            if (JsonGenerator.is_tuple_type(elem)) {
+                let nested = arr_var + "_t" + i.to_string();
+                let nested_s = JsonGenerator.tuple_to_stmts(elem, acc, nested, json_names);
+                if (nested_s.size() == 0) {
+                    return "";
+                }
+                s = s + nested_s + "        " + arr_var + ".push(" + nested + ");\n";
+            } else if (elem.ends_with("[]")) {
+                let ae = elem.substring(0, elem.size() - 2);
+                let nested = arr_var + "_a" + i.to_string();
+                let nested_s = JsonGenerator.array_to_stmts(
+                    ae,
+                    acc,
+                    nested,
+                    arr_var + "_i" + i.to_string(),
+                    json_names
+                );
+                if (nested_s.size() == 0) {
+                    return "";
+                }
+                s = s + nested_s + "        " + arr_var + ".push(" + nested + ");\n";
+            } else {
+                let to_e = JsonGenerator.json_to_expr(elem, acc, json_names);
+                if (to_e.size() == 0) {
+                    return "";
+                }
+                s = s + "        " + arr_var + ".push(" + to_e + ");\n";
+            }
+            i = i + 1;
+        }
+        return s;
+    }
+
+    static fun tuple_from_stmts(
+        ftype: string,
+        jexpr: string,
+        out_var: string,
+        src_var: string,
+        json_names: List<string>
+    ): string {
+        let elems = JsonGenerator.tuple_elems(ftype);
+        if (elems.size() < 2) {
+            return "";
+        }
+        let s = "let " + src_var + " = " + jexpr + ";\n";
+        let parts = "";
+        let i = 0;
+        while (i < elems.size()) {
+            let elem = elems.get(i).unwrap_or("");
+            let je = src_var + ".at(" + i.to_string() + ").unwrap_or(JsonValue.none())";
+            if (i > 0) {
+                parts = parts + ", ";
+            }
+            if (JsonGenerator.is_tuple_type(elem)) {
+                let nested = out_var + "_t" + i.to_string();
+                let nested_s = JsonGenerator.tuple_from_stmts(
+                    elem,
+                    je,
+                    nested,
+                    src_var + "_s" + i.to_string(),
+                    json_names
+                );
+                if (nested_s.size() == 0) {
+                    return "";
+                }
+                s = s + nested_s;
+                parts = parts + nested;
+            } else if (elem.ends_with("[]")) {
+                let ae = elem.substring(0, elem.size() - 2);
+                let nested = out_var + "_a" + i.to_string();
+                let nested_s = JsonGenerator.array_from_stmts(
+                    ae,
+                    je,
+                    nested,
+                    out_var + "_i" + i.to_string(),
+                    src_var + "_as" + i.to_string(),
+                    json_names
+                );
+                if (nested_s.size() == 0) {
+                    return "";
+                }
+                s = s + nested_s;
+                parts = parts + nested;
+            } else {
+                let from_e = JsonGenerator.json_from_expr(elem, je, json_names);
+                if (from_e.size() == 0) {
+                    return "";
+                }
+                parts = parts + from_e;
+            }
+            i = i + 1;
+        }
+        s = s + "        let " + out_var + " = (" + parts + ");\n";
+        return s;
+    }
+
     static fun expand_class(t: GenType, json_names: List<string>, jsonable: List<string>): GenResult {
         let to_body = "        let __o = JsonValue.dict();\n";
         let from_prelude = "";
@@ -268,12 +419,42 @@ public class JsonGenerator {
                 continue;
             }
 
-            if (field.is_type_param) {
-                to_body = to_body + "        __o.set(\"" + json_key + "\", JSON.parse(JSON.serialize(this." + fname + ")).unwrap_or(JsonValue.none()));\n";
+            if (JsonGenerator.is_tuple_type(ftype)) {
+                let to_s = JsonGenerator.tuple_to_stmts(
+                    ftype,
+                    "this." + fname,
+                    "__arr_" + fname,
+                    json_names
+                );
+                let from_s = JsonGenerator.tuple_from_stmts(
+                    ftype,
+                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.none())",
+                    "__" + fname,
+                    "__src_" + fname,
+                    json_names
+                );
+                if (to_s.size() == 0 || from_s.size() == 0) {
+                    return GenResult.failure(
+                        "@json class '" + t.name + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
+                    );
+                }
+                to_body = to_body + "        " + to_s + "        __o.set(\"" + json_key + "\", __arr_" + fname + ");\n";
+                from_prelude = from_prelude + "        " + from_s;
                 if (first_field == false) {
                     from_fields = from_fields + ", ";
                 }
-                from_fields = from_fields + "JSON.deserialize<" + ftype + ">(JSON.stringify(v.get(\"" + json_key + "\").unwrap_or(JsonValue.none())))";
+                from_fields = from_fields + "__" + fname;
+                first_field = false;
+                fi = fi + 1;
+                continue;
+            }
+
+            if (field.is_type_param) {
+                to_body = to_body + "        __o.set(\"" + json_key + "\", Json.parse(Json.serialize(this." + fname + ")).unwrap_or(JsonValue.none()));\n";
+                if (first_field == false) {
+                    from_fields = from_fields + ", ";
+                }
+                from_fields = from_fields + "Json.from_value<" + ftype + ">(v.get(\"" + json_key + "\").unwrap_or(JsonValue.none()))";
                 first_field = false;
                 fi = fi + 1;
                 continue;
@@ -339,7 +520,7 @@ public class JsonGenerator {
                 if (field.json_ignore) {
                     // skip serialize
                 } else if (field.is_type_param) {
-                    to_body = to_body + "                __o.set(\"" + fname + "\", JSON.parse(JSON.serialize(" + fname + ")).unwrap_or(JsonValue.none()));\n";
+                    to_body = to_body + "                __o.set(\"" + fname + "\", Json.parse(Json.serialize(" + fname + ")).unwrap_or(JsonValue.none()));\n";
                 } else if (ftype.ends_with("[]")) {
                     let elem = ftype.substring(0, ftype.size() - 2);
                     let to_s = JsonGenerator.array_to_stmts(
@@ -352,6 +533,20 @@ public class JsonGenerator {
                     if (to_s.size() == 0) {
                         return GenResult.failure(
                             "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
+                        );
+                    }
+                    to_body = to_body + "                " + to_s.replace("\n", "\n                ");
+                    to_body = to_body + "                __o.set(\"" + fname + "\", __arr_" + vname + "_" + fname + ");\n";
+                } else if (JsonGenerator.is_tuple_type(ftype)) {
+                    let to_s = JsonGenerator.tuple_to_stmts(
+                        ftype,
+                        fname,
+                        "__arr_" + vname + "_" + fname,
+                        json_names
+                    );
+                    if (to_s.size() == 0) {
+                        return GenResult.failure(
+                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
                         );
                     }
                     to_body = to_body + "                " + to_s.replace("\n", "\n                ");
@@ -385,7 +580,7 @@ public class JsonGenerator {
                         if (first_arg == false) {
                             args = args + ", ";
                         }
-                        args = args + "JSON.deserialize<" + ftype + ">(JSON.stringify(" + jexpr + "))";
+                        args = args + "Json.from_value<" + ftype + ">(" + jexpr + ")";
                         first_arg = false;
                     } else if (ftype.ends_with("[]")) {
                         let elem = ftype.substring(0, ftype.size() - 2);
@@ -401,6 +596,26 @@ public class JsonGenerator {
                         if (from_s.size() == 0) {
                             return GenResult.failure(
                                 "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
+                            );
+                        }
+                        from_prelude = from_prelude + "            " + from_s.replace("\n", "\n            ");
+                        if (first_arg == false) {
+                            args = args + ", ";
+                        }
+                        args = args + out_var;
+                        first_arg = false;
+                    } else if (JsonGenerator.is_tuple_type(ftype)) {
+                        let out_var = "__" + vname + "_" + fname;
+                        let from_s = JsonGenerator.tuple_from_stmts(
+                            ftype,
+                            jexpr,
+                            out_var,
+                            "__src_" + vname + "_" + fname,
+                            json_names
+                        );
+                        if (from_s.size() == 0) {
+                            return GenResult.failure(
+                                "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
                             );
                         }
                         from_prelude = from_prelude + "            " + from_s.replace("\n", "\n            ");
@@ -468,7 +683,7 @@ public class JsonGenerator {
                     if (first_arg == false) {
                         args = args + ", ";
                     }
-                    args = args + "JSON.deserialize<" + ftype + ">(JSON.stringify(" + jexpr + "))";
+                    args = args + "Json.from_value<" + ftype + ">(" + jexpr + ")";
                     first_arg = false;
                 } else if (ftype.ends_with("[]")) {
                     let elem = ftype.substring(0, ftype.size() - 2);

@@ -187,6 +187,7 @@ fn rvalue(r: &Rvalue) -> String {
             format!("union def{}#{}({})", def.0, variant, ops(args))
         }
         Rvalue::ArrayLit { elems, .. } => format!("[{}]", ops(elems)),
+        Rvalue::Tuple { elems, .. } => format!("({})", ops(elems)),
         Rvalue::ArrayLen(o) => format!("len({})", operand(o)),
         Rvalue::StrLen(o) => format!("str_scalar_len({})", operand(o)),
         Rvalue::StrByteSize(o) => format!("str_byte_size({})", operand(o)),

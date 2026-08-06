@@ -208,6 +208,13 @@ impl Lowerer<'_> {
                     elems: lowered,
                 }
             }
+            HExprKind::Tuple { elems } => {
+                let lowered = elems.iter().map(|e| self.lower_operand(e)).collect();
+                Rvalue::Tuple {
+                    ty: e.ty,
+                    elems: lowered,
+                }
+            }
             HExprKind::JsCall {
                 callee,
                 target,

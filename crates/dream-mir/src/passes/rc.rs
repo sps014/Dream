@@ -227,7 +227,8 @@ fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
-        | Rvalue::ArrayLit { elems: args, .. } => args.iter().for_each(&mut check),
+        | Rvalue::ArrayLit { elems: args, .. }
+        | Rvalue::Tuple { elems: args, .. } => args.iter().for_each(&mut check),
         Rvalue::IndirectCall { target, args } => {
             check(target);
             args.iter().for_each(&mut check);

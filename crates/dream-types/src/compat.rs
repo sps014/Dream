@@ -85,6 +85,16 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
         }
     }
 
+    // Structural tuples: same arity, each element assignable.
+    if let (TyKind::Tuple(t_elems), TyKind::Tuple(v_elems)) = (tk, vk) {
+        if t_elems.len() == v_elems.len() {
+            return t_elems
+                .iter()
+                .zip(v_elems.iter())
+                .all(|(t, v)| assignable(interner, *t, *v));
+        }
+    }
+
     false
 }
 

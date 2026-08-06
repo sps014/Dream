@@ -43,7 +43,7 @@ async fun main(): void {
     let api = HttpClient("https://api.example.com");
     switch (await api.text("/users/42")) {
         Ok(body) => {
-            switch (JSON.parse(body)) {
+            switch (Json.parse(body)) {
                 Ok(user) => System.println(user.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("")),
                 Err(e) => System.println(e.message()),
             }

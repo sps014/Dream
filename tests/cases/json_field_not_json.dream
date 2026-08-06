@@ -14,5 +14,5 @@ class Wrapper {
 
 fun main(): void {
     let w = Wrapper("a", Plain(5));
-    System.println(JSON.serialize(w));
+    System.println(Json.serialize(w));
 }

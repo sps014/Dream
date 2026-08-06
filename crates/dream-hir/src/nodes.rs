@@ -259,6 +259,11 @@ pub enum HExprKind {
         elem_ty: TypeId,
         elems: Vec<HExpr>,
     },
+    /// Positional tuple literal `(e0, e1, …)`. Lowered like a value-struct aggregate (inline frame
+    /// + per-field stores); the node's type is `TyKind::Tuple`.
+    Tuple {
+        elems: Vec<HExpr>,
+    },
     /// `Bytes.of<T>(v)` — raw-copy the blittable value `.0`'s bytes into a fresh `byte[]`. The
     /// operand's static type gives the byte count at codegen. Node type is `byte[]`.
     ToBytes(Box<HExpr>),

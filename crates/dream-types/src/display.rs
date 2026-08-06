@@ -37,5 +37,13 @@ pub fn display_name(interner: &TypeInterner, defs: &DefTable, id: TypeId) -> Str
                 .join(", ");
             format!("fun({}): {}", rendered, display_name(interner, defs, *ret))
         }
+        TyKind::Tuple(elems) => {
+            let rendered = elems
+                .iter()
+                .map(|e| display_name(interner, defs, *e))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({})", rendered)
+        }
     }
 }

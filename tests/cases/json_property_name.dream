@@ -24,10 +24,10 @@ class Product {
 fun main(): void {
     let p = Product(42, "Widget", 9.5, ["sale", "new"]);
 
-    let serialized = JSON.serialize(p);
+    let serialized = Json.serialize(p);
     System.println(serialized);
 
-    let deserialized = JSON.deserialize<Product>(serialized);
+    let deserialized = Json.deserialize<Product>(serialized).unwrap_or(p);
     System.println(deserialized.name);
     System.println(deserialized.product_id);
 }

@@ -119,6 +119,9 @@ pub enum TyKind {
     Enum(DefId),
     /// A first-class function value `fun(params...): ret`, an `i32` table index at runtime.
     Func(Vec<TypeId>, TypeId),
+    /// A positional product type `(T, U, …)` (arity ≥ 2). Structural identity by element
+    /// `TypeId`s; always stored inline as a value type (never a heap reference for the envelope).
+    Tuple(Vec<TypeId>),
     /// The dynamic JavaScript-interop type `js`: an opaque `i32` handle into the host's live-value
     /// registry (see `runtime/dream.js`). Member/method/index access on a `js` value binds
     /// dynamically at runtime, so the compiler performs no member resolution. It is *not* a heap

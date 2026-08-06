@@ -10,9 +10,9 @@ fun main(): void {
     user.set("tags", tags);
     user.set("active", JsonValue.boolean(true));
 
-    System.println(JSON.stringify(user));
+    System.println(Json.stringify(user));
 
-    let parsed = JSON.parse(JSON.stringify(user)).unwrap_or(JsonValue.none());
+    let parsed = Json.parse(Json.stringify(user)).unwrap_or(JsonValue.none());
     let none = JsonValue.none();
     System.println(parsed.get("name").unwrap_or(none).as_string().unwrap_or(""));
     System.println(parsed.get("age").unwrap_or(none).as_int().unwrap_or(0));

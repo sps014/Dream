@@ -1,5 +1,5 @@
 //! On-the-fly monomorphization of a generic static method, dispatching the `System.print`,
-//! `Buffer.alloc`, `Bytes.of`/`to`, `Promise.*`, and `JSON.serialize`/`deserialize` intrinsics
+//! `Buffer.alloc`, `Bytes.of`/`to`, `Promise.*`, and `Json.serialize`/`deserialize` intrinsics
 //! before falling back to registering a plain generic-static instance.
 
 use super::*;
@@ -312,9 +312,9 @@ impl<'a> Analyzer<'a> {
             return Ok(ret);
         }
 
-        // `JSON.serialize<T>(v)` / `JSON.deserialize<T>(text)`: the `@json` derive emits
-        // `<T>.to_json()` / `<T>.from_json()` (see `driver::generate` / Dream `JsonGenerator`), and `JSON.stringify` /
-        // `JSON.parse` are ordinary static methods. Expand the intrinsic into that composition so
+        // `Json.serialize<T>(v)` / `Json.deserialize<T>(text)`: the `@json` derive emits
+        // `<T>.to_json()` / `<T>.from_json()` (see `driver::generate` / Dream `JsonGenerator`), and `Json.stringify` /
+        // `Json.parse` are ordinary static methods. Expand the intrinsic into that composition so
         // the whole thing lowers through MIR as ordinary calls.
         let json_op = intrinsics::IntrinsicOp::from_attributes(&template.attributes);
         if json_op == Some(intrinsics::IntrinsicOp::JsonSerialize) {
@@ -335,10 +335,13 @@ impl<'a> Analyzer<'a> {
                 &named("JsonValue"),
             );
             let to_json = self.hir_take();
-            self.hir_set_call("JSON_stringify", vec![to_json], &named("string"));
+            self.hir_set_call("Json_stringify", vec![to_json], &named("string"));
             return Ok(named("string"));
         }
         if json_op == Some(intrinsics::IntrinsicOp::JsonDeserialize) {
+            use dream_hir::{Binding, HExpr, HExprKind};
+            use dream_syntax::token::token_kind::TokenKind;
+
             let named = |name: &str| -> Type {
                 let mut t = method.clone();
                 t.text = name.to_string();
@@ -348,7 +351,7 @@ impl<'a> Analyzer<'a> {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => {
                     diagnostics.report_error(
-                        "'JSON.deserialize' requires a type argument, e.g. JSON.deserialize<T>(text)"
+                        "'Json.deserialize' requires a type argument, e.g. Json.deserialize<T>(text)"
                             .to_string(),
                         Some(method.position),
                     );
@@ -357,9 +360,142 @@ impl<'a> Analyzer<'a> {
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
             let text = arg_hirs.into_iter().next().flatten();
-            self.hir_set_call("JSON_parse_value", vec![text], &named("JsonValue"));
-            let parsed = self.hir_take();
-            self.hir_set_call(&method_fn(&struct_name, "from_json"), vec![parsed], &t_type);
+
+            let parse_err = named("ParseError");
+            let json_value = named("JsonValue");
+            let parse_result_ty = Type::Struct(
+                synthetic_token(TokenKind::IdentifierToken, "Result"),
+                Some(vec![json_value.clone(), parse_err.clone()]),
+            );
+            let result_ty = Type::Struct(
+                synthetic_token(TokenKind::IdentifierToken, "Result"),
+                Some(vec![t_type.clone(), parse_err.clone()]),
+            );
+
+            let span = method.position;
+            self.ensure_union_instantiated(
+                "Result",
+                &[json_value.clone(), parse_err.clone()],
+                &span,
+                diagnostics,
+            );
+            self.ensure_union_instantiated(
+                "Result",
+                &[t_type.clone(), parse_err.clone()],
+                &span,
+                diagnostics,
+            );
+
+            self.hir_set_call("Json_parse", vec![text], &parse_result_ty);
+            let parse_hir = self.hir_take();
+
+            let parse_mangled = parse_result_ty.get_type();
+            let result_mangled = result_ty.get_type();
+            let parse_info = self.union_table.get(&parse_mangled).cloned();
+            let parse_def = self
+                .type_ctx
+                .defs
+                .lookup(dream_types::DefKind::Union, &parse_mangled);
+            let result_def = self
+                .type_ctx
+                .defs
+                .lookup(dream_types::DefKind::Union, &result_mangled);
+
+            let (Some(parse_info), Some(parse_def), Some(result_def)) =
+                (parse_info, parse_def, result_def)
+            else {
+                self.hir_fail();
+                self.hir_none();
+                return Ok(result_ty);
+            };
+            let (Some(ok_variant), Some(err_variant)) =
+                (parse_info.variant("Ok"), parse_info.variant("Err"))
+            else {
+                self.hir_fail();
+                self.hir_none();
+                return Ok(result_ty);
+            };
+            let ok_disc = ok_variant.discriminant as usize;
+            let err_disc = err_variant.discriminant as usize;
+
+            let result_temp = self.hir_alloc_local("__json_deser", &result_ty);
+            let ok_local = self.hir_alloc_local("__json_ok", &json_value);
+            let err_local = self.hir_alloc_local("__json_err", &parse_err);
+            let result_ty_id = self.type_ctx.lower(&result_ty);
+
+            let mut ok = parse_hir.is_some()
+                && result_temp.is_some()
+                && ok_local.is_some()
+                && err_local.is_some();
+
+            // Ok(v) => Result.Ok(T.from_json(v))
+            self.hir_open_block();
+            if let Some(local) = ok_local {
+                let ty_id = self.type_ctx.lower(&json_value);
+                let read = HExpr::new(ty_id, HExprKind::Var(Binding::Local(local)));
+                self.hir_set_call(
+                    &method_fn(&struct_name, "from_json"),
+                    vec![Some(read)],
+                    &t_type,
+                );
+                let from_json = self.hir_take();
+                self.hir_set_union_new(result_def, ok_disc, vec![from_json], &result_ty);
+                let wrapped = self.hir_take();
+                self.hir_assign_local_id(result_temp.unwrap_or(dream_hir::LocalId(0)), wrapped);
+            } else {
+                ok = false;
+            }
+            let ok_body = self.hir_close_block();
+            let ok_arm = self.hir_variant_arm(
+                parse_def,
+                ok_disc,
+                vec![ok_local.unwrap_or(dream_hir::LocalId(0))],
+                ok_body,
+            );
+
+            // Err(e) => Result.Err(e)
+            self.hir_open_block();
+            if let Some(local) = err_local {
+                let ty_id = self.type_ctx.lower(&parse_err);
+                let read = HExpr::new(ty_id, HExprKind::Var(Binding::Local(local)));
+                self.hir_set_union_new(result_def, err_disc, vec![Some(read)], &result_ty);
+                let wrapped = self.hir_take();
+                self.hir_assign_local_id(result_temp.unwrap_or(dream_hir::LocalId(0)), wrapped);
+            } else {
+                ok = false;
+            }
+            let err_body = self.hir_close_block();
+            let err_arm = self.hir_variant_arm(
+                parse_def,
+                err_disc,
+                vec![err_local.unwrap_or(dream_hir::LocalId(0))],
+                err_body,
+            );
+
+            self.hir_switch(parse_hir, vec![ok_arm, err_arm], vec![], ok);
+            if ok {
+                self.hir_set_local_read(result_temp.unwrap_or(dream_hir::LocalId(0)), result_ty_id);
+            } else {
+                self.hir_fail();
+                self.hir_none();
+            }
+            return Ok(result_ty);
+        }
+        if json_op == Some(intrinsics::IntrinsicOp::JsonFromValue) {
+            let t_type = match generic_args.as_ref().and_then(|g| g.first()) {
+                Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
+                None => {
+                    diagnostics.report_error(
+                        "'Json.from_value' requires a type argument, e.g. Json.from_value<T>(value)"
+                            .to_string(),
+                        Some(method.position),
+                    );
+                    Type::Void
+                }
+            };
+            let struct_name = t_type.get_type().trim_end_matches('?').to_string();
+            let value = arg_hirs.into_iter().next().flatten();
+            self.hir_set_call(&method_fn(&struct_name, "from_json"), vec![value], &t_type);
             return Ok(t_type);
         }
 

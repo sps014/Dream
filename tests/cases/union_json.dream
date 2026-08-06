@@ -21,18 +21,18 @@ enum Shape {
 
 fun main(): void {
     let c = Shape.Circle(7);
-    System.println(JSON.serialize(c));
-    System.println(JSON.deserialize<Shape>(JSON.serialize(c)).to_string());
+    System.println(Json.serialize(c));
+    System.println(Json.deserialize<Shape>(Json.serialize(c)).unwrap_or(Shape.Empty).to_string());
 
     let r = Shape.Rect(3, 4);
-    System.println(JSON.serialize(r));
-    System.println(JSON.deserialize<Shape>(JSON.serialize(r)).to_string());
+    System.println(Json.serialize(r));
+    System.println(Json.deserialize<Shape>(Json.serialize(r)).unwrap_or(Shape.Empty).to_string());
 
     let e = Shape.Empty;
-    System.println(JSON.serialize(e));
-    System.println(JSON.deserialize<Shape>(JSON.serialize(e)).to_string());
+    System.println(Json.serialize(e));
+    System.println(Json.deserialize<Shape>(Json.serialize(e)).unwrap_or(Shape.Empty).to_string());
 
     let l = Shape.Located(Point(1, 2));
-    System.println(JSON.serialize(l));
-    System.println(JSON.deserialize<Shape>(JSON.serialize(l)).to_string());
+    System.println(Json.serialize(l));
+    System.println(Json.deserialize<Shape>(Json.serialize(l)).unwrap_or(Shape.Empty).to_string());
 }

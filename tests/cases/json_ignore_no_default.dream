@@ -20,5 +20,5 @@ class Bad {
 
 fun main(): void {
     let b = Bad("x", Address("y"));
-    System.println(JSON.serialize(b));
+    System.println(Json.serialize(b));
 }

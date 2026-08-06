@@ -1,0 +1,18 @@
+import system;
+
+fun main() {
+    let (a, b) = (7, "ok");
+    System.println(a);
+    System.print(b);
+    System.println("");
+
+    let t = (1, 2, 3);
+    let (x, y, z) = t;
+    System.println(x);
+    System.println(y);
+    System.println(z);
+
+    const (c, d): (int, int) = (9, 8);
+    System.println(c);
+    System.println(d);
+}

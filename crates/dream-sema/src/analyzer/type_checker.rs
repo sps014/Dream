@@ -123,6 +123,7 @@ impl<'a> Analyzer<'a> {
         // *before* recursing into any nested body, so a function containing one is skipped cleanly.
         match statement {
             StatementNode::Declaration(..)
+            | StatementNode::TupleDeclaration { .. }
             | StatementNode::Assignment(..)
             | StatementNode::IndexAssignment(..)
             | StatementNode::MemberAssignment(..)
@@ -145,6 +146,12 @@ impl<'a> Analyzer<'a> {
         match statement {
             StatementNode::Declaration(left, type_annotation, right, is_const) => self
                 .analyze_declaration(left, type_annotation, right, *is_const, &ctx, diagnostics)?,
+            StatementNode::TupleDeclaration {
+                names,
+                ty,
+                init,
+                is_const,
+            } => self.analyze_tuple_declaration(names, ty, init, *is_const, &ctx, diagnostics)?,
             StatementNode::Assignment(left, right) => {
                 self.analyze_assignment(left, right, parent_function, symbol_table, diagnostics)?
             }

@@ -2,24 +2,28 @@ module system.json;
 
 // The public JSON API.
 
-public class JSON {
+public class Json {
     @intrinsic("json_serialize")
     static extern fun serialize<T>(value: T): string;
 
     @intrinsic("json_deserialize")
-    static extern fun deserialize<T>(text: string): T;
+    static extern fun deserialize<T>(text: string): Result<T, ParseError>;
+
+    // Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).
+    @intrinsic("json_from_value")
+    static extern fun from_value<T>(value: JsonValue): T;
 
     public static fun stringify(value: JsonValue): string {
-        return JSON._json_stringify(value);
+        return Json._json_stringify(value);
     }
 
     // Pretty-prints `value` with newlines and `indent` spaces per nesting level (e.g. 2 or 4).
     // Pass 0 to fall back to compact output.
     public static fun stringify_pretty(value: JsonValue, indent: int): string {
         if (indent <= 0) {
-            return JSON._json_stringify(value);
+            return Json._json_stringify(value);
         }
-        return JSON._json_stringify_pretty(value, indent, 0);
+        return Json._json_stringify_pretty(value, indent, 0);
     }
 
     public static fun parse(text: string): Result<JsonValue, ParseError> {
@@ -34,10 +38,6 @@ public class JSON {
         return Result.Ok(value);
     }
 
-    // Internal: JsonValue or `none` on parse failure (used by `JSON.deserialize` expansion).
-    static fun parse_value(text: string): JsonValue {
-        return JSON.parse(text).unwrap_or(JsonValue.none());
-    }
 
     // --- internal serialization helpers -----------------------------------------------------
 
@@ -90,10 +90,10 @@ public class JSON {
             return "false";
         }
         if (k == 2) {
-            return JSON._json_number(v.num_val);
+            return Json._json_number(v.num_val);
         }
         if (k == 3) {
-            return JSON._json_escape(v.str_val);
+            return Json._json_escape(v.str_val);
         }
         if (k == 4) {
             let result = "[";
@@ -102,7 +102,7 @@ public class JSON {
                 if (i > 0) {
                     result = result + ",";
                 }
-                result = result + JSON._json_stringify(v.items.get(i).unwrap_or(JsonValue.none()));
+                result = result + Json._json_stringify(v.items.get(i).unwrap_or(JsonValue.none()));
                 i = i + 1;
             }
             result = result + "]";
@@ -115,9 +115,9 @@ public class JSON {
                 if (i > 0) {
                     result = result + ",";
                 }
-                result = result + JSON._json_escape(v.obj_keys.get(i).unwrap_or(""));
+                result = result + Json._json_escape(v.obj_keys.get(i).unwrap_or(""));
                 result = result + ":";
-                result = result + JSON._json_stringify(v.obj_vals.get(i).unwrap_or(JsonValue.none()));
+                result = result + Json._json_stringify(v.obj_vals.get(i).unwrap_or(JsonValue.none()));
                 i = i + 1;
             }
             result = result + "}";
@@ -146,15 +146,15 @@ public class JSON {
             if (v.items.size() == 0) {
                 return "[]";
             }
-            let pad = JSON._json_spaces(indent * (depth + 1));
-            let pad_end = JSON._json_spaces(indent * depth);
+            let pad = Json._json_spaces(indent * (depth + 1));
+            let pad_end = Json._json_spaces(indent * depth);
             let result = "[\n";
             let i = 0;
             while (i < v.items.size()) {
                 if (i > 0) {
                     result = result + ",\n";
                 }
-                result = result + pad + JSON._json_stringify_pretty(v.items.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
+                result = result + pad + Json._json_stringify_pretty(v.items.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
                 i = i + 1;
             }
             result = result + "\n" + pad_end + "]";
@@ -164,20 +164,20 @@ public class JSON {
             if (v.obj_keys.size() == 0) {
                 return "{}";
             }
-            let pad = JSON._json_spaces(indent * (depth + 1));
-            let pad_end = JSON._json_spaces(indent * depth);
+            let pad = Json._json_spaces(indent * (depth + 1));
+            let pad_end = Json._json_spaces(indent * depth);
             let result = "{\n";
             let i = 0;
             while (i < v.obj_keys.size()) {
                 if (i > 0) {
                     result = result + ",\n";
                 }
-                result = result + pad + JSON._json_escape(v.obj_keys.get(i).unwrap_or("")) + ": " + JSON._json_stringify_pretty(v.obj_vals.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
+                result = result + pad + Json._json_escape(v.obj_keys.get(i).unwrap_or("")) + ": " + Json._json_stringify_pretty(v.obj_vals.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
                 i = i + 1;
             }
             result = result + "\n" + pad_end + "}";
             return result;
         }
-        return JSON._json_stringify(v);
+        return Json._json_stringify(v);
     }
 }

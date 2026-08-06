@@ -109,6 +109,178 @@ impl<'a> Analyzer<'a> {
         }
         Ok(())
     }
+
+    /// `let (a, b) = expr;` — positional tuple destructure. When `expr` is a same-arity tuple
+    /// literal, binds each name directly from the corresponding element (no materialized temp).
+    /// Otherwise materializes the tuple and projects constant indices.
+    pub(in crate::analyzer) fn analyze_tuple_declaration(
+        &mut self,
+        names: &[SyntaxToken],
+        type_annotation: &Option<Type>,
+        right: &ExpressionNode<'a>,
+        is_const: bool,
+        ctx: &super::super::AnalyzerContext<'a, '_>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<(), SemanticError> {
+        for name in names {
+            self.check_reserved_name(name, "variable", diagnostics);
+        }
+        let mono_annotation = type_annotation
+            .as_ref()
+            .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
+        let type_annotation = &mono_annotation;
+
+        if let Some(t) = type_annotation {
+            match t {
+                Type::Tuple(elems) if elems.len() == names.len() => {}
+                Type::Unknown => {}
+                Type::Tuple(elems) => {
+                    diagnostics.report_error(
+                        format!(
+                            "tuple type has {} elements but destructuring binds {}",
+                            elems.len(),
+                            names.len()
+                        ),
+                        names.first().map(|n| n.position),
+                    );
+                }
+                other => {
+                    diagnostics.report_error(
+                        format!(
+                            "tuple destructuring requires a tuple type, got {}",
+                            other.display_name()
+                        ),
+                        names.first().map(|n| n.position),
+                    );
+                }
+            }
+        }
+
+        // Fast path: `let (a, b) = (e0, e1);` — bind directly without a temp.
+        if let ExpressionNode::TupleLiteral(elems) = right {
+            if elems.len() == names.len() {
+                let expected_elems: Option<Vec<Type>> = match type_annotation {
+                    Some(Type::Tuple(ts)) => Some(ts.clone()),
+                    _ => None,
+                };
+                for (i, (name, elem)) in names.iter().zip(elems.iter()).enumerate() {
+                    let saved = self.current_expected_type.take();
+                    self.current_expected_type =
+                        expected_elems.as_ref().and_then(|es| es.get(i).cloned());
+                    let elem_ty = self
+                        .analyze_expression(elem, ctx.parent_function, ctx.symbol_table, diagnostics)
+                        .unwrap_or(Type::Unknown);
+                    let mut value = self.hir_take();
+                    self.current_expected_type = saved;
+                    let var_type = if let Some(es) = expected_elems.as_ref() {
+                        let t = &es[i];
+                        let converted;
+                        (converted, value) = self.apply_implicit_cast(&elem_ty, t, value);
+                        self.compare_data_type(t, &converted, &name.position, diagnostics)?;
+                        t.clone()
+                    } else {
+                        elem_ty
+                    };
+                    self.record_capturing_fun_local(&name.text, &var_type, value.as_ref());
+                    self.hir_declare_local(&name.text, &var_type, value);
+                    if let Err(e) = (*ctx.symbol_table)
+                        .as_ref()
+                        .borrow_mut()
+                        .add_symbol(name.text.clone(), var_type)
+                    {
+                        diagnostics.report_error(e.to_string(), Some(name.position));
+                    }
+                    if is_const {
+                        (*ctx.symbol_table)
+                            .as_ref()
+                            .borrow_mut()
+                            .mark_const(name.text.clone());
+                    }
+                }
+                self.hir_flush_ref_writebacks();
+                return Ok(());
+            }
+        }
+
+        let saved_expected = self.current_expected_type.take();
+        self.current_expected_type = type_annotation.clone();
+        let right_type = self
+            .analyze_expression(right, ctx.parent_function, ctx.symbol_table, diagnostics)
+            .unwrap_or(Type::Unknown);
+        let mut value = self.hir_take();
+        self.current_expected_type = saved_expected;
+
+        let tuple_ty = if let Some(t) = type_annotation {
+            let converted;
+            (converted, value) = self.apply_implicit_cast(&right_type, t, value);
+            self.compare_data_type(t, &converted, &names[0].position, diagnostics)?;
+            t.clone()
+        } else {
+            right_type.clone()
+        };
+
+        let Type::Tuple(elem_tys) = &tuple_ty else {
+            if !right_type.is_unknown() {
+                diagnostics.report_error(
+                    format!(
+                        "cannot destructure non-tuple type {}",
+                        right_type.display_name()
+                    ),
+                    right.position(),
+                );
+            }
+            self.hir_fail();
+            return Ok(());
+        };
+        if elem_tys.len() != names.len() {
+            diagnostics.report_error(
+                format!(
+                    "tuple has {} elements but destructuring binds {}",
+                    elem_tys.len(),
+                    names.len()
+                ),
+                names.first().map(|n| n.position),
+            );
+            self.hir_fail();
+            return Ok(());
+        }
+
+        let temp_name = format!("__tuple_tmp_{}", names[0].position.start);
+        self.hir_declare_local(&temp_name, &tuple_ty, value);
+        if let Err(e) = (*ctx.symbol_table)
+            .as_ref()
+            .borrow_mut()
+            .add_symbol(temp_name.clone(), tuple_ty.clone())
+        {
+            diagnostics.report_error(e.to_string(), names.first().map(|n| n.position));
+        }
+
+        for (i, name) in names.iter().enumerate() {
+            let elem_ty = elem_tys[i].clone();
+            self.hir_set_var(&temp_name);
+            let base = self.hir_take();
+            self.hir_set_field(base, i, &elem_ty);
+            let field_val = self.hir_take();
+            self.record_capturing_fun_local(&name.text, &elem_ty, field_val.as_ref());
+            self.hir_declare_local(&name.text, &elem_ty, field_val);
+            if let Err(e) = (*ctx.symbol_table)
+                .as_ref()
+                .borrow_mut()
+                .add_symbol(name.text.clone(), elem_ty)
+            {
+                diagnostics.report_error(e.to_string(), Some(name.position));
+            }
+            if is_const {
+                (*ctx.symbol_table)
+                    .as_ref()
+                    .borrow_mut()
+                    .mark_const(name.text.clone());
+            }
+        }
+        self.hir_flush_ref_writebacks();
+        Ok(())
+    }
+
     pub(in crate::analyzer) fn analyze_assignment(
         &mut self,
         left: &SyntaxToken,

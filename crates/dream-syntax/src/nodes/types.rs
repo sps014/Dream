@@ -147,6 +147,9 @@ pub enum Type {
     /// the tag in its header).
     Object(SyntaxToken),
     Array(Box<Type>),
+    /// A positional product type `(T, U, …)` with arity ≥ 2. Structural (no nominal `DefId`);
+    /// always a value type at runtime.
+    Tuple(Vec<Type>),
     Struct(SyntaxToken, Option<Vec<Type>>),
     Generic(String),
     /// A first-class function value `fun(params...): ret`. Represented at runtime as an `i32`
@@ -193,6 +196,14 @@ impl Type {
             Type::ULong(_) => "ulong".to_string(),
             Type::Byte(_) => "byte".to_string(),
             Type::Array(inner) => format!("{}[]", inner.get_type()),
+            Type::Tuple(elems) => {
+                let inner = elems
+                    .iter()
+                    .map(|e| e.get_type())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!("({})", inner)
+            }
             Type::Struct(token, generic_args) => match generic_args {
                 Some(args) => mangle_generic(&token.text, args),
                 None => token.text.clone(),
@@ -219,6 +230,14 @@ impl Type {
     pub fn display_name(&self) -> String {
         match self {
             Type::Array(inner) => format!("{}[]", inner.display_name()),
+            Type::Tuple(elems) => {
+                let inner = elems
+                    .iter()
+                    .map(|e| e.display_name())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({})", inner)
+            }
             Type::Struct(token, generic_args) => match generic_args {
                 Some(args) => {
                     let args_str = args
@@ -315,6 +334,7 @@ impl Type {
             | Type::Object(token)
             | Type::Struct(token, _) => Some(token.position),
             Type::Array(inner) => inner.get_span(),
+            Type::Tuple(elems) => elems.iter().find_map(|e| e.get_span()),
             Type::Void
             | Type::Generic(_)
             | Type::Function(_, _)
@@ -339,6 +359,10 @@ impl Type {
             Type::ULong(token) => token.position.get_point_str(),
             Type::Byte(token) => token.position.get_point_str(),
             Type::Array(inner) => inner.get_line_str(),
+            Type::Tuple(elems) => elems
+                .first()
+                .map(|e| e.get_line_str())
+                .unwrap_or_default(),
             Type::Struct(token, _) => token.position.get_point_str(),
             Type::Generic(_) => "".to_string(), // Can be improved
             Type::Function(_, _) => "".to_string(),

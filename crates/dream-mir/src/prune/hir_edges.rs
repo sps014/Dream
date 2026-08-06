@@ -181,7 +181,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
             hir_expr_edges(array, out);
             hir_expr_edges(new_len, out);
         }
-        K::ArrayLit { elems, .. } => {
+        K::ArrayLit { elems, .. } | K::Tuple { elems } => {
             for el in elems {
                 hir_expr_edges(el, out);
             }

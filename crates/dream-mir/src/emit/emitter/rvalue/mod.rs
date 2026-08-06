@@ -358,6 +358,10 @@ impl Emitter<'_> {
                 self.line("     (memory.fill)");
                 self.line("     (local.get $__obj)");
             }
+            Rvalue::Tuple { .. } => {
+                // Value tuples are always stored via `emit_value_store` / `construct_value_tuple`.
+                crate::internal_error!("tuple rvalue emitted as a stack value")
+            }
             Rvalue::ArrayLen(o) => {
                 self.emit_operand(o);
                 self.line("     (i32.load) ;; array length is the first word");

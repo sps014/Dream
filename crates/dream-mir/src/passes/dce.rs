@@ -202,7 +202,8 @@ fn read_rvalue(rvalue: &Rvalue, read: &mut HashSet<Local>) {
         Rvalue::Call { args, .. }
         | Rvalue::New { args, .. }
         | Rvalue::UnionNew { args, .. }
-        | Rvalue::ArrayLit { elems: args, .. } => args.iter().for_each(|a| read_operand(a, read)),
+        | Rvalue::ArrayLit { elems: args, .. }
+        | Rvalue::Tuple { elems: args, .. } => args.iter().for_each(|a| read_operand(a, read)),
         Rvalue::IndirectCall { target, args } => {
             read_operand(target, read);
             args.iter().for_each(|a| read_operand(a, read));

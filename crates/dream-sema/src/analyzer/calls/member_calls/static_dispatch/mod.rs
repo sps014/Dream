@@ -2,7 +2,7 @@
 //! - this module: the `try_analyze_static_method` dispatch (variant construction, generic-class
 //!   static methods, and routing to the generic-static / plain paths).
 //! - [`intrinsics`]: on-the-fly monomorphization of generic static methods, including the
-//!   `System.print`, `Buffer.alloc`, `Bytes.of`/`to`, `Promise.*`, and `JSON.*` intrinsics.
+//!   `System.print`, `Buffer.alloc`, `Bytes.of`/`to`, `Promise.*`, and `Json.*` intrinsics.
 //! - [`plain`]: plain (non-generic) static-method resolution (`analyze_static_call`).
 
 use super::super::super::*;

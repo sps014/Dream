@@ -117,10 +117,23 @@ impl<'a> Analyzer<'a> {
         // (or an enclosing struct/array/union) can size them. Compute each value struct's inline
         // (size, align) recursively — a value field contributes its full footprint; a reference field
         // contributes a 4-byte pointer — and record it on the interner so `scalar_size` resolves it.
-        let field_map: std::collections::HashMap<TypeId, Vec<TypeId>> = lowered
+        let mut field_map: std::collections::HashMap<TypeId, Vec<TypeId>> = lowered
             .iter()
             .map(|(ty, _, defs)| (*ty, defs.iter().map(|(_, t, ..)| *t).collect()))
             .collect();
+        // Tuples are also inline value aggregates; include them so nested tuples/structs size correctly.
+        let tuple_defs: Vec<(TypeId, Vec<TypeId>)> = self
+            .type_ctx
+            .interner
+            .iter_kinds()
+            .filter_map(|(id, kind)| match kind {
+                dream_types::TyKind::Tuple(elems) => Some((id, elems.clone())),
+                _ => None,
+            })
+            .collect();
+        for (ty, elems) in &tuple_defs {
+            field_map.insert(*ty, elems.clone());
+        }
         // A value union's inline footprint is `discriminant(4) + max value-aware variant payload`.
         // Collect each value union's variants as lists of payload field ids so the unified layout
         // computation can size value structs and value unions that embed one another.
@@ -157,6 +170,17 @@ impl<'a> Analyzer<'a> {
                 );
             }
         }
+        for (ty, _) in &tuple_defs {
+            let mut in_progress = std::collections::HashSet::new();
+            compute_inline_layout(
+                *ty,
+                &field_map,
+                &union_field_map,
+                &mut memo,
+                &mut in_progress,
+                &self.type_ctx.interner,
+            );
+        }
         // Also size every value union (even those not embedded in a value struct), so a value-union
         // local/field/element resolves its full inline footprint via `scalar_size`.
         let value_union_ids: Vec<TypeId> = union_field_map.keys().copied().collect();
@@ -178,6 +202,28 @@ impl<'a> Analyzer<'a> {
             layouts.insert(
                 ty,
                 TypeLayout::from_fields(&self.type_ctx.interner, name, defs),
+            );
+        }
+        for (ty, elems) in tuple_defs {
+            let name = dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, ty);
+            let safe_name: String = name
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '_' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            let defs: Vec<(String, TypeId, bool, bool)> = elems
+                .iter()
+                .enumerate()
+                .map(|(i, e)| (i.to_string(), *e, false, false))
+                .collect();
+            layouts.insert(
+                ty,
+                TypeLayout::from_fields(&self.type_ctx.interner, safe_name, defs),
             );
         }
         for (name, _size, variants) in union_snapshot {
