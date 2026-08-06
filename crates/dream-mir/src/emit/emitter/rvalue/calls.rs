@@ -8,22 +8,27 @@ use super::*;
 impl Emitter<'_> {
     /// Emits a call's arguments, applying implicit numeric widening to each so a narrower argument
     /// (e.g. an `int`/`float` passed to a `double` parameter) matches the callee's WASM signature.
-    /// A `fun(...)`-typed parameter is unboxed to its raw funcidx (`i32.load` of the funcbox) because
-    /// host imports have no env-restoring prologue — only the table index is meaningful across the
-    /// boundary (see [`signature_table`](crate::emit::tables::signature_table)). Falls back to a
-    /// plain push when the callee's parameter types are unknown (intrinsics without a sig entry).
+    /// A `fun(...)`-typed parameter is unboxed to its raw funcidx (`i32.load` of the funcbox) only
+    /// for **host imports** — they expect a bare table index. Internal MIR callees keep the funcbox
+    /// pointer; their bodies already call `funcbox_funcidx` / `funcbox_env` on it. Stripping the box
+    /// for an in-module call would pass a table index as a heap address and dispatch the wrong
+    /// function (see `List.sort` + `sort_by(desc)` in the same function). Falls back to a plain push
+    /// when the callee's parameter types are unknown (intrinsics without a sig entry).
     pub(in crate::emit::emitter) fn emit_call_args(
         &mut self,
         callee: &crate::Callee,
         args: &[Operand],
     ) {
         let params = self.sigs.get(&(callee.def, callee.args.clone())).cloned();
+        let is_host_import = !self.func_table.contains_key(&(callee.def, callee.args.clone()));
         for (i, a) in args.iter().enumerate() {
             self.emit_operand(a);
             if let Some(pty) = params.as_ref().and_then(|p| p.get(i)) {
                 if matches!(self.interner.kind(*pty), TyKind::Func(..)) {
-                    // Boxed `fun(...)` value → raw funcref-table index the host's `callback()` expects.
-                    self.line("     (i32.load)");
+                    if is_host_import {
+                        // Boxed `fun(...)` value → raw funcref-table index the host's `callback()` expects.
+                        self.line("     (i32.load)");
+                    }
                 } else {
                     self.emit_numeric_conv(self.operand_ty(a), *pty);
                 }

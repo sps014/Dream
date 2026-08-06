@@ -7,7 +7,7 @@ use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{EnumDeclarationNode, Type};
 use std::collections::HashSet;
 use std::io::Write;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 const HARNESS_SOURCE: &str = include_str!("json_gen_harness.dream");
 const OK_MARKER: &str = "__DREAM_JSON_GEN_OK__";
@@ -252,6 +252,13 @@ fn json_escape(s: &str) -> String {
 
 #[cfg(feature = "native")]
 fn run_dream_json_generator(snapshot: &str) -> Result<String, String> {
+    // The harness reads the snapshot path from process-global `DREAM_JSON_GEN_SNAPSHOT`.
+    // Concurrent `compile()` calls (e2e rayon pool) must not interleave set_var/run/remove_var.
+    static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
+    let _guard = SNAPSHOT_GUARD
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+
     let wat_path = harness_wat_path()?;
     let mut snap_file = snap_tempfile()?;
     snap_file
@@ -262,7 +269,6 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, String> {
     std::env::set_var(SNAPSHOT_ENV, &snap_path);
     let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path)
         .map_err(|e| format!("@json generator: failed to run Dream harness: {e}"))?;
-    let _ = std::env::var(SNAPSHOT_ENV);
     std::env::remove_var(SNAPSHOT_ENV);
     drop(snap_file);
 
