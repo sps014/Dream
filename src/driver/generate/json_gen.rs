@@ -4,14 +4,23 @@
 use super::context::GeneratorContext;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
-use dream_syntax::nodes::{EnumDeclarationNode, Type};
+use dream_syntax::nodes::EnumDeclarationNode;
 use std::collections::HashSet;
+
+#[cfg(feature = "native")]
+use dream_syntax::nodes::Type;
+#[cfg(feature = "native")]
 use std::io::Write;
+#[cfg(feature = "native")]
 use std::sync::{Mutex, OnceLock};
 
+#[cfg(feature = "native")]
 const HARNESS_SOURCE: &str = include_str!("json_gen_harness.dream");
+#[cfg(feature = "native")]
 const OK_MARKER: &str = "__DREAM_JSON_GEN_OK__";
+#[cfg(feature = "native")]
 const ERR_MARKER: &str = "__DREAM_JSON_GEN_ERR__";
+#[cfg(feature = "native")]
 const SNAPSHOT_ENV: &str = "DREAM_JSON_GEN_SNAPSHOT";
 
 /// Expands every `@json` type into synthesized `extend` source through `emit_file`.
@@ -43,7 +52,6 @@ pub fn expand_from_acc(
             "@json derive requires the native compiler feature (wasmtime host)".to_string(),
             None,
         );
-        return;
     }
 
     #[cfg(feature = "native")]
