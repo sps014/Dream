@@ -6,7 +6,7 @@ public class HttpResponse {
     boundary: int;
     scanned: bool;
 
-    constructor(data: char[]) {
+    public constructor(data: char[]) {
         this.data = data;
         this.boundary = 0 - 1;
         this.scanned = false;

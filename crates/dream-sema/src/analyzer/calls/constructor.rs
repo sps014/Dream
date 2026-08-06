@@ -82,6 +82,35 @@ impl<'a> Analyzer<'a> {
             } else {
                 self.function_table.get_function(&init_name).ok()
             };
+
+        // Class-member visibility (Axis 2): a private constructor is only callable from the
+        // declaring type's methods; `internal` from the same module; `public` everywhere the type
+        // is reachable. An implicit zero-arg default (no registered `constructor`) is public.
+        if let Some(sig) = &resolved_ctor {
+            let (base_name, _) =
+                Self::resolve_struct_parts(&Type::Struct(name.clone(), generic_args.clone()))
+                    .unwrap_or_else(|| (struct_name.clone(), vec![]));
+            let struct_file = self
+                .struct_table
+                .get_struct(&struct_name)
+                .and_then(|info| info.file_path.clone())
+                .or_else(|| sig.declaring_file.clone());
+            if !self.member_accessible(
+                sig.visibility,
+                &struct_file,
+                parent_function.file_path.as_ref(),
+                self.in_methods_of(parent_function, &base_name),
+            ) {
+                diagnostics.report_error(
+                    format!(
+                        "constructor of '{}' is not accessible here",
+                        base_name
+                    ),
+                    Some(name.position),
+                );
+            }
+        }
+
         // `expected` are the constructor's parameter types (a user `constructor` skips its implicit
         // `this`); `expected_defaults` are the parallel default values. A class with no explicit
         // `constructor` has an implicit zero-arg default constructor, so it expects no arguments.

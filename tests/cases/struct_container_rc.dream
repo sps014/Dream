@@ -6,7 +6,7 @@ import system;
 class Tracked {
     public id: int;
 
-    constructor(id: int) {
+    public constructor(id: int) {
         this.id = id;
     }
 
@@ -19,7 +19,7 @@ class Tracked {
 struct Ref {
     public t: Tracked;
 
-    constructor(t: Tracked) {
+    public constructor(t: Tracked) {
         this.t = t;
     }
 
@@ -31,7 +31,7 @@ struct Ref {
 class Wrap {
     public r: Ref;
 
-    constructor(r: Ref) {
+    public constructor(r: Ref) {
         this.r = r;
     }
 }

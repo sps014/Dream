@@ -9,7 +9,7 @@ class Point {
 class Logged {
     public id: int;
 
-    constructor(id: int) {
+    public constructor(id: int) {
         this.id = id;
         System.print("create ");
         System.println(this.id);

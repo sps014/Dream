@@ -6,7 +6,7 @@ class Point {
     x: int;
     y: int;
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
@@ -16,7 +16,7 @@ class Named {
     id: int;
     label: string;
 
-    constructor(id: int, label: string) {
+    public constructor(id: int, label: string) {
         this.id = id;
         this.label = label;
     }

@@ -3,7 +3,7 @@ import system;
 class Flag {
     public value: bool;
 
-    constructor(value: bool) {
+    public constructor(value: bool) {
         this.value = value;
     }
 

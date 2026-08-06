@@ -85,7 +85,7 @@ included). Fields that cannot cross (maps, interfaces, function values) are left
 class Point {
     public x: int;
     public y: int;
-    constructor(x: int, y: int) { this.x = x; this.y = y; }
+    public constructor(x: int, y: int) { this.x = x; this.y = y; }
 }
 
 js.global.render(Point(3, 4));   // -> render({ x: 3, y: 4 })

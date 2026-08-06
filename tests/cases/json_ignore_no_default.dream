@@ -3,7 +3,7 @@ import system.json;
 @json
 class Address {
     public city: string;
-    constructor(city: string) { this.city = city; }
+    public constructor(city: string) { this.city = city; }
 }
 
 @json
@@ -12,7 +12,7 @@ class Bad {
     @json_ignore
     public home: Address;
 
-    constructor(name: string, home: Address) {
+    public constructor(name: string, home: Address) {
         this.name = name;
         this.home = home;
     }

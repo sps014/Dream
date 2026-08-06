@@ -7,7 +7,7 @@ fun helper(x: int): int {
 class Widget {
     public n: int;
 
-    constructor(n: int) {
+    public constructor(n: int) {
         this.n = n;
     }
 

@@ -11,7 +11,7 @@ struct Point {
     public x: int;
     public y: int;
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
@@ -20,7 +20,7 @@ struct Point {
 class User {
     public name: string;
     
-    constructor(name: string) {
+    public constructor(name: string) {
         this.name = name;
     }
 }

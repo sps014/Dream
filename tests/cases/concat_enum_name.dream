@@ -5,7 +5,7 @@
 import system;
 enum Color { Red, Green, Blue }
 
-class P { public x: int; constructor(x: int) { this.x = x; } }
+class P { public x: int; public constructor(x: int) { this.x = x; } }
 
 fun main(): void {
     let c = Color.Green;

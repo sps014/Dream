@@ -5,17 +5,17 @@ class Point {
     public x: int;
     public y: int;
 
-    constructor() {
+    public constructor() {
         this.x = 0;
         this.y = 0;
     }
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
 
-    constructor(both: int) {
+    public constructor(both: int) {
         this.x = both;
         this.y = both;
     }

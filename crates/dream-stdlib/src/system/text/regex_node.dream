@@ -11,7 +11,7 @@ internal class RegexNode {
     public greedy: bool;
     public empty_kind: RegexEmptyKind;
 
-    constructor(kind: RegexNodeKind, left: List<RegexNode>, right: List<RegexNode>, ch: char, ranges: List<char>, negate: bool, cap: int, greedy: bool, empty_kind: RegexEmptyKind) {
+    public constructor(kind: RegexNodeKind, left: List<RegexNode>, right: List<RegexNode>, ch: char, ranges: List<char>, negate: bool, cap: int, greedy: bool, empty_kind: RegexEmptyKind) {
         this.kind = kind;
         this.left = left;
         this.right = right;

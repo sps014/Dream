@@ -7,7 +7,7 @@ public class RegexMatch {
     public groups: int[];
     public ngroup: int;
 
-    constructor(groups: int[], ngroup: int) {
+    public constructor(groups: int[], ngroup: int) {
         this.groups = groups;
         this.ngroup = ngroup;
     }

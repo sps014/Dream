@@ -159,7 +159,12 @@ fun main() {
 
 ### Class member visibility
 
-A class member (field, method, static method, or accessor) is **class-private by default** — reachable only from that class's own methods, regardless of file. `static` never implies visibility; a `static` member must still be `internal`/`public` to be called from outside the class.
+A class member (field, method, static method, accessor, or **constructor**) is **class-private by
+default** — reachable only from that class's own methods, regardless of file. `static` never implies
+visibility; a `static` member must still be `internal`/`public` to be called from outside the class.
+Constructors follow the same rule: mark them `public` (or `internal`) to allow `Type(...)` from
+outside the type. An implicit zero-arg default (no `constructor` declared) is public. Destructors
+(`del`) are always private.
 
 - `internal` — reachable from anywhere in the declaring class's module (not just the class's own methods), but not outside the module.
 - `public` — reachable from anywhere the type itself is reachable.

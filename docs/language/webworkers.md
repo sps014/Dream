@@ -168,7 +168,7 @@ Capturing an ordinary managed object reference is a compile-time error: it would
 @shared
 class Counter {
     public value: int;
-    constructor() { this.value = 0; }
+    public constructor() { this.value = 0; }
 
     public fun increment(): void {
         lock (this) {

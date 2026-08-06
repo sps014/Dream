@@ -9,7 +9,7 @@ interface Fetcher {
 
 class Remote : Fetcher {
     public base: int;
-    constructor(base: int) { this.base = base; }
+    public constructor(base: int) { this.base = base; }
     public async fun fetch(): int {
         await Time.sleep(10);
         return this.base + 1;
@@ -18,7 +18,7 @@ class Remote : Fetcher {
 
 class Cached : Fetcher {
     public value: int;
-    constructor(value: int) { this.value = value; }
+    public constructor(value: int) { this.value = value; }
     public async fun fetch(): int {
         return this.value;
     }

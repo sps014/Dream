@@ -13,7 +13,7 @@ public class DateTime {
     // The UTC offset in minutes.
     public offset_minutes: int;
 
-    constructor(epoch_millis: long, offset_minutes: int) {
+    public constructor(epoch_millis: long, offset_minutes: int) {
         this.epoch_millis = epoch_millis;
         this.offset_minutes = offset_minutes;
     }

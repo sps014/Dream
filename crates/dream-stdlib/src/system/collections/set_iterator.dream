@@ -5,7 +5,7 @@ public class SetIterator<T> : Iterator<T> {
     elements: T[];
     index: int;
 
-    constructor(elements: T[]) {
+    public constructor(elements: T[]) {
         this.elements = elements;
         this.index = 0;
     }

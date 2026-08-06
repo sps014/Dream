@@ -3,7 +3,7 @@ module system.core;
 public class Semaphore {
     permits: int;
 
-    constructor(initial: int) {
+    public constructor(initial: int) {
         this.permits = initial;
     }
 

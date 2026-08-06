@@ -2,7 +2,7 @@ import system;
 class P {
     public v: int;
 
-    constructor(v: int) {
+    public constructor(v: int) {
         this.v = v;
     }
 }

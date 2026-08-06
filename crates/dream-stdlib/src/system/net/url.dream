@@ -16,7 +16,7 @@ public class Url {
     public fragment: string;
 
     // Builds a URL from already-split components.
-    constructor(
+    public constructor(
         scheme: string,
         host: string,
         port: Option<int>,

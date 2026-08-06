@@ -4,7 +4,7 @@ module system.core;
 public class CancelledError : Error {
     _message: string;
 
-    constructor(message: string) {
+    public constructor(message: string) {
         this._message = message;
     }
 
@@ -29,7 +29,7 @@ public class CancellationSource {
     _cancelled: bool;
 
     // Creates a source that is not yet cancelled.
-    constructor() {
+    public constructor() {
         this._cancelled = false;
     }
 
@@ -53,7 +53,7 @@ public class CancellationSource {
 public class CancellationToken {
     _source: CancellationSource;
 
-    constructor(source: CancellationSource) {
+    public constructor(source: CancellationSource) {
         this._source = source;
     }
 

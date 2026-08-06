@@ -3,13 +3,13 @@
 
 import system;
 import system.json;
-class Plain { public v: int; constructor(v: int) { this.v = v; } }
+class Plain { public v: int; public constructor(v: int) { this.v = v; } }
 
 @json
 class Wrapper {
     public name: string;
     public inner: Plain;
-    constructor(name: string, inner: Plain) { this.name = name; this.inner = inner; }
+    public constructor(name: string, inner: Plain) { this.name = name; this.inner = inner; }
 }
 
 fun main(): void {

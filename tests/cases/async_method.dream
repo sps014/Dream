@@ -2,7 +2,7 @@ import system;
 class Worker {
     public base: int;
 
-    constructor(base: int) {
+    public constructor(base: int) {
         this.base = base;
     }
 

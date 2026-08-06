@@ -5,7 +5,7 @@ import system;
 class Tracked {
     public id: int;
 
-    constructor(id: int) {
+    public constructor(id: int) {
         this.id = id;
     }
 

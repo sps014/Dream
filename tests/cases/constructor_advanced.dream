@@ -15,7 +15,7 @@ class Account {
     public owner: string;
     public balance: int;
 
-    constructor(owner: string) {
+    public constructor(owner: string) {
         this.owner = owner;
         this.balance = 100;
     }

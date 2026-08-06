@@ -13,7 +13,7 @@ class Product {
 
     public tags: string[]; // standard field
 
-    constructor(product_id: int, name: string, price: float, tags: string[]) {
+    public constructor(product_id: int, name: string, price: float, tags: string[]) {
         this.product_id = product_id;
         this.name = name;
         this.price = price;

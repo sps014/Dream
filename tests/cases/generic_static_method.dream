@@ -5,7 +5,7 @@ class Pair<T> {
     public a: int;
     public b: int;
 
-    constructor(a: int, b: int) {
+    public constructor(a: int, b: int) {
         this.a = a;
         this.b = b;
     }

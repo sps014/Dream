@@ -5,7 +5,7 @@ class Address {
     public city: string;
     public zip: string;
 
-    constructor(city: string, zip: string) {
+    public constructor(city: string, zip: string) {
         this.city = city;
         this.zip = zip;
     }
@@ -20,7 +20,7 @@ class User {
     public tags: string[];
     public scores: int[];
 
-    constructor(name: string, age: int, active: bool, address: Address, tags: string[], scores: int[]) {
+    public constructor(name: string, age: int, active: bool, address: Address, tags: string[], scores: int[]) {
         this.name = name;
         this.age = age;
         this.active = active;

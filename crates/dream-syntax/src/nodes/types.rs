@@ -98,7 +98,7 @@ pub const CONSTRUCTOR_NAME: &str = "constructor";
 pub const DESTRUCTOR_NAME: &str = "del";
 
 /// True if `name` is a reserved member declaration keyword (`constructor`/`del`) that the parser
-/// accepts without the leading `fun` and that cannot be marked `public` or carry a return type.
+/// accepts without the leading `fun` and that cannot carry a return type.
 pub fn is_special_member_name(name: &str) -> bool {
     name == CONSTRUCTOR_NAME || name == DESTRUCTOR_NAME
 }

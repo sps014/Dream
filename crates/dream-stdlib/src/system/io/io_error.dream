@@ -8,7 +8,7 @@ public class IoError : Error {
     _message: string;
 
     // Creates an error with path, machine code, and message.
-    constructor(path: string, code: string, message: string) {
+    public constructor(path: string, code: string, message: string) {
         this.path = path;
         this._code = code;
         this._message = message;

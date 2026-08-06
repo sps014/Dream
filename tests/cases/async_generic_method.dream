@@ -3,7 +3,7 @@
 import system;
 class Cell<T> {
     public value: T;
-    constructor(value: T) { this.value = value; }
+    public constructor(value: T) { this.value = value; }
 
     public async fun get(): T {
         await Time.sleep(10);

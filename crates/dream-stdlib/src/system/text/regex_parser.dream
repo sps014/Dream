@@ -21,7 +21,7 @@ internal class RegexParser {
     n: int;
     group_count: int;
 
-    constructor(pattern: string) {
+    public constructor(pattern: string) {
         this.pattern = pattern;
         this.pos = 0;
         this.n = pattern.size();

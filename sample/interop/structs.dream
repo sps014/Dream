@@ -8,7 +8,7 @@ import system;
 class Point {
     public x: int;
     public y: int;
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
@@ -19,7 +19,7 @@ class User {
     public age: int;
     public scores: int[];
     public home: Point;
-    constructor(name: string, age: int, scores: int[], home: Point) {
+    public constructor(name: string, age: int, scores: int[], home: Point) {
         this.name = name;
         this.age = age;
         this.scores = scores;

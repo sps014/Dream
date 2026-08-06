@@ -7,7 +7,7 @@ import system;
 class Tracked {
     public id: int;
 
-    constructor(id: int) {
+    public constructor(id: int) {
         this.id = id;
     }
 
@@ -20,7 +20,7 @@ class Tracked {
 struct Holder {
     public item: Tracked;
 
-    constructor(item: Tracked) {
+    public constructor(item: Tracked) {
         this.item = item;
     }
 

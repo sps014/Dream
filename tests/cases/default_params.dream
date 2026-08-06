@@ -9,7 +9,7 @@ fun add(base: int, delta: int = 10): int {
 class Greeter {
     public factor: int;
 
-    constructor(factor: int = 3) {
+    public constructor(factor: int = 3) {
         this.factor = factor;
     }
 

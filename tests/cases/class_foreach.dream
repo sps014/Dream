@@ -7,7 +7,7 @@ class RangeIter {
     current: int;
     end: int;
 
-    constructor(start: int, end: int) {
+    public constructor(start: int, end: int) {
         this.current = start;
         this.end = end;
     }
@@ -27,7 +27,7 @@ class Range {
     start: int;
     end: int;
 
-    constructor(start: int, end: int) {
+    public constructor(start: int, end: int) {
         this.start = start;
         this.end = end;
     }

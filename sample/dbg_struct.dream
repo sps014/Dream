@@ -4,7 +4,7 @@ class Point {
     public y: int;
     public label: string;
 
-    constructor(x: int, y: int, label: string) {
+    public constructor(x: int, y: int, label: string) {
         this.x = x;
         this.y = y;
         this.label = label;

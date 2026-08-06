@@ -14,7 +14,7 @@ public class List<T> : IndexedCollection<T>, Collection<T> {
     count: int;
 
     // Allocates an empty list with an initial backing buffer capacity (defaults to 8).
-    constructor(capacity: int = 8) {
+    public constructor(capacity: int = 8) {
         let c = capacity;
         if (c < sequence_min_capacity()) {
             c = sequence_min_capacity();

@@ -21,7 +21,7 @@ public class LogRecord {
     public timestamp_ms: long;
 
     // Builds a record from its fields.
-    constructor(level: LogLevel, name: string, message: string, timestamp_ms: long) {
+    public constructor(level: LogLevel, name: string, message: string, timestamp_ms: long) {
         this.level = level;
         this.name = name;
         this.message = message;
@@ -53,7 +53,7 @@ fun level_name(level: LogLevel): string {
 // Writes formatted lines to stdout via `System.println`.
 public class ConsoleHandler : LogHandler {
     // Creates a console handler.
-    constructor() { }
+    public constructor() { }
 
     // Prints `[LEVEL] name: message`.
     public fun emit(record: LogRecord): void {
@@ -69,7 +69,7 @@ public class FileHandler : LogHandler {
     static extern fun file_append(path: string, content: string): long;
 
     // Creates a handler that appends to `path`.
-    constructor(path: string) {
+    public constructor(path: string) {
         this.path = path;
     }
 
@@ -86,7 +86,7 @@ public class Logger {
     level: LogLevel;
     handlers: List<LogHandler>;
 
-    constructor(name: string) {
+    public constructor(name: string) {
         this.name = name;
         this.level = LogLevel.Info;
         this.handlers = List<LogHandler>();

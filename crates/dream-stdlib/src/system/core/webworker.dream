@@ -80,7 +80,7 @@ public class WebWorker<TIn, TOut> {
     // values each message carries do - so it is wrapped once here in the `fun(string): string)`
     // the underlying worker thread actually calls: decode the wire string to `TIn`, run `body`,
     // encode its `TOut` result back to the wire string.
-    constructor(body: fun(TIn): TOut) {
+    public constructor(body: fun(TIn): TOut) {
         let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
         this.id = WebWorker<TIn, TOut>.spawn_host(WebWorker<TIn, TOut>.funcidx(wrapped), WebWorker<TIn, TOut>.env(wrapped));
     }
@@ -90,7 +90,7 @@ public class WebWorker<TIn, TOut> {
     // trampoline always sees a `Future<string>` whose settled result is already the wire form.
     // Unlike the sync-constructor + identity-`toWire` path used for a bare string-returning
     // `async fun`, this works for any `TOut` (int, unmanaged structs, arrays, …).
-    constructor(body: fun(TIn): Future<TOut>) {
+    public constructor(body: fun(TIn): Future<TOut>) {
         let wrapped: fun(string): Future<string> = async (raw: string) => {
             return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
         };

@@ -15,7 +15,7 @@ public struct Pointer<T> {
     // reference, and `free()` releases it directly, regardless of the stored count.
     buf: T[];
 
-    constructor(buf: T[]) {
+    public constructor(buf: T[]) {
         this.buf = buf;
     }
 

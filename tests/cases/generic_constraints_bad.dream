@@ -7,7 +7,7 @@ import system;
 import system.collections;
 class Widget {
     public id: int;
-    constructor(id: int) { this.id = id; }
+    public constructor(id: int) { this.id = id; }
 }
 
 fun main(): void {

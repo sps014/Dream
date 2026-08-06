@@ -4,7 +4,7 @@ import system;
 class Manager {
     public name: string;
 
-    constructor(name: string) {
+    public constructor(name: string) {
         this.name = name;
     }
 }
@@ -12,7 +12,7 @@ class Manager {
 class Cache {
     public unowned owner: Manager;
 
-    constructor(owner: Manager) {
+    public constructor(owner: Manager) {
         this.owner = owner;
     }
 }

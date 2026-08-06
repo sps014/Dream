@@ -80,7 +80,7 @@ Dispatch a `static` method by naming the class with concrete arguments on the re
 ```dream
 class Cache<T> {
     seed: int;
-    constructor(seed: int) { this.seed = seed; }
+    public constructor(seed: int) { this.seed = seed; }
     public static fun make(seed: int): Cache<T> {
         return Cache<T>(seed);
     }

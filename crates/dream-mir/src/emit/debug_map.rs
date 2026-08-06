@@ -9,7 +9,7 @@
 //! raw pointer) — and serializes it to a compact JSON sidecar (`<stem>.dbg.json`) shipped next to
 //! the `.wat`/`.wasm`.
 
-use crate::debug_schema::{FieldDesc, ScalarKind, TypeDesc, VariantDesc};
+use crate::debug_schema::{EnumMemberDesc, FieldDesc, ScalarKind, TypeDesc, VariantDesc};
 use dream_hir::{scalar_size, LayoutTable};
 use crate::{Mir, MirFunction, Statement};
 use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
@@ -47,15 +47,21 @@ pub fn spill_kind(interner: &TypeInterner, ty: TypeId) -> SpillKind {
 struct TypeRegistry<'a> {
     interner: &'a TypeInterner,
     layouts: &'a LayoutTable,
+    enums: &'a dream_hir::EnumDebugTable,
     descs: Vec<TypeDesc>,
     by_ty: HashMap<TypeId, u32>,
 }
 
 impl<'a> TypeRegistry<'a> {
-    fn new(interner: &'a TypeInterner, layouts: &'a LayoutTable) -> Self {
+    fn new(
+        interner: &'a TypeInterner,
+        layouts: &'a LayoutTable,
+        enums: &'a dream_hir::EnumDebugTable,
+    ) -> Self {
         TypeRegistry {
             interner,
             layouts,
+            enums,
             descs: Vec::new(),
             by_ty: HashMap::new(),
         }
@@ -77,6 +83,21 @@ impl<'a> TypeRegistry<'a> {
     }
 
     fn build(&mut self, ty: TypeId) -> TypeDesc {
+        // Tuples share LayoutTable with structs; prefer a dedicated Tuple desc for DAP display.
+        if matches!(self.interner.kind(ty), TyKind::Tuple(_)) {
+            if let Some(layout) = self.layouts.get(ty).cloned() {
+                let fields = layout
+                    .fields
+                    .iter()
+                    .map(|f| FieldDesc {
+                        name: f.name.clone(),
+                        offset: f.offset,
+                        type_id: self.intern(f.ty),
+                    })
+                    .collect();
+                return TypeDesc::Tuple { fields };
+            }
+        }
         // Structs (value or reference) — keyed by the monomorphized type id.
         if let Some(layout) = self.layouts.get(ty).cloned() {
             let value = self.interner.is_value_type(ty);
@@ -131,7 +152,25 @@ impl<'a> TypeRegistry<'a> {
             TyKind::Prim(PrimTy::Float) => TypeDesc::Scalar(ScalarKind::Float),
             TyKind::Prim(PrimTy::Double) => TypeDesc::Scalar(ScalarKind::Double),
             TyKind::Prim(PrimTy::String) => TypeDesc::Str,
-            TyKind::Enum(_) => TypeDesc::Enum,
+            TyKind::Enum(_) => {
+                if let Some((name, members)) = self.enums.get(&ty) {
+                    TypeDesc::Enum {
+                        name: name.clone(),
+                        members: members
+                            .iter()
+                            .map(|(n, d)| EnumMemberDesc {
+                                name: n.clone(),
+                                discriminant: *d,
+                            })
+                            .collect(),
+                    }
+                } else {
+                    TypeDesc::Enum {
+                        name: "enum".to_string(),
+                        members: Vec::new(),
+                    }
+                }
+            }
             TyKind::Array(elem) => {
                 let elem = *elem;
                 let stride = scalar_size(self.interner, elem).0;
@@ -216,7 +255,7 @@ impl DebugModule {
             .map(|(n, _)| n.to_string())
             .collect();
 
-        let mut registry = TypeRegistry::new(interner, &mir.layouts);
+        let mut registry = TypeRegistry::new(interner, &mir.layouts, &mir.enums);
         let mut functions = Vec::new();
         let mut global_pool = 0u32;
         for f in &mir.functions {
@@ -342,12 +381,35 @@ fn type_to_json(t: &TypeDesc) -> String {
     match t {
         TypeDesc::Scalar(k) => format!("{{\"kind\": \"scalar\", \"scalar\": \"{}\"}}", k.tag()),
         TypeDesc::Str => "{\"kind\": \"string\"}".to_string(),
-        TypeDesc::Enum => "{\"kind\": \"enum\"}".to_string(),
+        TypeDesc::Enum { name, members } => {
+            let ms: Vec<String> = members
+                .iter()
+                .map(|m| {
+                    format!(
+                        "{{\"name\": \"{}\", \"disc\": {}}}",
+                        json_escape(&m.name),
+                        m.discriminant
+                    )
+                })
+                .collect();
+            format!(
+                "{{\"kind\": \"enum\", \"name\": \"{}\", \"members\": [{}]}}",
+                json_escape(name),
+                ms.join(",")
+            )
+        }
         TypeDesc::Ref => "{\"kind\": \"ref\"}".to_string(),
         TypeDesc::Array { elem, stride } => {
             format!(
                 "{{\"kind\": \"array\", \"elem\": {}, \"stride\": {}}}",
                 elem, stride
+            )
+        }
+        TypeDesc::Tuple { fields } => {
+            let fs: Vec<String> = fields.iter().map(field_to_json).collect();
+            format!(
+                "{{\"kind\": \"tuple\", \"fields\": [{}]}}",
+                fs.join(",")
             )
         }
         TypeDesc::Struct {

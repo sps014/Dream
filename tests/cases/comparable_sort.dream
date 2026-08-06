@@ -7,7 +7,7 @@ import system.collections;
 class Money : Comparable<Money>, Equatable<Money> {
     public cents: int;
 
-    constructor(cents: int) {
+    public constructor(cents: int) {
         this.cents = cents;
     }
 
@@ -24,7 +24,7 @@ struct Vec2 : Comparable<Vec2>, Equatable<Vec2> {
     public x: int;
     public y: int;
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }

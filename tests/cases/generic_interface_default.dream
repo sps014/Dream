@@ -17,13 +17,13 @@ interface Container<T> {
 
 class Box<T> : Container<T> {
     public value: T;
-    constructor(value: T) { this.value = value; }
+    public constructor(value: T) { this.value = value; }
     public fun get(): T { return this.value; }
 }
 
 class IntBox : Container<int> {
     public value: int;
-    constructor(value: int) { this.value = value; }
+    public constructor(value: int) { this.value = value; }
     public fun get(): int { return this.value; }
 }
 

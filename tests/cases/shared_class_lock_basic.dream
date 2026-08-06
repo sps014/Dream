@@ -6,7 +6,7 @@ import system;
 class Counter {
     public value: int;
 
-    constructor() {
+    public constructor() {
         this.value = 0;
     }
 

@@ -4,7 +4,7 @@ import system;
 class Temperature {
     celsius: float;
 
-    constructor(celsius: float) {
+    public constructor(celsius: float) {
         this.celsius = celsius;
     }
 

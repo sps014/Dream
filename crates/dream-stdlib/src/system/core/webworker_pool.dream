@@ -5,7 +5,7 @@ public class WebWorkerPool {
     next: int;
 
     // Start `size` worker threads up front, idle until dispatched to.
-    constructor(size: int) {
+    public constructor(size: int) {
         this.ids = Buffer.alloc<int>(size);
         for (let i = 0; i < size; i = i + 1) {
             this.ids[i] = WebWorkerPool.spawn_host();

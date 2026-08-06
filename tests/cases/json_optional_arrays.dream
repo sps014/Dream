@@ -4,7 +4,7 @@ import system.json;
 class Address {
     public city: string;
 
-    constructor(city: string) {
+    public constructor(city: string) {
         this.city = city;
     }
 }
@@ -15,7 +15,7 @@ class Bag {
     public names: Option<string[]>;
     public places: Option<Address[]>;
 
-    constructor(tags: Option<int[]>, names: Option<string[]>, places: Option<Address[]>) {
+    public constructor(tags: Option<int[]>, names: Option<string[]>, places: Option<Address[]>) {
         this.tags = tags;
         this.names = names;
         this.places = places;

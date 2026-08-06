@@ -6,7 +6,7 @@ internal class RegexCompiler {
     ignore_case: bool;
     dot_all: bool;
 
-    constructor(ignore_case: bool, dot_all: bool) {
+    public constructor(ignore_case: bool, dot_all: bool) {
         this.prog = Buffer.alloc<RegexInst>(0);
         this.pc = 0;
         this.ignore_case = ignore_case;

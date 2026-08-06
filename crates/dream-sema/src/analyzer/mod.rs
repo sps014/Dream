@@ -792,6 +792,21 @@ impl<'a> Analyzer<'a> {
         let hir_functions = std::mem::take(&mut self.hir.functions);
         let hir_globals = std::mem::take(&mut self.hir.global_decls);
 
+        let enum_entries: Vec<(String, indexmap::IndexMap<String, i32>)> = self
+            .enum_table
+            .iter()
+            .map(|(n, m)| (n.clone(), m.clone()))
+            .collect();
+        let mut hir_enums = indexmap::IndexMap::new();
+        for (name, members) in enum_entries {
+            if let Some(def) = self.type_ctx.defs.lookup(DefKind::Enum, &name) {
+                let tid = self.type_ctx.interner.enum_ty(def);
+                let mems: Vec<(String, i32)> =
+                    members.iter().map(|(n, v)| (n.clone(), *v)).collect();
+                hir_enums.insert(tid, (name, mems));
+            }
+        }
+
         Ok(SemanticInfo {
             hash_map: symbol_table_map,
             function_table: &self.function_table,
@@ -809,6 +824,7 @@ impl<'a> Analyzer<'a> {
                 imports,
                 intrinsics,
                 interfaces,
+                enums: hir_enums,
             },
         })
     }

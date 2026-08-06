@@ -15,7 +15,7 @@ public ref struct Span<T> {
     offset: int;
     length: int;
 
-    constructor(array: T[], offset: int, length: int) {
+    public constructor(array: T[], offset: int, length: int) {
         this.array = array;
         this.offset = offset;
         this.length = length;

@@ -8,7 +8,7 @@ public class HttpError : Error {
     _message: string;
 
     // Creates an error with the given status, machine code, and message.
-    constructor(status: int, code: string, message: string) {
+    public constructor(status: int, code: string, message: string) {
         this.status = status;
         this._code = code;
         this._message = message;

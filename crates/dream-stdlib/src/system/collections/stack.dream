@@ -5,7 +5,7 @@ public class Stack<T> : Collection<T> {
     items: List<T>;
 
     // Creates an empty stack.
-    constructor() {
+    public constructor() {
         this.items = List<T>();
     }
 

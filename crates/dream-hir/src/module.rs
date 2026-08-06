@@ -42,7 +42,12 @@ pub struct Hir {
     /// itable data + dispatch trampolines emitted by the backend, and keeps concrete interface
     /// method implementations reachable through dead-code elimination.
     pub interfaces: InterfaceTable,
+    /// C-style enum members for debug decode: `TypeId` → `(enum name, [(member, disc), …])`.
+    pub enums: EnumDebugTable,
 }
+
+/// Debug metadata for C-style enums: `TypeId` → `(enum name, [(member name, discriminant), …])`.
+pub type EnumDebugTable = indexmap::IndexMap<TypeId, (String, Vec<(String, i32)>)>;
 
 /// Interface dispatch metadata carried from analysis into codegen.
 #[derive(Debug, Clone, Default)]

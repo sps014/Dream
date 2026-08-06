@@ -6,7 +6,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     values: List<string>;
 
     // Creates an empty header map.
-    constructor() {
+    public constructor() {
         this.keys = List<string>();
         this.values = List<string>();
     }

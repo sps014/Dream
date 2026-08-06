@@ -2,7 +2,7 @@ import system;
 class Counter {
     public value: int;
 
-    constructor(start: int) {
+    public constructor(start: int) {
         this.value = start;
     }
 

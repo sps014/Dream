@@ -3,7 +3,7 @@
 
 import system;
 struct Doubler {
-    constructor() {}
+    public constructor() {}
 
     public fun apply(ref x: int): void {
         x = x * 2;

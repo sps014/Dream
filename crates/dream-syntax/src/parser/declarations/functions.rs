@@ -95,13 +95,15 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         // Constructor (`constructor`) / destructor (`del`) declarations omit the `fun` keyword and
         // the return type; they are lowered to ordinary methods named `constructor`/`del` and
-        // dispatched specially (constructor calls, scope-exit destructor calls). They cannot be
-        // marked `public`/`internal`.
+        // dispatched specially (constructor calls, scope-exit destructor calls). Destructors cannot
+        // be marked `public`/`internal`. Constructors accept the same visibility as other members
+        // (default private; `internal`/`public` to open them up).
         if self.current_token().kind == TokenKind::IdentifierToken
             && crate::nodes::types::is_special_member_name(&self.current_token().text)
         {
             let ctor_name = self.match_token(TokenKind::IdentifierToken);
-            if visibility != Visibility::Private {
+            let is_dtor = ctor_name.text == crate::nodes::types::DESTRUCTOR_NAME;
+            if is_dtor && visibility != Visibility::Private {
                 self.diagnostics.report_error(
                     format!(
                         "'{}' cannot be marked 'public' or 'internal'",
@@ -112,6 +114,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             let params = self.parse_formal_parameters()?;
             let block = self.parse_block()?;
+            let ctor_vis = if is_dtor {
+                Visibility::Private
+            } else {
+                visibility
+            };
             return Ok(FunctionNode::new(
                 attributes,
                 ctor_name,
@@ -119,7 +126,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 None,
                 params,
                 block,
-                Visibility::Private,
+                ctor_vis,
             ));
         }
 

@@ -6,7 +6,7 @@ internal class JsonParser {
     pos: int;
     n: int;
 
-    constructor(src: string, pos: int, n: int) {
+    public constructor(src: string, pos: int, n: int) {
         this.src = src;
         this.pos = pos;
         this.n = n;

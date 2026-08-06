@@ -151,7 +151,7 @@ class Vector2 {
     public x: int;
     public y: int;
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
@@ -211,7 +211,7 @@ declaring type to the method's return type:
 class Meters {
     public value: float;
 
-    constructor(value: float) {
+    public constructor(value: float) {
         this.value = value;
     }
 
@@ -225,7 +225,7 @@ class Meters {
 class Money {
     public cents: int;
 
-    constructor(cents: int) {
+    public constructor(cents: int) {
         this.cents = cents;
     }
 

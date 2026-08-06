@@ -5,7 +5,7 @@ public class StringIterator : Iterator<char> {
     text: string;
     idx: int;
 
-    constructor(text: string) {
+    public constructor(text: string) {
         this.text = text;
         this.idx = 0;
     }

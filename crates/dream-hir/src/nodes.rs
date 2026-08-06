@@ -399,6 +399,7 @@ mod tests {
             imports: vec![],
             intrinsics: vec![],
             interfaces: InterfaceTable::default(),
+            enums: indexmap::IndexMap::new(),
         };
         assert_eq!(hir.functions.len(), 1);
         assert_eq!(hir.functions[0].params.len(), 2);

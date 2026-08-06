@@ -18,7 +18,7 @@ internal class RegexVM {
     ngroup: int;
     multiline: bool;
 
-    constructor(prog: RegexInst[], ngroup: int, multiline: bool) {
+    public constructor(prog: RegexInst[], ngroup: int, multiline: bool) {
         this.prog = prog;
         this.ngroup = ngroup;
         this.multiline = multiline;

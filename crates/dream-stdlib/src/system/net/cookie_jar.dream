@@ -6,7 +6,7 @@ public class CookieJar {
     values: List<string>;
 
     // Creates an empty jar.
-    constructor() {
+    public constructor() {
         this.names = List<string>();
         this.values = List<string>();
     }

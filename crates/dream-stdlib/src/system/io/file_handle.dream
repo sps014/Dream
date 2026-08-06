@@ -7,7 +7,7 @@ public class FileHandle {
     _id: int;
     public path: string;
 
-    constructor(id: int, path: string) {
+    public constructor(id: int, path: string) {
         this._id = id;
         this.path = path;
     }

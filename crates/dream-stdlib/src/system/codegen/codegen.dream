@@ -13,18 +13,23 @@ public class CodeBuilder {
     indent_unit: string;
     indent_pending: bool;
 
-    constructor() {
+    public constructor() {
         this.buf = StringBuilder();
         this.indent_level = 0;
         this.indent_unit = "    ";
         this.indent_pending = true;
     }
 
-    constructor(spaces: int) {
+    // Class-private: configure the indent unit. Prefer [`with_spaces`] from outside the class.
+    constructor(unit: string) {
         this.buf = StringBuilder();
         this.indent_level = 0;
-        this.indent_unit = CodeBuilder._spaces(spaces);
+        this.indent_unit = unit;
         this.indent_pending = true;
+    }
+
+    public static fun with_spaces(spaces: int): CodeBuilder {
+        return CodeBuilder(CodeBuilder._spaces(spaces));
     }
 
     static fun _spaces(n: int): string {

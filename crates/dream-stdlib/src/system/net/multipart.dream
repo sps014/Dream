@@ -10,7 +10,7 @@ public class MultipartForm {
     file_bodies: List<byte[]>;
 
     // Creates an empty form.
-    constructor() {
+    public constructor() {
         this.field_names = List<string>();
         this.field_values = List<string>();
         this.file_names = List<string>();
@@ -99,7 +99,7 @@ public class MultipartBuilt {
     // Encoded multipart body.
     public body: byte[];
 
-    constructor(headers: HttpHeaders, body: byte[]) {
+    public constructor(headers: HttpHeaders, body: byte[]) {
         this.headers = headers;
         this.body = body;
     }

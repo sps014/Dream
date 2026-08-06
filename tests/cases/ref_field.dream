@@ -1,7 +1,7 @@
 import system;
 struct Counter {
     public value: int;
-    constructor() { this.value = 0; }
+    public constructor() { this.value = 0; }
 }
 
 fun increment(ref x: int): void {

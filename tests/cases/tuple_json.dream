@@ -4,7 +4,7 @@ import system.json;
 @json
 class Row {
     public pair: (int, string);
-    constructor(pair: (int, string)) {
+    public constructor(pair: (int, string)) {
         this.pair = pair;
     }
 }

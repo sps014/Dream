@@ -9,7 +9,7 @@ public class Set<T> : Collection<T> {
     cap: int;
 
     // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
-    constructor(capacity: int = 8) {
+    public constructor(capacity: int = 8) {
         let c = hash_min_capacity();
         while (c < capacity) {
             c = c * 2;

@@ -2,7 +2,7 @@ import system;
 class Box<T> {
     public val: T;
 
-    constructor(val: T) {
+    public constructor(val: T) {
         this.val = val;
     }
 }
@@ -11,7 +11,7 @@ class Pair<T> {
     public first: T;
     public second: T;
 
-    constructor(first: T, second: T) {
+    public constructor(first: T, second: T) {
         this.first = first;
         this.second = second;
     }

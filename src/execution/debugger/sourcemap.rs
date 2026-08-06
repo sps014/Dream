@@ -3,7 +3,7 @@
 //! uses to map hook ids/file ids back to source paths, function names, variable tables, and the
 //! recursive **type table** that lets it decode live aggregate values from linear memory.
 
-pub use dream_mir::debug_schema::{FieldDesc, ScalarKind, TypeDesc, VariantDesc};
+pub use dream_mir::debug_schema::{EnumMemberDesc, FieldDesc, ScalarKind, TypeDesc, VariantDesc};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
@@ -189,7 +189,37 @@ fn parse_type(v: &Value) -> TypeDesc {
             v.get("scalar").and_then(|x| x.as_str()).unwrap_or("int"),
         )),
         "string" => TypeDesc::Str,
-        "enum" => TypeDesc::Enum,
+        "enum" => TypeDesc::Enum {
+            name: v
+                .get("name")
+                .and_then(|x| x.as_str())
+                .unwrap_or("enum")
+                .to_string(),
+            members: v
+                .get("members")
+                .and_then(|x| x.as_array())
+                .map(|a| {
+                    a.iter()
+                        .map(|m| EnumMemberDesc {
+                            name: m
+                                .get("name")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            discriminant: m.get("disc").and_then(|x| x.as_i64()).unwrap_or(0)
+                                as i32,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+        },
+        "tuple" => TypeDesc::Tuple {
+            fields: v
+                .get("fields")
+                .and_then(|x| x.as_array())
+                .map(|a| a.iter().map(parse_field).collect())
+                .unwrap_or_default(),
+        },
         "array" => TypeDesc::Array {
             elem: v.get("elem").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
             stride: v.get("stride").and_then(|x| x.as_u64()).unwrap_or(4) as u32,

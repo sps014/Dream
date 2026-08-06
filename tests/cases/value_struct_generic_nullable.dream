@@ -6,7 +6,7 @@ import system;
 struct Point {
     public x: int;
 
-    constructor(x: int) {
+    public constructor(x: int) {
         this.x = x;
     }
 }
@@ -14,7 +14,7 @@ struct Point {
 struct Wrapper<T> {
     public inner: Option<T>;
 
-    constructor(inner: Option<T>) {
+    public constructor(inner: Option<T>) {
         this.inner = inner;
     }
 }

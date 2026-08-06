@@ -4,7 +4,7 @@ import system;
 class Grid {
     cells: int[];
 
-    constructor(size: int) {
+    public constructor(size: int) {
         this.cells = Buffer.alloc<int>(size);
     }
 

@@ -11,7 +11,7 @@ class Rect {
     public width: int;
     public height: int;
 
-    constructor(width: int, height: int = 1) {
+    public constructor(width: int, height: int = 1) {
         this.width = width;
         this.height = height;
     }

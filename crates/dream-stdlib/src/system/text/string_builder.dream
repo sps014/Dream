@@ -7,7 +7,7 @@ public class StringBuilder {
     count: int;
 
     // Allocates an empty builder with an initial backing buffer capacity (defaults to 16).
-    constructor(capacity: int = 16) {
+    public constructor(capacity: int = 16) {
         let c = capacity;
         if (c < sequence_min_capacity()) {
             c = sequence_min_capacity();

@@ -13,7 +13,7 @@ fun private_secret(): int {
 public class PublicBox {
     public value: int;
 
-    constructor(v: int) {
+    public constructor(v: int) {
         this.value = v;
     }
 
@@ -26,7 +26,7 @@ public class PublicBox {
 class PrivateBox {
     public value: int;
 
-    constructor(v: int) {
+    public constructor(v: int) {
         this.value = v;
     }
 }
@@ -36,7 +36,7 @@ class PrivateBox {
 class HiddenCache<T> {
     public v: int;
 
-    constructor(v: int) {
+    public constructor(v: int) {
         this.v = v;
     }
 
@@ -50,7 +50,7 @@ class HiddenCache<T> {
 public class OpenCache<T> {
     public v: int;
 
-    constructor(v: int) {
+    public constructor(v: int) {
         this.v = v;
     }
 

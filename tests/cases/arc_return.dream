@@ -2,7 +2,7 @@ import system;
 class Node {
     public val: int;
 
-    constructor(val: int) {
+    public constructor(val: int) {
         this.val = val;
     }
 }

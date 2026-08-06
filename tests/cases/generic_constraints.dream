@@ -6,7 +6,7 @@ import system;
 class Money : Comparable<Money> {
     public cents: int;
 
-    constructor(cents: int) {
+    public constructor(cents: int) {
         this.cents = cents;
     }
 

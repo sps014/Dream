@@ -10,7 +10,7 @@ internal class RegexInst {
     public out: int;
     public out1: int;
 
-    constructor(opcode: RegexOp, ranges: List<char>, negate: bool, foldcase: bool, cap: int, empty_kind: RegexEmptyKind, out: int, out1: int) {
+    public constructor(opcode: RegexOp, ranges: List<char>, negate: bool, foldcase: bool, cap: int, empty_kind: RegexEmptyKind, out: int, out1: int) {
         this.opcode = opcode;
         this.ranges = ranges;
         this.negate = negate;

@@ -4,7 +4,7 @@
 import system;
 class NoIter {
     x: int;
-    constructor() { this.x = 0; }
+    public constructor() { this.x = 0; }
 }
 
 fun main() {

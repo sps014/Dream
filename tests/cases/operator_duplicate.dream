@@ -3,7 +3,7 @@ import system;
 class Vector2 {
     public x: int;
 
-    constructor(x: int) {
+    public constructor(x: int) {
         this.x = x;
     }
 

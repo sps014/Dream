@@ -5,10 +5,10 @@
 import system;
 import system.json;
 @json
-struct Point { public x: int; public y: int; constructor(x: int, y: int) { this.x = x; this.y = y; } }
+struct Point { public x: int; public y: int; public constructor(x: int, y: int) { this.x = x; this.y = y; } }
 
 @json
-struct Box<T> { public value: T; constructor(value: T) { this.value = value; } }
+struct Box<T> { public value: T; public constructor(value: T) { this.value = value; } }
 
 fun main(): void {
     let b = Box<Point>(Point(3, 4));

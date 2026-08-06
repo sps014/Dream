@@ -5,7 +5,7 @@ class Geo {
     public lat: double;
     public lng: double;
 
-    constructor(lat: double, lng: double) {
+    public constructor(lat: double, lng: double) {
         this.lat = lat;
         this.lng = lng;
     }
@@ -17,7 +17,7 @@ class Address {
     public zip: string;
     public geo: Geo;
 
-    constructor(city: string, zip: string, geo: Geo) {
+    public constructor(city: string, zip: string, geo: Geo) {
         this.city = city;
         this.zip = zip;
         this.geo = geo;
@@ -29,7 +29,7 @@ class Company {
     public name: string;
     public address: Address;
 
-    constructor(name: string, address: Address) {
+    public constructor(name: string, address: Address) {
         this.name = name;
         this.address = address;
     }
@@ -42,7 +42,7 @@ class User {
     public company: Company;
     public tags: string[];
 
-    constructor(name: string, age: int, company: Company, tags: string[]) {
+    public constructor(name: string, age: int, company: Company, tags: string[]) {
         this.name = name;
         this.age = age;
         this.company = company;
@@ -56,7 +56,7 @@ class Team {
     public lead: User;
     public members: User[];
 
-    constructor(title: string, lead: User, members: User[]) {
+    public constructor(title: string, lead: User, members: User[]) {
         this.title = title;
         this.lead = lead;
         this.members = members;

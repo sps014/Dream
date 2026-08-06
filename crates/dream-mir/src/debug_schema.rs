@@ -68,6 +68,13 @@ pub struct VariantDesc {
     pub fields: Vec<FieldDesc>,
 }
 
+/// One named member of a C-style enum.
+#[derive(Debug, Clone)]
+pub struct EnumMemberDesc {
+    pub name: String,
+    pub discriminant: i32,
+}
+
 /// A structural description of a runtime type, sufficient to walk memory and decode a live value.
 /// Recursive: aggregates reference their component types by index into the owning type table.
 #[derive(Debug, Clone)]
@@ -75,8 +82,15 @@ pub enum TypeDesc {
     Scalar(ScalarKind),
     /// A `string`: pointer to `[len:i32][utf8...]`.
     Str,
-    /// C-style enum (an `i32` discriminant).
-    Enum,
+    /// C-style enum (an `i32` discriminant) with optional member names for display.
+    Enum {
+        name: String,
+        members: Vec<EnumMemberDesc>,
+    },
+    /// Positional tuple `(T, U, …)` — same layout as a value struct, shown as `(v0, v1, …)`.
+    Tuple {
+        fields: Vec<FieldDesc>,
+    },
     Struct {
         name: String,
         /// True for value (inline) structs; false for reference (heap) structs.

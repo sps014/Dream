@@ -16,7 +16,7 @@ class Track {
     public url: string;
     public is_ncs: bool;
 
-    constructor(title: string, artist: string, url: string) {
+    public constructor(title: string, artist: string, url: string) {
         this.title = title;
         this.artist = artist;
         this.url = url;

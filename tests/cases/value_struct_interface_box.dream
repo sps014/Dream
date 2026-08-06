@@ -11,14 +11,14 @@ interface Shape {
 struct Rect : Shape {
     public w: int;
     public h: int;
-    constructor(w: int, h: int) { this.w = w; this.h = h; }
+    public constructor(w: int, h: int) { this.w = w; this.h = h; }
     public fun area(): int { return this.w * this.h; }
     public fun name(): string { return "rect"; }
 }
 
 struct Sq : Shape {
     public side: int;
-    constructor(side: int) { this.side = side; }
+    public constructor(side: int) { this.side = side; }
     public fun area(): int { return this.side * this.side; }
     public fun name(): string { return "sq"; }
 }

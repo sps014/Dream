@@ -14,7 +14,7 @@ class Node {
     public val: int;
     public next: Option<Node>;
 
-    constructor(val: int, next: Option<Node>) {
+    public constructor(val: int, next: Option<Node>) {
         this.val = val;
         this.next = next;
     }
@@ -24,7 +24,7 @@ class Holder {
     public item: Option<Node>;
     public label: string;
 
-    constructor(item: Option<Node>, label: string) {
+    public constructor(item: Option<Node>, label: string) {
         this.item = item;
         this.label = label;
     }
@@ -33,7 +33,7 @@ class Holder {
 class Tracked {
     public id: int;
 
-    constructor(id: int) {
+    public constructor(id: int) {
         this.id = id;
     }
 

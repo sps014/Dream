@@ -11,7 +11,7 @@ class Point {
     x: int;
     y: int;
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
@@ -34,17 +34,17 @@ class Point {
     public x: int;
     public y: int;
 
-    constructor() {
+    public constructor() {
         this.x = 0;
         this.y = 0;
     }
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
 
-    constructor(both: int) {
+    public constructor(both: int) {
         this.x = both;
         this.y = both;
     }
@@ -64,7 +64,7 @@ struct Vec2 {
     public x: int;
     public y: int;
 
-    constructor(x: int, y: int) {
+    public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
     }
@@ -87,7 +87,7 @@ ref struct Pair {
     public a: int;
     public b: int;
 
-    constructor(a: int, b: int) {
+    public constructor(a: int, b: int) {
         this.a = a;
         this.b = b;
     }
@@ -187,7 +187,7 @@ Prefix a `class` with `@shared` to make it safe to pass by reference across [`We
 @shared
 class Counter {
     public value: int;
-    constructor() { this.value = 0; }
+    public constructor() { this.value = 0; }
 
     public fun increment(): void {
         lock (this) {

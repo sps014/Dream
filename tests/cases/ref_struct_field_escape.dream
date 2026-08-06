@@ -5,7 +5,7 @@ ref struct Pair {
     public a: int;
     public b: int;
 
-    constructor(a: int, b: int) {
+    public constructor(a: int, b: int) {
         this.a = a;
         this.b = b;
     }
@@ -14,7 +14,7 @@ ref struct Pair {
 class Holder {
     public pair: Pair;
 
-    constructor(pair: Pair) {
+    public constructor(pair: Pair) {
         this.pair = pair;
     }
 }

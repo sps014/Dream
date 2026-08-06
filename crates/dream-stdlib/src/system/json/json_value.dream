@@ -10,7 +10,7 @@ public class JsonValue {
     public obj_keys: List<string>;
     public obj_vals: List<JsonValue>;
 
-    constructor(kind: int, bool_val: bool, num_val: double, str_val: string, items: List<JsonValue>, obj_keys: List<string>, obj_vals: List<JsonValue>) {
+    public constructor(kind: int, bool_val: bool, num_val: double, str_val: string, items: List<JsonValue>, obj_keys: List<string>, obj_vals: List<JsonValue>) {
         this.kind = kind;
         this.bool_val = bool_val;
         this.num_val = num_val;

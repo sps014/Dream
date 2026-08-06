@@ -4,7 +4,7 @@ module member.mod;
 public class Vector {
     internal x: int;
 
-    constructor(x: int) {
+    public constructor(x: int) {
         this.x = x;
     }
 

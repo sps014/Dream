@@ -11,7 +11,7 @@ class User {
     @json_ignore
     public nickname: Option<string>;
 
-    constructor(name: string, age: int, password: string, login_count: int, nickname: Option<string>) {
+    public constructor(name: string, age: int, password: string, login_count: int, nickname: Option<string>) {
         this.name = name;
         this.age = age;
         this.password = password;

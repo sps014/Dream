@@ -5,7 +5,7 @@ class Mixed {
     public d1: double;
     public b2: bool;
 
-    constructor(b1: bool, i1: int, d1: double, b2: bool) {
+    public constructor(b1: bool, i1: int, d1: double, b2: bool) {
         this.b1 = b1;
         this.i1 = i1;
         this.d1 = d1;

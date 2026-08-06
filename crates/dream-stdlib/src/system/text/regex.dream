@@ -14,7 +14,7 @@ public class Regex {
     dot_all: bool;
     global: bool;
 
-    constructor(pattern: string, flags: string) {
+    public constructor(pattern: string, flags: string) {
         this.pattern = pattern;
         this.flags = flags;
         this.ignore_case = flags.contains("i");

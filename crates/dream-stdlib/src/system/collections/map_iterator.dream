@@ -6,7 +6,7 @@ public class MapIterator<K, V> : Iterator<KeyValuePair<K, V>> {
     values: V[];
     idx: int;
 
-    constructor(keys: K[], values: V[]) {
+    public constructor(keys: K[], values: V[]) {
         this.keys = keys;
         this.values = values;
         this.idx = 0;

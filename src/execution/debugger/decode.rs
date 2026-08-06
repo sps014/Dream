@@ -163,11 +163,11 @@ impl Decoder<'_> {
         let addr = base.wrapping_add(field.offset);
         match self.desc(field.type_id) {
             TypeDesc::Scalar(k) => self.load_scalar(addr, k),
-            TypeDesc::Enum => self.u32_at(addr) as u64,
+            TypeDesc::Enum { .. } => self.u32_at(addr) as u64,
             TypeDesc::Str | TypeDesc::Array { .. } | TypeDesc::Ref => self.u32_at(addr) as u64,
-            TypeDesc::Struct { value: true, .. } | TypeDesc::Union { value: true, .. } => {
-                addr as u64
-            }
+            TypeDesc::Tuple { .. }
+            | TypeDesc::Struct { value: true, .. }
+            | TypeDesc::Union { value: true, .. } => addr as u64,
             TypeDesc::Struct { .. } | TypeDesc::Union { .. } => self.u32_at(addr) as u64,
         }
     }
@@ -177,7 +177,15 @@ impl Decoder<'_> {
     fn build(&mut self, type_id: u32, raw: u64, depth: usize) -> (String, String, i64) {
         match self.desc(type_id) {
             TypeDesc::Scalar(k) => (decode_scalar(k, raw), k.tag().to_string(), 0),
-            TypeDesc::Enum => ((raw as u32 as i32).to_string(), "enum".to_string(), 0),
+            TypeDesc::Enum { name, members } => {
+                let disc = raw as u32 as i32;
+                let label = members
+                    .iter()
+                    .find(|m| m.discriminant == disc)
+                    .map(|m| format!("{}.{}", name, m.name))
+                    .unwrap_or_else(|| disc.to_string());
+                (label, name, 0)
+            }
             TypeDesc::Str => {
                 let ptr = raw as u32;
                 let val = if ptr == 0 {
@@ -196,6 +204,7 @@ impl Decoder<'_> {
                 };
                 (val, "ref".to_string(), 0)
             }
+            TypeDesc::Tuple { fields } => self.build_tuple(&fields, raw as u32, depth),
             TypeDesc::Struct { name, fields, .. } => {
                 self.build_struct(&name, &fields, raw as u32, depth)
             }
@@ -235,6 +244,37 @@ impl Decoder<'_> {
         let summary = format!("{} {{ {} }}", name, parts.join(", "));
         let vref = self.alloc(children);
         (summary, name.to_string(), vref)
+    }
+
+    fn build_tuple(
+        &mut self,
+        fields: &[sourcemap::FieldDesc],
+        ptr: u32,
+        depth: usize,
+    ) -> (String, String, i64) {
+        let type_name = "tuple".to_string();
+        if ptr == 0 {
+            return ("null".to_string(), type_name, 0);
+        }
+        if depth == 0 {
+            return ("(…)".to_string(), type_name, 0);
+        }
+        let mut children = Vec::new();
+        let mut parts = Vec::new();
+        for field in fields.iter().take(MAX_FIELDS) {
+            let raw = self.field_raw(ptr, field);
+            let (value, tn, vref) = self.build(field.type_id, raw, depth - 1);
+            parts.push(value.clone());
+            children.push(VarValue {
+                name: format!(".{}", field.name),
+                value,
+                type_name: tn,
+                variables_reference: vref,
+            });
+        }
+        let summary = format!("({})", parts.join(", "));
+        let vref = self.alloc(children);
+        (summary, type_name, vref)
     }
 
     fn build_union(
@@ -314,11 +354,11 @@ impl Decoder<'_> {
     fn elem_raw(&self, addr: u32, elem: u32) -> u64 {
         match self.desc(elem) {
             TypeDesc::Scalar(k) => self.load_scalar(addr, k),
-            TypeDesc::Enum => self.u32_at(addr) as u64,
+            TypeDesc::Enum { .. } => self.u32_at(addr) as u64,
             TypeDesc::Str | TypeDesc::Array { .. } | TypeDesc::Ref => self.u32_at(addr) as u64,
-            TypeDesc::Struct { value: true, .. } | TypeDesc::Union { value: true, .. } => {
-                addr as u64
-            }
+            TypeDesc::Tuple { .. }
+            | TypeDesc::Struct { value: true, .. }
+            | TypeDesc::Union { value: true, .. } => addr as u64,
             TypeDesc::Struct { .. } | TypeDesc::Union { .. } => self.u32_at(addr) as u64,
         }
     }
@@ -329,7 +369,8 @@ fn element_type_name(desc: &TypeDesc) -> String {
     match desc {
         TypeDesc::Scalar(k) => k.tag().to_string(),
         TypeDesc::Str => "string".to_string(),
-        TypeDesc::Enum => "enum".to_string(),
+        TypeDesc::Enum { name, .. } => name.clone(),
+        TypeDesc::Tuple { .. } => "tuple".to_string(),
         TypeDesc::Struct { name, .. } | TypeDesc::Union { name, .. } => name.clone(),
         TypeDesc::Array { .. } => "array".to_string(),
         TypeDesc::Ref => "ref".to_string(),

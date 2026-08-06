@@ -6,7 +6,7 @@ public class ParseError : Error {
     _message: string;
 
     // Creates an error with machine code and message.
-    constructor(code: string, message: string) {
+    public constructor(code: string, message: string) {
         this._code = code;
         this._message = message;
     }

@@ -1,0 +1,22 @@
+import system;
+
+class Hidden {
+    constructor() {}
+}
+
+public class Box {
+    public x: int;
+    public constructor(x: int) {
+        this.x = x;
+    }
+
+    public static fun make(): Box {
+        return Box(1);
+    }
+}
+
+fun main() {
+    let b = Box.make();
+    System.println(b.x);
+    let h = Hidden();
+}

@@ -7,7 +7,7 @@ struct Pair {
     public a: int;
     public b: int;
 
-    constructor(a: int, b: int) {
+    public constructor(a: int, b: int) {
         this.a = a;
         this.b = b;
     }
@@ -16,7 +16,7 @@ struct Pair {
 class Box {
     public p: Pair;
 
-    constructor(p: Pair) {
+    public constructor(p: Pair) {
         this.p = p;
     }
 }

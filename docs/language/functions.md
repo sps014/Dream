@@ -81,7 +81,7 @@ Defaults also apply to constructors and methods:
 ```dream
 class Greeter {
     public factor: int;
-    constructor(factor: int = 3) { this.factor = factor; }
+    public constructor(factor: int = 3) { this.factor = factor; }
     public fun scale(n: int, by: int = 2): int { return n * by * this.factor; }
 }
 
@@ -129,7 +129,7 @@ cannot express:
 class Rect {
     public width: int;
     public height: int;
-    constructor(width: int, height: int = 1) { this.width = width; this.height = height; }
+    public constructor(width: int, height: int = 1) { this.width = width; this.height = height; }
     public fun area(scale: int = 1, offset: int = 0): int {
         return (this.width * this.height * scale) + offset;
     }

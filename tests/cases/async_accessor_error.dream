@@ -2,7 +2,7 @@
 // not a Future. Compilation must fail.
 class Box {
     v: int;
-    constructor() { this.v = 0; }
+    public constructor() { this.v = 0; }
 
     public async get value(): int {
         return this.v;

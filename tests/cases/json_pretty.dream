@@ -5,7 +5,7 @@ class Address {
     city: string;
     zip: string;
 
-    constructor(city: string, zip: string) {
+    public constructor(city: string, zip: string) {
         this.city = city;
         this.zip = zip;
     }
@@ -18,7 +18,7 @@ class User {
     address: Address;
     tags: string[];
 
-    constructor(name: string, age: int, address: Address, tags: string[]) {
+    public constructor(name: string, age: int, address: Address, tags: string[]) {
         this.name = name;
         this.age = age;
         this.address = address;

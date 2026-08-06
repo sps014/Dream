@@ -3,7 +3,7 @@ import system;
 @bogus
 class Foo {
     public x: int;
-    constructor(x: int) {
+    public constructor(x: int) {
         this.x = x;
     }
 }

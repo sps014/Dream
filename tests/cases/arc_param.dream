@@ -5,7 +5,7 @@ import system;
 class Box {
     public value: int;
 
-    constructor(value: int) {
+    public constructor(value: int) {
         this.value = value;
     }
 }

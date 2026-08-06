@@ -10,7 +10,7 @@ interface Container<T> {
 
 class Box<T> : Container<T> {
     public value: T;
-    constructor(value: T) { this.value = value; }
+    public constructor(value: T) { this.value = value; }
     public fun get(): T { return this.value; }
     public fun size(): int { return 1; }
 }
@@ -18,7 +18,7 @@ class Box<T> : Container<T> {
 class Pair<T> : Container<T> {
     public first: T;
     public second: T;
-    constructor(first: T, second: T) { this.first = first; this.second = second; }
+    public constructor(first: T, second: T) { this.first = first; this.second = second; }
     public fun get(): T { return this.first; }
     public fun size(): int { return 2; }
 }

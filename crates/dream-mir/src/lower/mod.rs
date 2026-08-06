@@ -89,6 +89,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         imports: hir.imports.clone(),
         intrinsics: hir.intrinsics.clone(),
         interfaces: hir.interfaces.clone(),
+        enums: hir.enums.clone(),
     }
 }
 

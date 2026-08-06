@@ -5,7 +5,7 @@ class Node {
     public value: int;
     public weak parent: Option<Node>;
 
-    constructor(value: int) {
+    public constructor(value: int) {
         this.value = value;
         this.parent = Option.None;
     }

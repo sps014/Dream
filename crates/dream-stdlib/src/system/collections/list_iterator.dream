@@ -5,7 +5,7 @@ public class ListIterator<T> : Iterator<T> {
     list: List<T>;
     idx: int;
 
-    constructor(list: List<T>) {
+    public constructor(list: List<T>) {
         this.list = list;
         this.idx = 0;
     }

@@ -13,7 +13,7 @@ HTML and other syntax DSLs are **not** part of this package — see
 ## `CodeBuilder`
 
 Accumulates Dream source for `emit_extend` / `emit_file` bodies. Construct with `CodeBuilder()`
-(4 spaces per indent level) or `CodeBuilder(n)` for `n` spaces per level.
+(4 spaces per indent level) or `CodeBuilder.with_spaces(n)` for `n` spaces per level.
 
 ```dream
 let b = CodeBuilder();
@@ -29,7 +29,7 @@ let src = b.to_string();
 | Method | Role |
 |--------|------|
 | `CodeBuilder()` | Empty builder, 4 spaces per indent level |
-| `CodeBuilder(spaces)` | Empty builder, `spaces` spaces per level (`<= 0` → no indent) |
+| `CodeBuilder.with_spaces(n)` | Empty builder, `n` spaces per level (`<= 0` → no indent) |
 | `indent()` | Increase indent level by one |
 | `dedent()` | Decrease indent level by one (floored at 0) |
 | `line(text)` | Write indent (if at line start) + text + newline |

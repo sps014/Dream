@@ -7,7 +7,7 @@ class Node {
     public value: int;
     public next: Option<Node>;
 
-    constructor(value: int, next: Option<Node>) {
+    public constructor(value: int, next: Option<Node>) {
         this.value = value;
         this.next = next;
     }

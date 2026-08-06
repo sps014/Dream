@@ -6,7 +6,7 @@ import system;
 class Tracked {
     public id: int;
 
-    constructor(id: int) {
+    public constructor(id: int) {
         this.id = id;
     }
 
@@ -19,7 +19,7 @@ class Tracked {
 class Factory {
     public base: int;
 
-    constructor(base: int) {
+    public constructor(base: int) {
         this.base = base;
     }
 
@@ -31,7 +31,7 @@ class Factory {
 class Named {
     public name: string;
 
-    constructor(name: string) {
+    public constructor(name: string) {
         this.name = name;
     }
 

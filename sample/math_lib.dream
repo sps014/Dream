@@ -13,7 +13,7 @@ public class Test
     age: int;
 
     /* constructor is a function that initializes the object */
-    constructor(name: string, age: int) {
+    public constructor(name: string, age: int) {
         this.name = name;
         this.age = age;
     }

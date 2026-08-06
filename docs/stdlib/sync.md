@@ -24,7 +24,7 @@ public class Lock {
 @shared
 class Account {
     public balance: int;
-    constructor() { this.balance = 0; }
+    public constructor() { this.balance = 0; }
 }
 
 fun transfer(acct: Account, amount: int, mtx: Lock): void {
