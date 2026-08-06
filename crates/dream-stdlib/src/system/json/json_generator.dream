@@ -9,7 +9,7 @@ public class JsonGenerator {
     public static fun expand(types: List<GenType>, json_names: List<string>, jsonable: List<string>): GenResult {
         let cb = CodeBuilder();
         let i = 0;
-        while (i < types.size()) {
+        while (i < types.size) {
             let t = types.get(i).unwrap_or(GenType.class_type("", List<string>(), List<GenField>()));
             let one = GenResult.failure("");
             if (t.is_union) {
@@ -29,7 +29,7 @@ public class JsonGenerator {
 
     static fun name_in(list: List<string>, name: string): bool {
         let i = 0;
-        while (i < list.size()) {
+        while (i < list.size) {
             if (list.get(i).unwrap_or("") == name) {
                 return true;
             }
@@ -46,11 +46,11 @@ public class JsonGenerator {
     }
 
     static fun ignore_default(ftype: string, option_inner: string): string {
-        if (option_inner.size() > 0) {
+        if (option_inner.size > 0) {
             return "Option.None";
         }
         if (ftype.ends_with("[]")) {
-            let elem = ftype.substring(0, ftype.size() - 2);
+            let elem = ftype.substring(0, ftype.size - 2);
             return "Buffer.alloc<" + elem + ">(0)";
         }
         if (ftype == "int" || ftype == "long" || ftype == "uint" || ftype == "ulong" || ftype == "byte") {
@@ -127,12 +127,12 @@ public class JsonGenerator {
         json_names: List<string>
     ): bool {
         let to_e = JsonGenerator.json_to_expr(elem, access + "[" + idx_var + "]", json_names);
-        if (to_e.size() == 0) {
+        if (to_e.size == 0) {
             return false;
         }
         cb.line("let " + arr_var + " = JsonValue.array();");
         cb.line("let " + idx_var + " = 0;");
-        cb.line("while (" + idx_var + " < " + access + ".size()) {");
+        cb.line("while (" + idx_var + " < " + access + ".size) {");
         cb.indent();
         cb.line(arr_var + ".push(" + to_e + ");");
         cb.line(idx_var + " = " + idx_var + " + 1;");
@@ -155,13 +155,13 @@ public class JsonGenerator {
             src_var + ".at(" + idx_var + ").unwrap_or(JsonValue.none())",
             json_names
         );
-        if (from_e.size() == 0) {
+        if (from_e.size == 0) {
             return false;
         }
         cb.line("let " + src_var + " = " + jexpr + ";");
-        cb.line("let " + out_var + " = Buffer.alloc<" + elem + ">(" + src_var + ".size());");
+        cb.line("let " + out_var + " = Buffer.alloc<" + elem + ">(" + src_var + ".size);");
         cb.line("let " + idx_var + " = 0;");
-        cb.line("while (" + idx_var + " < " + src_var + ".size()) {");
+        cb.line("while (" + idx_var + " < " + src_var + ".size) {");
         cb.indent();
         cb.line(out_var + "[" + idx_var + "] = " + from_e + ";");
         cb.line(idx_var + " = " + idx_var + " + 1;");
@@ -171,7 +171,7 @@ public class JsonGenerator {
     }
 
     static fun is_tuple_type(ftype: string): bool {
-        return ftype.starts_with("(") && ftype.ends_with(")") && ftype.size() > 2;
+        return ftype.starts_with("(") && ftype.ends_with(")") && ftype.size > 2;
     }
 
     // Split a tuple type spelling `(T,U,…)` / `((T,U),V)` into element type spellings at depth 0.
@@ -180,11 +180,11 @@ public class JsonGenerator {
         if (JsonGenerator.is_tuple_type(ftype) == false) {
             return out;
         }
-        let inner = ftype.substring(1, ftype.size() - 1);
+        let inner = ftype.substring(1, ftype.size - 1);
         let cur = "";
         let depth = 0;
         let i = 0;
-        while (i < inner.size()) {
+        while (i < inner.size) {
             let ch = inner.char_at(i);
             if (ch == '(') {
                 depth = depth + 1;
@@ -193,18 +193,18 @@ public class JsonGenerator {
                 depth = depth - 1;
                 cur = cur + ")";
             } else if (ch == ',' && depth == 0) {
-                if (cur.size() > 0) {
+                if (cur.size > 0) {
                     out.push(cur);
                 }
                 cur = "";
-            } else if (ch == ' ' && depth == 0 && cur.size() == 0) {
+            } else if (ch == ' ' && depth == 0 && cur.size == 0) {
                 // skip leading spaces after commas
             } else {
                 cur = cur + inner.substring(i, i + 1);
             }
             i = i + 1;
         }
-        if (cur.size() > 0) {
+        if (cur.size > 0) {
             out.push(cur);
         }
         return out;
@@ -218,12 +218,12 @@ public class JsonGenerator {
         json_names: List<string>
     ): bool {
         let elems = JsonGenerator.tuple_elems(ftype);
-        if (elems.size() < 2) {
+        if (elems.size < 2) {
             return false;
         }
         cb.line("let " + arr_var + " = JsonValue.array();");
         let i = 0;
-        while (i < elems.size()) {
+        while (i < elems.size) {
             let elem = elems.get(i).unwrap_or("");
             let acc = access + "." + i.to_string();
             if (JsonGenerator.is_tuple_type(elem)) {
@@ -233,7 +233,7 @@ public class JsonGenerator {
                 }
                 cb.line(arr_var + ".push(" + nested + ");");
             } else if (elem.ends_with("[]")) {
-                let ae = elem.substring(0, elem.size() - 2);
+                let ae = elem.substring(0, elem.size - 2);
                 let nested = arr_var + "_a" + i.to_string();
                 if (JsonGenerator.array_to_stmts(
                     cb,
@@ -248,7 +248,7 @@ public class JsonGenerator {
                 cb.line(arr_var + ".push(" + nested + ");");
             } else {
                 let to_e = JsonGenerator.json_to_expr(elem, acc, json_names);
-                if (to_e.size() == 0) {
+                if (to_e.size == 0) {
                     return false;
                 }
                 cb.line(arr_var + ".push(" + to_e + ");");
@@ -267,13 +267,13 @@ public class JsonGenerator {
         json_names: List<string>
     ): bool {
         let elems = JsonGenerator.tuple_elems(ftype);
-        if (elems.size() < 2) {
+        if (elems.size < 2) {
             return false;
         }
         cb.line("let " + src_var + " = " + jexpr + ";");
         let parts = "";
         let i = 0;
-        while (i < elems.size()) {
+        while (i < elems.size) {
             let elem = elems.get(i).unwrap_or("");
             let je = src_var + ".at(" + i.to_string() + ").unwrap_or(JsonValue.none())";
             if (i > 0) {
@@ -293,7 +293,7 @@ public class JsonGenerator {
                 }
                 parts = parts + nested;
             } else if (elem.ends_with("[]")) {
-                let ae = elem.substring(0, elem.size() - 2);
+                let ae = elem.substring(0, elem.size - 2);
                 let nested = out_var + "_a" + i.to_string();
                 if (JsonGenerator.array_from_stmts(
                     cb,
@@ -309,7 +309,7 @@ public class JsonGenerator {
                 parts = parts + nested;
             } else {
                 let from_e = JsonGenerator.json_from_expr(elem, je, json_names);
-                if (from_e.size() == 0) {
+                if (from_e.size == 0) {
                     return false;
                 }
                 parts = parts + from_e;
@@ -324,7 +324,7 @@ public class JsonGenerator {
     static fun append_block(cb: CodeBuilder, block: string): void {
         let start = 0;
         let i = 0;
-        let n = block.size();
+        let n = block.size;
         while (i < n) {
             if (block.char_at(i) == '\n') {
                 cb.line(block.substring(start, i));
@@ -344,7 +344,7 @@ public class JsonGenerator {
         let from_fields = "";
         let first_field = true;
         let fi = 0;
-        while (fi < t.fields.size()) {
+        while (fi < t.fields.size) {
             let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
             let fname = field.name;
             let ftype = field.type_name;
@@ -352,7 +352,7 @@ public class JsonGenerator {
 
             if (field.json_ignore) {
                 let def = JsonGenerator.ignore_default(ftype, field.option_inner);
-                if (def.size() == 0) {
+                if (def.size == 0) {
                     return GenResult.failure(
                         "@json class '" + t.name + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default (use `Option<" + ftype + ">` or remove @json_ignore)"
                     );
@@ -366,10 +366,10 @@ public class JsonGenerator {
                 continue;
             }
 
-            if (field.option_inner.size() > 0) {
+            if (field.option_inner.size > 0) {
                 let base = field.option_inner;
                 if (base.ends_with("[]")) {
-                    let elem = base.substring(0, base.size() - 2);
+                    let elem = base.substring(0, base.size - 2);
                     to_cb.line("switch (this." + fname + ") {");
                     to_cb.indent();
                     to_cb.line("Some(__v_" + fname + ") => {");
@@ -457,7 +457,7 @@ public class JsonGenerator {
             }
 
             if (ftype.ends_with("[]")) {
-                let elem = ftype.substring(0, ftype.size() - 2);
+                let elem = ftype.substring(0, ftype.size - 2);
                 if (JsonGenerator.array_to_stmts(
                     to_cb,
                     elem,
@@ -544,7 +544,7 @@ public class JsonGenerator {
                 "v.get(\"" + json_key + "\").unwrap_or(JsonValue.none())",
                 json_names
             );
-            if (to_e.size() == 0 || from_e.size() == 0) {
+            if (to_e.size == 0 || from_e.size == 0) {
                 return GenResult.failure(
                     "@json class '" + t.name + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
                 );
@@ -588,14 +588,14 @@ public class JsonGenerator {
         from_cb.line("let __t = v.get(\"type\").unwrap_or(JsonValue.none()).as_string().unwrap_or(\"\");");
 
         let vi = 0;
-        while (vi < t.variants.size()) {
+        while (vi < t.variants.size) {
             let variant = t.variants.get(vi).unwrap_or(GenVariant.make("", List<GenField>()));
             let vname = variant.name;
             let pattern = vname;
             if (variant.fields.is_empty() == false) {
                 pattern = vname + "(";
                 let bi = 0;
-                while (bi < variant.fields.size()) {
+                while (bi < variant.fields.size) {
                     if (bi > 0) {
                         pattern = pattern + ", ";
                     }
@@ -612,7 +612,7 @@ public class JsonGenerator {
             let args = "";
             let first_arg = true;
             let fi = 0;
-            while (fi < variant.fields.size()) {
+            while (fi < variant.fields.size) {
                 let field = variant.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
                 let fname = field.name;
                 let ftype = field.type_name;
@@ -621,7 +621,7 @@ public class JsonGenerator {
                 } else if (field.is_type_param) {
                     to_cb.line("__o.set(\"" + fname + "\", Json.parse(Json.serialize(" + fname + ")).unwrap_or(JsonValue.none()));");
                 } else if (ftype.ends_with("[]")) {
-                    let elem = ftype.substring(0, ftype.size() - 2);
+                    let elem = ftype.substring(0, ftype.size - 2);
                     if (JsonGenerator.array_to_stmts(
                         to_cb,
                         elem,
@@ -650,7 +650,7 @@ public class JsonGenerator {
                     to_cb.line("__o.set(\"" + fname + "\", __arr_" + vname + "_" + fname + ");");
                 } else {
                     let expr = JsonGenerator.json_to_expr(ftype, fname, json_names);
-                    if (expr.size() == 0) {
+                    if (expr.size == 0) {
                         return GenResult.failure(
                             "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
                         );
@@ -660,7 +660,7 @@ public class JsonGenerator {
 
                 if (field.json_ignore) {
                     let def = JsonGenerator.ignore_default(ftype, field.option_inner);
-                    if (def.size() == 0) {
+                    if (def.size == 0) {
                         return GenResult.failure(
                             "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default"
                         );
@@ -679,7 +679,7 @@ public class JsonGenerator {
                         args = args + "Json.from_value<" + ftype + ">(" + jexpr + ")";
                         first_arg = false;
                     } else if (ftype.ends_with("[]")) {
-                        let elem = ftype.substring(0, ftype.size() - 2);
+                        let elem = ftype.substring(0, ftype.size - 2);
                         let out_var = "__" + vname + "_" + fname;
                         if (JsonGenerator.array_from_stmts(
                             arm_from,
@@ -720,7 +720,7 @@ public class JsonGenerator {
                         first_arg = false;
                     } else {
                         let expr = JsonGenerator.json_from_expr(ftype, jexpr, json_names);
-                        if (expr.size() == 0) {
+                        if (expr.size == 0) {
                             return GenResult.failure(
                                 "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
                             );
@@ -764,7 +764,7 @@ public class JsonGenerator {
             let first_arg = true;
             let vname = first.name;
             let fi = 0;
-            while (fi < first.fields.size()) {
+            while (fi < first.fields.size) {
                 let field = first.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
                 let fname = field.name;
                 let ftype = field.type_name;
@@ -783,7 +783,7 @@ public class JsonGenerator {
                     args = args + "Json.from_value<" + ftype + ">(" + jexpr + ")";
                     first_arg = false;
                 } else if (ftype.ends_with("[]")) {
-                    let elem = ftype.substring(0, ftype.size() - 2);
+                    let elem = ftype.substring(0, ftype.size - 2);
                     let out_var = "__fb_" + fname;
                     if (JsonGenerator.array_from_stmts(
                         from_cb,

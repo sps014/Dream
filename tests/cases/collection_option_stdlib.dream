@@ -2,7 +2,7 @@ import system;
 import system.collections;
 
 fun total_size(xs: Collection<string>): int {
-    return xs.size();
+    return xs.size;
 }
 
 fun double_it(x: int): int {
@@ -23,6 +23,6 @@ fun main(): void {
     System.println(mapped.unwrap_or(0));
 
     for (let s in list) {
-        System.println(s.size());
+        System.println(s.size);
     }
 }

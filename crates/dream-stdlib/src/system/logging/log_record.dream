@@ -1,0 +1,22 @@
+module system.logging;
+
+// One log event ready for handlers.
+
+public class LogRecord {
+    // Severity of this record.
+    public level: LogLevel;
+    // Logger name that produced this record.
+    public name: string;
+    // Message text.
+    public message: string;
+    // UTC epoch milliseconds when the record was created.
+    public timestamp_ms: long;
+
+    // Builds a record from its fields.
+    public constructor(level: LogLevel, name: string, message: string, timestamp_ms: long) {
+        this.level = level;
+        this.name = name;
+        this.message = message;
+        this.timestamp_ms = timestamp_ms;
+    }
+}

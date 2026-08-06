@@ -120,7 +120,7 @@ public class JsonValue {
 
     fun _find_key(key: string): int {
         let i = 0;
-        while (i < this.obj_keys.size()) {
+        while (i < this.obj_keys.size) {
             if (this.obj_keys.get(i).unwrap_or("") == key) {
                 return i;
             }
@@ -177,10 +177,10 @@ public class JsonValue {
     }
 
     // Element count for arrays/objects.
-    public fun size(): int {
+    public get size(): int {
         if (this.kind == 5) {
-            return this.obj_keys.size();
+            return this.obj_keys.size;
         }
-        return this.items.size();
+        return this.items.size;
     }
 }

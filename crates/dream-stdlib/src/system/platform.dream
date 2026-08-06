@@ -1,0 +1,10 @@
+module system;
+
+// Host runtime kind.
+
+public enum Platform {
+    Native,
+    Node,
+    Browser,
+    Unknown,
+}

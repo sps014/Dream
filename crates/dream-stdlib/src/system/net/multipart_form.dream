@@ -1,6 +1,7 @@
 module system.net;
 
 // Builder for `multipart/form-data` request bodies.
+
 public class MultipartForm {
     field_names: List<string>;
     field_values: List<string>;
@@ -35,10 +36,10 @@ public class MultipartForm {
 
     // Returns `(Content-Type headers, body bytes)` for `request_bytes`.
     public fun build(): MultipartBuilt {
-        let boundary = "dreamform" + this.field_names.size().to_string() + "x" + this.file_names.size().to_string();
+        let boundary = "dreamform" + this.field_names.size.to_string() + "x" + this.file_names.size.to_string();
         let body = Buffer.alloc<byte>(0);
         let i = 0;
-        while (i < this.field_names.size()) {
+        while (i < this.field_names.size) {
             body = MultipartForm._append_str(body, "--" + boundary + "\r\n");
             body = MultipartForm._append_str(
                 body,
@@ -49,7 +50,7 @@ public class MultipartForm {
             i = i + 1;
         }
         i = 0;
-        while (i < this.file_names.size()) {
+        while (i < this.file_names.size) {
             body = MultipartForm._append_str(body, "--" + boundary + "\r\n");
             body = MultipartForm._append_str(
                 body,
@@ -75,32 +76,19 @@ public class MultipartForm {
     }
 
     static fun _append_bytes(base: byte[], extra: byte[]): byte[] {
-        let n = base.size() + extra.size();
+        let n = base.size + extra.size;
         let out = Buffer.alloc<byte>(n);
         let i = 0;
-        while (i < base.size()) {
+        while (i < base.size) {
             out[i] = base[i];
             i = i + 1;
         }
         let j = 0;
-        while (j < extra.size()) {
+        while (j < extra.size) {
             out[i] = extra[j];
             i = i + 1;
             j = j + 1;
         }
         return out;
-    }
-}
-
-// Result of `MultipartForm.build`.
-public class MultipartBuilt {
-    // Headers including `Content-Type` with boundary.
-    public headers: HttpHeaders;
-    // Encoded multipart body.
-    public body: byte[];
-
-    public constructor(headers: HttpHeaders, body: byte[]) {
-        this.headers = headers;
-        this.body = body;
     }
 }

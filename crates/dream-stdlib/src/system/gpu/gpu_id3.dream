@@ -1,0 +1,9 @@
+module system.gpu;
+
+/// 3-component id used by compute builtins (`global_id`, `local_id`, …).
+
+public struct GpuId3 {
+    public x: int;
+    public y: int;
+    public z: int;
+}

@@ -1,21 +1,7 @@
 module system;
 
-// Host runtime kind.
-public enum Platform {
-    Native,
-    Node,
-    Browser,
-    Unknown,
-}
-
-// Operating-system family (native hosts).
-public enum OsFamily {
-    Unix,
-    Windows,
-    Unknown,
-}
-
 // System utilities for console I/O, process control, and terminal colors.
+
 public class System {
     // Prints a value to standard output.
     @intrinsic("print")
@@ -154,7 +140,7 @@ public class System {
         if (raw.char_at(0) != '1') {
             return Option.None;
         }
-        return Option.Some(raw.substring(1, raw.size()));
+        return Option.Some(raw.substring(1, raw.size));
     }
 
     // Value of environment variable `name`, or `fallback` when unset.

@@ -1,0 +1,59 @@
+module system.json;
+
+public class GenType {
+    public name: string;
+    public is_union: bool;
+    public generic_params: List<string>;
+    public fields: List<GenField>;
+    public variants: List<GenVariant>;
+
+    public constructor(
+        name: string,
+        is_union: bool,
+        generic_params: List<string>,
+        fields: List<GenField>,
+        variants: List<GenVariant>
+    ) {
+        this.name = name;
+        this.is_union = is_union;
+        this.generic_params = generic_params;
+        this.fields = fields;
+        this.variants = variants;
+    }
+
+    public static fun class_type(
+        name: string,
+        generic_params: List<string>,
+        fields: List<GenField>
+    ): GenType {
+        return GenType(name, false, generic_params, fields, List<GenVariant>());
+    }
+
+    public static fun union_type(
+        name: string,
+        generic_params: List<string>,
+        variants: List<GenVariant>
+    ): GenType {
+        return GenType(name, true, generic_params, List<GenField>(), variants);
+    }
+
+    public fun params_clause(): string {
+        if (this.generic_params.is_empty()) {
+            return "";
+        }
+        let s = "<";
+        let i = 0;
+        while (i < this.generic_params.size) {
+            if (i > 0) {
+                s = s + ", ";
+            }
+            s = s + this.generic_params.get(i).unwrap_or("");
+            i = i + 1;
+        }
+        return s + ">";
+    }
+
+    public fun self_ty(): string {
+        return this.name + this.params_clause();
+    }
+}

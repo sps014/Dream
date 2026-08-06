@@ -1,8 +1,8 @@
 import system;
 fun main(): void {
     let xs: int[] = [];
-    System.println(xs.size());
+    System.println(xs.size);
 
     let ys: string[] = [];
-    System.println(ys.size());
+    System.println(ys.size);
 }

@@ -42,7 +42,7 @@ extend ulong : Comparable<ulong> {
 
     // Parses an unsigned decimal integer from `text`.
     public static fun parse(text: string): Result<ulong, ParseError> {
-        let n = text.size();
+        let n = text.size;
         if (n == 0) {
             return Result.Err(ParseError.invalid("cannot parse ulong from empty string"));
         }

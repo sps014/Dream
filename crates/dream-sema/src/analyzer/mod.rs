@@ -189,18 +189,18 @@ fn generic_param_names(params: &Option<Vec<SyntaxToken>>) -> Vec<String> {
 /// The internal member name a property getter is registered under. The `$` cannot appear in a
 /// source identifier, so this never collides with a user method (including the indexer `get`) and
 /// is not directly callable as `obj.get$prop()`.
-pub(super) fn getter_member_name(prop: &str) -> String {
+pub fn getter_member_name(prop: &str) -> String {
     format!("get${}", prop)
 }
 
 /// The internal member name a property setter is registered under (see [`getter_member_name`]).
-pub(super) fn setter_member_name(prop: &str) -> String {
+pub fn setter_member_name(prop: &str) -> String {
     format!("set${}", prop)
 }
 
 /// The internal member name a class member is registered under: the `$`-tagged accessor name for a
 /// property `get`/`set`, or the plain method/field name otherwise.
-pub(super) fn accessor_member_name(method: &FunctionNode) -> String {
+pub fn accessor_member_name(method: &FunctionNode) -> String {
     match method.accessor {
         Some(dream_syntax::nodes::function::AccessorKind::Get) => {
             getter_member_name(&method.name.text)

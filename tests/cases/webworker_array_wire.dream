@@ -15,16 +15,16 @@ struct Point {
 }
 
 fun doubleAll(nums: int[]): int[] {
-    let out = Buffer.alloc<int>(nums.size());
-    for (let i = 0; i < nums.size(); i = i + 1) {
+    let out = Buffer.alloc<int>(nums.size);
+    for (let i = 0; i < nums.size; i = i + 1) {
         out[i] = nums[i] * 2;
     }
     return out;
 }
 
 fun shiftAll(points: Point[]): Point[] {
-    let out = Buffer.alloc<Point>(points.size());
-    for (let i = 0; i < points.size(); i = i + 1) {
+    let out = Buffer.alloc<Point>(points.size);
+    for (let i = 0; i < points.size; i = i + 1) {
         out[i] = Point(points[i].x + 1, points[i].y + 1);
     }
     return out;
@@ -35,7 +35,7 @@ async fun main(): void {
     let nums = [1, 2, 3, 4, 5];
     let doubled = await w1.send(nums);
     let s1 = "";
-    for (let i = 0; i < doubled.size(); i = i + 1) {
+    for (let i = 0; i < doubled.size; i = i + 1) {
         s1 = s1 + doubled[i] + " ";
     }
     System.println(s1.trim());
@@ -45,7 +45,7 @@ async fun main(): void {
     let pts = [Point(1, 2), Point(3, 4)];
     let shifted = await w2.send(pts);
     let s2 = "";
-    for (let i = 0; i < shifted.size(); i = i + 1) {
+    for (let i = 0; i < shifted.size; i = i + 1) {
         s2 = s2 + shifted[i].x + "," + shifted[i].y + " ";
     }
     System.println(s2.trim());

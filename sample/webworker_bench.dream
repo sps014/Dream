@@ -10,7 +10,7 @@
 // be optimized away. `input` seeds the work so each call is real.
 import system;
 fun heavy(input: string): string {
-    let seed = input.size();
+    let seed = input.size;
     let acc = 0;
     let i = 0;
     while (i < 60000000) {

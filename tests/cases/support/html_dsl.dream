@@ -6,7 +6,7 @@ public class Html {
     public static fun el(tag: string, attrs: string[], inner: string): string {
         let a = "";
         let i = 0;
-        while (i + 1 < attrs.size()) {
+        while (i + 1 < attrs.size) {
             a = a + " " + attrs[i] + "=\"" + attrs[i + 1] + "\"";
             i = i + 2;
         }

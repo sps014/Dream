@@ -2,16 +2,16 @@ module system.core;
 
 // Every `T[]` implements `IndexedCollection<T>` (and thus `Collection<T>`). Instantiated on demand
 // for each concrete element type (`int[]`, `Point[]`, …).
-// `this.size()` resolves to the builtin `ArrayLen` (checked before instance dispatch).
+// `this.size` resolves to the builtin `ArrayLen` (checked before instance dispatch).
 
 extend T[] : IndexedCollection<T> {
-    public fun size(): int {
-        return this.size();
+    public get size(): int {
+        return this.size;
     }
 
     @get_indexer
     public fun get(index: int): Option<T> {
-        if (index < 0 || index >= this.size()) {
+        if (index < 0 || index >= this.size) {
             return Option.None;
         }
         return Option.Some(this[index]);

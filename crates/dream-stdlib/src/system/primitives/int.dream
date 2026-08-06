@@ -76,7 +76,7 @@ extend int : Comparable<int> {
 
     // Parses a (possibly signed) decimal integer from `text`.
     public static fun parse(text: string): Result<int, ParseError> {
-        let n = text.size();
+        let n = text.size;
         if (n == 0) {
             return Result.Err(ParseError.invalid("cannot parse int from empty string"));
         }

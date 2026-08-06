@@ -9,7 +9,7 @@ fun asc(a: int, b: int): int { return a.compare(b); }
 fun sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
-    while (i < xs.size()) {
+    while (i < xs.size) {
         total = total + xs.get(i).unwrap_or(0);
         i = i + 1;
     }
@@ -33,7 +33,7 @@ fun main(): void {
         System.println(x);
     }
 
-    System.println(arr.filter(is_even).size());
+    System.println(arr.filter(is_even).size);
     System.println(arr.map(times_two).reduce(0, add));
 
     let xs = List<int>();
@@ -41,6 +41,6 @@ fun main(): void {
     xs.push(1);
     xs.push(2);
     xs.push(1);
-    System.println(xs.distinct().size());
+    System.println(xs.distinct().size);
     System.println(xs.order_by(asc).get(0).unwrap_or(-1));
 }

@@ -1,14 +1,7 @@
 module system.text;
 
-// Unicode normalization forms for `Unicode.normalize`.
-public enum UnicodeNormForm {
-    Nfc,
-    Nfd,
-    Nfkc,
-    Nfkd,
-}
-
 // ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
+
 public class Unicode {
     @js("Dream", "unicodeNormalize")
     static extern fun normalize_host(text: string, form: int): string;

@@ -61,7 +61,7 @@ extend long : Comparable<long> {
 
     // Parses a decimal integer from `text`.
     public static fun parse(text: string): Result<long, ParseError> {
-        let n = text.size();
+        let n = text.size;
         if (n == 0) {
             return Result.Err(ParseError.invalid("cannot parse long from empty string"));
         }

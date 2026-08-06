@@ -7,10 +7,10 @@ fun main(): void {
     System.println(anchored.test("abcx"));
 
     let multiline = Regex("^b", "mg");
-    System.println(multiline.match("a\nb\nc").size());
+    System.println(multiline.match("a\nb\nc").size);
 
     let single_line = Regex("^b", "g");
-    System.println(single_line.match("a\nb\nc").size());
+    System.println(single_line.match("a\nb\nc").size);
 
     let word_boundary = Regex("\\bcat\\b", "");
     System.println(word_boundary.test("a cat sat"));

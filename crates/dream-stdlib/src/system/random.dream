@@ -7,8 +7,8 @@ public class Random {
     // Creates a generator from `seed` (`0` is remapped to `1` so the state is never zero).
     public constructor(seed: uint) {
         let s = seed;
-        if (s == (uint)0) {
-            s = (uint)1;
+        if (s == 0u) {
+            s = 1u;
         }
         this.state = s;
     }
@@ -16,9 +16,9 @@ public class Random {
     // Advances the generator and returns the next 32-bit value.
     public fun next_u32(): uint {
         let x = this.state;
-        x = x ^ (x << (uint)13);
-        x = x ^ (x >> (uint)17);
-        x = x ^ (x << (uint)5);
+        x = x ^ (x << 13u);
+        x = x ^ (x >> 17u);
+        x = x ^ (x << 5u);
         this.state = x;
         return x;
     }
@@ -34,11 +34,11 @@ public class Random {
     // Uniform value in `[0.0, 1.0)`.
     public fun next_double(): double {
         let x = this.next_u32();
-        return (double)((int)(x % (uint)1000000)) / 1000000.0d;
+        return (double)((int)(x % 1000000u)) / 1000000.0d;
     }
 
     // True or false with equal probability.
     public fun next_bool(): bool {
-        return (this.next_u32() & (uint)1) == (uint)1;
+        return (this.next_u32() & 1u) == 1u;
     }
 }

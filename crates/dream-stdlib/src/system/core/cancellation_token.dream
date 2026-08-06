@@ -1,0 +1,31 @@
+module system.core;
+
+// Read-only view of a `CancellationSource` for cooperative checks at await boundaries.
+
+public class CancellationToken {
+    _source: CancellationSource;
+
+    public constructor(source: CancellationSource) {
+        this._source = source;
+    }
+
+    // True when the owning source has been cancelled.
+    public fun is_cancelled(): bool {
+        return this._source.is_cancelled();
+    }
+
+    // Panics with `CancelledError` when already cancelled.
+    public fun throw_if_cancelled(): void {
+        if (this.is_cancelled()) {
+            System.panic(CancelledError.cancelled().message());
+        }
+    }
+
+    // `Ok(true)` when still running; `Err(CancelledError)` when cancelled.
+    public fun check(): Result<bool, CancelledError> {
+        if (this.is_cancelled()) {
+            return Result.Err(CancelledError.cancelled());
+        }
+        return Result.Ok(true);
+    }
+}

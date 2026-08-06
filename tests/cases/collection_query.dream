@@ -29,7 +29,7 @@ fun main(): void {
     System.println(xs.find_where(gt_two).unwrap_or(-1));
 
     let doubled = xs.map(times_two);
-    System.println(doubled.size());
+    System.println(doubled.size);
     System.println(doubled.get(0).unwrap_or(-1));
 
     System.println(sum_evens(xs));
@@ -38,8 +38,8 @@ fun main(): void {
     System.println(filtered.reduce(0, add));
 
     let from_iface: Collection<int> = xs;
-    System.println(from_iface.to_list().size());
+    System.println(from_iface.to_list().size);
 
-    System.println(xs.distinct().size());
+    System.println(xs.distinct().size);
     System.println(xs.order_by(asc).get(0).unwrap_or(-1));
 }

@@ -1,0 +1,8 @@
+module system.crypto;
+
+// HMAC-SHA256 of `data` under `key` (32 bytes).
+
+public class HmacSha256 {
+    @js("Dream", "cryptoHmacSha256")
+    static extern fun sign(key: byte[], data: byte[]): byte[];
+}

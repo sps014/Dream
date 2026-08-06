@@ -42,7 +42,7 @@ extend byte : Comparable<byte> {
 
     // Parses an unsigned decimal byte from `text`.
     public static fun parse(text: string): Result<byte, ParseError> {
-        let n = text.size();
+        let n = text.size;
         if (n == 0) {
             return Result.Err(ParseError.invalid("cannot parse byte from empty string"));
         }

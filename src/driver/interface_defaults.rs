@@ -12,7 +12,7 @@
 //! The same inheritance applies to `extend Target : Iface` blocks (e.g. `extend int[] :
 //! IndexedCollection<int>`), so array/primitive implementers pick up `is_empty` / `all` / …
 
-use dream_sema::analyzer::{generic_bindings, substitute_generic_type};
+use dream_sema::analyzer::{accessor_member_name, generic_bindings, substitute_generic_type};
 use dream_syntax::nodes::interface_node::InterfaceDeclarationNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{ExtendNode, FunctionNode, Type};
@@ -107,11 +107,11 @@ fn collect_inherited_defaults<'a>(
                 if !method.is_default_impl || method.is_static {
                     continue;
                 }
-                if defines(&method.name.text) || seen_methods.iter().any(|n| n == &method.name.text)
-                {
+                let key = accessor_member_name(method);
+                if defines(&key) || seen_methods.iter().any(|n| n == &key) {
                     continue;
                 }
-                seen_methods.push(method.name.text.clone());
+                seen_methods.push(key);
                 let mut m = method.clone();
                 m.is_default_impl = false;
                 if !bindings.is_empty() {
@@ -165,12 +165,17 @@ pub(crate) fn generate_interface_default_impls<'a>(
         }
         let class_name = class.name.text.as_str();
         let inherited = collect_inherited_defaults(&class.implements, all_interfaces, |name| {
-            class.methods.iter().any(|m| m.name.text == name)
+            class
+                .methods
+                .iter()
+                .any(|m| accessor_member_name(m) == name)
                 || all_extends.iter().any(|e| {
-                    e.target.text == class_name && e.methods.iter().any(|m| m.name.text == name)
+                    e.target.text == class_name
+                        && e.methods.iter().any(|m| accessor_member_name(m) == name)
                 })
                 || synthesized.iter().any(|e| {
-                    e.target.text == class_name && e.methods.iter().any(|m| m.name.text == name)
+                    e.target.text == class_name
+                        && e.methods.iter().any(|m| accessor_member_name(m) == name)
                 })
         });
         push_default_extend(
@@ -195,15 +200,17 @@ pub(crate) fn generate_interface_default_impls<'a>(
         let own_methods: Vec<String> = all_extends[idx]
             .methods
             .iter()
-            .map(|m| m.name.text.clone())
+            .map(|m| accessor_member_name(m))
             .collect();
         let inherited = collect_inherited_defaults(&implements, all_interfaces, |name| {
             own_methods.iter().any(|m| m == name)
                 || all_extends.iter().any(|e| {
-                    e.target.text == target_name && e.methods.iter().any(|m| m.name.text == name)
+                    e.target.text == target_name
+                        && e.methods.iter().any(|m| accessor_member_name(m) == name)
                 })
                 || synthesized.iter().any(|e| {
-                    e.target.text == target_name && e.methods.iter().any(|m| m.name.text == name)
+                    e.target.text == target_name
+                        && e.methods.iter().any(|m| accessor_member_name(m) == name)
                 })
         });
         push_default_extend(

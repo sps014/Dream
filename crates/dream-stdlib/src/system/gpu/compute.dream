@@ -1,0 +1,65 @@
+module system.gpu;
+
+/// High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
+
+public class Compute {
+    public static async fun run_1d(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        n: int
+    ): Result<bool, GpuError> {
+        return await Compute.run_3d(kernel, buffers, n, 1, 1, Buffer.alloc<byte>(0));
+    }
+
+    public static async fun run_2d(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        w: int,
+        h: int
+    ): Result<bool, GpuError> {
+        return await Compute.run_3d(kernel, buffers, w, h, 1, Buffer.alloc<byte>(0));
+    }
+
+    public static async fun run_2d_uniforms(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        w: int,
+        h: int,
+        uniforms: byte[]
+    ): Result<bool, GpuError> {
+        return await Compute.run_3d(kernel, buffers, w, h, 1, uniforms);
+    }
+
+    public static async fun run_3d(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        sx: int,
+        sy: int,
+        sz: int,
+        uniforms: byte[]
+    ): Result<bool, GpuError> {
+        let ids = Buffer.alloc<int>(buffers.size);
+        for (let i = 0; i < buffers.size; i = i + 1) {
+            ids[i] = buffers[i].id;
+        }
+        let code = await Gpu.dispatch(kernel, ids, sx, sy, sz, uniforms);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
+    }
+
+    public static async fun run_shader(
+        shader: GpuShader,
+        buffers: GpuBuffer<float>[],
+        wx: int,
+        wy: int,
+        wz: int
+    ): Result<bool, GpuError> {
+        let ids = Buffer.alloc<int>(buffers.size);
+        for (let i = 0; i < buffers.size; i = i + 1) {
+            ids[i] = buffers[i].id;
+        }
+        let code = await Gpu.dispatch_shader(shader.id, ids, wx, wy, wz);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "shader dispatch failed"));
+    }
+}

@@ -11,7 +11,7 @@ fun grow_and_shrink(): void {
 
     // Grow: the overlapping prefix survives, the new tail is zero-initialized.
     xs = Buffer.realloc<int>(xs, 5);
-    System.println(xs.size());   // 5
+    System.println(xs.size);   // 5
     System.println(xs[0]);       // 10
     System.println(xs[1]);       // 20
     System.println(xs[2]);       // 30
@@ -23,7 +23,7 @@ fun grow_and_shrink(): void {
 
     // Shrink: the surviving prefix is unchanged.
     xs = Buffer.realloc<int>(xs, 2);
-    System.println(xs.size());   // 2
+    System.println(xs.size);   // 2
     System.println(xs[0]);       // 10
     System.println(xs[1]);       // 20
 

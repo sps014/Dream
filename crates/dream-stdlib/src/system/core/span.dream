@@ -23,11 +23,11 @@ public ref struct Span<T> {
 
     // A span over the whole of `array`.
     public static fun of(array: T[]): Span<T> {
-        return Span<T>(array, 0, array.size());
+        return Span<T>(array, 0, array.size);
     }
 
     // Number of elements this span covers.
-    public fun len(): int {
+    public get size(): int {
         return this.length;
     }
 

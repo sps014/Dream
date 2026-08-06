@@ -3,7 +3,7 @@ import system.text;
 
 fun main(): void {
     let s = "aé🙂";
-    System.println(s.size());
+    System.println(s.size);
     System.println(s.byte_size());
     System.println(s.char_at(0).to_int());
     System.println(s.char_at(1).to_int());
@@ -12,7 +12,7 @@ fun main(): void {
     System.println(s.byte_at(1));
     System.println(s.byte_at(2));
     let i = 0;
-    while (i < s.size()) {
+    while (i < s.size) {
         System.println(s.char_at(i).to_int());
         i = i + 1;
     }

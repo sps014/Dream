@@ -1,0 +1,11 @@
+module system.crypto;
+
+// Host-backed digests and CSPRNG (`sha2` / `hmac` / `getrandom` natively; `node:crypto` or Web
+// Crypto in `runtime/dream.js`). Hex/Base64 encoding lives in `system.encoding`.
+
+// SHA-256 digest of `data` (32 bytes).
+
+public class Sha256 {
+    @js("Dream", "cryptoSha256")
+    static extern fun hash(data: byte[]): byte[];
+}

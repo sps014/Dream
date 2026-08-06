@@ -24,7 +24,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Number of elements currently stored.
-    public fun size(): int {
+    public get size(): int {
         return this.count;
     }
 
@@ -35,12 +35,12 @@ public class List<T> : IndexedCollection<T> {
 
     // Current capacity of the backing buffer.
     public fun capacity(): int {
-        return this.items.size();
+        return this.items.size;
     }
 
     // Doubles the backing buffer, resizing in place via `Buffer.realloc` when possible.
     fun grow(): void {
-        let old_cap = this.items.size();
+        let old_cap = this.items.size;
         let new_cap = old_cap * 2;
         if (new_cap < sequence_min_capacity()) {
             new_cap = sequence_min_capacity();
@@ -50,7 +50,7 @@ public class List<T> : IndexedCollection<T> {
 
     // Appends a value to the end, growing if necessary.
     public fun push(value: T): void {
-        if (this.count == this.items.size()) {
+        if (this.count == this.items.size) {
             this.grow();
         }
         this.items[this.count] = value;
@@ -59,9 +59,9 @@ public class List<T> : IndexedCollection<T> {
 
     // Appends every element of `items`, ensuring capacity once then copying.
     public fun push_all(items: T[]): void {
-        let n = items.size();
+        let n = items.size;
         let need = this.count + n;
-        while (need > this.items.size()) {
+        while (need > this.items.size) {
             this.grow();
         }
         let i = 0;
@@ -75,7 +75,7 @@ public class List<T> : IndexedCollection<T> {
     // Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]`
     // list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
     public static fun from_array(items: T[]): List<T> {
-        let result = List<T>(items.size());
+        let result = List<T>(items.size);
         result.push_all(items);
         return result;
     }
@@ -146,7 +146,7 @@ public class List<T> : IndexedCollection<T> {
         if ((index < 0) || (index > this.count)) {
             return false;
         }
-        if (this.count == this.items.size()) {
+        if (this.count == this.items.size) {
             this.grow();
         }
         let i = this.count;

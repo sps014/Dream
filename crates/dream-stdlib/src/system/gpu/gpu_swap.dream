@@ -1,0 +1,29 @@
+module system.gpu;
+
+/// Ping-pong pair of storage buffers.
+
+public class GpuSwap<T : unmanaged> {
+    public a: GpuBuffer<T>;
+    public b: GpuBuffer<T>;
+    public use_a: bool;
+
+    public static fun alloc(n: int): GpuSwap<T> {
+        let s = GpuSwap<T>();
+        s.a = GpuBuffer<T>.alloc(n);
+        s.b = GpuBuffer<T>.alloc(n);
+        s.use_a = true;
+        return s;
+    }
+
+    public fun front(): GpuBuffer<T> {
+        return this.use_a ? this.a : this.b;
+    }
+
+    public fun back(): GpuBuffer<T> {
+        return this.use_a ? this.b : this.a;
+    }
+
+    public fun swap(): void {
+        this.use_a = !this.use_a;
+    }
+}

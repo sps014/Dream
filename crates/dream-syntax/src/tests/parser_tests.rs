@@ -118,7 +118,8 @@ fn test_parse_unary_minus_after_comparison_and_arithmetic() {
         let (_, diagnostics) = parse_code(code, &arena);
         assert!(
             !diagnostics.has_errors(),
-            "expected clean parse for `{code}`, got errors"
+            "expected clean parse for `{code}`, got errors",
+            code = code
         );
     }
 

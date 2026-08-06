@@ -38,15 +38,15 @@ public class CookieJar {
     }
 
     // Number of stored cookies.
-    public fun size(): int {
-        return this.names.size();
+    public get size(): int {
+        return this.names.size;
     }
 
     // Builds a `Cookie` request header value (`name=value; …`).
     public fun to_header(): string {
         let out = "";
         let i = 0;
-        while (i < this.names.size()) {
+        while (i < this.names.size) {
             if (i > 0) {
                 out = out + "; ";
             }
@@ -61,17 +61,17 @@ public class CookieJar {
         let head = res.head_text_for_cookies();
         let lines = head.split('\n');
         let i = 0;
-        while (i < lines.size()) {
+        while (i < lines.size) {
             let line = lines[i];
             let lower = line.to_lower();
             if (lower.starts_with("set-cookie:")) {
-                let rest = line.substring(11, line.size()).trim();
-                let semi = rest.index_of(';').unwrap_or(rest.size());
+                let rest = line.substring(11, line.size).trim();
+                let semi = rest.index_of(';').unwrap_or(rest.size);
                 let pair = rest.substring(0, semi);
                 let eq = pair.index_of('=').unwrap_or(0 - 1);
                 if (eq > 0) {
                     let name = pair.substring(0, eq).trim();
-                    let value = pair.substring(eq + 1, pair.size()).trim();
+                    let value = pair.substring(eq + 1, pair.size).trim();
                     this.set(name, value);
                 }
             }
@@ -81,7 +81,7 @@ public class CookieJar {
 
     fun _find(name: string): int {
         let i = 0;
-        while (i < this.names.size()) {
+        while (i < this.names.size) {
             if (this.names.get(i).unwrap_or("") == name) {
                 return i;
             }

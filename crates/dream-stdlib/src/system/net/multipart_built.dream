@@ -1,0 +1,15 @@
+module system.net;
+
+// Result of `MultipartForm.build`.
+
+public class MultipartBuilt {
+    // Headers including `Content-Type` with boundary.
+    public headers: HttpHeaders;
+    // Encoded multipart body.
+    public body: byte[];
+
+    public constructor(headers: HttpHeaders, body: byte[]) {
+        this.headers = headers;
+        this.body = body;
+    }
+}

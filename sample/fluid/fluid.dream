@@ -14,8 +14,8 @@ fun add_force(vx: float[], vy: float[], dye: float[], n: int): void {
     let y = global_id.y;
     if (x >= n || y >= n) { return; }
     let i = y * n + x;
-    let cx: float = (float)(n / 2);
-    let cy: float = (float)(n / 2);
+    let cx: float = n / 2;
+    let cy: float = n / 2;
     let dx: float = (float)x - cx;
     let dy: float = (float)y - cy;
     let d2: float = dx * dx + dy * dy;
@@ -40,15 +40,15 @@ fun advect(src: float[], dst: float[], vx: float[], vy: float[], n: int): void {
     let py: float = (float)y - dt * vy[i];
     if (px < 0.5) { px = 0.5; }
     if (py < 0.5) { py = 0.5; }
-    let nm1: float = (float)(n - 2);
+    let nm1: float = n - 2;
     if (px > nm1) { px = nm1; }
     if (py > nm1) { py = nm1; }
     let x0 = (int)px;
     let y0 = (int)py;
     let x1 = x0 + 1;
     let y1 = y0 + 1;
-    let sx: float = px - (float)x0;
-    let sy: float = py - (float)y0;
+    let sx: float = px - x0;
+    let sy: float = py - y0;
     let v00: float = src[y0 * n + x0];
     let v10: float = src[y0 * n + x1];
     let v01: float = src[y1 * n + x0];
@@ -147,8 +147,8 @@ fun update_mouse_from_event(ev: js): void {
     if (ny > 1.0) { ny = 1.0; }
     app.prev_mx = app.mouse_x;
     app.prev_my = app.mouse_y;
-    app.mouse_x = (int)(nx * (double)(app.n - 1));
-    app.mouse_y = (int)(ny * (double)(app.n - 1));
+    app.mouse_x = (int)(nx * (app.n - 1));
+    app.mouse_y = (int)(ny * (app.n - 1));
 }
 
 fun on_pointer_down(ev: js): void {
@@ -183,7 +183,7 @@ fun splat(field: float[], n: int, cx: int, cy: int, amount: float, rad: int): vo
             let dy = y - cy;
             let d2 = dx * dx + dy * dy;
             if (d2 < r2) {
-                let w: float = amount * (1.0 - (float)d2 / (float)r2);
+                let w: float = amount * (1.0 - (float)d2 / r2);
                 let i = y * n + x;
                 let v = field[i] + w;
                 if (v > 1.0) { v = 1.0; }
@@ -197,15 +197,15 @@ fun splat(field: float[], n: int, cx: int, cy: int, amount: float, rad: int): vo
 fun sample_field(src: float[], n: int, px: float, py: float): float {
     if (px < 0.5) { px = 0.5; }
     if (py < 0.5) { py = 0.5; }
-    let nm1: float = (float)(n - 2);
+    let nm1: float = n - 2;
     if (px > nm1) { px = nm1; }
     if (py > nm1) { py = nm1; }
     let x0 = (int)px;
     let y0 = (int)py;
     let x1 = x0 + 1;
     let y1 = y0 + 1;
-    let sx: float = px - (float)x0;
-    let sy: float = py - (float)y0;
+    let sx: float = px - x0;
+    let sy: float = py - y0;
     let v00: float = src[y0 * n + x0];
     let v10: float = src[y0 * n + x1];
     let v01: float = src[y1 * n + x0];
@@ -276,8 +276,7 @@ async fun present_density(
         let d = dens[i];
         if (d < 0.0) { d = 0.0; }
         if (d > 1.0) { d = 1.0; }
-        let speed: float = (float)Math.sqrt((double)(vx[i] * vx[i] + vy[i] * vy[i])).unwrap_or(0.0d);
-        let s: float = (float)speed;
+        let s: float = GpuMath.sqrt(vx[i] * vx[i] + vy[i] * vy[i]);
         if (s > 1.0) { s = 1.0; }
         // Multi-stop palette: deep indigo → cyan → lime → amber → magenta → white.
         let t: float = d * 0.75 + s * 0.25;
@@ -363,9 +362,9 @@ async fun main(): void {
     await present_density(surface, tex, app.dens, app.vx, app.vy, n, cells);
 
     while (true) {
-        let ang: double = (double)app.frame * 0.07d;
-        let ox = n / 2 + (int)(Math.cos(ang) * (double)(n / 5));
-        let oy = n / 2 + (int)(Math.sin(ang) * (double)(n / 5));
+        let ang: double = 0.07d * app.frame;
+        let ox = n / 2 + (int)(Math.cos(ang) * (n / 5));
+        let oy = n / 2 + (int)(Math.sin(ang) * (n / 5));
         let fx: float = (float)((0.0d - Math.sin(ang)) * 1.2d);
         let fy: float = (float)(Math.cos(ang) * 1.2d);
         splat(app.dens, n, ox, oy, 0.35, 10);
@@ -373,8 +372,8 @@ async fun main(): void {
         splat(app.vy, n, ox, oy, fy, 10);
 
         if (app.mouse_down) {
-            let mfx: float = (float)(app.mouse_x - app.prev_mx) * 0.8;
-            let mfy: float = (float)(app.mouse_y - app.prev_my) * 0.8;
+            let mfx: float = 0.8 * (app.mouse_x - app.prev_mx);
+            let mfy: float = 0.8 * (app.mouse_y - app.prev_my);
             splat(app.dens, n, app.mouse_x, app.mouse_y, 0.95, 14);
             splat(app.vx, n, app.mouse_x, app.mouse_y, mfx, 14);
             splat(app.vy, n, app.mouse_x, app.mouse_y, mfy, 14);

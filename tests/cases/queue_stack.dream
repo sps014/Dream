@@ -7,7 +7,7 @@ fun main(): void {
     q.enqueue(3);
     System.println(q.dequeue().unwrap_or(0));
     System.println(q.peek().unwrap_or(0));
-    System.println(q.size());
+    System.println(q.size);
 
     let s = Stack<int>();
     s.push(10);

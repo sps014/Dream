@@ -1,0 +1,26 @@
+module system.core;
+
+// Error raised when a cooperative cancellation token is already cancelled.
+
+public class CancelledError : Error {
+    _message: string;
+
+    public constructor(message: string) {
+        this._message = message;
+    }
+
+    // Human-readable description.
+    public fun message(): string {
+        return this._message;
+    }
+
+    // Stable machine code.
+    public fun code(): string {
+        return "ECANCELLED";
+    }
+
+    // Factory for a standard cancelled error.
+    public static fun cancelled(): CancelledError {
+        return CancelledError("operation cancelled");
+    }
+}

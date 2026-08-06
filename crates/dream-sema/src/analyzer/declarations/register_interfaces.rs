@@ -255,7 +255,7 @@ impl<'a> Analyzer<'a> {
                 .cloned()
                 .unwrap_or_default();
             for pm in parent_methods {
-                let name = pm.name.text.clone();
+                let name = accessor_member_name(pm);
                 if let Some((prev_default, prev_src)) = from_parent.get(&name) {
                     if *prev_default && pm.is_default_impl {
                         diagnostics.report_error(
@@ -287,7 +287,10 @@ impl<'a> Analyzer<'a> {
         };
 
         for om in own {
-            if let Some(pos) = merged.iter().position(|m| m.name.text == om.name.text) {
+            if let Some(pos) = merged
+                .iter()
+                .position(|m| accessor_member_name(m) == accessor_member_name(om))
+            {
                 merged[pos] = om;
             } else {
                 merged.push(om);
@@ -367,7 +370,7 @@ impl<'a> Analyzer<'a> {
                     .unwrap_or_default();
                 let symbols: Vec<String> = methods
                     .iter()
-                    .map(|m| method_fn(&class, &m.name.text))
+                    .map(|m| method_fn(&class, &accessor_member_name(m)))
                     .collect();
                 entries.push((id, symbols));
             }
@@ -527,11 +530,12 @@ impl<'a> Analyzer<'a> {
                 if !m.is_default_impl || m.is_static {
                     continue;
                 }
-                let mangled = method_fn(array_ty, &m.name.text);
+                let key = accessor_member_name(m);
+                let mangled = method_fn(array_ty, &key);
                 if self.function_table.get_function(&mangled).is_ok() {
                     continue;
                 }
-                if owned.iter().any(|p| p.name.text == m.name.text) {
+                if owned.iter().any(|p| accessor_member_name(p) == key) {
                     continue;
                 }
                 let mut cloned = (*m).clone();
@@ -563,6 +567,9 @@ impl<'a> Analyzer<'a> {
         bindings: &GenericBindings,
         _diagnostics: &mut DiagnosticBag,
     ) -> bool {
+        if iface_method.accessor != class_method.accessor {
+            return false;
+        }
         if iface_method.is_async != class_method.is_async {
             return false;
         }
@@ -647,9 +654,10 @@ impl<'a> Analyzer<'a> {
                 None => continue,
             };
             for im in &iface_methods {
+                let im_key = accessor_member_name(im);
                 match methods
                     .iter()
-                    .find(|cm| cm.name.text == im.name.text && !cm.is_static)
+                    .find(|cm| accessor_member_name(cm) == im_key && !cm.is_static)
                 {
                     Some(cm) => {
                         let matches = if bindings.is_empty() {

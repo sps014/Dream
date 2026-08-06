@@ -1,0 +1,46 @@
+module system.gpu;
+
+// WebGPU compute + present. Auto-loaded when any `@compute` kernel is present.
+
+/// Failure from GPU init / dispatch / present.
+
+public class GpuError : Error {
+    _code: string;
+    _message: string;
+
+    public constructor(code: string, message: string) {
+        this._code = code;
+        this._message = message;
+    }
+
+    public fun message(): string {
+        return this._message;
+    }
+
+    public fun code(): string {
+        return this._code;
+    }
+
+    public static fun unavailable(message: string): GpuError {
+        return GpuError("UNAVAILABLE", message);
+    }
+
+    public static fun timeout(message: string): GpuError {
+        return GpuError("TIMEOUT", message);
+    }
+
+    public static fun validation(message: string): GpuError {
+        return GpuError("VALIDATION", message);
+    }
+
+    public static fun other(message: string): GpuError {
+        return GpuError("EIO", message);
+    }
+
+    public static fun from_code(code: int, detail: string): GpuError {
+        if (code == 1) { return GpuError.unavailable(detail); }
+        if (code == 2) { return GpuError.timeout(detail); }
+        if (code == 3) { return GpuError.validation(detail); }
+        return GpuError.other(detail);
+    }
+}

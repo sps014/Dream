@@ -1,0 +1,27 @@
+module system.logging;
+
+// Severity levels ordered from most to least verbose.
+
+public enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+public fun level_name(level: LogLevel): string {
+    if (level == LogLevel.Trace) {
+        return "TRACE";
+    }
+    if (level == LogLevel.Debug) {
+        return "DEBUG";
+    }
+    if (level == LogLevel.Info) {
+        return "INFO";
+    }
+    if (level == LogLevel.Warn) {
+        return "WARN";
+    }
+    return "ERROR";
+}

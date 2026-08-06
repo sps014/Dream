@@ -5,7 +5,7 @@ public class HttpClient {
     base_url: string;
     default_headers: HttpHeaders;
     // Request timeout in milliseconds; `0` means no timeout.
-    public timeout_ms: int;
+    _timeout_ms: int;
     cookie_jar: Option<CookieJar>;
     cancel_token: Option<CancellationToken>;
 
@@ -19,14 +19,22 @@ public class HttpClient {
     public constructor(base_url: string) {
         this.base_url = base_url;
         this.default_headers = HttpHeaders();
-        this.timeout_ms = 0;
+        this._timeout_ms = 0;
         this.cookie_jar = Option.None;
         this.cancel_token = Option.None;
     }
 
+    public get timeout_ms(): int {
+        return this._timeout_ms;
+    }
+
+    public set timeout_ms(ms: int) {
+        this._timeout_ms = ms;
+    }
+
     // Sets the request timeout in milliseconds (`0` = none).
     public fun with_timeout(ms: int): HttpClient {
-        this.timeout_ms = ms;
+        this._timeout_ms = ms;
         return this;
     }
 

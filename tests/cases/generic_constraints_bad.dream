@@ -15,5 +15,5 @@ fun main(): void {
     xs.push(Widget(3));
     xs.push(Widget(1));
     xs.sort();
-    System.println(xs.size());
+    System.println(xs.size);
 }

@@ -30,18 +30,19 @@ impl<'a> Analyzer<'a> {
         // Default: clear `last` until a matching builtin re-fills it (`size` / `to_string` / …).
         self.hir_none();
 
-        // `arr.size()` / `str.size()`: built-in element-count method on arrays and strings (the same
-        // `size()` the stdlib `List`/`Map` expose, so every collection is queried the same way).
+        // `arr.size()` / `str.size()`: removed — element count is the property `arr.size` /
+        // `str.size` (see member_access). Reject the call form so there is one spelling.
         if method.text == intrinsics::SIZE {
             let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
-                if !params.is_empty() {
-                    diagnostics.report_error(
-                        format!("'size' takes no arguments, got {}", params.len()),
-                        Some(method.position),
-                    );
-                }
-                self.hir_set_array_len(receiver.take());
+                diagnostics.report_error(
+                    format!(
+                        "'{}.size' is a property, not a method; use `.size` instead of `.size()`",
+                        base
+                    ),
+                    Some(method.position),
+                );
+                self.hir_none();
                 return Ok(Some(Type::Integer(synthetic_token(
                     TokenKind::DataTypeToken,
                     "int",

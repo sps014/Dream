@@ -1,0 +1,10 @@
+module system.text;
+
+// Unicode normalization forms for `Unicode.normalize`.
+
+public enum UnicodeNormForm {
+    Nfc,
+    Nfd,
+    Nfkc,
+    Nfkd,
+}

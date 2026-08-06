@@ -1,0 +1,27 @@
+module system.core;
+
+// Cooperative cancellation flag shared with tokens from a `CancellationSource`.
+
+public class CancellationSource {
+    _cancelled: bool;
+
+    // Creates a source that is not yet cancelled.
+    public constructor() {
+        this._cancelled = false;
+    }
+
+    // True after `cancel` has been called.
+    public fun is_cancelled(): bool {
+        return this._cancelled;
+    }
+
+    // Marks this source (and all of its tokens) as cancelled.
+    public fun cancel(): void {
+        this._cancelled = true;
+    }
+
+    // Returns a token that observes this source's cancelled state.
+    public fun token(): CancellationToken {
+        return CancellationToken(this);
+    }
+}

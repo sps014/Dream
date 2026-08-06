@@ -1,0 +1,71 @@
+module system.collections;
+
+// Eager materializing query wrapper. Chain filter/map/take/skip, then read `.items` or use
+// Collection defaults via the list inside.
+
+public class Seq<T> {
+    public items: List<T>;
+
+    public constructor(items: List<T>) {
+        this.items = items;
+    }
+
+    public fun filter(pred: fun(T): bool): Seq<T> {
+        let result = List<T>();
+        for (let x in this.items) {
+            if (pred(x)) {
+                result.push(x);
+            }
+        }
+        return Seq<T>(result);
+    }
+
+    public fun map<U>(f: fun(T): U): Seq<U> {
+        let result = List<U>();
+        for (let x in this.items) {
+            result.push(f(x));
+        }
+        return Seq<U>(result);
+    }
+
+    public fun take(n: int): Seq<T> {
+        let result = List<T>();
+        let i = 0;
+        for (let x in this.items) {
+            if (i >= n) {
+                break;
+            }
+            result.push(x);
+            i = i + 1;
+        }
+        return Seq<T>(result);
+    }
+
+    public fun skip(n: int): Seq<T> {
+        let result = List<T>();
+        let i = 0;
+        for (let x in this.items) {
+            if (i >= n) {
+                result.push(x);
+            }
+            i = i + 1;
+        }
+        return Seq<T>(result);
+    }
+
+    public fun distinct(): Seq<T> {
+        return Seq<T>(this.items.distinct());
+    }
+
+    public fun order_by(cmp: fun(T, T): int): Seq<T> {
+        return Seq<T>(this.items.order_by(cmp));
+    }
+
+    public fun flat_map<U>(f: fun(T): List<U>): Seq<U> {
+        return Seq<U>(this.items.flat_map(f));
+    }
+
+    public fun to_list(): List<T> {
+        return this.items;
+    }
+}

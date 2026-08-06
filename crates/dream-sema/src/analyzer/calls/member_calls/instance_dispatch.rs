@@ -48,7 +48,7 @@ impl<'a> Analyzer<'a> {
         let Some((slot, im)) = methods
             .iter()
             .enumerate()
-            .find(|(_, m)| m.name.text == method.text)
+            .find(|(_, m)| accessor_member_name(m) == method.text || m.name.text == method.text)
         else {
             return Err(report(
                 diagnostics,

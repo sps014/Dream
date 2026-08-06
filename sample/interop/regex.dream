@@ -17,7 +17,7 @@ fun main(): void {
     System.println(cleaned);                          // a#b#c#
 
     let parts = digits.match("a1b2c3");
-    System.println(parts.size());           // 3
+    System.println(parts.size);           // 3
     System.println(parts[0]);                         // 1
     System.println(parts[2]);                         // 3
 }

@@ -1,0 +1,95 @@
+module system.gpu;
+
+/// GPU storage buffer of blittable `T` elements (`T : unmanaged`).
+public class GpuBuffer<T : unmanaged> {
+    _id: int;
+    _length: int;
+    _stride: int;
+
+    public get size(): int {
+        return this._length;
+    }
+
+    public get id(): int {
+        return this._id;
+    }
+
+    public get stride(): int {
+        return this._stride;
+    }
+
+    public static fun alloc(n: int): GpuBuffer<T> {
+        let scratch = Buffer.alloc<T>(1);
+        let stride = Bytes.of(scratch[0]).size;
+        let b = GpuBuffer<T>();
+        b._id = Gpu.buffer_alloc_bytes(n * stride);
+        b._length = n;
+        b._stride = stride;
+        return b;
+    }
+
+    public static fun from(data: T[]): GpuBuffer<T> {
+        let b = GpuBuffer<T>.alloc(data.size);
+        b.write(data);
+        return b;
+    }
+
+    public fun write(data: T[]): void {
+        let n = data.size;
+        let out = Buffer.alloc<byte>(n * this._stride);
+        for (let i = 0; i < n; i = i + 1) {
+            let eb = Bytes.of(data[i]);
+            for (let j = 0; j < this._stride; j = j + 1) {
+                out[i * this._stride + j] = eb[j];
+            }
+        }
+        Gpu.buffer_write_bytes(this._id, out);
+    }
+
+    /// Partial CPU→GPU write starting at element `offset`.
+    public fun write_at(offset: int, data: T[]): void {
+        if (offset < 0 || data.size < 0) { return; }
+        if (offset + data.size > this._length) {
+            System.println("GpuBuffer.write_at: out of bounds");
+            return;
+        }
+        let n = data.size;
+        let out = Buffer.alloc<byte>(n * this._stride);
+        for (let i = 0; i < n; i = i + 1) {
+            let eb = Bytes.of(data[i]);
+            for (let j = 0; j < this._stride; j = j + 1) {
+                out[i * this._stride + j] = eb[j];
+            }
+        }
+        Gpu.buffer_write_bytes_at(this._id, offset * this._stride, out);
+    }
+
+    public async fun read(): T[] {
+        let bytes = await Gpu.buffer_read_bytes(this._id, this._length * this._stride);
+        return GpuBuffer<T>.decode(bytes, this._length, this._stride);
+    }
+
+    public async fun read_at(offset: int, count: int): T[] {
+        if (offset < 0 || count < 0 || offset + count > this._length) {
+            return Buffer.alloc<T>(0);
+        }
+        let bytes = await Gpu.buffer_read_bytes_at(
+            this._id,
+            offset * this._stride,
+            count * this._stride
+        );
+        return GpuBuffer<T>.decode(bytes, count, this._stride);
+    }
+
+    static fun decode(bytes: byte[], count: int, stride: int): T[] {
+        let out = Buffer.alloc<T>(count);
+        for (let i = 0; i < count; i = i + 1) {
+            let slice = Buffer.alloc<byte>(stride);
+            for (let j = 0; j < stride; j = j + 1) {
+                slice[j] = bytes[i * stride + j];
+            }
+            out[i] = Bytes.to<T>(slice);
+        }
+        return out;
+    }
+}

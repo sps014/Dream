@@ -128,7 +128,7 @@ ARC covers every allocation by default, but a handful of low-level primitives st
 ```dream
 @unsafe
 fun grow(p: Pointer<int>): Pointer<int> {
-    p.realloc(p.len() * 2);   // fine: this function is itself @unsafe
+    p.realloc(p.size * 2);   // fine: this function is itself @unsafe
     return p;
 }
 

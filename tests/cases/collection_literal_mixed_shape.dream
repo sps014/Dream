@@ -4,5 +4,5 @@ import system;
 import system.collections;
 fun main(): void {
     let s: Set<int> = {1, 2: 3};
-    System.println(s.size());
+    System.println(s.size);
 }

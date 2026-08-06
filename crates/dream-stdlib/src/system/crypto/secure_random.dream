@@ -1,0 +1,13 @@
+module system.crypto;
+
+// Cryptographically secure random bytes from the OS CSPRNG.
+
+public class SecureRandom {
+    // Allocates `n` random bytes (`n <= 0` yields an empty array).
+    @js("Dream", "cryptoSecureRandomBytes")
+    static extern fun bytes(n: int): byte[];
+
+    // Fills `dest` in place with random bytes (length unchanged).
+    @js("Dream", "cryptoSecureRandomFill")
+    static extern fun fill(dest: byte[]): void;
+}

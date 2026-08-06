@@ -1,0 +1,39 @@
+module system.gpu;
+
+/// RGBA8 texture (storage / blit source).
+
+public class GpuTexture {
+    public id: int;
+    public width: int;
+    public height: int;
+
+    public static fun rgba8(width: int, height: int): GpuTexture {
+        let t = GpuTexture();
+        t.id = Gpu.texture_create_rgba8(width, height);
+        t.width = width;
+        t.height = height;
+        return t;
+    }
+
+    public async fun write_rgba(pixels: byte[]): Result<bool, GpuError> {
+        let code = await Gpu.texture_write_rgba(this.id, pixels, 0, 0, this.width, this.height);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "texture write failed"));
+    }
+
+    public async fun write_rgba_at(
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        pixels: byte[]
+    ): Result<bool, GpuError> {
+        let code = await Gpu.texture_write_rgba(this.id, pixels, x, y, w, h);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "texture write_at failed"));
+    }
+
+    public async fun read_rgba(): byte[] {
+        return await Gpu.texture_read_rgba(this.id);
+    }
+}

@@ -42,9 +42,9 @@ public class Url {
         let scheme_end = text.index_of(':');
         switch (scheme_end) {
             Some(idx) => {
-                if ((idx + 2 < text.size()) && (text.char_at(idx + 1) == '/') && (text.char_at(idx + 2) == '/')) {
+                if ((idx + 2 < text.size) && (text.char_at(idx + 1) == '/') && (text.char_at(idx + 2) == '/')) {
                     scheme = text.substring(0, idx);
-                    rest = text.substring(idx + 3, text.size());
+                    rest = text.substring(idx + 3, text.size);
                 }
             },
             None => { },
@@ -54,7 +54,7 @@ public class Url {
         let hash = rest.index_of('#');
         switch (hash) {
             Some(idx) => {
-                fragment = rest.substring(idx + 1, rest.size());
+                fragment = rest.substring(idx + 1, rest.size);
                 rest = rest.substring(0, idx);
             },
             None => { },
@@ -64,7 +64,7 @@ public class Url {
         let q = rest.index_of('?');
         switch (q) {
             Some(idx) => {
-                query = rest.substring(idx + 1, rest.size());
+                query = rest.substring(idx + 1, rest.size);
                 rest = rest.substring(0, idx);
             },
             None => { },
@@ -76,7 +76,7 @@ public class Url {
         switch (slash) {
             Some(idx) => {
                 host = rest.substring(0, idx);
-                path = rest.substring(idx, rest.size());
+                path = rest.substring(idx, rest.size);
             },
             None => {
                 path = "/";
@@ -87,7 +87,7 @@ public class Url {
         let colon = host.index_of(':');
         switch (colon) {
             Some(idx) => {
-                let port_text = host.substring(idx + 1, host.size());
+                let port_text = host.substring(idx + 1, host.size);
                 host = host.substring(0, idx);
                 switch (int.parse(port_text)) {
                     Ok(p) => { port = Option.Some(p); },

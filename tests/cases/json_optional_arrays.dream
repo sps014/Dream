@@ -35,7 +35,7 @@ fun main(): void {
     let t1 = Json.serialize(b1);
     System.println(t1);
     let r1 = Json.deserialize<Bag>(t1).unwrap_or(b1);
-    System.println((r1.tags ?? Buffer.alloc<int>(0)).size());
+    System.println((r1.tags ?? Buffer.alloc<int>(0)).size);
     System.println((r1.names ?? Buffer.alloc<string>(0))[0]);
     System.println((r1.places ?? Buffer.alloc<Address>(0))[0].city);
 

@@ -26,9 +26,9 @@ fun main(): void {
 
     // Fake response head with Set-Cookie
     let wire = "200\nSet-Cookie: token=xyz; Path=/\nSet-Cookie: other=1\n\nok";
-    let chars = Buffer.alloc<char>(wire.size());
+    let chars = Buffer.alloc<char>(wire.size);
     let i = 0;
-    while (i < wire.size()) {
+    while (i < wire.size) {
         chars[i] = wire.char_at(i);
         i = i + 1;
     }

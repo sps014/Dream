@@ -1,0 +1,51 @@
+module system.gpu;
+
+/// Math helpers; inside `@compute` the WGSL emitter maps these names to WGSL builtins.
+
+public class GpuMath {
+    public static fun min(a: float, b: float): float {
+        if (a < b) { return a; }
+        return b;
+    }
+    public static fun max(a: float, b: float): float {
+        if (a > b) { return a; }
+        return b;
+    }
+    public static fun abs(a: float): float {
+        if (a < 0.0) { return 0.0 - a; }
+        return a;
+    }
+    public static fun clamp(x: float, lo: float, hi: float): float {
+        return GpuMath.max(lo, GpuMath.min(x, hi));
+    }
+    public static fun floor(x: float): float {
+        return (float)Math.floor((double)x);
+    }
+    public static fun ceil(x: float): float {
+        return (float)Math.ceil((double)x);
+    }
+    public static fun sqrt(x: float): float {
+        return (float)(Math.sqrt((double)x).unwrap_or(0.0d));
+    }
+    public static fun sin(x: float): float {
+        return (float)Math.sin((double)x);
+    }
+    public static fun cos(x: float): float {
+        return (float)Math.cos((double)x);
+    }
+    public static fun tan(x: float): float {
+        return (float)Math.tan((double)x);
+    }
+    public static fun asin(x: float): float {
+        return (float)Math.asin((double)x);
+    }
+    public static fun acos(x: float): float {
+        return (float)Math.acos((double)x);
+    }
+    public static fun atan(x: float): float {
+        return (float)Math.atan((double)x);
+    }
+    public static fun atan2(y: float, x: float): float {
+        return (float)Math.atan2((double)y, (double)x);
+    }
+}

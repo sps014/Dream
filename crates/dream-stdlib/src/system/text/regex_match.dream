@@ -22,7 +22,7 @@ public class RegexMatch {
 
     public fun group_start(i: int): int {
         let idx = 2 * i;
-        if ((idx < 0) || (idx + 1 >= this.groups.size())) {
+        if ((idx < 0) || (idx + 1 >= this.groups.size)) {
             return 0 - 1;
         }
         return this.groups[idx];
@@ -30,7 +30,7 @@ public class RegexMatch {
 
     public fun group_end(i: int): int {
         let idx = (2 * i) + 1;
-        if ((idx < 0) || (idx >= this.groups.size())) {
+        if ((idx < 0) || (idx >= this.groups.size)) {
             return 0 - 1;
         }
         return this.groups[idx];

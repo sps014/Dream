@@ -865,7 +865,7 @@ function defaultDreamModule(getInstance) {
     fileHandleWrite: (id, data) => fileHandleWriteHost(id, data),
     fileHandleSeek: (id, pos) => fileHandleSeekHost(id, pos),
     fileHandleClose: (id) => { fileHandleCloseHost(id); },
-    // Cryptographic digests and CSPRNG (see system/crypto/crypto.dream). Node uses `node:crypto`;
+    // Cryptographic digests and CSPRNG (see system/crypto/*.dream). Node uses `node:crypto`;
     // browsers use `getRandomValues` for randomness and sync host digests (Web Crypto subtle is async).
     cryptoSha256: (data) => cryptoSha256Bytes(data),
     cryptoSha512: (data) => cryptoSha512Bytes(data),

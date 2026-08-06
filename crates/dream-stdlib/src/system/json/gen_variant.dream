@@ -1,0 +1,15 @@
+module system.json;
+
+public class GenVariant {
+    public name: string;
+    public fields: List<GenField>;
+
+    public constructor(name: string, fields: List<GenField>) {
+        this.name = name;
+        this.fields = fields;
+    }
+
+    public static fun make(name: string, fields: List<GenField>): GenVariant {
+        return GenVariant(name, fields);
+    }
+}

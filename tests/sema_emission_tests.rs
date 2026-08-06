@@ -808,12 +808,12 @@ fn exec_print_bool_via_to_string() {
 #[cfg(feature = "native")]
 #[test]
 fn exec_string_len_via_strlen() {
-    // `str.size()` calls `$str_scalar_len` (Unicode scalar count over the UTF-8 payload).
+    // `str.size` calls `$str_scalar_len` (Unicode scalar count over the UTF-8 payload).
     let code = format!(
         "{SYSTEM_STUB}
         fun main(): void {{
             let s: string = \"hello\";
-            System.print(s.size());
+            System.print(s.size);
         }}"
     );
     assert_eq!(run_and_capture(&code, "main"), "5");
@@ -1583,11 +1583,11 @@ fn test_hir_emission_switch_statement_with_variant_binding() {
 
 #[test]
 fn test_hir_emission_len_builtin() {
-    // `arr.size()` reads the array's stored length word; `str.size()` calls the runtime `$str_scalar_len`
+    // `arr.size` reads the array's stored length word; `str.size` calls the runtime `$str_scalar_len`
     // (both are O(1) loads now that strings are length-prefixed heap objects).
     let code = "
-        fun count(xs: int[]): int { return xs.size(); }
-        fun slen(s: string): int { return s.size(); }
+        fun count(xs: int[]): int { return xs.size; }
+        fun slen(s: string): int { return s.size; }
     ";
     let (wat, count) = emit_hir_to_wat(code);
     assert_eq!(count, 2, "both size functions should be emitted:\n{}", wat);

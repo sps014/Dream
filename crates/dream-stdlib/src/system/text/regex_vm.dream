@@ -25,7 +25,7 @@ internal class RegexVM {
     }
 
     fun copy_caps(src: int[]): int[] {
-        let n = src.size();
+        let n = src.size;
         let dst = Buffer.alloc<int>(n);
         let i = 0;
         while (i < n) {
@@ -84,7 +84,7 @@ internal class RegexVM {
 
     fun range_hit(ranges: List<char>, c: char, foldcase: bool): bool {
         let i = 0;
-        while (i < ranges.size()) {
+        while (i < ranges.size) {
             let lo = ranges.get(i).unwrap_or(' ');
             let hi = ranges.get(i + 1).unwrap_or(' ');
             if (foldcase) {
@@ -117,7 +117,7 @@ internal class RegexVM {
     fun add_to_threadq(threads: List<RegexThread>, on_list: int[], gen: int, start_pc: int, pos: int, input: string, len: int, start_caps: int[]): void {
         let stack = List<RegexAddFrame>();
         stack.push(RegexAddFrame(start_pc, start_caps));
-        while (stack.size() > 0) {
+        while (stack.size > 0) {
             let frame = stack.pop().unwrap_or(RegexAddFrame(0 - 1, start_caps));
             let pc = frame.pc;
             if (pc < 0) {
@@ -137,7 +137,7 @@ internal class RegexVM {
                     stack.push(RegexAddFrame(inst.out, frame.caps));
                 } else if (inst.opcode == RegexOp.Capture) {
                     let updated = this.copy_caps(frame.caps);
-                    if ((inst.cap >= 0) && (inst.cap < updated.size())) {
+                    if ((inst.cap >= 0) && (inst.cap < updated.size)) {
                         updated[inst.cap] = pos;
                     }
                     stack.push(RegexAddFrame(inst.out, updated));
@@ -158,11 +158,11 @@ internal class RegexVM {
     // unanchored search from position 0). Returns the leftmost, Perl-style ("leftmost-first" by
     // thread priority, not POSIX leftmost-longest) match.
     public fun find(input: string, start: int): Option<RegexMatch> {
-        let len = input.size();
+        let len = input.size;
         let ncap = 2 * (this.ngroup + 1);
-        let on_list = Buffer.alloc<int>(this.prog.size());
+        let on_list = Buffer.alloc<int>(this.prog.size);
         let i0 = 0;
-        while (i0 < on_list.size()) {
+        while (i0 < on_list.size) {
             on_list[i0] = 0 - 1;
             i0 = i0 + 1;
         }
@@ -181,14 +181,14 @@ internal class RegexVM {
         let pos = start;
         let going = true;
         while (going) {
-            if (clist.size() == 0) {
+            if (clist.size == 0) {
                 going = false;
             } else {
                 let nlist = List<RegexThread>();
                 gen = gen + 1;
                 let k = 0;
                 let stop = false;
-                while ((k < clist.size()) && (stop == false)) {
+                while ((k < clist.size) && (stop == false)) {
                     let t = clist.get(k).unwrap_or(RegexThread(0, init_caps));
                     let inst = this.prog[t.pc];
                     if (inst.opcode == RegexOp.CharClass) {

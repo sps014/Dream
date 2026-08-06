@@ -15,7 +15,7 @@ public class HttpResponse {
     fun scan(): void {
         if (this.scanned == false) {
             this.scanned = true;
-            let n = this.data.size();
+            let n = this.data.size;
             let i = 0;
             let found = false;
             while ((i + 1 < n) && (found == false)) {
@@ -57,7 +57,7 @@ public class HttpResponse {
 
     // The HTTP status code.
     public fun status(): int {
-        let n = this.data.size();
+        let n = this.data.size;
         let i = 0;
         let value = 0;
         let going = true;
@@ -84,13 +84,13 @@ public class HttpResponse {
         let lines = this.head_text().split('\n');
         let want = name.to_lower();
         let i = 1;
-        while (i < lines.size()) {
+        while (i < lines.size) {
             let line = lines[i];
             let colon = line.index_of(':').unwrap_or(0 - 1);
             if (colon >= 0) {
                 let key = line.substring(0, colon).trim().to_lower();
                 if (key == want) {
-                    return line.substring(colon + 1, line.size()).trim();
+                    return line.substring(colon + 1, line.size).trim();
                 }
             }
             i = i + 1;
@@ -101,13 +101,13 @@ public class HttpResponse {
     // The response body as UTF-8 text.
     public fun text(): string {
         this.scan();
-        return this.slice_text(this.boundary + 2, this.data.size());
+        return this.slice_text(this.boundary + 2, this.data.size);
     }
 
     // The response body as raw bytes.
     public fun bytes(): byte[] {
         this.scan();
-        let n = this.data.size();
+        let n = this.data.size;
         let start = this.boundary + 2;
         if (start > n) {
             start = n;

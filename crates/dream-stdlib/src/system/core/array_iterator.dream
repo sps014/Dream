@@ -13,7 +13,7 @@ public class ArrayIterator<T> : Iterator<T> {
 
     @next
     public fun next(): Option<T> {
-        if (this.idx >= this.items.size()) {
+        if (this.idx >= this.items.size) {
             return Option.None;
         }
         let value = this.items[this.idx];

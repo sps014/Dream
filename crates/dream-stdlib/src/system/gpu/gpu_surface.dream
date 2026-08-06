@@ -1,0 +1,27 @@
+module system.gpu;
+
+/// Canvas-backed WebGPU swapchain.
+
+public class GpuSurface {
+    public id: int;
+
+    public static fun from_canvas(canvas_id: string): Result<GpuSurface, GpuError> {
+        let sid = Gpu.surface_from_canvas(canvas_id);
+        if (sid < 0) {
+            return Result.Err(GpuError.unavailable("GpuSurface.from_canvas failed"));
+        }
+        let s = GpuSurface();
+        s.id = sid;
+        return Result.Ok(s);
+    }
+
+    public fun configure(width: int, height: int): void {
+        Gpu.surface_configure(this.id, width, height);
+    }
+
+    public async fun present(): Result<bool, GpuError> {
+        let code = await Gpu.surface_present(this.id);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "surface present failed"));
+    }
+}

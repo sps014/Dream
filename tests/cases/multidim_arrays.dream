@@ -1,8 +1,8 @@
 import system;
 fun main() {
     let grid: int[][] = [[1, 2, 3], [4, 5, 6]];
-    System.println(grid.size());
-    System.println(grid[0].size());
+    System.println(grid.size);
+    System.println(grid[0].size);
     System.println(grid[1][2]);
 
     let words: string[][] = [["hello", "world"], ["foo"]];

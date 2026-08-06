@@ -754,13 +754,13 @@ fn test_static_getter_type_mismatch_is_reported() {
 
 #[test]
 fn test_array_size_builtin_ok() {
-    // `arr.size()` is the builtin element-count method on arrays, typed `int` (the same `size()`
+    // `arr.size` is the builtin element-count property on arrays, typed `int` (the same `size`
     // the stdlib collections expose). Cross-collection consistency is covered by the
     // `size_consistent` e2e case.
     let code = "
         fun main(): void {
             let a = [10, 20, 30];
-            let n: int = a.size();
+            let n: int = a.size;
         }
     ";
     let diagnostics = analyze_code(code);
@@ -969,7 +969,7 @@ fn test_generic_interface_signature_mismatch_errors() {
         }
         fun run(): int {
             let b = Box<string>(\"x\");
-            return b.size();
+            return b.size;
         }
     ";
     let diagnostics = analyze_code(code);

@@ -9,5 +9,5 @@ fun main(): void {
     System.println(n.doubled());    // -14 (user extend)
 
     let s: string = "hello";
-    System.println(s.size());       // 5  (prelude extend)
+    System.println(s.size);       // 5  (prelude extend)
 }

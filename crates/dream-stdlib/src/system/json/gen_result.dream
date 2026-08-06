@@ -1,0 +1,21 @@
+module system.json;
+
+public class GenResult {
+    public ok: bool;
+    public source: string;
+    public error: string;
+
+    public constructor(ok: bool, source: string, error: string) {
+        this.ok = ok;
+        this.source = source;
+        this.error = error;
+    }
+
+    public static fun success(source: string): GenResult {
+        return GenResult(true, source, "");
+    }
+
+    public static fun failure(error: string): GenResult {
+        return GenResult(false, "", error);
+    }
+}

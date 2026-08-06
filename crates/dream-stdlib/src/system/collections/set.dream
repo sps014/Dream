@@ -22,7 +22,7 @@ public class Set<T> : Collection<T> {
     }
 
     // Number of elements currently stored.
-    public fun size(): int {
+    public get size(): int {
         return this.count;
     }
 
@@ -143,7 +143,7 @@ public class Set<T> : Collection<T> {
     // with N elements costs one call, not N.
     public fun add_all(items: T[]): void {
         let i = 0;
-        while (i < items.size()) {
+        while (i < items.size) {
             this.add(items[i]);
             i = i + 1;
         }
@@ -152,7 +152,7 @@ public class Set<T> : Collection<T> {
     // Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}`
     // set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.
     public static fun from_array(items: T[]): Set<T> {
-        let result = Set<T>(items.size());
+        let result = Set<T>(items.size);
         result.add_all(items);
         return result;
     }

@@ -73,16 +73,32 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/core/parse_error.dream"),
             ),
             (
-                "<std>/system/core/cancellation.dream",
-                include_str!("system/core/cancellation.dream"),
+                "<std>/system/core/cancelled_error.dream",
+                include_str!("system/core/cancelled_error.dream"),
+            ),
+            (
+                "<std>/system/core/cancellation_source.dream",
+                include_str!("system/core/cancellation_source.dream"),
+            ),
+            (
+                "<std>/system/core/cancellation_token.dream",
+                include_str!("system/core/cancellation_token.dream"),
             ),
             (
                 "<std>/system/core/option.dream",
                 include_str!("system/core/option.dream"),
             ),
             (
+                "<std>/system/core/iterator.dream",
+                include_str!("system/core/iterator.dream"),
+            ),
+            (
                 "<std>/system/core/collection.dream",
                 include_str!("system/core/collection.dream"),
+            ),
+            (
+                "<std>/system/core/indexed_collection.dream",
+                include_str!("system/core/indexed_collection.dream"),
             ),
             (
                 "<std>/system/core/array_iterator.dream",
@@ -209,8 +225,12 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/collections/stack.dream"),
             ),
             (
-                "<std>/system/collections/query.dream",
-                include_str!("system/collections/query.dream"),
+                "<std>/system/collections/collection_query.dream",
+                include_str!("system/collections/collection_query.dream"),
+            ),
+            (
+                "<std>/system/collections/seq.dream",
+                include_str!("system/collections/seq.dream"),
             ),
         ],
     },
@@ -221,6 +241,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/text/string.dream",
                 include_str!("system/text/string.dream"),
+            ),
+            (
+                "<std>/system/text/unicode_norm_form.dream",
+                include_str!("system/text/unicode_norm_form.dream"),
             ),
             (
                 "<std>/system/text/unicode.dream",
@@ -307,8 +331,20 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/json/json.dream"),
             ),
             (
-                "<std>/system/json/json_gen_model.dream",
-                include_str!("system/json/json_gen_model.dream"),
+                "<std>/system/json/gen_field.dream",
+                include_str!("system/json/gen_field.dream"),
+            ),
+            (
+                "<std>/system/json/gen_variant.dream",
+                include_str!("system/json/gen_variant.dream"),
+            ),
+            (
+                "<std>/system/json/gen_type.dream",
+                include_str!("system/json/gen_type.dream"),
+            ),
+            (
+                "<std>/system/json/gen_result.dream",
+                include_str!("system/json/gen_result.dream"),
             ),
             (
                 "<std>/system/json/json_generator.dream",
@@ -319,10 +355,56 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     StdPackage {
         name: "system.gpu",
         deps: &["system.core", "system.primitives", "system"],
-        files: &[(
-            "<std>/system/gpu/gpu.dream",
-            include_str!("system/gpu/gpu.dream"),
-        )],
+        files: &[
+            (
+                "<std>/system/gpu/gpu_error.dream",
+                include_str!("system/gpu/gpu_error.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_id3.dream",
+                include_str!("system/gpu/gpu_id3.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_buffer.dream",
+                include_str!("system/gpu/gpu_buffer.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_swap.dream",
+                include_str!("system/gpu/gpu_swap.dream"),
+            ),
+            (
+                "<std>/system/gpu/uniforms.dream",
+                include_str!("system/gpu/uniforms.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_shader.dream",
+                include_str!("system/gpu/gpu_shader.dream"),
+            ),
+            (
+                "<std>/system/gpu/compute.dream",
+                include_str!("system/gpu/compute.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_texture.dream",
+                include_str!("system/gpu/gpu_texture.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_surface.dream",
+                include_str!("system/gpu/gpu_surface.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_render_pass.dream",
+                include_str!("system/gpu/gpu_render_pass.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu.dream",
+                include_str!("system/gpu/gpu.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_math.dream",
+                include_str!("system/gpu/gpu_math.dream"),
+            ),
+        ],
     },
     StdPackage {
         name: "system.io",
@@ -386,8 +468,12 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/net/cookie_jar.dream"),
             ),
             (
-                "<std>/system/net/multipart.dream",
-                include_str!("system/net/multipart.dream"),
+                "<std>/system/net/multipart_form.dream",
+                include_str!("system/net/multipart_form.dream"),
+            ),
+            (
+                "<std>/system/net/multipart_built.dream",
+                include_str!("system/net/multipart_built.dream"),
             ),
             (
                 "<std>/system/net/http_client.dream",
@@ -410,8 +496,20 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         deps: &["system.core", "system.primitives"],
         files: &[
             (
-                "<std>/system/crypto/crypto.dream",
-                include_str!("system/crypto/crypto.dream"),
+                "<std>/system/crypto/sha256.dream",
+                include_str!("system/crypto/sha256.dream"),
+            ),
+            (
+                "<std>/system/crypto/sha512.dream",
+                include_str!("system/crypto/sha512.dream"),
+            ),
+            (
+                "<std>/system/crypto/hmac_sha256.dream",
+                include_str!("system/crypto/hmac_sha256.dream"),
+            ),
+            (
+                "<std>/system/crypto/secure_random.dream",
+                include_str!("system/crypto/secure_random.dream"),
             ),
         ],
     },
@@ -422,6 +520,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/arg_error.dream",
                 include_str!("system/arg_error.dream"),
+            ),
+            (
+                "<std>/system/platform.dream",
+                include_str!("system/platform.dream"),
+            ),
+            (
+                "<std>/system/os_family.dream",
+                include_str!("system/os_family.dream"),
             ),
             (
                 "<std>/system/system.dream",
@@ -476,8 +582,28 @@ pub const STD_PACKAGES: &[StdPackage] = &[
         ],
         files: &[
             (
-                "<std>/system/logging/logging.dream",
-                include_str!("system/logging/logging.dream"),
+                "<std>/system/logging/log_level.dream",
+                include_str!("system/logging/log_level.dream"),
+            ),
+            (
+                "<std>/system/logging/log_record.dream",
+                include_str!("system/logging/log_record.dream"),
+            ),
+            (
+                "<std>/system/logging/log_handler.dream",
+                include_str!("system/logging/log_handler.dream"),
+            ),
+            (
+                "<std>/system/logging/console_handler.dream",
+                include_str!("system/logging/console_handler.dream"),
+            ),
+            (
+                "<std>/system/logging/file_handler.dream",
+                include_str!("system/logging/file_handler.dream"),
+            ),
+            (
+                "<std>/system/logging/logger.dream",
+                include_str!("system/logging/logger.dream"),
             ),
         ],
     },

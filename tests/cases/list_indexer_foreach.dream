@@ -16,5 +16,5 @@ fun main() {
         sum = sum + x;
     }
     System.println(sum);       // 1 + 2 + 30 = 33
-    System.println(xs.size()); // 3
+    System.println(xs.size); // 3
 }

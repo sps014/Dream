@@ -10,8 +10,8 @@ public class Queue<T> : Collection<T> {
     }
 
     // Number of elements currently stored.
-    public fun size(): int {
-        return this.items.size();
+    public get size(): int {
+        return this.items.size;
     }
 
     // Appends `value` at the back of the queue.
@@ -21,7 +21,7 @@ public class Queue<T> : Collection<T> {
 
     // Removes and returns the front element, or `None` when empty.
     public fun dequeue(): Option<T> {
-        if (this.items.size() == 0) {
+        if (this.items.size == 0) {
             return Option.None;
         }
         let v = this.items.get(0);

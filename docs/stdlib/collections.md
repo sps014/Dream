@@ -51,7 +51,7 @@ import system.collections;
 let nums = List<int>();
 nums.push(10);
 nums.push(20);
-System.println(nums.size());   // 2
+System.println(nums.size);   // 2
 ```
 
 Lists support bracket indexing and `for..in`. Indexed reads return an `Option<T>`:
@@ -114,7 +114,7 @@ Methods:
 - `.get(key)` — value as `Option<V>`; `.get_or(key, fallback)` — value or `fallback`.
 - `.contains(key)` — key present.
 - `.remove(key)` — remove, returning `true` if it existed.
-- `.size()` / `.clear()` — count and empty.
+- `.size` / `.clear()` — count and empty.
 - `.keys()` / `.values()` — new arrays of all keys or values.
 
 Any type can be a key as long as its `hash_code` and `==` work correctly. Primitives and strings work automatically; classes use reference equality unless their `hash_code` and `==` are overridden.
@@ -137,7 +137,7 @@ Methods:
 - `Set<T>.from_array(items)` (static) — build a new set from an array.
 - `.contains(value)` — membership.
 - `.remove(value)` — remove, returning `true` if it existed.
-- `.size()` / `.clear()` — count and empty.
+- `.size` / `.clear()` — count and empty.
 - `.to_array()` — a new array of all elements.
 
 Sets iterate with `for..in`, and their element requirements match `Map` keys (working `hash_code` and `==`; classes use reference equality by default).

@@ -1,0 +1,79 @@
+module system.logging;
+
+// Named logger with a minimum level and zero or more handlers.
+
+public class Logger {
+    name: string;
+    level: LogLevel;
+    handlers: List<LogHandler>;
+
+    public constructor(name: string) {
+        this.name = name;
+        this.level = LogLevel.Info;
+        this.handlers = List<LogHandler>();
+    }
+
+    // Returns the named logger, creating it on first use.
+    public static fun get(name: string): Logger {
+        let existing = loggers_map.get(name);
+        if (existing.is_some()) {
+            return existing.unwrap_or(Logger(name));
+        }
+        let created = Logger(name);
+        loggers_map.set(name, created);
+        return created;
+    }
+
+    // Sets the minimum level; lower-severity records are dropped.
+    public fun set_level(level: LogLevel): void {
+        this.level = level;
+    }
+
+    // Registers an additional handler.
+    public fun add_handler(h: LogHandler): void {
+        this.handlers.push(h);
+    }
+
+    fun emit(level: LogLevel, msg: string): void {
+        if (level < this.level) {
+            return;
+        }
+        let record = LogRecord(level, this.name, msg, DateTime.utc_now().epoch_millis);
+        let i = 0;
+        while (i < this.handlers.size) {
+            switch (this.handlers.get(i)) {
+                Some(h) => { h.emit(record); },
+                None => { },
+            }
+            i = i + 1;
+        }
+    }
+
+    // Logs at Trace.
+    public fun trace(msg: string): void {
+        this.emit(LogLevel.Trace, msg);
+    }
+
+    // Logs at Debug.
+    public fun debug(msg: string): void {
+        this.emit(LogLevel.Debug, msg);
+    }
+
+    // Logs at Info.
+    public fun info(msg: string): void {
+        this.emit(LogLevel.Info, msg);
+    }
+
+    // Logs at Warn.
+    public fun warn(msg: string): void {
+        this.emit(LogLevel.Warn, msg);
+    }
+
+    // Logs at Error.
+    public fun error(msg: string): void {
+        this.emit(LogLevel.Error, msg);
+    }
+}
+
+// Process-wide registry of named loggers.
+let loggers_map: Map<string, Logger> = Map<string, Logger>();

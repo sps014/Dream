@@ -2,39 +2,42 @@ module system;
 
 // A high-resolution timer for measuring elapsed time, useful for benchmarking.
 public class Stopwatch {
-    public is_running: bool;
-    
+    _is_running: bool;
     _start_time: long;
     _elapsed: long;
 
     // Creates a new Stopwatch and starts measuring time immediately.
     public constructor() {
-        this.is_running = true;
+        this._is_running = true;
         this._elapsed = 0L;
         this._start_time = Time.nano_time();
     }
 
+    public get is_running(): bool {
+        return this._is_running;
+    }
+
     // Starts or resumes measuring elapsed time.
     public fun start(): void {
-        if (!this.is_running) {
+        if (!this._is_running) {
             this._start_time = Time.nano_time();
-            this.is_running = true;
+            this._is_running = true;
         }
     }
 
     // Stops measuring elapsed time.
     public fun stop(): void {
-        if (this.is_running) {
+        if (this._is_running) {
             let now = Time.nano_time();
             this._elapsed = this._elapsed + (now - this._start_time);
-            this.is_running = false;
+            this._is_running = false;
         }
     }
 
     // Stops measuring elapsed time and resets the elapsed time to zero.
     public fun reset(): void {
         this._elapsed = 0L;
-        this.is_running = false;
+        this._is_running = false;
         this._start_time = 0L;
     }
 
@@ -42,12 +45,12 @@ public class Stopwatch {
     public fun restart(): void {
         this._elapsed = 0L;
         this._start_time = Time.nano_time();
-        this.is_running = true;
+        this._is_running = true;
     }
 
     // The total elapsed time measured by the current instance, in nanoseconds.
     public fun elapsed_nanos(): long {
-        if (this.is_running) {
+        if (this._is_running) {
             let now = Time.nano_time();
             return this._elapsed + (now - this._start_time);
         }

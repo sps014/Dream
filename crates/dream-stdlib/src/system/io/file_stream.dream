@@ -13,14 +13,14 @@ public class FileStream {
     // Reads up to `n` raw bytes from the current position, advancing the cursor.
     public fun read_bytes(n: int): byte[] {
         let bytes = this.handle.read(n).unwrap_or(Buffer.alloc<byte>(0));
-        this.pos = this.pos + bytes.size();
+        this.pos = this.pos + bytes.size;
         return bytes;
     }
 
     // Reads up to `n` bytes from the current position as text, advancing the cursor.
     public fun read(n: int): string {
         let bytes = this.read_bytes(n);
-        let count = bytes.size();
+        let count = bytes.size;
         let out = string.alloc(count);
         let i = 0;
         while (i < count) {
@@ -58,7 +58,7 @@ public class FileStream {
     }
 
     // Total file size in bytes (`-1` when the path is missing).
-    public fun size(): int {
+    public get size(): int {
         let sz = File.size(this.handle.path);
         if (sz.is_none()) {
             return (0 - 1);

@@ -201,6 +201,52 @@ impl<'a> Analyzer<'a> {
             return Ok(Self::js_type());
         }
 
+        // `arr.size` / `str.size`: builtin element-count property (same spelling collections use).
+        if member.text == dream_abi::intrinsics::SIZE {
+            let base = obj_type.get_type();
+            if base.ends_with("[]") || base == "string" {
+                self.hir_set_array_len(obj_hir);
+                return Ok(Type::Integer(synthetic_token(
+                    TokenKind::DataTypeToken,
+                    "int",
+                )));
+            }
+        }
+
+        // Interface-typed receiver: `iface.prop` may be a property getter (`get prop`), desugared
+        // to a method call of `get$prop` (same path as class getters / interface method dispatch).
+        if let Some(iface_name) = self.interface_receiver_name(&obj_type) {
+            if let Some((base, args)) = Self::resolve_struct_parts(&obj_type) {
+                if !args.is_empty() && self.is_generic_interface(&base) {
+                    self.ensure_interface_instantiated(
+                        &base,
+                        &args,
+                        &member.position,
+                        diagnostics,
+                    );
+                }
+            }
+            let getter = getter_member_name(&member.text);
+            let methods = self
+                .interface_methods
+                .get(&iface_name)
+                .cloned()
+                .unwrap_or_default();
+            if methods
+                .iter()
+                .any(|m| accessor_member_name(m) == getter)
+            {
+                let get_tok = synthetic_token(TokenKind::IdentifierToken, &getter);
+                let call = ExpressionNode::MethodCall(obj, get_tok, None, vec![]);
+                return self.analyze_expression(
+                    &call,
+                    parent_function,
+                    symbol_table,
+                    diagnostics,
+                );
+            }
+        }
+
         match self.resolve_member_field(&obj_type, member, parent_function, diagnostics) {
             MemberField::Field {
                 struct_name,

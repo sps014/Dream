@@ -32,7 +32,7 @@ fun main(): void {
     m.set(Color.Red, Point(10, 20));
     m.set(Color.Green, Point(30, 40));
     
-    System.println("Map size: " + m.size());
+    System.println("Map size: " + m.size);
     let p1 = m.get_or(Color.Red, Point(0, 0));
     System.println("Red x: " + p1.x + ", y: " + p1.y);
     
@@ -52,7 +52,7 @@ fun main(): void {
     let u3 = User("Alice");
     System.println("Add new Alice instance: " + s.add(u3)); // True, because it is a different heap allocation
     
-    System.println("Set size: " + s.size());
+    System.println("Set size: " + s.size);
     System.println("Contains Alice: " + s.contains(u1));
     System.println("Contains new Alice instance: " + s.contains(u3));
     

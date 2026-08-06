@@ -1,23 +1,17 @@
 module system.core;
 
-// Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this.
-// `@next` lives on the implementing class (attributes are not required on the interface).
-public interface Iterator<T> {
-    fun next(): Option<T>;
-}
-
 // Sized collection — the type users pass into APIs that need a count.
 // `for (let x in xs)` works for concrete `@iterator` types and for interface-typed
 // `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch).
 // List-returning query helpers (`to_list`, `filter`, `map`, …) live in `system.collections`
 // as `extend Collection<T>` so bootstrap does not depend on `List`.
 public interface Collection<T> {
-    fun size(): int;
+    get size(): int;
 
     fun iterator(): Iterator<T>;
 
     public fun is_empty(): bool {
-        return this.size() == 0;
+        return this.size == 0;
     }
 
     public fun all(pred: fun(T): bool): bool {
@@ -65,20 +59,5 @@ public interface Collection<T> {
         for (let x in this) {
             action(x);
         }
-    }
-}
-
-// Ordered, indexable sequences (`List`). Extends `Collection` so implementers are usable
-// wherever a `Collection` is expected without re-listing `size` / `iterator`.
-public interface IndexedCollection<T> : Collection<T> {
-    @get_indexer
-    fun get(index: int): Option<T>;
-
-    public fun first(): Option<T> {
-        return this.get(0);
-    }
-
-    public fun last(): Option<T> {
-        return this.get(this.size() - 1);
     }
 }

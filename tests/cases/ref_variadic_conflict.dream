@@ -1,6 +1,6 @@
 import system;
 fun bad(ref ...xs: int[]): void {
-    System.println(xs.len());
+    System.println(xs.size);
 }
 
 fun main(): void {

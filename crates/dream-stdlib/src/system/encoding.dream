@@ -65,7 +65,7 @@ public class Encoding {
 
     // Encodes `bytes` as lowercase hexadecimal text.
     public static fun hex_encode(bytes: byte[]): string {
-        let n = bytes.size();
+        let n = bytes.size;
         let out = string.alloc(n * 2);
         let i = 0;
         while (i < n) {
@@ -79,7 +79,7 @@ public class Encoding {
 
     // Decodes hexadecimal text into bytes; rejects odd length and non-hex digits.
     public static fun hex_decode(text: string): Result<byte[], ParseError> {
-        let n = text.size();
+        let n = text.size;
         if ((n % 2) != 0) {
             return Result.Err(ParseError.invalid("hex string length must be even"));
         }
@@ -101,7 +101,7 @@ public class Encoding {
     // Encodes `bytes` as standard Base64 (with `=` padding).
     public static fun base64_encode(bytes: byte[]): string {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let n = bytes.size();
+        let n = bytes.size;
         let out = "";
         let i = 0;
         while (i < n) {
@@ -137,7 +137,7 @@ public class Encoding {
     public static fun base64_decode(text: string): Result<byte[], ParseError> {
         let cleaned = "";
         let i = 0;
-        while (i < text.size()) {
+        while (i < text.size) {
             let c = text.char_at(i);
             if (c != '=') {
                 if ((c != ' ') && (c != '\n') && (c != '\r') && (c != '\t')) {
@@ -146,11 +146,11 @@ public class Encoding {
             }
             i = i + 1;
         }
-        let n = cleaned.size();
+        let n = cleaned.size;
         if ((n % 4) == 1) {
             return Result.Err(ParseError.invalid("invalid base64 length"));
         }
-        while ((cleaned.size() % 4) != 0) {
+        while ((cleaned.size % 4) != 0) {
             cleaned = cleaned + "A";
         }
         let pad = 0;
@@ -159,14 +159,14 @@ public class Encoding {
         } else if (text.ends_with("=")) {
             pad = 1;
         }
-        let out_len = (cleaned.size() / 4) * 3 - pad;
+        let out_len = (cleaned.size / 4) * 3 - pad;
         if (out_len < 0) {
             out_len = 0;
         }
         let out = Buffer.alloc<byte>(out_len);
         let oi = 0;
         i = 0;
-        while (i < cleaned.size()) {
+        while (i < cleaned.size) {
             let c0 = b64_value(cleaned.char_at(i));
             let c1 = b64_value(cleaned.char_at(i + 1));
             let c2 = b64_value(cleaned.char_at(i + 2));

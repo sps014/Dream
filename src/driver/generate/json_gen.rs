@@ -316,7 +316,13 @@ fn harness_wat_path() -> Result<String, String> {
                 HARNESS_SOURCE.hash(&mut h);
                 include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream")
                     .hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/json/json_gen_model.dream")
+                include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream")
+                    .hash(&mut h);
+                include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream")
+                    .hash(&mut h);
+                include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream")
+                    .hash(&mut h);
+                include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream")
                     .hash(&mut h);
                 include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream")
                     .hash(&mut h);

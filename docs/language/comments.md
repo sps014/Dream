@@ -4,7 +4,7 @@ Dream uses ordinary contiguous `//` comments as API documentation. The language 
 
 ```dream
 // Number of elements currently stored.
-public fun size(): int {
+public get size(): int {
     return this.count;
 }
 ```

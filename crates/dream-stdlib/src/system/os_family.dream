@@ -1,0 +1,9 @@
+module system;
+
+// Operating-system family (native hosts).
+
+public enum OsFamily {
+    Unix,
+    Windows,
+    Unknown,
+}

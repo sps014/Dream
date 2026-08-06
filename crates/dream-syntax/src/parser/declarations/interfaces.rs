@@ -73,7 +73,8 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Parses one interface method: `[public] [static] fun Name[<T>](params)[: ret] ;` for a
     /// signature-only method, or `... { ... }` for a *default* method whose body implementing
-    /// classes inherit when they omit the method.
+    /// classes inherit when they omit the method. Also accepts TypeScript-style `get`/`set`
+    /// property accessors (`get size(): int;`) with the same `;` / `{ ... }` default-body choice.
     pub(crate) fn parse_interface_method(
         &mut self,
         attributes: Vec<crate::nodes::AttributeNode>,
@@ -84,6 +85,47 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_static,
             is_extern: _,
         } = self.parse_function_modifiers();
+
+        // Property accessor: `get name(): T;` / `set name(v: T) { ... }` — same shape as class
+        // accessors, but allowing a trailing `;` for a required (no-default) contract.
+        let accessor_kind = if self.current_token().kind == TokenKind::IdentifierToken
+            && self.peek_token(1).kind == TokenKind::IdentifierToken
+        {
+            crate::nodes::function::AccessorKind::from_keyword(&self.current_token().text)
+        } else {
+            None
+        };
+        if let Some(accessor_kind) = accessor_kind {
+            self.match_token(TokenKind::IdentifierToken);
+            let function_name = self.match_token(TokenKind::IdentifierToken);
+            let params = self.parse_formal_parameters()?;
+            let mut return_type: Option<Type> = None;
+            if self.current_token().kind == TokenKind::ColonToken {
+                self.match_token(TokenKind::ColonToken);
+                return_type = Some(self.parse_type()?);
+            }
+            let (body, is_default): (&'a [StatementNode<'a>], bool) =
+                if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
+                    (self.parse_block()?, true)
+                } else {
+                    self.match_token(TokenKind::SemicolonToken);
+                    (self.arena.alloc_slice_fill_iter(std::iter::empty()), false)
+                };
+            let mut node = FunctionNode::new(
+                attributes,
+                function_name,
+                None,
+                return_type,
+                params,
+                body,
+                visibility,
+            );
+            node.is_static = is_static;
+            node.is_async = is_async;
+            node.is_default_impl = is_default;
+            node.accessor = Some(accessor_kind);
+            return Ok(node);
+        }
 
         self.match_token(TokenKind::FunToken);
         let function_name = self.match_token(TokenKind::IdentifierToken);
@@ -183,11 +225,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let iter = self.current_token_index;
             let field_attributes = self.parse_attributes();
+            let is_accessor = self.current_token().kind == TokenKind::IdentifierToken
+                && crate::nodes::function::AccessorKind::from_keyword(&self.current_token().text)
+                    .is_some()
+                && self.peek_token(1).kind == TokenKind::IdentifierToken;
             if self.current_token().kind == TokenKind::FunToken
                 || self.current_token().kind == TokenKind::PublicToken
                 || self.current_token().kind == TokenKind::InternalToken
                 || self.current_token().kind == TokenKind::StaticToken
                 || self.current_token().kind == TokenKind::AsyncToken
+                || is_accessor
             {
                 methods.push(self.parse_function(Some(field_attributes))?);
             } else {

@@ -131,7 +131,7 @@ public class WebWorker<TIn, TOut> {
     // the same capture rules as the plain constructor: a non-capturing top-level function, or a
     // lambda capturing only `@shared class`/unmanaged state. Called as `WebWorker<T, R>.map(...)`.
     public static async fun map(items: TIn[], body: fun(TIn): TOut): TOut[] {
-        let n = items.size();
+        let n = items.size;
         let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
             workers[i] = WebWorker<TIn, TOut>(body);
@@ -150,7 +150,7 @@ public class WebWorker<TIn, TOut> {
     // Async-body `map`: same shape as the sync overload, but `body` returns `Future<TOut>`
     // (named `async fun` or `async (…) => …`). Each worker drives its own awaits to completion.
     public static async fun map(items: TIn[], body: fun(TIn): Future<TOut>): TOut[] {
-        let n = items.size();
+        let n = items.size;
         let workers = Buffer.alloc<WebWorker<TIn, TOut>>(n);
         for (let i = 0; i < n; i = i + 1) {
             workers[i] = WebWorker<TIn, TOut>(body);

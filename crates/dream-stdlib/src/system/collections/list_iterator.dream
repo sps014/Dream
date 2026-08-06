@@ -12,7 +12,7 @@ public class ListIterator<T> : Iterator<T> {
 
     @next
     public fun next(): Option<T> {
-        if (this.idx >= this.list.size()) {
+        if (this.idx >= this.list.size) {
             return Option.None;
         }
         let value = this.list.get(this.idx);

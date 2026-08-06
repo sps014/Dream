@@ -49,7 +49,7 @@ async fun main(): void {
     // List the current directory.
     let entries = await File.list(".");
     System.print("entries: ");
-    System.println(entries.size());
+    System.println(entries.size);
 
     // Clean up.
     await File.delete(path);
