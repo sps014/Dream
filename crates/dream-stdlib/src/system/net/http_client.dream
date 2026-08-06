@@ -24,10 +24,12 @@ public class HttpClient {
         this.cancel_token = Option.None;
     }
 
+    // Request timeout in milliseconds (`0` = none).
     public get timeout_ms(): int {
         return this._timeout_ms;
     }
 
+    // Sets the request timeout in milliseconds (`0` = none).
     public set timeout_ms(ms: int) {
         this._timeout_ms = ms;
     }

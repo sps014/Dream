@@ -6,10 +6,12 @@ module system.collections;
 public class Seq<T> {
     public items: List<T>;
 
+    // Wraps an already-materialized list.
     public constructor(items: List<T>) {
         this.items = items;
     }
 
+    // Keeps elements for which `pred` is true.
     public fun filter(pred: fun(T): bool): Seq<T> {
         let result = List<T>();
         for (let x in this.items) {
@@ -20,6 +22,7 @@ public class Seq<T> {
         return Seq<T>(result);
     }
 
+    // Maps each element through `f`.
     public fun map<U>(f: fun(T): U): Seq<U> {
         let result = List<U>();
         for (let x in this.items) {
@@ -28,6 +31,7 @@ public class Seq<T> {
         return Seq<U>(result);
     }
 
+    // Keeps at most the first `n` elements.
     public fun take(n: int): Seq<T> {
         let result = List<T>();
         let i = 0;
@@ -41,6 +45,7 @@ public class Seq<T> {
         return Seq<T>(result);
     }
 
+    // Drops the first `n` elements.
     public fun skip(n: int): Seq<T> {
         let result = List<T>();
         let i = 0;
@@ -53,18 +58,22 @@ public class Seq<T> {
         return Seq<T>(result);
     }
 
+    // Removes duplicates while preserving first-seen order.
     public fun distinct(): Seq<T> {
         return Seq<T>(this.items.distinct());
     }
 
+    // Returns a new sequence sorted by `cmp`.
     public fun order_by(cmp: fun(T, T): int): Seq<T> {
         return Seq<T>(this.items.order_by(cmp));
     }
 
+    // Maps each element to a list and concatenates the results.
     public fun flat_map<U>(f: fun(T): List<U>): Seq<U> {
         return Seq<U>(this.items.flat_map(f));
     }
 
+    // Materializes the current items as a `List`.
     public fun to_list(): List<T> {
         return this.items;
     }

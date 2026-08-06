@@ -13,32 +13,33 @@ public ref struct Span<T> {
     array: T[];
     // Index into `array` of this span's first element.
     offset: int;
-    length: int;
+    _length: int;
 
     public constructor(array: T[], offset: int, length: int) {
         this.array = array;
         this.offset = offset;
-        this.length = length;
+        this._length = length;
     }
 
     // A span over the whole of `array`.
     public static fun of(array: T[]): Span<T> {
-        return Span<T>(array, 0, array.size);
+        return Span<T>(array, 0, array.length);
     }
 
     // Number of elements this span covers.
-    public get size(): int {
-        return this.length;
+    public get length(): int {
+        return this._length;
     }
 
+    // True when this span covers no elements.
     public fun is_empty(): bool {
-        return this.length == 0;
+        return this._length == 0;
     }
 
     // The element at `index` (relative to this span, not the backing array). Traps if out of range.
     @get_indexer
     public fun get(index: int): T {
-        if ((index < 0) || (index >= this.length)) {
+        if ((index < 0) || (index >= this._length)) {
             System.panic("Span index out of range");
         }
         return this.array[this.offset + index];
@@ -47,7 +48,7 @@ public ref struct Span<T> {
     // Overwrites the element at `index` (relative to this span). Traps if out of range.
     @set_indexer
     public fun set(index: int, value: T): void {
-        if ((index < 0) || (index >= this.length)) {
+        if ((index < 0) || (index >= this._length)) {
             System.panic("Span index out of range");
         }
         this.array[this.offset + index] = value;
@@ -56,7 +57,7 @@ public ref struct Span<T> {
     // A sub-span covering `[start, start + count)` of this span's own range. Traps if the requested
     // range doesn't fit within this span.
     public fun slice(start: int, count: int): Span<T> {
-        if ((start < 0) || (count < 0) || (start + count > this.length)) {
+        if ((start < 0) || (count < 0) || (start + count > this._length)) {
             System.panic("Span slice out of range");
         }
         return Span<T>(this.array, this.offset + start, count);
@@ -64,9 +65,9 @@ public ref struct Span<T> {
 
     // Copies every element of this span into a fresh, independently-owned array.
     public fun to_array(): T[] {
-        let result = Buffer.alloc<T>(this.length);
+        let result = Buffer.alloc<T>(this._length);
         let i = 0;
-        while (i < this.length) {
+        while (i < this._length) {
             result[i] = this.array[this.offset + i];
             i = i + 1;
         }

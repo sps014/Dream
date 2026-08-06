@@ -204,7 +204,7 @@ public class DateTime {
 
     // Parses an ISO-8601 datetime.
     public static fun parse_iso8601(text: string): Result<DateTime, ParseError> {
-        let n = text.size;
+        let n = text.length;
         if (n < 19) {
             return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
@@ -358,7 +358,7 @@ public class DateTime {
 
     static fun _pad(n: int, width: int): string {
         let s = n.to_string();
-        while ((s.size < width) && (n >= 0)) {
+        while ((s.length < width) && (n >= 0)) {
             s = "0" + s;
         }
         return s;
@@ -378,7 +378,7 @@ public class DateTime {
         if (len <= 0) {
             return Option.None;
         }
-        if ((start < 0) || (start + len > text.size)) {
+        if ((start < 0) || (start + len > text.length)) {
             return Option.None;
         }
         let result = 0;

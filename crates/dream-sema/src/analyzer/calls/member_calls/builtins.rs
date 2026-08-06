@@ -1,4 +1,4 @@
-//! The `size()`/`char_at()`/`to_string()`/`hash_code()` object protocol available on every (or
+//! The `length`/`char_at()`/`to_string()`/`hash_code()` object protocol available on every (or
 //! every primitive/array) receiver, checked before falling through to normal instance dispatch.
 
 use super::super::super::*;
@@ -13,7 +13,7 @@ use dream_types::method_fn;
 
 impl<'a> Analyzer<'a> {
     /// Type-checks the builtin methods available on every (or every primitive/array) receiver:
-    /// `size()`, `str.char_at(i)`, and the `to_string`/`hash_code` object protocol (a C-style enum's
+    /// `str.char_at(i)`, and the `to_string`/`hash_code` object protocol (a C-style enum's
     /// `to_string()` renders its variant name). Returns `Ok(Some(result_type))` when the call is a
     /// builtin (so the caller returns it) or `Ok(None)` to fall through to normal instance-method
     /// dispatch. A user-defined `to_string`/`hash_code` override yields `None` so the override is
@@ -27,18 +27,18 @@ impl<'a> Analyzer<'a> {
         receiver: &mut Option<dream_hir::HExpr>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Option<Type>, SemanticError> {
-        // Default: clear `last` until a matching builtin re-fills it (`size` / `to_string` / …).
+        // Default: clear `last` until a matching builtin re-fills it (`to_string` / …).
         self.hir_none();
 
-        // `arr.size()` / `str.size()`: removed — element count is the property `arr.size` /
-        // `str.size` (see member_access). Reject the call form so there is one spelling.
-        if method.text == intrinsics::SIZE {
+        // Element count is the property `arr.length` / `str.length` (see member_access). Reject
+        // call forms (including the old `.size()` spelling) so there is one public API.
+        if method.text == intrinsics::LENGTH || method.text == "size" {
             let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
                 diagnostics.report_error(
                     format!(
-                        "'{}.size' is a property, not a method; use `.size` instead of `.size()`",
-                        base
+                        "'{}.length' is a property, not a method; use `.length` instead of `.{}()`",
+                        base, method.text
                     ),
                     Some(method.position),
                 );
@@ -50,7 +50,7 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        // `str.byte_size()`: UTF-8 byte length (distinct from scalar `size()`).
+        // `str.byte_size()`: UTF-8 byte length (distinct from scalar `length`).
         if method.text == intrinsics::BYTE_SIZE && obj_type.get_type() == "string" {
             if !params.is_empty() {
                 diagnostics.report_error(

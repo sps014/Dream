@@ -21,7 +21,7 @@ class Pixel {
 
 fun main() {
     let pts: Point<int>[] = [Point<int>(1, 2), Point<int>(3, 4)];
-    System.println(pts.size);
+    System.println(pts.length);
     System.println(pts[0].x);
     System.println(pts[1].y);
 

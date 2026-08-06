@@ -3,5 +3,5 @@
 import system;
 fun main(): void {
     let p = Pointer<int>.alloc(3);
-    System.println(p.size);
+    System.println(p.length);
 }

@@ -17,7 +17,7 @@ async fun main(): void {
     let _r = await Compute.run_1d("add", [a, b, out], 4);
     // Native host stages buffers but does not execute WGSL; round-trip `a` proves write/read.
     let ra = await a.read();
-    System.println(a.size);
+    System.println(a.length);
     System.println((int)ra[0]);
     System.println((int)ra[3]);
 }

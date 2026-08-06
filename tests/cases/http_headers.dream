@@ -7,7 +7,7 @@ fun main(): void {
     h.set("X-Trace", "abc");
     System.println(h.get("content-type").unwrap_or("missing"));
     System.println(h.contains("X-Trace"));
-    System.println(h.size);
+    System.println(h.length);
     h.remove("X-Trace");
-    System.println(h.size);
+    System.println(h.length);
 }

@@ -5,6 +5,7 @@ public class KeyValuePair<K, V> {
     public key: K;
     public value: V;
 
+    // Builds a pair from `key` and `value`.
     public constructor(key: K, value: V) {
         this.key = key;
         this.value = value;

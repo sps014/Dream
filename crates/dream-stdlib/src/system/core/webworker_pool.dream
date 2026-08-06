@@ -1,5 +1,6 @@
 module system.core;
 
+// Fixed-size pool of `WebWorker` threads with round-robin `dispatch`.
 public class WebWorkerPool {
     ids: int[];
     next: int;
@@ -22,7 +23,7 @@ public class WebWorkerPool {
     public async fun dispatch<TIn, TOut>(msg: TIn, body: fun(TIn): TOut): TOut {
         let wrapped: fun(string): string = (raw: string) => Bytes.toWire<TOut>(body(Bytes.fromWire<TIn>(raw)));
         let id = this.ids[this.next];
-        this.next = (this.next + 1) % this.ids.size;
+        this.next = (this.next + 1) % this.ids.length;
         let funcidx = WebWorker<string, string>.funcidx(wrapped);
         let env = WebWorker<string, string>.env(wrapped);
         return Bytes.fromWire<TOut>(await WebWorkerPool.dispatch_host(id, funcidx, env, Bytes.toWire<TIn>(msg)));
@@ -35,7 +36,7 @@ public class WebWorkerPool {
             return Bytes.toWire<TOut>(await body(Bytes.fromWire<TIn>(raw)));
         };
         let id = this.ids[this.next];
-        this.next = (this.next + 1) % this.ids.size;
+        this.next = (this.next + 1) % this.ids.length;
         let funcidx = WebWorker<string, string>.funcidx_async(wrapped);
         let env = WebWorker<string, string>.env_async(wrapped);
         return Bytes.fromWire<TOut>(await WebWorkerPool.dispatch_host(id, funcidx, env, Bytes.toWire<TIn>(msg)));
@@ -43,7 +44,7 @@ public class WebWorkerPool {
 
     // Stop every thread in the pool. Idempotent.
     public fun shutdown(): void {
-        for (let i = 0; i < this.ids.size; i = i + 1) {
+        for (let i = 0; i < this.ids.length; i = i + 1) {
             WebWorker<string, string>.terminate_host(this.ids[i]);
         }
     }

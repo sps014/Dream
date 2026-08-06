@@ -1,0 +1,22 @@
+// `length` is the single, uniform element-count property across every collection: raw arrays,
+// strings, `List`, and `Map` all answer to the same `.length`.
+import system;
+import system.collections;
+fun main(): void {
+    let a = Buffer.alloc<int>(4);
+    System.println(a.length);     // 4  (array)
+
+    let s = "hello";
+    System.println(s.length);     // 5  (string)
+
+    let xs = List<int>();
+    xs.push(10);
+    xs.push(20);
+    xs.push(30);
+    System.println(xs.length);    // 3  (list)
+
+    let m = Map<string, int>();
+    m.set("a", 1);
+    m.set("b", 2);
+    System.println(m.length);     // 2  (map)
+}

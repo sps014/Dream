@@ -201,8 +201,8 @@ impl<'a> Analyzer<'a> {
             return Ok(Self::js_type());
         }
 
-        // `arr.size` / `str.size`: builtin element-count property (same spelling collections use).
-        if member.text == dream_abi::intrinsics::SIZE {
+        // `arr.length` / `str.length`: builtin element-count property (same spelling collections use).
+        if member.text == dream_abi::intrinsics::LENGTH {
             let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
                 self.hir_set_array_len(obj_hir);

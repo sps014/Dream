@@ -66,7 +66,7 @@ async fun main(): void {
                 System.println(res.status());        // 200
                 System.println(res.header("content-type"));
                 switch (res.json()) {
-                    Ok(data) => System.println(data.size),
+                    Ok(data) => System.println(data.length),
                     Err(e) => System.println(e.message()),
                 }
             }

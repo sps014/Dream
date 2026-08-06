@@ -1,6 +1,6 @@
 module system.gpu;
 
-/// Device lifecycle, host bridges, kernel barriers.
+// Device lifecycle, host bridges, kernel barriers.
 
 public class Gpu {
     @js("Dream", "gpuIsAvailable")
@@ -18,24 +18,29 @@ public class Gpu {
     @js("Dream", "gpuTimestamp")
     static extern async fun timestamp_host(): long;
 
+    // True when a WebGPU/native GPU backend is present.
     public static fun is_available(): bool {
         return Gpu.is_available_host();
     }
 
+    // True after a successful `try_init`.
     public static fun ready(): bool {
         return Gpu.ready_host();
     }
 
+    // Initializes the GPU device; returns `Err` with a host error code on failure.
     public static async fun try_init(): Result<bool, GpuError> {
         let code = await Gpu.try_init_host();
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "Gpu.try_init failed"));
     }
 
+    // Yields until the next presentation/frame tick.
     public static async fun frame(): void {
         await Gpu.frame_host();
     }
 
+    // High-resolution GPU timestamp in nanoseconds (host-defined epoch).
     public static async fun timestamp(): long {
         return await Gpu.timestamp_host();
     }
@@ -105,6 +110,8 @@ public class Gpu {
     @js("Dream", "gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 
+    // Workgroup barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).
     public static fun workgroup_barrier(): void {}
+    // Storage memory barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).
     public static fun storage_barrier(): void {}
 }

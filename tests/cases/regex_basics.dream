@@ -6,7 +6,7 @@ fun main(): void {
     System.println(digits.test("no digits here"));
 
     let parts = digits.match("a1b22c333");
-    System.println(parts.size);
+    System.println(parts.length);
     System.println(parts[0]);
     System.println(parts[1]);
     System.println(parts[2]);

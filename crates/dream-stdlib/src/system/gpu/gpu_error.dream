@@ -2,41 +2,49 @@ module system.gpu;
 
 // WebGPU compute + present. Auto-loaded when any `@compute` kernel is present.
 
-/// Failure from GPU init / dispatch / present.
+// Failure from GPU init / dispatch / present.
 
 public class GpuError : Error {
     _code: string;
     _message: string;
 
+    // Builds an error with a stable `code` string and human-readable `message`.
     public constructor(code: string, message: string) {
         this._code = code;
         this._message = message;
     }
 
+    // Human-readable description.
     public fun message(): string {
         return this._message;
     }
 
+    // Stable machine-readable code (`UNAVAILABLE`, `TIMEOUT`, …).
     public fun code(): string {
         return this._code;
     }
 
+    // GPU backend missing or not initialized.
     public static fun unavailable(message: string): GpuError {
         return GpuError("UNAVAILABLE", message);
     }
 
+    // Operation exceeded the host timeout.
     public static fun timeout(message: string): GpuError {
         return GpuError("TIMEOUT", message);
     }
 
+    // Invalid arguments or pipeline state.
     public static fun validation(message: string): GpuError {
         return GpuError("VALIDATION", message);
     }
 
+    // Unclassified I/O or host failure.
     public static fun other(message: string): GpuError {
         return GpuError("EIO", message);
     }
 
+    // Maps a numeric host status code to a typed `GpuError`.
     public static fun from_code(code: int, detail: string): GpuError {
         if (code == 1) { return GpuError.unavailable(detail); }
         if (code == 2) { return GpuError.timeout(detail); }

@@ -17,9 +17,9 @@ fun main(): void {
     System.println(Encoding.hex_encode(Sha512.hash(abc)));
 
     let rnd = SecureRandom.bytes(8);
-    System.println(rnd.size);
+    System.println(rnd.length);
 
     let buf = Buffer.alloc<byte>(16);
     SecureRandom.fill(buf);
-    System.println(buf.size);
+    System.println(buf.length);
 }

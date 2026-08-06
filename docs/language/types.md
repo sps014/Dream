@@ -87,7 +87,7 @@ let (a, b) = t;         // destructure
 
 Nested tuples are allowed. There are no named tuple elements. Access is via `.0`, `.1`, … (not
 `t[i]`). Tuples are not iterable — use destructuring or fixed projections; there is no `foreach`
-or `t.size`.
+or `t.length`.
 
 ## Optional values
 

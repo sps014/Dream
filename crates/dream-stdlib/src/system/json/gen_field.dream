@@ -3,6 +3,7 @@ module system.json;
 // Snapshot model for the `@json` source generator. The compile host fills these from the
 // declaration SemanticModel and passes them to [`JsonGenerator`].
 
+// One serializable field on a class or union variant.
 public class GenField {
     public name: string;
     public type_name: string;
@@ -11,6 +12,7 @@ public class GenField {
     public option_inner: string;
     public is_type_param: bool;
 
+    // Builds a field snapshot from SemanticModel data.
     public constructor(
         name: string,
         type_name: string,
@@ -27,6 +29,7 @@ public class GenField {
         this.is_type_param = is_type_param;
     }
 
+    // Convenience factory matching the constructor arguments.
     public static fun make(
         name: string,
         type_name: string,
@@ -38,8 +41,9 @@ public class GenField {
         return GenField(name, type_name, json_ignore, property_name, option_inner, is_type_param);
     }
 
+    // JSON object key: `@json_property` override, else the Dream field name.
     public fun json_key(): string {
-        if (this.property_name.size > 0) {
+        if (this.property_name.length > 0) {
             return this.property_name;
         }
         return this.name;

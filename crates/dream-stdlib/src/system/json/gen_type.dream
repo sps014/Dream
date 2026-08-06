@@ -1,5 +1,6 @@
 module system.json;
 
+// Class or discriminated-union type snapshot for `@json` codegen.
 public class GenType {
     public name: string;
     public is_union: bool;
@@ -7,6 +8,7 @@ public class GenType {
     public fields: List<GenField>;
     public variants: List<GenVariant>;
 
+    // Builds a type snapshot (prefer `class_type` / `union_type` factories).
     public constructor(
         name: string,
         is_union: bool,
@@ -21,6 +23,7 @@ public class GenType {
         this.variants = variants;
     }
 
+    // Snapshot for a `@json` class/struct with named fields.
     public static fun class_type(
         name: string,
         generic_params: List<string>,
@@ -29,6 +32,7 @@ public class GenType {
         return GenType(name, false, generic_params, fields, List<GenVariant>());
     }
 
+    // Snapshot for a `@json` discriminated union with variants.
     public static fun union_type(
         name: string,
         generic_params: List<string>,
@@ -37,13 +41,14 @@ public class GenType {
         return GenType(name, true, generic_params, List<GenField>(), variants);
     }
 
+    // `<T, U>` clause for emit, or empty when non-generic.
     public fun params_clause(): string {
         if (this.generic_params.is_empty()) {
             return "";
         }
         let s = "<";
         let i = 0;
-        while (i < this.generic_params.size) {
+        while (i < this.generic_params.length) {
             if (i > 0) {
                 s = s + ", ";
             }
@@ -53,6 +58,7 @@ public class GenType {
         return s + ">";
     }
 
+    // Fully written self type (`Name` or `Name<T, U>`).
     public fun self_ty(): string {
         return this.name + this.params_clause();
     }

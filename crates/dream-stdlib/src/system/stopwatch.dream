@@ -13,6 +13,7 @@ public class Stopwatch {
         this._start_time = Time.nano_time();
     }
 
+    // True while the stopwatch is currently accumulating time.
     public get is_running(): bool {
         return this._is_running;
     }

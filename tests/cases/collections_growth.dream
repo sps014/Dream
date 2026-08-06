@@ -8,13 +8,13 @@ fun main(): void {
         xs.push(i * 2);
         i = i + 1;
     }
-    System.println(xs.size);
+    System.println(xs.length);
     System.println(xs.get(0).unwrap_or(0 - 1));
     System.println(xs.get(99).unwrap_or(0 - 1));
 
     let sum = 0;
     let j = 0;
-    while (j < xs.size) {
+    while (j < xs.length) {
         sum = sum + xs.get(j).unwrap_or(0);
         j = j + 1;
     }
@@ -26,7 +26,7 @@ fun main(): void {
         words.push("x");
         k = k + 1;
     }
-    System.println(words.size);
+    System.println(words.length);
     System.print(words.get(19).unwrap_or(""));
     System.print("\n");
     System.print(words.contains("x"));
@@ -40,7 +40,7 @@ fun main(): void {
         squares.set(n, n * n);
         n = n + 1;
     }
-    System.println(squares.size);
+    System.println(squares.length);
     System.println(squares.get(12).unwrap_or(0 - 1));
     System.println(squares.get(63).unwrap_or(0 - 1));
 }

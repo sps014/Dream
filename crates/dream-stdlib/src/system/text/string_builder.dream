@@ -17,7 +17,7 @@ public class StringBuilder {
     }
 
     // Number of characters appended so far.
-    public get size(): int {
+    public get length(): int {
         return this.count;
     }
 
@@ -28,7 +28,7 @@ public class StringBuilder {
 
     // Grows the backing buffer to at least `min_capacity` via in-place realloc when possible.
     fun grow(min_capacity: int): void {
-        let new_cap = this.chars.size * 2;
+        let new_cap = this.chars.length * 2;
         if (new_cap < min_capacity) {
             new_cap = min_capacity;
         }
@@ -37,7 +37,7 @@ public class StringBuilder {
 
     // Appends a single character.
     public fun append_char(c: char): void {
-        if (this.count == this.chars.size) {
+        if (this.count == this.chars.length) {
             this.grow(this.count + 1);
         }
         this.chars[this.count] = c;
@@ -46,8 +46,8 @@ public class StringBuilder {
 
     // Appends every character of `text`, growing at most once regardless of `text`'s length.
     public fun append(text: string): void {
-        let n = text.size;
-        if ((this.count + n) > this.chars.size) {
+        let n = text.length;
+        if ((this.count + n) > this.chars.length) {
             this.grow(this.count + n);
         }
         let i = 0;

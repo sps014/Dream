@@ -4,6 +4,7 @@ module system.collections;
 // Attached via `extend Collection<T>` so bootstrap `system.core` never depends on `List`/`Set`.
 
 extend Collection<T> {
+    // Copies every element into a new `List`.
     public fun to_list(): List<T> {
         let result = List<T>();
         for (let x in this) {
@@ -12,6 +13,7 @@ extend Collection<T> {
         return result;
     }
 
+    // Keeps elements for which `pred` is true.
     public fun filter(pred: fun(T): bool): List<T> {
         let result = List<T>();
         for (let x in this) {
@@ -22,6 +24,7 @@ extend Collection<T> {
         return result;
     }
 
+    // Maps each element through `f`.
     public fun map<U>(f: fun(T): U): List<U> {
         let result = List<U>();
         for (let x in this) {
@@ -30,6 +33,7 @@ extend Collection<T> {
         return result;
     }
 
+    // Left-fold with seed `init`.
     public fun reduce<A>(init: A, f: fun(A, T): A): A {
         let acc = init;
         for (let x in this) {
@@ -38,6 +42,7 @@ extend Collection<T> {
         return acc;
     }
 
+    // Inserts every element into a new `Set` (deduplicating).
     public fun collect_set(): Set<T> {
         let result = Set<T>();
         for (let x in this) {
@@ -46,6 +51,7 @@ extend Collection<T> {
         return result;
     }
 
+    // Removes duplicates while preserving first-seen order.
     public fun distinct(): List<T> {
         let seen = Set<T>();
         let result = List<T>();
@@ -58,6 +64,7 @@ extend Collection<T> {
         return result;
     }
 
+    // Maps each element to a list and concatenates the results.
     public fun flat_map<U>(f: fun(T): List<U>): List<U> {
         let result = List<U>();
         for (let x in this) {
@@ -69,6 +76,7 @@ extend Collection<T> {
         return result;
     }
 
+    // Keeps at most the first `n` elements.
     public fun take(n: int): List<T> {
         let result = List<T>();
         let i = 0;
@@ -82,6 +90,7 @@ extend Collection<T> {
         return result;
     }
 
+    // Drops the first `n` elements.
     public fun skip(n: int): List<T> {
         let result = List<T>();
         let i = 0;
@@ -94,12 +103,14 @@ extend Collection<T> {
         return result;
     }
 
+    // Copies into a list and sorts by `cmp`.
     public fun order_by(cmp: fun(T, T): int): List<T> {
         let result = this.to_list();
         result.sort_by(cmp);
         return result;
     }
 
+    // Starts an eager `Seq` chain over a copy of the elements.
     public fun seq(): Seq<T> {
         let items = List<T>();
         for (let x in this) {

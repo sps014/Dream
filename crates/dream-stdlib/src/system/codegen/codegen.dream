@@ -4,15 +4,16 @@ module system.codegen;
 // SyntaxTree / GeneratorContext; this package provides emit helpers generators use when building
 // Dream source strings.
 
-/// Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
-/// Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth;
-/// `line` / `append` apply the current indent only at the start of a line.
+// Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
+// Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth;
+// `line` / `append` apply the current indent only at the start of a line.
 public class CodeBuilder {
     buf: StringBuilder;
     indent_level: int;
     indent_unit: string;
     indent_pending: bool;
 
+    // Creates a builder that indents with four spaces.
     public constructor() {
         this.buf = StringBuilder();
         this.indent_level = 0;
@@ -28,6 +29,7 @@ public class CodeBuilder {
         this.indent_pending = true;
     }
 
+    // Creates a builder whose indent unit is `spaces` ASCII spaces.
     public static fun with_spaces(spaces: int): CodeBuilder {
         return CodeBuilder(CodeBuilder._spaces(spaces));
     }
@@ -57,27 +59,32 @@ public class CodeBuilder {
         this.indent_pending = false;
     }
 
+    // Increases the indent depth by one unit.
     public fun indent(): void {
         this.indent_level = this.indent_level + 1;
     }
 
+    // Decreases the indent depth by one unit (no-op at zero).
     public fun dedent(): void {
         if (this.indent_level > 0) {
             this.indent_level = this.indent_level - 1;
         }
     }
 
+    // Writes `text` as a full line at the current indent, then starts a new line.
     public fun line(text: string): void {
         this.write_indent();
         this.buf.append_line(text);
         this.indent_pending = true;
     }
 
+    // Appends `text` without a trailing newline (indent applied only at line start).
     public fun append(text: string): void {
         this.write_indent();
         this.buf.append(text);
     }
 
+    // Returns the accumulated source text.
     @override
     public fun to_string(): string {
         return this.buf.to_string();

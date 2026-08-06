@@ -61,7 +61,7 @@ An interface may extend one or more parents with `: Parent` and `+` for multiple
 
 ```dream
 interface Collection<T> {
-    get size(): int;
+    get length(): int;
     fun iterator(): Iterator<T>;
 }
 
@@ -174,13 +174,13 @@ An interface can be generic. A class implements a concrete or generic instance o
 ```dream
 interface Container<T> {
     fun get(): T;
-    get size(): int;
+    get length(): int;
 }
 
 class Box<T> : Container<T> {
     public value: T;
     public fun get(): T { return this.value; }
-    public get size(): int { return 1; }
+    public get length(): int { return 1; }
 }
 ```
 
@@ -189,7 +189,7 @@ Each concrete use is specialized: `Box<int>` implements `Container<int>`. Dispat
 ```dream
 fun describe(c: Container<int>): void {
     println(c.get());
-    println(c.size);
+    println(c.length);
 }
 
 let b = Box<int>(7);

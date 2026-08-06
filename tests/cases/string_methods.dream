@@ -2,7 +2,7 @@ import system;
 import system.text;
 fun main(): void {
     let s = "Hello, World";
-    System.println(s.size);
+    System.println(s.length);
     System.println(s.substring(0, 5));
     System.println(s.substring(7, 12));
     System.println(s.to_lower());

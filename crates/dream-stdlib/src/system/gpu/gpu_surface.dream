@@ -1,10 +1,11 @@
 module system.gpu;
 
-/// Canvas-backed WebGPU swapchain.
+// Canvas-backed WebGPU swapchain.
 
 public class GpuSurface {
     public id: int;
 
+    // Creates a surface bound to the DOM canvas with id `canvas_id`.
     public static fun from_canvas(canvas_id: string): Result<GpuSurface, GpuError> {
         let sid = Gpu.surface_from_canvas(canvas_id);
         if (sid < 0) {
@@ -15,10 +16,12 @@ public class GpuSurface {
         return Result.Ok(s);
     }
 
+    // Sets the swapchain size in CSS/device pixels.
     public fun configure(width: int, height: int): void {
         Gpu.surface_configure(this.id, width, height);
     }
 
+    // Presents the current backbuffer to the canvas.
     public async fun present(): Result<bool, GpuError> {
         let code = await Gpu.surface_present(this.id);
         if (code == 0) { return Result.Ok(true); }

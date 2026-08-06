@@ -42,7 +42,7 @@ public class Regex {
     // it, only the first). `replacement` may reference capture groups with `$1`.."$9" or the whole
     // match with `$&`; `$$` is a literal `$`.
     public fun replace(input: string, replacement: string): string {
-        let n = input.size;
+        let n = input.length;
         let sb = StringBuilder();
         let vm = this.vm();
         let pos = 0;
@@ -81,7 +81,7 @@ public class Regex {
     }
 
     fun append_replacement(sb: StringBuilder, replacement: string, input: string, m: RegexMatch): void {
-        let rn = replacement.size;
+        let rn = replacement.length;
         let i = 0;
         while (i < rn) {
             let c = replacement.char_at(i);
@@ -114,7 +114,7 @@ public class Regex {
     // participate is "").
     public fun match(input: string): string[] {
         let vm = this.vm();
-        let n = input.size;
+        let n = input.length;
         if (this.global) {
             let results = List<string>();
             let pos = 0;
@@ -162,9 +162,9 @@ public class Regex {
     }
 
     fun to_array(list: List<string>): string[] {
-        let arr = Buffer.alloc<string>(list.size);
+        let arr = Buffer.alloc<string>(list.length);
         let i = 0;
-        while (i < list.size) {
+        while (i < list.length) {
             arr[i] = list.get(i).unwrap_or("");
             i = i + 1;
         }

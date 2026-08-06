@@ -6,14 +6,16 @@ public class ArrayIterator<T> : Iterator<T> {
     items: T[];
     idx: int;
 
+    // Starts at the beginning of `items`.
     public constructor(items: T[]) {
         this.items = items;
         this.idx = 0;
     }
 
+    // Returns the next element, or `None` if exhausted.
     @next
     public fun next(): Option<T> {
-        if (this.idx >= this.items.size) {
+        if (this.idx >= this.items.length) {
             return Option.None;
         }
         let value = this.items[this.idx];

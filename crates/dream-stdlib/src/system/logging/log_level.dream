@@ -10,6 +10,7 @@ public enum LogLevel {
     Error,
 }
 
+// Uppercase label for a severity level (`TRACE` … `ERROR`).
 public fun level_name(level: LogLevel): string {
     if (level == LogLevel.Trace) {
         return "TRACE";

@@ -10,7 +10,7 @@ fun main(): void {
 
     let negated = Regex("[^aeiou\\s]+", "g");
     let m = negated.match("hi there");
-    System.println(m.size);
+    System.println(m.length);
     System.println(m[0]);
     System.println(m[1]);
 

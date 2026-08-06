@@ -140,7 +140,7 @@ public class System {
         if (raw.char_at(0) != '1') {
             return Option.None;
         }
-        return Option.Some(raw.substring(1, raw.size));
+        return Option.Some(raw.substring(1, raw.length));
     }
 
     // Value of environment variable `name`, or `fallback` when unset.

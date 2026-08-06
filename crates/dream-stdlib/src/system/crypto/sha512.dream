@@ -1,8 +1,12 @@
 module system.crypto;
 
-// SHA-512 digest of `data` (64 bytes).
-
+// SHA-512 digest (64-byte output). Host-backed via `Dream.cryptoSha512`.
 public class Sha512 {
     @js("Dream", "cryptoSha512")
-    static extern fun hash(data: byte[]): byte[];
+    static extern fun hash_host(data: byte[]): byte[];
+
+    // Digests `data` and returns the 64-byte hash.
+    public static fun hash(data: byte[]): byte[] {
+        return Sha512.hash_host(data);
+    }
 }

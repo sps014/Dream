@@ -5,5 +5,5 @@ import system;
 fun main(): void {
     let xs = Buffer.alloc<int>(3);
     xs = Buffer.realloc<int>(xs, 5);
-    System.println(xs.size);
+    System.println(xs.length);
 }

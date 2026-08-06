@@ -96,11 +96,11 @@ let p = Math.pow(2.0, 3.0);                                  // 8.0
 
 ## `size`
 
-`size()` is the element-count method shared by arrays, strings, `List`, `Map`, and `Set`, so every collection is queried the same way:
+`length` is the element-count method shared by arrays, strings, `List`, `Map`, and `Set`, so every collection is queried the same way:
 
 ```dream
-System.println([10, 20, 30].size);   // 3
-System.println("hello".size);        // 5
+System.println([10, 20, 30].length);   // 3
+System.println("hello".length);        // 5
 ```
 
 ## `Buffer.alloc`

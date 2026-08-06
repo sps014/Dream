@@ -40,7 +40,7 @@ extend double : Comparable<double> {
 
     // Parses a decimal double from `text`.
     public static fun parse(text: string): Result<double, ParseError> {
-        let n = text.size;
+        let n = text.length;
         if (n == 0) {
             return Result.Err(ParseError.invalid("cannot parse double from empty string"));
         }

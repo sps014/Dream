@@ -10,8 +10,8 @@ public class Stack<T> : Collection<T> {
     }
 
     // Number of elements currently stored.
-    public get size(): int {
-        return this.items.size;
+    public get length(): int {
+        return this.items.length;
     }
 
     // Pushes `value` onto the top of the stack.
@@ -26,7 +26,7 @@ public class Stack<T> : Collection<T> {
 
     // Returns the top element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
-        return this.items.get(this.items.size - 1);
+        return this.items.get(this.items.length - 1);
     }
 
     // Removes every element.

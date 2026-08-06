@@ -7,13 +7,13 @@ fun main(): void {
     p.set(0, 10);
     p.set(1, 20);
     p.set(2, 30);
-    System.println(p.size);   // 3
+    System.println(p.length);   // 3
     System.println(p.get(0));  // 10
     System.println(p.get(1));  // 20
     System.println(p.get(2));  // 30
 
     p.realloc(5);
-    System.println(p.size);   // 5
+    System.println(p.length);   // 5
     System.println(p.get(0));  // 10 (preserved)
     System.println(p.get(3));  // 0 (zero-filled tail)
 

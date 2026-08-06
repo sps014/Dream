@@ -80,7 +80,7 @@ fun render_playlist(): void {
     playlist_el.innerHTML = "";
 
     let i = 0;
-    while (i < tracks.size) {
+    while (i < tracks.length) {
         let track = tracks[i];
 
         let row = doc.createElement("li");
@@ -122,7 +122,7 @@ fun render_playlist(): void {
 
 // Loads `index` (wrapping around the playlist) into the `<audio>` element and refreshes the UI.
 fun load_track(index: int): void {
-    let count = tracks.size;
+    let count = tracks.length;
     let wrapped = ((index % count) + count) % count;
     current_index = wrapped;
 

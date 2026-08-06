@@ -7,7 +7,7 @@ import system;
 import system.collections;
 import system.text;
 fun take_list(xs: List<int>): int {
-    return xs.size;
+    return xs.length;
 }
 
 fun make_set(): Set<string> {
@@ -16,43 +16,43 @@ fun make_set(): Set<string> {
 
 fun main(): void {
     let xs: List<int> = [1, 2, 3];
-    System.println(xs.size);
+    System.println(xs.length);
     System.println(xs.get(0).unwrap_or(-1));
     System.println(xs.get(2).unwrap_or(-1));
 
     // Plain `T[]` array literals are unaffected by the `List<T>` sugar.
     let raw: int[] = [4, 5, 6];
-    System.println(raw.size);
+    System.println(raw.length);
     System.println(raw[1]);
 
     let ys: Set<string> = {"a", "b", "c", "a"};
-    System.println(ys.size);
+    System.println(ys.length);
     System.println(ys.contains("b"));
     System.println(ys.contains("z"));
 
     let m: Map<string, int> = {"a": 1, "b": 2};
-    System.println(m.size);
+    System.println(m.length);
     System.println(m.get("a").unwrap_or(-1));
     System.println(m.get("b").unwrap_or(-1));
     System.println(m.contains("c"));
 
     // Empty literals: the element/key/value type comes entirely from context.
     let empty_list: List<int> = [];
-    System.println(empty_list.size);
+    System.println(empty_list.length);
 
     let empty_set: Set<int> = {};
-    System.println(empty_set.size);
+    System.println(empty_set.length);
 
     let empty_map: Map<string, int> = {};
-    System.println(empty_map.size);
+    System.println(empty_map.length);
 
     // A literal used directly as a call argument or return value.
     System.println(take_list([10, 20, 30, 40]));
-    System.println(make_set().size);
+    System.println(make_set().length);
 
     // Nested `List<List<int>>`.
     let nested: List<List<int>> = [[1, 2], [3]];
-    System.println(nested.size);
-    System.println(nested.get(0).unwrap_or(List<int>(0)).size);
-    System.println(nested.get(1).unwrap_or(List<int>(0)).size);
+    System.println(nested.length);
+    System.println(nested.get(0).unwrap_or(List<int>(0)).length);
+    System.println(nested.get(1).unwrap_or(List<int>(0)).length);
 }

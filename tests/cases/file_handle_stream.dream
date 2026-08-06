@@ -39,7 +39,7 @@ async fun main(): void {
         Err(e) => FileHandle(0, ""),
     };
     let chunk = await reader.read_async(5);
-    System.println(chunk.unwrap_or(Buffer.alloc<byte>(0)).size);
+    System.println(chunk.unwrap_or(Buffer.alloc<byte>(0)).length);
     reader.close();
 
     await File.delete(path);

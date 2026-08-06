@@ -48,8 +48,8 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     }
 
     // Number of stored header pairs.
-    public get size(): int {
-        return this.keys.size;
+    public get length(): int {
+        return this.keys.length;
     }
 
     // Iterates `(name, value)` pairs in insertion order.
@@ -57,7 +57,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     public fun iterator(): ListIterator<KeyValuePair<string, string>> {
         let pairs = List<KeyValuePair<string, string>>();
         let i = 0;
-        while (i < this.keys.size) {
+        while (i < this.keys.length) {
             pairs.push(KeyValuePair<string, string>(
                 this.keys.get(i).unwrap_or(""),
                 this.values.get(i).unwrap_or("")
@@ -71,7 +71,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     public fun to_wire(): string {
         let obj = JsonValue.dict();
         let i = 0;
-        while (i < this.keys.size) {
+        while (i < this.keys.length) {
             obj.set(
                 this.keys.get(i).unwrap_or(""),
                 JsonValue.from_string(this.values.get(i).unwrap_or(""))
@@ -92,7 +92,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
             Ok(v) => {
                 let keys = v.keys();
                 let i = 0;
-                while (i < keys.size) {
+                while (i < keys.length) {
                     let key = keys.get(i).unwrap_or("");
                     headers.set(key, v.get(key).unwrap_or(JsonValue.none()).as_string().unwrap_or(""));
                     i = i + 1;
@@ -106,7 +106,7 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     fun _find(name: string): int {
         let want = name.to_lower();
         let i = 0;
-        while (i < this.keys.size) {
+        while (i < this.keys.length) {
             if (this.keys.get(i).unwrap_or("").to_lower() == want) {
                 return i;
             }

@@ -1,8 +1,9 @@
 module system.gpu;
 
-/// Fixed-function render helpers (v1: fullscreen blit only).
+// Fixed-function render helpers (v1: fullscreen blit only).
 
 public class GpuRenderPass {
+    // Blits `source` onto `surface` (fullscreen).
     public static async fun blit(surface: GpuSurface, source: GpuTexture): Result<bool, GpuError> {
         let code = await Gpu.render_blit(surface.id, source.id);
         if (code == 0) { return Result.Ok(true); }

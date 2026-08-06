@@ -1,6 +1,6 @@
 module system.gpu;
 
-/// Math helpers; inside `@compute` the WGSL emitter maps these names to WGSL builtins.
+// Math helpers; inside `@compute` the WGSL emitter maps these names to WGSL builtins.
 
 public class GpuMath {
     public static fun min(a: float, b: float): float {

@@ -15,6 +15,7 @@ public struct Pointer<T> {
     // reference, and `free()` releases it directly, regardless of the stored count.
     buf: T[];
 
+    // Wraps an existing block; prefer `alloc` for a fresh pointer.
     public constructor(buf: T[]) {
         this.buf = buf;
     }
@@ -26,8 +27,8 @@ public struct Pointer<T> {
     }
 
     // Number of elements currently addressable through this pointer.
-    public get size(): int {
-        return this.buf.size;
+    public get length(): int {
+        return this.buf.length;
     }
 
     // Bounds-checked read (traps if `index` is out of range, exactly like `T[]` indexing).

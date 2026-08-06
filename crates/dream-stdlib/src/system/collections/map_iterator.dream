@@ -6,15 +6,17 @@ public class MapIterator<K, V> : Iterator<KeyValuePair<K, V>> {
     values: V[];
     idx: int;
 
+    // Iterates parallel `keys`/`values` snapshots from index 0.
     public constructor(keys: K[], values: V[]) {
         this.keys = keys;
         this.values = values;
         this.idx = 0;
     }
 
+    // Returns the next key/value pair, or `None` if exhausted.
     @next
     public fun next(): Option<KeyValuePair<K, V>> {
-        if (this.idx >= this.keys.size) {
+        if (this.idx >= this.keys.length) {
             return Option.None;
         }
         let pair = KeyValuePair<K, V>(this.keys[this.idx], this.values[this.idx]);

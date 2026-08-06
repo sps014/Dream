@@ -21,7 +21,7 @@ public class Bytes {
     // Used to carry an arbitrary byte buffer over a channel that only understands `string`s (the
     // `WebWorker` wire), without needing a second, binary-native transport.
     public static fun toWireString(bytes: byte[]): string {
-        let n = bytes.size;
+        let n = bytes.length;
         let s = string.alloc(n);
         for (let i = 0; i < n; i = i + 1) {
             string.set(s, i, (char)bytes[i]);
@@ -31,7 +31,7 @@ public class Bytes {
 
     // The inverse of `toWireString`.
     public static fun fromWireString(s: string): byte[] {
-        let n = s.size;
+        let n = s.length;
         let out = Buffer.alloc<byte>(n);
         for (let i = 0; i < n; i = i + 1) {
             out[i] = (byte)s.char_at(i).to_int();

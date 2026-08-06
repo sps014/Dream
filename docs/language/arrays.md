@@ -19,10 +19,10 @@ nums[2] = 99;          // [1, 2, 99, 4, 5]
 
 ## Size
 
-`.size` returns the element count. It is the same `size()` that `List` and `Map` expose, so every collection is measured the same way:
+`.length` returns the element count. It is the same `size()` that `List` and `Map` expose, so every collection is measured the same way:
 
 ```dream
-let count = nums.size;   // 5
+let count = nums.length;   // 5
 ```
 
 ## Passing to functions
@@ -32,7 +32,7 @@ Because arrays are references, a function sees the caller's buffer directly:
 ```dream
 fun fill_zeros(arr: int[]): void {
     let i = 0;
-    while (i < arr.size) {
+    while (i < arr.length) {
         arr[i] = 0;
         i = i + 1;
     }
@@ -50,8 +50,8 @@ let pts: Point[] = [ Point(0, 0), Point(1, 2) ];
 println(pts[1].x);   // 1
 
 let grid: int[][] = [[1, 2, 3], [4, 5, 6]];
-println(grid.size);      // 2  (rows)
-println(grid[0].size);   // 3  (columns)
+println(grid.length);      // 2  (rows)
+println(grid[0].length);   // 3  (columns)
 println(grid[1][2]);       // 6
 ```
 
@@ -96,7 +96,7 @@ fun scratch(): void {
     println(p.get(0));               // 10
 
     p.realloc(8);                    // grow in place; [0..4) preserved, [4..8) zeroed
-    println(p.size);                // 8
+    println(p.length);                // 8
 
     p.free();                        // returns the block to the allocator immediately
 }
@@ -117,7 +117,7 @@ import system.collections;
 let xs = List<int>();
 xs.push(10);
 xs.push(20);
-System.println(xs.size);                // 2
+System.println(xs.length);                // 2
 System.println(xs.get(0).unwrap_or(-1));  // 10
 ```
 
@@ -140,7 +140,7 @@ System.println(ys.binary_search(2).unwrap_or(-1));  // 1
 
 ```dream
 fun total_size(xs: Collection<string>): int {
-    return xs.size;
+    return xs.length;
 }
 
 fun sum(xs: Collection<int>): int {

@@ -6,7 +6,7 @@ fun main(): void {
     
     // Test size and is_empty
     System.println("Empty? " + s.is_empty());
-    System.println("Size: " + s.size);
+    System.println("Size: " + s.length);
     
     // Test additions
     System.println("Add 1: " + s.add(1));
@@ -18,7 +18,7 @@ fun main(): void {
     
     // Test properties again
     System.println("Empty? " + s.is_empty());
-    System.println("Size: " + s.size);
+    System.println("Size: " + s.length);
     
     // Test contains
     System.println("Contains 1: " + s.contains(1));
@@ -28,7 +28,7 @@ fun main(): void {
     System.println("Remove 2: " + s.remove(2));
     System.println("Remove 4: " + s.remove(4));
     System.println("Contains 2: " + s.contains(2));
-    System.println("Size after remove: " + s.size);
+    System.println("Size after remove: " + s.length);
 
     // Test iteration (use a list to sort since order isn't guaranteed)
     let l = List<int>();
@@ -37,12 +37,12 @@ fun main(): void {
     }
     l.sort();
     
-    System.println("Iterated: " + l.size);
+    System.println("Iterated: " + l.length);
     for (let x in l) {
         System.println("Elem: " + x);
     }
     
     // Test clear
     s.clear();
-    System.println("Size after clear: " + s.size);
+    System.println("Size after clear: " + s.length);
 }

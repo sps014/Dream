@@ -5,14 +5,14 @@
 import system;
 interface Container<T> {
     fun get(): T;
-    get size(): int;
+    get length(): int;
 }
 
 class Box<T> : Container<T> {
     public value: T;
     public constructor(value: T) { this.value = value; }
     public fun get(): T { return this.value; }
-    public get size(): int { return 1; }
+    public get length(): int { return 1; }
 }
 
 class Pair<T> : Container<T> {
@@ -20,13 +20,13 @@ class Pair<T> : Container<T> {
     public second: T;
     public constructor(first: T, second: T) { this.first = first; this.second = second; }
     public fun get(): T { return this.first; }
-    public get size(): int { return 2; }
+    public get length(): int { return 2; }
 }
 
 // Implicit upcast Box<int>/Pair<int> -> Container<int>; the call dispatches dynamically.
 fun describe(c: Container<int>): void {
     System.println(c.get());
-    System.println(c.size);
+    System.println(c.length);
 }
 
 fun main(): void {

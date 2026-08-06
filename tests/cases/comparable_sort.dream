@@ -59,7 +59,7 @@ fun main(): void {
     prices.push(Money(200));
     prices.sort();
     let i = 0;
-    while (i < prices.size) {
+    while (i < prices.length) {
         System.println(prices.get(i).unwrap_or(Money(-1)).cents);
         i = i + 1;
     }
@@ -71,7 +71,7 @@ fun main(): void {
     vs.push(Vec2(0, 2));   // magnitude 4
     vs.sort();
     let j = 0;
-    while (j < vs.size) {
+    while (j < vs.length) {
         let v = vs.get(j).unwrap_or(Vec2(0, 0));
         System.println(v.x * v.x + v.y * v.y);
         j = j + 1;

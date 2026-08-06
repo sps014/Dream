@@ -5,6 +5,7 @@ public class SetIterator<T> : Iterator<T> {
     elements: T[];
     index: int;
 
+    // Iterates a dense snapshot of set elements from index 0.
     public constructor(elements: T[]) {
         this.elements = elements;
         this.index = 0;
@@ -13,7 +14,7 @@ public class SetIterator<T> : Iterator<T> {
     // Returns the next element, or `None` if exhausted.
     @next
     public fun next(): Option<T> {
-        if (this.index >= this.elements.size) {
+        if (this.index >= this.elements.length) {
             return Option.None;
         }
         let val = this.elements[this.index];

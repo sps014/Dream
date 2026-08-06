@@ -1,11 +1,12 @@
 module system.gpu;
 
-/// Pack little-endian scalar uniforms for `Compute.run_*` extra uniform blobs.
+// Pack little-endian scalar uniforms for `Compute.run_*` extra uniform blobs.
 
 public class Uniforms {
+    // Packs `int` values as little-endian i32 bytes.
     public static fun pack_i32(values: int[]): byte[] {
-        let out = Buffer.alloc<byte>(values.size * 4);
-        for (let i = 0; i < values.size; i = i + 1) {
+        let out = Buffer.alloc<byte>(values.length * 4);
+        for (let i = 0; i < values.length; i = i + 1) {
             let v = values[i];
             out[i * 4] = (byte)(v & 255);
             out[i * 4 + 1] = (byte)((v >> 8) & 255);
@@ -15,9 +16,10 @@ public class Uniforms {
         return out;
     }
 
+    // Packs `float` values as IEEE-754 little-endian f32 bytes.
     public static fun pack_f32(values: float[]): byte[] {
-        let out = Buffer.alloc<byte>(values.size * 4);
-        for (let i = 0; i < values.size; i = i + 1) {
+        let out = Buffer.alloc<byte>(values.length * 4);
+        for (let i = 0; i < values.length; i = i + 1) {
             let eb = Bytes.of(values[i]);
             for (let j = 0; j < 4; j = j + 1) {
                 out[i * 4 + j] = eb[j];

@@ -18,5 +18,5 @@ fun main(): void {
     System.println(parsed.get("age").unwrap_or(none).as_int().unwrap_or(0));
     System.println(parsed.get("tags").unwrap_or(none).at(1).unwrap_or(none).as_string().unwrap_or(""));
     System.println(parsed.get("active").unwrap_or(none).as_bool().unwrap_or(false));
-    System.println(parsed.get("tags").unwrap_or(none).size);
+    System.println(parsed.get("tags").unwrap_or(none).length);
 }

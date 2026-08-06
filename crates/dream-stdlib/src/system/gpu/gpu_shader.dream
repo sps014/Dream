@@ -1,10 +1,11 @@
 module system.gpu;
 
-/// Raw WGSL shader handle (escape hatch).
+// Raw WGSL shader handle (escape hatch).
 
 public class GpuShader {
     public id: int;
 
+    // Compiles WGSL `source` and binds entry point `entry`.
     public static fun from_wgsl(source: string, entry: string): GpuShader {
         let s = GpuShader();
         s.id = Gpu.shader_from_wgsl(source, entry);

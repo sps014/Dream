@@ -1,12 +1,13 @@
 module system.gpu;
 
-/// RGBA8 texture (storage / blit source).
+// RGBA8 texture (storage / blit source).
 
 public class GpuTexture {
     public id: int;
     public width: int;
     public height: int;
 
+    // Allocates an empty RGBA8 texture of `width`×`height`.
     public static fun rgba8(width: int, height: int): GpuTexture {
         let t = GpuTexture();
         t.id = Gpu.texture_create_rgba8(width, height);
@@ -15,12 +16,14 @@ public class GpuTexture {
         return t;
     }
 
+    // Uploads a full-texture RGBA8 pixel buffer.
     public async fun write_rgba(pixels: byte[]): Result<bool, GpuError> {
         let code = await Gpu.texture_write_rgba(this.id, pixels, 0, 0, this.width, this.height);
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "texture write failed"));
     }
 
+    // Uploads an RGBA8 sub-rectangle at (`x`, `y`) of size `w`×`h`.
     public async fun write_rgba_at(
         x: int,
         y: int,
@@ -33,6 +36,7 @@ public class GpuTexture {
         return Result.Err(GpuError.from_code(code, "texture write_at failed"));
     }
 
+    // Downloads the full texture as RGBA8 bytes.
     public async fun read_rgba(): byte[] {
         return await Gpu.texture_read_rgba(this.id);
     }

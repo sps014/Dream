@@ -26,7 +26,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Number of key/value pairs currently stored.
-    public get size(): int {
+    public get length(): int {
         return this.count;
     }
 
@@ -148,9 +148,9 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // map-literal syntax lowers to via `from_arrays`, so a literal with N entries costs one call to
     // build each backing array plus one call here, not N `set` calls.
     public fun set_all(keys: K[], values: V[]): void {
-        let n = keys.size;
-        if (values.size < n) {
-            n = values.size;
+        let n = keys.length;
+        if (values.length < n) {
+            n = values.length;
         }
         let i = 0;
         while (i < n) {
@@ -162,7 +162,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // Builds a map from parallel `keys`/`values` arrays. The `{k1: v1, k2: v2, ...}` map-literal
     // syntax (e.g. `let m: Map<string, int> = {"a": 1, "b": 2};`) desugars to this.
     public static fun from_arrays(keys: K[], values: V[]): Map<K, V> {
-        let result = Map<K, V>(keys.size);
+        let result = Map<K, V>(keys.length);
         result.set_all(keys, values);
         return result;
     }

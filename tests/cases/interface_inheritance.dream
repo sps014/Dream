@@ -5,11 +5,11 @@ import system.collections;
 // as Collection, and IndexedCollection-typed values expose inherited size/is_empty.
 
 fun as_collection(xs: Collection<int>): int {
-    return xs.size;
+    return xs.length;
 }
 
 fun as_indexed(xs: IndexedCollection<int>): int {
-    let n = xs.size;
+    let n = xs.length;
     let first = xs.first().unwrap_or(-1);
     return n + first;
 }

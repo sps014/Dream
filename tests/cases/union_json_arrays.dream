@@ -28,7 +28,7 @@ fun main(): void {
     let m2 = Json.deserialize<Tags>(Json.serialize(m)).unwrap_or(m);
     switch (m2) {
         Many(items) => {
-            System.println(items.size);
+            System.println(items.length);
             System.println(items[0]);
             System.println(items[1]);
         }

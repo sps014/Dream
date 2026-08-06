@@ -10,7 +10,7 @@ fun main(): void {
     sb.append("Hello, ");
     sb.append("world");
     sb.append_char('!');
-    System.println(sb.size);
+    System.println(sb.length);
     System.println(sb.is_empty());
     System.println(sb.build());
 
@@ -31,5 +31,5 @@ fun main(): void {
         sb2.append_char('x');
         i = i + 1;
     }
-    System.println(sb2.size);
+    System.println(sb2.length);
 }

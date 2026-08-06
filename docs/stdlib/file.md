@@ -45,7 +45,7 @@ async fun main(): void {
         System.println(File.size("notes.txt").unwrap_or(0L - 1L));   // bytes; -1 if missing
     }
     let entries = await File.list(".");
-    System.println(entries.size);
+    System.println(entries.length);
 }
 ```
 

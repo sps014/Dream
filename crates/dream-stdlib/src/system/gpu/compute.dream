@@ -1,8 +1,9 @@
 module system.gpu;
 
-/// High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
+// High-level compute dispatch by kernel name (see `.abi.json` `"gpu"` section).
 
 public class Compute {
+    // Dispatches `kernel` over a 1D grid of size `n`.
     public static async fun run_1d(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -11,6 +12,7 @@ public class Compute {
         return await Compute.run_3d(kernel, buffers, n, 1, 1, Buffer.alloc<byte>(0));
     }
 
+    // Dispatches `kernel` over a 2D grid of size `w`×`h`.
     public static async fun run_2d(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -20,6 +22,7 @@ public class Compute {
         return await Compute.run_3d(kernel, buffers, w, h, 1, Buffer.alloc<byte>(0));
     }
 
+    // Like `run_2d`, with a little-endian uniform blob.
     public static async fun run_2d_uniforms(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -30,6 +33,7 @@ public class Compute {
         return await Compute.run_3d(kernel, buffers, w, h, 1, uniforms);
     }
 
+    // Dispatches `kernel` over a 3D grid with optional uniforms.
     public static async fun run_3d(
         kernel: string,
         buffers: GpuBuffer<float>[],
@@ -38,8 +42,8 @@ public class Compute {
         sz: int,
         uniforms: byte[]
     ): Result<bool, GpuError> {
-        let ids = Buffer.alloc<int>(buffers.size);
-        for (let i = 0; i < buffers.size; i = i + 1) {
+        let ids = Buffer.alloc<int>(buffers.length);
+        for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
         }
         let code = await Gpu.dispatch(kernel, ids, sx, sy, sz, uniforms);
@@ -47,6 +51,7 @@ public class Compute {
         return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
     }
 
+    // Dispatches a raw `GpuShader` over a 3D workgroup grid.
     public static async fun run_shader(
         shader: GpuShader,
         buffers: GpuBuffer<float>[],
@@ -54,8 +59,8 @@ public class Compute {
         wy: int,
         wz: int
     ): Result<bool, GpuError> {
-        let ids = Buffer.alloc<int>(buffers.size);
-        for (let i = 0; i < buffers.size; i = i + 1) {
+        let ids = Buffer.alloc<int>(buffers.length);
+        for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
         }
         let code = await Gpu.dispatch_shader(shader.id, ids, wx, wy, wz);

@@ -707,7 +707,7 @@ fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
         }
         ExpressionNode::MemberAccess(obj, member) => {
             let base = emit_expr(obj, ctx);
-            if member.text == "len" || member.text == "size" {
+            if member.text == "length" {
                 format!("i32(arrayLength(&{}))", base)
             } else {
                 format!("{}.{}", base, member.text)
@@ -715,7 +715,7 @@ fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
         }
         ExpressionNode::FunctionCall(name, _, args) => emit_call(&name.text, args, ctx),
         ExpressionNode::MethodCall(obj, method, _, args) => {
-            if method.text == "size" || method.text == "len" {
+            if method.text == "length" {
                 format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
             } else {
                 emit_call(&method.text, args, ctx)
@@ -724,7 +724,7 @@ fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
         ExpressionNode::Call(callee, _, args) => match &**callee {
             ExpressionNode::Identifier(n) => emit_call(&n.text, args, ctx),
             ExpressionNode::MemberAccess(obj, method) => {
-                if method.text == "size" || method.text == "len" {
+                if method.text == "length" {
                     format!("i32(arrayLength(&{}))", emit_expr(obj, ctx))
                 } else {
                     emit_call(&method.text, args, ctx)

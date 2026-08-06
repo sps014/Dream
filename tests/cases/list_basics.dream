@@ -6,13 +6,13 @@ fun main(): void {
     xs.push(10);
     xs.push(20);
     xs.push(30);
-    System.println(xs.size);
+    System.println(xs.length);
     System.println(xs.get(0).unwrap_or(0 - 1));
     System.println(xs.get(2).unwrap_or(0 - 1));
     xs.set(1, 99);
     System.println(xs.get(1).unwrap_or(0 - 1));
     System.println(xs.pop().unwrap_or(0 - 1));
-    System.println(xs.size);
+    System.println(xs.length);
     System.println(xs.index_of(99).unwrap_or(0 - 1));
     System.print(xs.contains(99));
     System.print("\n");
@@ -24,12 +24,12 @@ fun main(): void {
         xs.push(i);
         i = i + 1;
     }
-    System.println(xs.size);
+    System.println(xs.length);
     System.println(xs.get(51).unwrap_or(0 - 1));
 
     xs.remove_at(0);
     System.println(xs.get(0).unwrap_or(0 - 1));
-    System.println(xs.size);
+    System.println(xs.length);
 
     let names = List<string>();
     names.push("alpha");

@@ -13,6 +13,7 @@ public class Json {
     @intrinsic("json_from_value")
     static extern fun from_value<T>(value: JsonValue): T;
 
+    // Compact stringify of a dynamic `JsonValue` tree.
     public static fun stringify(value: JsonValue): string {
         return Json._json_stringify(value);
     }
@@ -26,11 +27,12 @@ public class Json {
         return Json._json_stringify_pretty(value, indent, 0);
     }
 
+    // Parses `text` into a dynamic `JsonValue` tree.
     public static fun parse(text: string): Result<JsonValue, ParseError> {
         if (text.is_empty()) {
             return Result.Err(ParseError.invalid("empty JSON input"));
         }
-        let parser = JsonParser(text, 0, text.size);
+        let parser = JsonParser(text, 0, text.length);
         let value = parser.parse_value();
         if (parser.at_end() == false) {
             return Result.Err(ParseError.invalid("trailing characters after JSON value"));
@@ -43,7 +45,7 @@ public class Json {
 
     // Wraps `s` in quotes, escaping the characters JSON requires.
     static fun _json_escape(s: string): string {
-        let n = s.size;
+        let n = s.length;
         let result = "\"";
         let i = 0;
         while (i < n) {
@@ -98,7 +100,7 @@ public class Json {
         if (k == 4) {
             let result = "[";
             let i = 0;
-            while (i < v.items.size) {
+            while (i < v.items.length) {
                 if (i > 0) {
                     result = result + ",";
                 }
@@ -111,7 +113,7 @@ public class Json {
         if (k == 5) {
             let result = "{";
             let i = 0;
-            while (i < v.obj_keys.size) {
+            while (i < v.obj_keys.length) {
                 if (i > 0) {
                     result = result + ",";
                 }
@@ -143,14 +145,14 @@ public class Json {
     static fun _json_stringify_pretty(v: JsonValue, indent: int, depth: int): string {
         let k = v.kind;
         if (k == 4) {
-            if (v.items.size == 0) {
+            if (v.items.length == 0) {
                 return "[]";
             }
             let pad = Json._json_spaces(indent * (depth + 1));
             let pad_end = Json._json_spaces(indent * depth);
             let result = "[\n";
             let i = 0;
-            while (i < v.items.size) {
+            while (i < v.items.length) {
                 if (i > 0) {
                     result = result + ",\n";
                 }
@@ -161,14 +163,14 @@ public class Json {
             return result;
         }
         if (k == 5) {
-            if (v.obj_keys.size == 0) {
+            if (v.obj_keys.length == 0) {
                 return "{}";
             }
             let pad = Json._json_spaces(indent * (depth + 1));
             let pad_end = Json._json_spaces(indent * depth);
             let result = "{\n";
             let i = 0;
-            while (i < v.obj_keys.size) {
+            while (i < v.obj_keys.length) {
                 if (i > 0) {
                     result = result + ",\n";
                 }

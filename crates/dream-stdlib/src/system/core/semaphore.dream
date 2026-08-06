@@ -1,8 +1,10 @@
 module system.core;
 
+// Counting semaphore for limiting concurrent access to a shared resource.
 public class Semaphore {
     permits: int;
 
+    // Creates a semaphore with `initial` available permits.
     public constructor(initial: int) {
         this.permits = initial;
     }

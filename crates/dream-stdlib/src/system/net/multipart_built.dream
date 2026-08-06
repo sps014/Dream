@@ -8,6 +8,7 @@ public class MultipartBuilt {
     // Encoded multipart body.
     public body: byte[];
 
+    // Packs the Content-Type headers and encoded body from `MultipartForm.build`.
     public constructor(headers: HttpHeaders, body: byte[]) {
         this.headers = headers;
         this.body = body;

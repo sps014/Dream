@@ -1,14 +1,17 @@
 module system.json;
 
+// One variant of a `@json` discriminated union.
 public class GenVariant {
     public name: string;
     public fields: List<GenField>;
 
+    // Builds a variant snapshot from SemanticModel data.
     public constructor(name: string, fields: List<GenField>) {
         this.name = name;
         this.fields = fields;
     }
 
+    // Convenience factory matching the constructor arguments.
     public static fun make(name: string, fields: List<GenField>): GenVariant {
         return GenVariant(name, fields);
     }

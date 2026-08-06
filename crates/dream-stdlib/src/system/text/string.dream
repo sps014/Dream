@@ -5,8 +5,8 @@ module system.text;
 extend string : Comparable<string> {
     // Orders this string against `other` lexicographically.
     public fun compare(other: string): int {
-        let n = this.size;
-        let m = other.size;
+        let n = this.length;
+        let m = other.length;
         let i = 0;
         while ((i < n) && (i < m)) {
             let a = this.char_at(i);
@@ -30,7 +30,7 @@ extend string : Comparable<string> {
 
     // True when the string has no characters.
     public fun is_empty(): bool {
-        return this.size == 0;
+        return this.length == 0;
     }
 
     // Gets the character at the specified index.
@@ -62,7 +62,7 @@ extend string : Comparable<string> {
 
     // The index of the first occurrence of `target`, or `None`.
     public fun index_of(target: char): Option<int> {
-        let n = this.size;
+        let n = this.length;
         let i = 0;
         while (i < n) {
             if (this.char_at(i) == target) {
@@ -75,8 +75,8 @@ extend string : Comparable<string> {
 
     // The index of the first occurrence of substring `sub`, or `None`.
     public fun index_of(sub: string): Option<int> {
-        let n = this.size;
-        let m = sub.size;
+        let n = this.length;
+        let m = sub.length;
         if (m == 0) {
             return Option.Some(0);
         }
@@ -95,8 +95,8 @@ extend string : Comparable<string> {
 
     // True if `sub` occurs anywhere in this string.
     public fun contains(sub: string): bool {
-        let n = this.size;
-        let m = sub.size;
+        let n = this.length;
+        let m = sub.length;
         if (m == 0) {
             return true;
         }
@@ -115,7 +115,7 @@ extend string : Comparable<string> {
 
     // True if this string begins with `prefix`.
     public fun starts_with(prefix: string): bool {
-        if (prefix.size > this.size) {
+        if (prefix.length > this.length) {
             return false;
         }
         return this._matches_at(prefix, 0);
@@ -123,7 +123,7 @@ extend string : Comparable<string> {
 
     // True if this string ends with `suffix`.
     public fun ends_with(suffix: string): bool {
-        let offset = this.size - suffix.size;
+        let offset = this.length - suffix.length;
         if (offset < 0) {
             return false;
         }
@@ -132,7 +132,7 @@ extend string : Comparable<string> {
 
     // A new string with every uppercase letter lowercased.
     public fun to_lower(): string {
-        let n = this.size;
+        let n = this.length;
         let result = string.alloc(n);
         let i = 0;
         while (i < n) {
@@ -145,7 +145,7 @@ extend string : Comparable<string> {
 
     // A new string with every lowercase letter uppercased.
     public fun to_upper(): string {
-        let n = this.size;
+        let n = this.length;
         let result = string.alloc(n);
         let i = 0;
         while (i < n) {
@@ -173,7 +173,7 @@ extend string : Comparable<string> {
 
     // A new string with leading and trailing whitespace removed.
     public fun trim(): string {
-        let n = this.size;
+        let n = this.length;
         let start = 0;
         while ((start < n) && (this._is_space_at(start) == true)) {
             start = start + 1;
@@ -187,7 +187,7 @@ extend string : Comparable<string> {
 
     // A new string repeated `times` times.
     public fun repeat(times: int): string {
-        let n = this.size;
+        let n = this.length;
         let total = n * times;
         if (total < 0) {
             total = 0;
@@ -212,7 +212,7 @@ extend string : Comparable<string> {
 
     // Splits this string on the single character `sep`.
     public fun split(sep: char): string[] {
-        let n = this.size;
+        let n = this.length;
         let parts = 1;
         let i = 0;
         while (i < n) {
@@ -239,7 +239,7 @@ extend string : Comparable<string> {
 
     // Splits this string on every occurrence of substring `sep`.
     public fun split(sep: string): string[] {
-        let m = sep.size;
+        let m = sep.length;
         if (m == 0) {
             let one = Buffer.alloc<string>(1);
             one[0] = this;
@@ -248,7 +248,7 @@ extend string : Comparable<string> {
         if (m == 1) {
             return this.split(sep.char_at(0));
         }
-        let n = this.size;
+        let n = this.length;
         let parts = 1;
         let i = 0;
         while ((i + m) <= n) {
@@ -279,11 +279,11 @@ extend string : Comparable<string> {
 
     // A new string with every occurrence of `old` replaced by `replacement`.
     public fun replace(old: string, replacement: string): string {
-        let m = old.size;
+        let m = old.length;
         if (m == 0) {
             return this;
         }
-        let n = this.size;
+        let n = this.length;
         let result = "";
         let i = 0;
         while (i < n) {
@@ -304,7 +304,7 @@ extend string : Comparable<string> {
     }
 
     fun _matches_at(sub: string, offset: int): bool {
-        let m = sub.size;
+        let m = sub.length;
         let j = 0;
         while (j < m) {
             if (this.char_at(offset + j) != sub.char_at(j)) {

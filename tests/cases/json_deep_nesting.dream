@@ -80,7 +80,7 @@ fun main(): void {
     System.println(back.lead.company.address.city);
     System.println(back.lead.company.address.geo.lat);
     System.println(back.lead.tags[1]);
-    System.println(back.members.size);
+    System.println(back.members.length);
     System.println(back.members[0].name);
     System.println(back.members[1].company.address.geo.lng);
     System.println(back.members[1].age);

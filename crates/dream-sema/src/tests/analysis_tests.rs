@@ -754,13 +754,13 @@ fn test_static_getter_type_mismatch_is_reported() {
 
 #[test]
 fn test_array_size_builtin_ok() {
-    // `arr.size` is the builtin element-count property on arrays, typed `int` (the same `size`
+    // `arr.length` is the builtin element-count property on arrays, typed `int` (the same `size`
     // the stdlib collections expose). Cross-collection consistency is covered by the
     // `size_consistent` e2e case.
     let code = "
         fun main(): void {
             let a = [10, 20, 30];
-            let n: int = a.size;
+            let n: int = a.length;
         }
     ";
     let diagnostics = analyze_code(code);
@@ -938,13 +938,13 @@ fn test_generic_interface_monomorphized_ok() {
     let code = "
         interface Container<T> {
             fun get(): T;
-            fun size(): int;
+            get length(): int;
         }
         class Box<T> : Container<T> {
             public value: T;
             public constructor(value: T) { this.value = value; }
             public fun get(): T { return this.value; }
-            public fun size(): int { return 1; }
+            public get length(): int { return 1; }
         }
         fun describe(c: Container<int>): int { return c.get(); }
         fun run(): int {
@@ -969,7 +969,7 @@ fn test_generic_interface_signature_mismatch_errors() {
         }
         fun run(): int {
             let b = Box<string>(\"x\");
-            return b.size;
+            return b.length;
         }
     ";
     let diagnostics = analyze_code(code);

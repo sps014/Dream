@@ -42,7 +42,7 @@ extend uint : Comparable<uint> {
 
     // Parses an unsigned decimal integer from `text`.
     public static fun parse(text: string): Result<uint, ParseError> {
-        let n = text.size;
+        let n = text.length;
         if (n == 0) {
             return Result.Err(ParseError.invalid("cannot parse uint from empty string"));
         }

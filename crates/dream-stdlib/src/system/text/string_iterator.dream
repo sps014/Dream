@@ -13,7 +13,7 @@ public class StringIterator : Iterator<char> {
     // Yields the next character or None.
     @next
     public fun next(): Option<char> {
-        if (this.idx >= this.text.size) {
+        if (this.idx >= this.text.length) {
             return Option.None;
         }
         let value = this.text.char_at(this.idx);

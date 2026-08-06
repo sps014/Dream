@@ -24,7 +24,7 @@ internal class RegexParser {
     public constructor(pattern: string) {
         this.pattern = pattern;
         this.pos = 0;
-        this.n = pattern.size;
+        this.n = pattern.length;
         this.group_count = 0;
     }
 
@@ -472,7 +472,7 @@ internal class RegexParser {
 
     fun append_ranges(dst: List<char>, src: List<char>): void {
         let i = 0;
-        while (i < src.size) {
+        while (i < src.length) {
             dst.push(src.get(i).unwrap_or(' '));
             i = i + 1;
         }

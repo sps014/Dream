@@ -10,7 +10,7 @@ import system.text;
 fun sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
-    while (i < xs.size) {
+    while (i < xs.length) {
         total = total + xs.get(i).unwrap_or(0);
         i = i + 1;
     }
@@ -23,7 +23,7 @@ fun main(): void {
     a.push(10);
     a.push(20);
 
-    System.println(a.size);
+    System.println(a.length);
 
     a.sort();
     for (let x in a) {
@@ -41,7 +41,7 @@ fun main(): void {
 
     let popped = a.pop();
     System.println(popped.unwrap_or(-1));
-    System.println(a.size);
+    System.println(a.length);
 
     // Polymorphism: two independent `List<int>` instances both flow through `IndexedCollection<int>`.
     let b = List<int>();

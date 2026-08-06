@@ -6,7 +6,7 @@ import system;
 fun sum(s: Span<int>): int {
     let total = 0;
     let i = 0;
-    while (i < s.size) {
+    while (i < s.length) {
         total = total + s.get(i);
         i = i + 1;
     }
@@ -17,11 +17,11 @@ fun main(): void {
     let xs = [1, 2, 3, 4, 5];
 
     let whole = Span<int>.of(xs);
-    System.println(whole.size);       // 5
+    System.println(whole.length);       // 5
     System.println(sum(whole));        // 15
 
     let mid = whole.slice(1, 3);       // [2, 3, 4]
-    System.println(mid.size);         // 3
+    System.println(mid.length);         // 3
     System.println(sum(mid));          // 9
 
     // Writing through a span mutates the backing array.
@@ -29,7 +29,7 @@ fun main(): void {
     System.println(xs[1]);             // 20
 
     let copy = mid.to_array();
-    System.println(copy.size);       // 3
+    System.println(copy.length);       // 3
     System.println(copy[0]);           // 20
 
     // A slice nested within a slice.

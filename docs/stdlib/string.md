@@ -15,7 +15,7 @@ import system;
 import system.text;
 
 let s = "aé🙂";
-System.println(s.size);       // 3 (scalars)
+System.println(s.length);       // 3 (scalars)
 System.println(s.byte_size());  // 7 (UTF-8 bytes)
 System.println(s[0]);           // 'a'
 System.println(s.char_at(1));   // 'é'
@@ -106,7 +106,7 @@ Methods:
 - `.append(text)` — append a string.
 - `.append_char(c)` — append a single character.
 - `.append_line(text)` — append a string followed by `\n`.
-- `.size` / `.is_empty()` — character count so far.
+- `.length` / `.is_empty()` — character count so far.
 - `.clear()` — remove everything appended, keeping the backing buffer for reuse.
 - `.build()` — materialize the accumulated characters into a new string.
 

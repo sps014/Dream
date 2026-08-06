@@ -6,14 +6,16 @@ module system.core;
 // List-returning query helpers (`to_list`, `filter`, `map`, …) live in `system.collections`
 // as `extend Collection<T>` so bootstrap does not depend on `List`.
 public interface Collection<T> {
-    get size(): int;
+    get length(): int;
 
     fun iterator(): Iterator<T>;
 
+    // True when the collection has no elements.
     public fun is_empty(): bool {
-        return this.size == 0;
+        return this.length == 0;
     }
 
+    // True when every element satisfies `pred`.
     public fun all(pred: fun(T): bool): bool {
         for (let x in this) {
             if (!pred(x)) {
@@ -23,6 +25,7 @@ public interface Collection<T> {
         return true;
     }
 
+    // True when at least one element satisfies `pred`.
     public fun any(pred: fun(T): bool): bool {
         for (let x in this) {
             if (pred(x)) {
@@ -32,10 +35,12 @@ public interface Collection<T> {
         return false;
     }
 
+    // True when no element satisfies `pred`.
     public fun none(pred: fun(T): bool): bool {
         return !this.any(pred);
     }
 
+    // Counts elements for which `pred` is true.
     public fun count_where(pred: fun(T): bool): int {
         let n = 0;
         for (let x in this) {
@@ -46,6 +51,7 @@ public interface Collection<T> {
         return n;
     }
 
+    // First element for which `pred` is true, or `None`.
     public fun find_where(pred: fun(T): bool): Option<T> {
         for (let x in this) {
             if (pred(x)) {
@@ -55,6 +61,7 @@ public interface Collection<T> {
         return Option.None;
     }
 
+    // Invokes `action` for each element in iteration order.
     public fun for_each(action: fun(T): void): void {
         for (let x in this) {
             action(x);

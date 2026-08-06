@@ -7,6 +7,7 @@ public class Logger {
     level: LogLevel;
     handlers: List<LogHandler>;
 
+    // Creates a logger with the given name at Info level and no handlers.
     public constructor(name: string) {
         this.name = name;
         this.level = LogLevel.Info;
@@ -40,7 +41,7 @@ public class Logger {
         }
         let record = LogRecord(level, this.name, msg, DateTime.utc_now().epoch_millis);
         let i = 0;
-        while (i < this.handlers.size) {
+        while (i < this.handlers.length) {
             switch (this.handlers.get(i)) {
                 Some(h) => { h.emit(record); },
                 None => { },

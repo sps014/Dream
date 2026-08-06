@@ -6,11 +6,13 @@ public interface IndexedCollection<T> : Collection<T> {
     @get_indexer
     fun get(index: int): Option<T>;
 
+    // Element at index 0, or `None` when empty.
     public fun first(): Option<T> {
         return this.get(0);
     }
 
+    // Last element, or `None` when empty.
     public fun last(): Option<T> {
-        return this.get(this.size - 1);
+        return this.get(this.length - 1);
     }
 }
