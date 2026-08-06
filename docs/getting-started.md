@@ -40,13 +40,29 @@ Hello, world!
 
 `import system;` loads the console / process package so `System.println` is available. Other stdlib surfaces use their own packages (`system.collections`, `system.net`, …) — see [Imports](language/imports.md#standard-library-packages). The editor can insert these for you via an auto-import quick fix.
 
-The `run` subcommand compiles to WebAssembly and executes your program. To compile without running:
+The `run` subcommand compiles to WebAssembly and executes your program under the native host. To compile without running:
 
 ```bash
 cargo run -- hello.dream
 ```
 
-That writes a `.wasm` (and related artifacts) next to your source.
+That writes `.wat`, `.wasm`, and `.abi.json` next to your source.
+
+### Running in the browser or Node
+
+Use the shared host in [`runtime/dream.js`](https://github.com/sps014/Dream/blob/main/runtime/dream.js), or emit a smaller per-program host with `--runtime`:
+
+```bash
+cargo run -- --runtime --web hello.dream    # hello.runtime.js for the browser
+cargo run -- --runtime --node hello.dream   # hello.runtime.js for Node ≥ 18
+```
+
+```javascript
+import { run } from "./hello.runtime.js";  // or "./runtime/dream.js"
+await run("hello.wasm");
+```
+
+See [JS Interop](language/interop.md#running-it-from-javascript) for marshaling, ABI details, and regenerating the full `runtime/dream.js` from `runtime/src/`.
 
 ## A bigger example
 

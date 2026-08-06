@@ -137,9 +137,17 @@ Sync functions emit nested `block`/`loop`/`if` from relooper shapes; async poll 
 cargo build --release            # binary at target/release/dream
 
 # Run a program
-cargo run -- run path/to/file.dream        # compile + execute
-cargo run -- path/to/file.dream            # compile to .wat only
+cargo run -- run path/to/file.dream        # compile + execute (wasmtime)
+cargo run -- path/to/file.dream            # compile to .wat / .wasm / .abi.json
 cargo run -- -v run path/to/file.dream     # verbose
+
+# Opt-in tree-shaken JS host next to the .wasm (browser or Node)
+cargo run -- --runtime --web path/to/file.dream    # *.runtime.js for the browser
+cargo run -- --runtime --node path/to/file.dream   # *.runtime.js for Node ≥ 18
+
+# Full shared JS runtime (edit runtime/src/, then regenerate)
+node scripts/bundle-runtime.mjs            # writes runtime/dream.js
+node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 
 # Full test suite
 cargo test --workspace
@@ -154,6 +162,7 @@ cargo test -p dream-sema
 cargo test -p dream-lsp
 ```
 
+JS interop details (full vs selective runtime): `docs/language/interop.md`.
 ### VS Code extension
 ```bash
 cd tooling/vscode

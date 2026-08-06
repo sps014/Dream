@@ -54,7 +54,8 @@ await run("hello.wasm");   // loads hello.abi.json, binds externs, calls main
 ```
 
 Optionally emit a tree-shaken sibling `*.runtime.js` (only the host chunks that program needs) with
-`--runtime` plus a host flag:
+`--runtime` plus a host flag. Without these flags, compile does **not** write a `.runtime.js` — use
+the full shared host instead.
 
 ```bash
 dream --runtime --web hello.dream    # browser (fetch, isNode=false)
