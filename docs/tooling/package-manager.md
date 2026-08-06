@@ -94,30 +94,20 @@ and git dependencies are copied from a shared, checksum-verified download cache 
 `~/.dream/registry/`. `dream_packages/` is never committed (`dreamer init` adds it to
 `.gitignore`); it's fully reproducible from `dream.toml` + `dream.lock`.
 
-The `dream` compiler's own import resolution (`resolve_import_path` in
-[`src/driver/source_loader.rs`](https://github.com/sps014/Dream/blob/main/src/driver/source_loader.rs))
-falls back to `dream_packages/` whenever a plain `import` doesn't resolve to a local file:
+When a plain `import` doesn't resolve to a local file, the compiler looks under `dream_packages/`:
 
 - `import json_tools;` (no dot) looks for `dream_packages/json_tools/src/json_tools.dream` — a
-  package's self-named entry file, the same "logical entry shares the file's own name" convention
-  as a project's own `src/main.dream`.
+  package's self-named entry file.
 - `import json_tools.parse;` looks for `dream_packages/json_tools/src/parse.dream`.
 
-This fallback only inspects the on-disk layout `dreamer` produces — the compiler never reads
-`dream.toml` itself, so import resolution stays independent of the package manager's manifest
-format. See [Imports & Modules](../language/imports.md) for the base (non-package) import syntax.
+See [Imports & Modules](../language/imports.md) for the base (non-package) import syntax.
 
-The native LSP (`tooling/dream-lsp`) reuses the exact same compiler functions for hover,
-autocomplete-on-reference, and diagnostics, so once a dependency is installed, referencing its
-symbols in an open file works immediately. Typing `import ` inside an editor also suggests
-installed package names (in addition to local files/directories), reading straight from
-`dream_packages/` — no separate LSP configuration needed.
+The LSP suggests installed package names when you type `import `, reading from `dream_packages/` —
+no separate configuration needed.
 
 ## Registry protocol
 
-A "registry" is a sparse index plus tarball storage, modeled after crates.io's sparse index / the
-npm registry — so trying this out (or running a private registry) never requires standing up
-bespoke server software. A plain directory works as a registry, served either as a local
+A registry is a sparse index plus tarball storage. A plain directory works, served as a local
 `file://` path or over any static HTTP file server:
 
 ```text
@@ -131,29 +121,19 @@ Each line of `<base>/index/<name>` is a JSON object:
 {"name":"json-tools","vers":"0.3.1","deps":[{"name":"buffer-utils","req":"^1.0"}],"cksum":"sha256:...","tarball":"dl/json-tools/json-tools-0.3.1.tar.gz","description":"JSON helpers"}
 ```
 
-Two optional dynamic endpoints back `dreamer search`/`dreamer publish` against HTTP registries
-(`file://` registries implement the equivalent operations directly on disk, no server needed):
+Optional endpoints for `dreamer search` / `dreamer publish` against HTTP registries:
 
 - `GET  <base>/search?q=<query>` → JSON array of index-entry objects
 - `POST <base>/api/v1/publish` → JSON body `{ "entry": <index-entry>, "tarball_base64": "..." }`
 
-No production Dream registry is hosted yet — `DEFAULT_REGISTRY` in `dreamer` is a placeholder.
-Point `[registries] default` at any location implementing the protocol above, including a
-`file://` directory for local or private use.
+No production Dream registry is hosted yet. Point `[registries] default` at any location
+implementing the protocol above, including a `file://` directory for local or private use.
 
 ## Dependency resolution
 
-Registry dependencies resolve with a greedy "highest version satisfying every accumulated
-requirement" strategy — the same class of algorithm as Cargo's classic resolver: requirements
-accumulate breadth-first (a package's own dependencies contribute new requirements once *it*'s
-resolved), repeating until a fixed point. `path` and `git` dependencies are resolved immediately by
-reading the dependency's own `dream.toml` and are pinned — they're never subject to registry
-version selection, even if another dependency also requests the same package by name from a
-registry.
-
-If no single version can satisfy every accumulated requirement for a package, `dreamer` reports a
-clear error naming the conflicting requirements rather than silently picking a version that
-violates one of them.
+Registry dependencies resolve to the highest version that satisfies every accumulated requirement.
+`path` and `git` dependencies are pinned from their own `dream.toml` and are never subject to
+registry version selection. Conflicting requirements produce a clear error naming both sides.
 
 ## Command reference
 
@@ -226,5 +206,10 @@ mkdir -p /tmp/my-registry
 dreamer add that-package
 ```
 
-This is exactly the fixture setup exercised by `tooling/dreamer`'s own integration tests
-(`tooling/dreamer/tests/end_to_end.rs`).
+This is exactly the fixture setup exercised by `tooling/dreamer`'s own integration tests.
+
+## For contributors
+
+Import resolution, the registry protocol wire format, and resolver edge cases live in the
+[Contributing](../compiler/README.md) handbook and the `tooling/dreamer` crate — not required for
+day-to-day package use.

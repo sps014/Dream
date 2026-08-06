@@ -1,4 +1,4 @@
-# Language Invariants
+# Language rules
 
 Some rules in Dream are permanent by design, not features waiting to be built. The compiler enforces them at parse or analysis time. They are collected here so the resulting errors are never a surprise — code that relies on breaking them is simply not valid Dream.
 

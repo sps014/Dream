@@ -19,12 +19,12 @@ let users: Set<string> = {"alice", "bob"};
 let scores: Map<string, int> = {"alice": 95, "bob": 80};
 ```
 
-- `[e1, e2, ...]` builds a `List<T>` — but only when the expected type is specifically `List<T>`; with no such context (or an `int[]`-typed context) `[...]` still means a plain array, exactly as before.
+- `[e1, e2, ...]` builds a `List<T>` — but only when the expected type is specifically `List<T>`; with no such context (or an `int[]`-typed context) `[...]` still means a plain array.
 - `{e1, e2, ...}` builds a `Set<T>`; duplicates are silently deduplicated, same as calling `.add()` for each.
 - `{k1: v1, k2: v2, ...}` builds a `Map<K, V>`; a `:` after the first element is what distinguishes a Map literal from a Set literal.
 - An empty literal (`[]`, `{}`) needs the target type spelled out somewhere, since there is no element to infer it from — e.g. `let xs: Set<int> = {};`. An empty `{}` is valid for both `Set<T>` and `Map<K, V>`, disambiguated by the annotation.
 
-Each literal lowers to a single bulk call — `List<T>.from_array(...)`, `Set<T>.from_array(...)`, or `Map<K, V>.from_arrays(...)` — not one `.push`/`.add`/`.set` call per element, so a literal with N elements costs one call, not N. These factories (along with the bulk `push_all`/`add_all`/`set_all` instance methods they're built on) are also callable directly.
+You can also build collections with the bulk factories `List.from_array`, `Set.from_array`, and `Map.from_arrays`, or the instance methods `push_all` / `add_all` / `set_all`.
 
 ## `List<T>`
 
@@ -56,8 +56,8 @@ Methods:
 - `.push(value)` — append.
 - `.insert(index, value)` — insert at index.
 - `.remove(value)` — remove first equal element.
-- `.push_all(items)` — append every element of an array, in order (what the `[...]` literal desugars to).
-- `List<T>.from_array(items)` (static) — build a new list from an array; what the `[...]` literal desugars to.
+- `.push_all(items)` — append every element of an array, in order.
+- `List<T>.from_array(items)` (static) — build a new list from an array.
 - `.pop()` — remove and return the last element as `Option<T>`.
 - `.get(index)` — element at `index` as `Option<T>`.
 - `.set(index, value)` — overwrite, returning `true` on success.
@@ -95,8 +95,8 @@ for (let pair in scores) {
 Methods:
 
 - `.set(key, value)` — insert or update.
-- `.set_all(keys, values)` — insert/update from parallel `keys`/`values` arrays (what the `{k: v, ...}` literal desugars to).
-- `Map<K, V>.from_arrays(keys, values)` (static) — build a new map from parallel arrays; what the `{k: v, ...}` literal desugars to.
+- `.set_all(keys, values)` — insert/update from parallel `keys`/`values` arrays.
+- `Map<K, V>.from_arrays(keys, values)` (static) — build a new map from parallel arrays.
 - `.get(key)` — value as `Option<V>`; `.get_or(key, fallback)` — value or `fallback`.
 - `.contains(key)` — key present.
 - `.remove(key)` — remove, returning `true` if it existed.
@@ -119,8 +119,8 @@ users.add("alice");   // returns false, not added again
 Methods:
 
 - `.add(value)` — insert; `true` if newly added, `false` if already present.
-- `.add_all(items)` — insert every element of an array, duplicates ignored (what the `{...}` literal desugars to).
-- `Set<T>.from_array(items)` (static) — build a new set from an array; what the `{...}` literal desugars to.
+- `.add_all(items)` — insert every element of an array, duplicates ignored.
+- `Set<T>.from_array(items)` (static) — build a new set from an array.
 - `.contains(value)` — membership.
 - `.remove(value)` — remove, returning `true` if it existed.
 - `.size()` / `.clear()` — count and empty.

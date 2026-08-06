@@ -40,13 +40,13 @@ Hello, world!
 
 `import system;` loads the console / process package so `System.println` is available. Other stdlib surfaces use their own packages (`system.collections`, `system.net`, …) — see [Imports](language/imports.md#standard-library-packages). The editor can insert these for you via an auto-import quick fix.
 
-The `run` subcommand compiles and immediately executes your file with Wasmtime. To inspect the generated WebAssembly instead, drop `run`:
+The `run` subcommand compiles to WebAssembly and executes your program. To compile without running:
 
 ```bash
 cargo run -- hello.dream
 ```
 
-That writes `hello.wat` (WebAssembly text) next to your source.
+That writes a `.wasm` (and related artifacts) next to your source.
 
 ## A bigger example
 

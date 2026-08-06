@@ -6,15 +6,15 @@
 
 Fallible ops return `Result<_, HttpError>` (`message()` / `code()` such as `HTTP_0`, `HTTP_404`). Typed headers use `HttpHeaders`. `Url.parse` returns `Result<Url, ParseError>`.
 
-## Runtime support
+## Platform notes
 
 | Runtime | HTTP backend |
 | --- | --- |
-| Wasmtime (native CLI) | A blocking `reqwest` call |
-| Node.js | The global `fetch` (Node 18+) |
-| Browser | The page's `fetch` |
+| Native (`dream run`) | Native HTTP client |
+| Node.js | Global `fetch` (Node 18+) |
+| Browser | Page `fetch` |
 
-The API is identical across all three; only the transport differs. Unlike the dynamic [`js`](../language/references.md) type, there is nothing to release — the body bytes are in hand once the future resolves.
+The API is identical across all three; only the transport differs. Unlike the dynamic [`js`](../language/js-type.md) type, there is nothing to release — the body bytes are in hand once the future resolves.
 
 ## Creating a client
 

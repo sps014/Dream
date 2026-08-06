@@ -6,12 +6,12 @@ Fallible ops return `Result<_, IoError>` (`message()` / `code()` such as `ENOENT
 
 `File`, `FileHandle`, and `FileStream` are the filesystem API. Whole-file `File.read`/`write`/`…` are [`async`](../language/async.md). Streaming handles use a **sync primary API** (`open`/`read`/`write`/`seek`/`close`) with optional `*_async` wrappers (except `close`, which is sync-only). The same `.dream` runs unchanged on every host.
 
-## Runtime support
+## Platform notes
 
 | Runtime | Filesystem |
 | --- | --- |
-| Wasmtime (native CLI) | Real on-disk filesystem |
-| Node.js | Real on-disk filesystem via `node:fs` |
+| Native (`dream run`) | Real on-disk filesystem |
+| Node.js | Real on-disk filesystem |
 | Browser | In-memory virtual filesystem; files persist for the page session only |
 
 The API is identical everywhere; only the browser differs in that writes live in memory.

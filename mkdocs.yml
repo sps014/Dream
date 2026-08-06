@@ -63,55 +63,61 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
-  - Basics:
-    - Variables: language/variables.md
-    - Operators: language/operators.md
-    - Control Flow: language/control-flow.md
-    - Functions: language/functions.md
-    - Comments: language/comments.md
-    - Panics: language/panics.md
-    - Language Invariants: language/invariants.md
-  - Types & Data:
-    - Overview: language/types.md
-    - Primitives: language/primitives.md
-    - Arrays: language/arrays.md
-    - Enums & Unions: language/enums-unions.md
-    - Classes & Structs: language/classes-structs.md
-    - The object Type: language/objects.md
-  - Source Generators:
-    - Overview: language/generators.md
-    - Syntax DSLs: language/syntax-dsls.md
-    - CodeBuilder API: stdlib/codegen.md
-    - @json derive: stdlib/json.md
-  - Advanced Features:
-    - Generics: language/generics.md
-    - Interfaces: language/interfaces.md
-    - Async/Await: language/async.md
-    - WebWorkers: language/webworkers.md
-    - Imports & Modules: language/imports.md
-    - Memory Management: language/memory.md
+  - Language:
+    - Basics:
+      - Variables: language/variables.md
+      - Operators: language/operators.md
+      - Control Flow: language/control-flow.md
+      - Functions: language/functions.md
+      - Comments: language/comments.md
+      - Panics: language/panics.md
+    - Types:
+      - Overview: language/types.md
+      - Primitives: language/primitives.md
+      - Arrays: language/arrays.md
+      - Enums & Unions: language/enums-unions.md
+      - Classes & Structs: language/classes-structs.md
+      - The object Type: language/objects.md
+    - Structure:
+      - Imports & Modules: language/imports.md
+      - Language Rules: language/invariants.md
+    - Features:
+      - Generics: language/generics.md
+      - Interfaces: language/interfaces.md
+      - Async/Await: language/async.md
+      - WebWorkers: language/webworkers.md
+      - Memory Management: language/memory.md
     - Interop:
       - Overview: language/interop.md
-      - The js type: language/references.md
+      - The js type: language/js-type.md
       - Callbacks: language/callbacks.md
+    - Metaprogramming:
+      - Source Generators: language/generators.md
+      - CodeBuilder: stdlib/codegen.md
   - Standard Library:
-    - Built-ins: stdlib/builtins.md
-    - Strings: stdlib/string.md
-    - Option & Result: stdlib/option-result.md
-    - Collections (List, Map, Queue, Stack): stdlib/collections.md
-    - Lock & Semaphore: stdlib/sync.md
-    - Encoding: stdlib/encoding.md
-    - Random: stdlib/random.md
-    - System & IO:
-      - JSON: stdlib/json.md
-      - Codegen: stdlib/codegen.md
-      - File I/O: stdlib/file.md
-      - HTTP: stdlib/http.md
+    - Core:
+      - Built-ins: stdlib/builtins.md
+      - Option & Result: stdlib/option-result.md
+      - Lock & Semaphore: stdlib/sync.md
+    - Text & Data:
+      - Strings: stdlib/string.md
       - Regex: stdlib/regex.md
+      - Encoding: stdlib/encoding.md
+    - Collections: stdlib/collections.md
+    - System:
+      - Random: stdlib/random.md
       - DateTime: stdlib/datetime.md
       - Logging: stdlib/logging.md
+    - I/O:
+      - File I/O: stdlib/file.md
+      - HTTP: stdlib/http.md
+    - Serialization:
+      - JSON: stdlib/json.md
+    - Security:
       - Crypto: stdlib/crypto.md
-  - Compiler Internals:
+  - Tooling:
+    - Package Manager (dreamer): tooling/package-manager.md
+  - Contributing:
     - Overview: compiler/README.md
     - Pipeline: compiler/01-pipeline-overview.md
     - Type System: compiler/02-type-system.md
@@ -124,5 +130,3 @@ nav:
     - Design notes:
       - Nullable purge: compiler/09-nullable-purge-design-note.md
       - Stack alloc & mono: compiler/10-stack-alloc-and-mono-design-note.md
-  - Tooling:
-    - Package Manager (dreamer): tooling/package-manager.md

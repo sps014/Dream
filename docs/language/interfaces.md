@@ -140,7 +140,7 @@ class Box<T> : Container<T> {
 }
 ```
 
-Each concrete use is monomorphized: `Box<int>` implements `Container<int>`, and gets its own itable. Dispatch works through the monomorphized interface type:
+Each concrete use is specialized: `Box<int>` implements `Container<int>`. Dispatch uses that concrete interface type:
 
 ```dream
 fun describe(c: Container<int>): void {
@@ -178,10 +178,6 @@ async fun run(f: Fetcher): void {
 
 An `async` interface method must be implemented by an `async` method (and non-async by non-async) — the two compile to different shapes, so a mismatch is a compile error.
 
-### How dispatch works
-
-Interface calls use **tag-indexed itables**, like the JVM's `invokeinterface`. Every object carries a runtime tag (its concrete class id) in its heap header. For each interface, the compiler builds a compact table, indexed by that tag, of the concrete implementations. A call reads the tag, looks up the method, and calls it indirectly. Because Dream compiles the whole program at once, these tables are computed entirely at compile time.
-
 ### Built-in `Equatable` and `Comparable`
 
 Two generic interfaces ship in bootstrap `system.core` (no import):
@@ -196,10 +192,10 @@ A type implements them against itself (`class Money : Comparable<Money>, Equatab
 Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude `extend` blocks), so with `import system.collections;` — `List<int>().sort()`, `binary_search`, and comparisons in generic code work with no extra code.
 
 - **`==` / `!=` route to `equals`** when both operands are the same user type implementing `Equatable<Self>`. Primitives and strings keep built-in equality.
-- **`<` / `<=` / `>` / `>=` route to `compare`** when the left operand's type implements `Comparable<Self>`: `a < b` lowers to `a.compare(b) < 0`, and likewise for the other three. A type with a more specific [`@operator("...")`](operators.md#operator-overloading) overload for a *different* symbol is unaffected — ordering has no separate attribute, it always goes through `compare`.
+- **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`@operator("...")`](operators.md#operator-overloading) for a different symbol is unaffected.
 - **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../stdlib/collections.md#sorting).
 
-Both interfaces work with [value structs](classes-structs.md): when the concrete type is known (a direct call or a generic constraint), dispatch is static with no boxing. Assigning a value struct to a bare interface variable boxes it into a tagged heap object, after which it dispatches dynamically:
+Both interfaces work with [value structs](classes-structs.md). When the concrete type is known, calls are direct. Assigning a value struct to a bare interface variable boxes it for dynamic dispatch:
 
 ```dream
 let a: Shape = Rect(3, 4);   // boxed; a.area() dispatches dynamically

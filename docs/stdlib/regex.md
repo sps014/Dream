@@ -2,11 +2,7 @@
 
 **Package:** `system.text` — `import system.text;`
 
-`Regex` is a regular-expression class implemented entirely in Dream — a Thompson-NFA/Pike-VM
-engine (the same family of algorithm as RE2, Go's `regexp`, and Rust's `regex` crate), not a
-binding to a host library. Construct one with a pattern and flags, then `test`, `replace`, or
-`match`. There is nothing runtime-specific about it: the exact same compiled code runs under
-wasmtime, Node, and the browser, and these calls are synchronous — no `await`.
+`Regex` matches patterns with a pure-Dream engine (no host `RegExp`). Construct one with a pattern and flags, then `test`, `replace`, or `match`. Calls are synchronous — no `await` — and behave the same on native, Node, and the browser.
 
 ## Usage
 
@@ -75,11 +71,9 @@ fun main(): void {
 | Shorthand classes | `\d`, `\D`, `\w`, `\W`, `\s`, `\S` |
 | Escapes | `\n`, `\t`, `\r`, and `\` before any metacharacter (`\.`, `\\`, `\(`, ...) |
 
-**Not supported:** lookaround (`(?=...)`, `(?!...)`, ...), backreferences (`\1`), named groups
-(`(?<name>...)`), and Unicode property classes (`\p{...}`) — the same NFA-based family of engine
-this one belongs to (RE2, Go's `regexp`) leaves these out too, since they can't be matched in
-guaranteed linear time. A pattern that uses one of these constructs won't crash; it just won't
-carry that construct's special meaning (e.g. `(?=...)` parses as a best-effort non-capturing group,
-`\1` as a literal `1`).
+**Not supported:** lookaround (`(?=...)`, `(?!...)`, …), backreferences (`\1`), named groups
+(`(?<name>...)`), and Unicode property classes (`\p{...}`). A pattern that uses one of these
+constructs won't crash; it just won't carry that construct's special meaning (e.g. `(?=...)`
+parses as a best-effort non-capturing group, `\1` as a literal `1`).
 
 A runnable example lives in [`sample/interop/regex.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/regex.dream).

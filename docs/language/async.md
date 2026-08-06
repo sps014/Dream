@@ -26,7 +26,7 @@ async fun main(): void {
 
 ### Where `await` is allowed
 
-The whole body of an `async` function compiles to a state machine, so `await` may appear in any expression or statement position — including conditionally-evaluated ones:
+`await` may appear in any expression or statement position inside an `async` function — including conditionally evaluated ones:
 
 ```dream
 let x = await e;                // bind the result
@@ -111,40 +111,22 @@ async fun main(): void {
 }
 ```
 
-Async methods work on **generic** classes too: each instantiation is monomorphized to its own concrete async state machine.
+Async methods work on **generic** classes too: each concrete type gets its own async method.
 
 ### Async lambdas and `fun(...): Future<T>` values
 
 An `async (params) => …` arrow lambda is typed as `fun(...): Future<T>` — see [Functions](functions.md#async-lambdas). Calling the boxed value returns a `Future` just like calling a named `async fun`; `await` unwraps it. Named async functions used as first-class values (`let f: fun(int): Future<int> = delayed;`) use the same shape.
 
-## Advanced
+## Awaiting JavaScript promises
 
-### How it works
-
-Each `async fun` compiles to a resumable **state machine** plus a heap **task frame** (the `Future`). A small cooperative **scheduler** — a ready queue plus a timer queue — drives the polls. Calling an `async fun` allocates the `Future` and enqueues its first poll; `await` registers the current task as a waker on the awaited future and suspends until it resolves.
-
-```mermaid
-flowchart TD
-  asyncFn["async fun f()"] -->|codegen transform| pollFn["poll_f (state machine)"]
-  pollFn -->|returns| Future["Future / task frame on heap"]
-  Future --> Scheduler["Scheduler: ready queue + timer queue"]
-  Scheduler -->|"call_indirect poll"| pollFn
-  hostPromise["JS Promise (fetch/setTimeout)"] -->|".then -> __dream_resolve"| Future
-  Scheduler -->|drains| done["main task complete"]
-```
-
-The whole event loop lives **inside** the WebAssembly module, so an async program is self-driving and deterministic. An async `main` is exported as an ordinary `() -> ()` entry point that spawns the top-level task and pumps the loop to completion — nothing extra is needed to run it under `wasmtime`.
-
-### Awaiting JavaScript promises
-
-An `extern async fun` bridges to a host function returning a `Promise`. The `.then` wiring lives entirely in `dream.js`; Dream source never sees a promise:
+An `extern async fun` bridges to a host function that returns a Promise. Dream source never sees the Promise itself:
 
 ```dream
 @js("api", "getUser")
 extern async fun getUser(id: int): string;
 
 async fun main(): void {
-    let name = await getUser(42);   // suspends until the JS promise resolves
+    let name = await getUser(42);
     System.println("user = " + name);
 }
 ```
@@ -154,15 +136,14 @@ import { run } from "./dream.js";
 
 await run("user.wasm", {
   imports: {
-    // Returning a Promise is enough — dream.js allocates a host Future,
-    // hands its pointer back to Dream, and resolves it when the Promise settles.
     getUser: (id) => fetch(`/api/user/${id}`).then((r) => r.text()),
   },
 });
 ```
 
-The generated `*.abi.json` marks async externs with `"async": true` so the runtime treats the import result as a `Promise`. A complete runnable example lives in [`sample/interop/async_fetch.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/async_fetch.dream).
+A complete example: [`sample/interop/async_fetch.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/async_fetch.dream).
 
-## Limitations (v1)
+## Limitations
 
-- No `.then()`/callback chaining. `async`/`await` is a single-threaded cooperative scheduler: tasks interleave at `await` points but run on one thread. For real parallelism across threads (separate memory, message passing), see [WebWorkers](webworkers.md).
+- No `.then()` / callback chaining — use `async` / `await`.
+- Tasks interleave at `await` points on one thread. For real parallelism, see [WebWorkers](webworkers.md).

@@ -2,7 +2,15 @@
 
 **Package:** `system.crypto` — `import system.crypto;`
 
-Host-backed digests and a cryptographically secure random byte generator. Implementations use the OS CSPRNG and native digest libraries (`sha2` / `hmac` / `getrandom` under wasmtime; `node:crypto` or Web Crypto in `runtime/dream.js`). Hex and Base64 encoding stay in [`encoding`](encoding.md) — crypto APIs return raw `byte[]`.
+Host-backed digests and a cryptographically secure random byte generator. Hex and Base64 encoding stay in [`encoding`](encoding.md) — crypto APIs return raw `byte[]`.
+
+## Platform notes
+
+| Runtime | Digests / CSPRNG |
+| --- | --- |
+| Native (`dream run`) | OS CSPRNG and native digest libraries |
+| Node.js | `node:crypto` |
+| Browser | Web Crypto |
 
 | Type | Member | Description |
 | --- | --- | --- |

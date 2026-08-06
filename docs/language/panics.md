@@ -32,8 +32,8 @@ panic: index out of bounds (at /path/to/program.dream:6, in main)
 `System.panic(message)` prints exactly the `message` you pass — no automatic location is appended, so include whatever context is useful yourself.
 
 !!! note "Precision notes"
-    The line is the checked construct's own source line whenever the compiler can determine it (`?` otherwise, e.g. for synthesized code with no source position). A checked construct inside a callee small enough to be inlined into its caller reports the caller's call-site line rather than its own, since inlining erases that distinction — an acceptable, still-diagnosable loss of precision, not a wrong (cross-file) location.
+    The line is the checked construct's own source line whenever the compiler can determine it (`?` otherwise). A check inside a small inlined callee may report the caller's line instead — still diagnosable, not a wrong file.
 
 ## Why panics, not undefined behavior
 
-Before this mechanism existed, an out-of-bounds index or a bad unbox cast would silently read whatever bytes happened to be at the computed address — a real, exploitable bug rather than a diagnosable failure. Every one of the automatic checks above replaces that silent corruption with a deterministic, message-and-halt failure. This makes bugs *loud* during development instead of turning into mysterious wrong answers (or hard crashes) later on.
+Out-of-bounds indexes, bad casts, and similar checks halt with a message instead of reading or writing arbitrary memory. Bugs fail loudly during development rather than becoming mysterious wrong answers later.

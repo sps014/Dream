@@ -3,7 +3,7 @@
 A playable music player — playlist, play/pause, prev/next, seek bar, volume, live time display —
 written entirely in [`music_player.dream`](music_player.dream). Every DOM query, `<audio>`
 element, event listener, and property get/set is ordinary Dream code compiled to WebAssembly via
-the dynamic [`js` interop type](../../docs/language/references.md); there is **no hand-written
+the dynamic [`js` interop type](../../docs/language/js-type.md); there is **no hand-written
 JavaScript logic** anywhere in this sample. The page loads only the shared, program-agnostic
 runtime in [`runtime/dream.js`](../../runtime/dream.js) — the exact same loader every sample under
 [`sample/interop/`](../interop/) uses — via a three-line `<script type="module">` that just calls

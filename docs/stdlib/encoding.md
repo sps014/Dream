@@ -4,6 +4,15 @@
 
 `Encoding` converts between Dream `string` / `byte[]` and common wire formats. Hex and Base64 helpers return `Result<_, ParseError>` on invalid input.
 
+```dream
+import system.encoding;
+
+fun main(): void {
+    let bytes = Encoding.utf8_encode("hi");
+    let hex = Encoding.hex_encode(bytes);   // "6869"
+}
+```
+
 | Member | Description |
 | --- | --- |
 | `Encoding.utf8_encode(text)` | UTF-8 bytes of `text` |

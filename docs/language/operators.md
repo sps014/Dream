@@ -43,7 +43,7 @@ let count = 3;
 let msg = $"{name} has {count + 1} items";   // "Ada has 4 items"
 ```
 
-Interpolation desugars to a `+` chain, so the above equals `"" + name + " has " + (count + 1) + " items"`.
+Interpolation expands to concatenation, so the above equals `"" + name + " has " + (count + 1) + " items"`.
 
 Double a brace to write it literally — `{{` produces `{`, `}}` produces `}`:
 

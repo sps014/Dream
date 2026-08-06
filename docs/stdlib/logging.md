@@ -2,7 +2,7 @@
 
 **Package:** `system.logging` — `import system.logging;`
 
-Python-inspired levels, named loggers, and pluggable handlers. Not a full `dictConfig` clone — enough for apps and stdlib hosts.
+Levels, named loggers, and pluggable handlers for apps and libraries.
 
 ## Levels
 

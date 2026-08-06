@@ -1,6 +1,11 @@
-# Compiler Internals
+# Contributing — Compiler handbook
 
-This is the engineering handbook for the Dream compiler's middle and back end. It assumes you have never seen the codebase. By the end you should be able to add a language feature, write an optimization pass, extend the type system, or wire up a new backend without guessing.
+!!! warning "Contributors only"
+    This section is the engineering handbook for people changing the Dream compiler.
+    If you are learning the language, start at [Getting started](../getting-started.md) and the
+    [Language](../index.md) / [Standard library](../index.md) guides instead.
+
+This handbook covers the middle and back end. It assumes you have never seen the codebase. By the end you should be able to add a language feature, write an optimization pass, extend the type system, or wire up a new backend without guessing.
 
 Read the chapters in order the first time; afterward, use this page as an index.
 

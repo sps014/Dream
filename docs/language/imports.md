@@ -74,7 +74,7 @@ public fun add(a: int, b: int): int {
 - A module path is purely a name — `module utils.math;` does **not** need to live in a `utils/math` directory. File resolution for plain `import`s is still directory-based, exactly as before; `module` only tags a file's declarations with a logical namespace, independent of where the file sits on disk.
 - Files that don't declare a `module` stay in the implicit, unnamed **root module** — today's flat, unqualified behavior is unchanged for any file that never writes `module`.
 - Two files in **different** modules may declare the same name (e.g. two `public fun add(...)`) without colliding. Two declarations in the **same** module (or both in the unnamed root module) with the same name still collide exactly as before — a module is still one namespace.
-- Same-module overloads and cross-module duplicate names compose: within one module you may overload `add` by signature; across modules each side keeps its own overload set. The compiler's emitted WASM names may be module-qualified (`utils.math::add`) and, when overloaded, signature-mangled on top of that (`utils.math::add.…`). Call sites and `import … as` aliases still use the source names.
+- Same-module overloads and cross-module duplicate names compose: within one module you may overload `add` by signature; across modules each side keeps its own overload set. Call sites and `import … as` aliases still use the source names.
 
 ## Aliased imports (resolving duplicate names)
 
@@ -190,9 +190,7 @@ public fun origin(): Point {
 }
 ```
 
-### Why no `protected`
-
-Dream still has no `protected` modifier: it exists in other languages to grant access to subclasses, but Dream [has no class inheritance](classes-structs.md) — classes cannot extend one another, only implement interfaces (which contribute no member implementations to override or share). With no derived-class hierarchy, there is nothing for "accessible to this class and its subclasses" to mean. If a future version of Dream gains class inheritance, revisiting this is reasonable.
+There is no `protected` modifier. Dream has [no class inheritance](classes-structs.md) — only interface implementation — so there is no subclass hierarchy for `protected` to grant access to.
 
 ## Importing from JavaScript
 

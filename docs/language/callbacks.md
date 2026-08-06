@@ -1,8 +1,8 @@
 # Callbacks
 
-Functions cross the Dream/JavaScript boundary in both directions: hand a Dream function to JS, or call a JS function from Dream. A Dream function value (`fun(params): ret`) is an index into the module's function table, and the runtime wraps that index as a real, callable JS function.
+Functions cross the Dream/JavaScript boundary in both directions: hand a Dream function to JS, or call a JS function from Dream. The runtime wraps Dream function values as ordinary callable JS functions.
 
-**Only non-capturing functions may cross into JS.** The host bridges (`js.func` / `js.func0` / `js.funcN`, and the automatic FUNC-slot wrap on a dynamic `js` call) pass only the function-table index — the closure environment word is discarded — so a capturing lambda would lose its captured state. Passing one is a compile-time error. Use a top-level `fun`, a captureless lambda, or module-level state instead of captures (see the [music player sample](https://github.com/sps014/Dream/blob/main/sample/music_player/music_player.dream)).
+**Only non-capturing functions may cross into JS.** A capturing lambda would lose its captured state at the boundary. The compiler rejects capturing callbacks — use a top-level `fun`, a captureless lambda, or module-level state instead (see the [music player sample](https://github.com/sps014/Dream/blob/main/sample/music_player/music_player.dream)).
 
 ## Dream to JS
 
@@ -32,11 +32,9 @@ await run("callbacks.wasm", {
 });
 ```
 
-Behind the scenes the compiler exports the function table as `__indirect_function_table`, and the `*.abi.json` marks `fun(...)` parameters so the runtime wraps the incoming index before the host sees it.
-
 ## Registering DOM handlers
 
-Passing a Dream function directly into a dynamic [`js`](references.md) call wraps it automatically — so event handlers read just like JavaScript:
+Passing a Dream function directly into a dynamic [`js`](js-type.md) call wraps it automatically — so event handlers read just like JavaScript:
 
 ```dream
 fun on_click(ev: js): void {
@@ -49,11 +47,11 @@ fun main(): void {
 }
 ```
 
-The wrapper has **stable identity per function** — the runtime caches it by function-table index — so a handler registered with `addEventListener` can later be removed by passing the *same* Dream function to `removeEventListener`. If you need an explicit `js` callable up front (to store, compare, or pass around first), build one with `js.func(handler)` / `js.func0(handler)` (still only with a captureless `fun(...)`).
+The wrapper has **stable identity per function**, so a handler registered with `addEventListener` can later be removed by passing the *same* Dream function to `removeEventListener`. If you need an explicit `js` callable up front (to store, compare, or pass around first), build one with `js.func(handler)` / `js.func0(handler)` (still only with a captureless `fun(...)`).
 
 ## JS to Dream
 
-A JavaScript function handed to Dream is just a [`js`](references.md) value — call it with native syntax, and its arguments auto-convert on the way in:
+A JavaScript function handed to Dream is just a [`js`](js-type.md) value — call it with native syntax, and its arguments auto-convert on the way in:
 
 ```dream
 fun main(): void {
@@ -68,7 +66,7 @@ await run("callbacks.wasm");
 
 ## Marshaling
 
-Callback arguments and results follow the same conversion rules as ordinary externs and dynamic `js` calls (see [Value marshaling](interop.md#value-marshaling) and [Passing values to JS](references.md#passing-values-to-js)): primitives and `string` convert automatically, and JS values travel as `js` handles.
+Callback arguments and results follow the same conversion rules as ordinary externs and dynamic `js` calls (see [Value marshaling](interop.md#value-marshaling) and [Passing values to JS](js-type.md#passing-values-to-js)): primitives and `string` convert automatically, and JS values travel as `js` handles.
 
 ## Try it
 

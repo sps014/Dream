@@ -80,6 +80,6 @@ async fun main(): void {
 
 ## Notes and limits
 
-- Both `Lock` and `Semaphore` are `@shared class` instances and only provide cross-thread synchronization when worker instances genuinely share linear memory (native wasmtime, or browser with COOP/COEP — see [WebWorkers](../language/webworkers.md)).
+- Both `Lock` and `Semaphore` are `@shared class` instances and only provide cross-thread synchronization when workers share memory with the owner (native, or browser with COOP/COEP — see [WebWorkers](../language/webworkers.md)).
 - `acquire()` busy-waits via a WASM atomic wait, not a spin loop burning CPU — but there is still no fairness guarantee (no FIFO ordering among waiters) and no timeout; a deadlocked pair of workers will wait forever.
 - `release()` on a `Lock` you don't hold, or on a `Semaphore` past its `initial` count, is undefined — these primitives trust the caller, the same way C#'s `Monitor`/`SemaphoreSlim` do.

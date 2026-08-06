@@ -2,7 +2,7 @@
 
 **Package:** `system.text` — `import system.text;` (also pulled in by `import system;`)
 
-`string` is a built-in reference type: heap-allocated, length-prefixed UTF-8. Basic operations (`+`, `size()`, `char_at`, interpolation) need no import. Higher-level helpers (`substring`, `split`, `trim`, `StringBuilder`, `Regex`, `Unicode`, …) require this package.
+`string` is a built-in reference type holding UTF-8 text. Basic operations (`+`, `size()`, `char_at`, interpolation) need no import. Higher-level helpers (`substring`, `split`, `trim`, `StringBuilder`, `Regex`, `Unicode`, …) require this package.
 
 Build strings with `+` concatenation or [interpolation](../language/operators.md#string-interpolation) (`$"hi {name}"`).
 

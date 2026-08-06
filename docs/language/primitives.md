@@ -31,16 +31,13 @@ let n = int.parse("42").unwrap_or(0);  // 42
 ### Integer overflow
 
 Every integer primitive **wraps** on overflow: two's-complement modulo its own bit width, with no
-trap and no promotion to a wider type. This matches WebAssembly's native `i32`/`i64` arithmetic
-(the compiler's target), so wrapping is the zero-cost default rather than a runtime check.
+trap and no promotion to a wider type.
 
 - `int`/`uint` wrap at 32 bits, `long`/`ulong` at 64 bits, `byte` at 8 bits (`+`, `-`, `*`, `<<`
-  all wrap; `byte` shares WASM's 32-bit `i32` register, so the compiler masks its result back into
-  `[0, 255]` after every op instead of getting the narrower width for free).
+  all wrap; `byte` results stay in `[0, 255]`).
 - A binary op's result type is its **left operand's** type — `byte + byte` stays `byte`, it is
   never promoted to `int` the way C promotes narrow integer types.
-- `/` and `%` by zero panic (a WASM integer division trap, routed through the same diagnosable
-  panic path as other runtime checks) rather than wrapping.
+- `/` and `%` by zero panic rather than wrapping.
 
 ```dream
 let i: int = 2147483647;   // int.max
@@ -80,7 +77,7 @@ let b = bool.parse("true").unwrap_or(false);
 
 ## Characters
 
-`char` is a single character (one Unicode scalar value stored as an `i32`). Write literals in single quotes: `'A'`, `'\n'`, `'é'`.
+`char` is a single character (one Unicode scalar value). Write literals in single quotes: `'A'`, `'\n'`, `'é'`.
 
 - `.is_digit()` / `.is_alpha()` / `.is_whitespace()` — classify the character (ASCII rules).
 - `.to_lower()` / `.to_upper()` — ASCII case conversion.

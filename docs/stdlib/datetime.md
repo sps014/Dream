@@ -92,9 +92,9 @@ let parsed = DateTime.parse_iso8601("2026-07-02T10:35:00.250Z");
 System.println(parsed.unwrap_or(DateTime.from_epoch_millis(0L)).to_iso8601());
 ```
 
-## Runtime support
+## Platform notes
 
-| Runtime | Wall clock | Local timezone offset |
+| Runtime | Wall clock | Local timezone |
 | --- | --- | --- |
-| Wasmtime (native CLI) | `std::time::SystemTime` | the `chrono` crate (OS timezone database, DST-aware) |
+| Native (`dream run`) | OS system clock | OS timezone database (DST-aware) |
 | Node.js / browser | `Date.now()` | `Date.getTimezoneOffset()` |

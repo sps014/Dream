@@ -248,12 +248,8 @@ Rules:
 
 ### `ref` and closures
 
-Under the hood, a `ref` argument's target needs its *address* taken so the callee can alias it —
-a plain WASM local has no address, so the compiler gives the target its own stack-allocated slot
-(no heap allocation, no reference counting) unless it is *also* captured by a closure, in which
-case the target already has heap-durable storage for the closure's own sake, and `ref` simply
-reuses that same storage rather than adding a second box. Either way, mutations through the `ref`
-call and through the closure are visible to both:
+A `ref` argument aliases the caller's storage. If that local is also captured by a closure, both
+see the same storage — mutations through the `ref` and through the closure are visible to both:
 
 ```dream
 fun increment(ref x: int): void {

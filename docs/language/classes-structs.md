@@ -209,7 +209,7 @@ class Bad {
 }
 ```
 
-`@shared struct` is rejected outright — a lock plus atomic-refcount header on a value type would defeat the point of a zero-allocation value type. Wrap the value in a `@shared class` instead if it needs to cross threads.
+`@shared struct` is not allowed. Wrap the value in a `@shared class` if it needs to cross threads.
 
 ## Advanced: boxing a struct
 

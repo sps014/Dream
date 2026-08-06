@@ -2,7 +2,7 @@
 
 **Package:** `system` — `import system;`
 
-`Random` is a seedable xorshift32 PRNG for non-cryptographic use (games, tests, shuffling). For cryptographic randomness, use [`system.crypto`](crypto.md) `SecureRandom`.
+`Random` is a seedable PRNG for non-cryptographic use (games, tests, shuffling). For cryptographic randomness, use [`system.crypto`](crypto.md) `SecureRandom`.
 
 | Member | Description |
 | --- | --- |

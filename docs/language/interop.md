@@ -5,7 +5,7 @@ Dream compiles to WebAssembly, so it runs anywhere WASM does — including the b
 | Piece | What it's for | Docs |
 | --- | --- | --- |
 | `extern fun` | a typed, fixed-signature function that lives in JS (`Math.max`, your glue code) | this page |
-| `js` | a dynamic handle to *any* live JS value, used with native syntax | [The js type](references.md) |
+| `js` | a dynamic handle to *any* live JS value, used with native syntax | [The js type](js-type.md) |
 | function values | passing functions across the boundary in either direction | [Callbacks](callbacks.md) |
 
 This page covers `extern` functions.
@@ -45,13 +45,7 @@ extern fun log(msg: string): void;
 
 ## Running it from JavaScript
 
-Compiling a `.dream` file produces three artifacts next to it:
-
-- `*.wat` — human-readable WebAssembly text.
-- `*.wasm` — the binary module browsers and Node load.
-- `*.abi.json` — an auto-generated description of extern imports and exports. You never edit it; the runtime reads it to marshal values.
-
-The `runtime/dream.js` module loads the `.wasm`, wires the built-in `print`/math functions, and runs `main`. The `run` helper finds the sibling `.abi.json` automatically:
+Compiling a `.dream` file produces a `.wasm` module (and a sibling `.abi.json` the runtime uses to marshal values). You load it with `runtime/dream.js`:
 
 ```javascript
 import { run } from "./runtime/dream.js";
@@ -106,7 +100,7 @@ To hand a string back to Dream, the runtime calls the exported `malloc` for you 
 
 ## Beyond fixed signatures
 
-`extern fun` is ideal for known signatures. For open-ended JS values (a DOM node, a `fetch` `Response`, a `RegExp`) you want to read and call natively, use the dynamic [`js`](references.md) type:
+`extern fun` is ideal for known signatures. For open-ended JS values (a DOM node, a `fetch` `Response`, a `RegExp`) you want to read and call natively, use the dynamic [`js`](js-type.md) type:
 
 ```dream
 let el = js.global.document.getElementById("app");

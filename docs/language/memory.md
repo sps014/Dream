@@ -105,11 +105,11 @@ Neither modifier contributes to its referent's strong reference count, so declar
 
     Use `unowned` only when you can truly guarantee the referent outlives every access; reach for `weak` (and a `switch`/`is_some()` check) whenever the referent's lifetime is less certain.
 
-Both mechanisms use a small internal side table (see `src/mir/runtime/weak.wat`) that records every live `weak`/`unowned` slot; freeing an object walks that table and resets/poisons every slot currently watching it before the memory is reclaimed.
+When the referent is freed, every live `weak` slot watching it becomes `None`, and every `unowned` slot is poisoned so later reads panic.
 
 ### `@allow_cycle`: the escape hatch
 
-For the rare case where a cycle is genuinely intentional and manually managed (rather than fixable with `weak`/`unowned`), annotate **every** class participating in the cycle:
+For the rare case where a cycle is intentional and manually managed, annotate **every** class in the cycle:
 
 ```dream
 @allow_cycle
