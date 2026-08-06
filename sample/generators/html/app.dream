@@ -1,8 +1,7 @@
 import system;
 import html;
 
-// Demo app for the `html { }` source-generator sample.
-// From this directory: `dream run app.dream` (see dream.toml).
+// Demo: `html { }` markup expanded at compile time by the sample Dream parser.
 
 fun page(title: string): string {
     return html {

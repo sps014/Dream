@@ -2,7 +2,8 @@
 //! that runs lex -> parse -> analyze -> lower -> optimize -> emit and writes the module; the rest
 //! are the cross-cutting pieces it orchestrates: [`source_loader`]/[`prelude`] (assembling user
 //! sources with the bundled stdlib), [`interface_defaults`] (synthesizing inherited default-method
-//! bodies before analysis), [`generate`] (source generators including `@json` / `html { }`),
+//! Layering: parse / prelude / class collection / interface defaults (inherit default-method
+//! bodies before analysis), [`generate`] (source generators including `@json`),
 //! [`abi`] (shared runtime layout constants), [`wasm_opt`] (opt-in Binaryen post-processing), and
 //! [`error`] (the driver-level error type).
 

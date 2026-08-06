@@ -1,0 +1,341 @@
+module parser;
+
+import system;
+import system.collections;
+import system.json;
+
+// Compile-time HTML markup → Dream source (`Html.el` / `Html.render`).
+// Used by harness.dream; no Rust markup logic.
+
+class SpliceCursor {
+    public i: int;
+
+    public constructor() {
+        this.i = 0;
+    }
+}
+
+public class HtmlCompiler {
+    public static fun compile(body: string, splices: List<string>): GenResult {
+        let cur = SpliceCursor();
+        let frag = HtmlCompiler.compile_fragment(body.trim(), splices, cur);
+        if (!frag.ok) {
+            return frag;
+        }
+        return GenResult.success("Html.render(" + frag.source + ")");
+    }
+
+    static fun compile_fragment(body: string, splices: List<string>, cur: SpliceCursor): GenResult {
+        let trimmed = body.trim();
+        if (trimmed.length == 0) {
+            return GenResult.success("\"\"");
+        }
+        if (!trimmed.contains("<")) {
+            return HtmlCompiler.compile_text_with_splices(trimmed, splices, cur);
+        }
+        let el = HtmlCompiler.try_compile_element(trimmed, splices, cur);
+        if (!el.ok) {
+            return el;
+        }
+        if (el.source.length > 0) {
+            return el;
+        }
+        if (trimmed.starts_with("<")) {
+            let preview = trimmed;
+            if (preview.length > 32) {
+                preview = preview.substring(0, 32);
+            }
+            return GenResult.failure(
+                "html syntax block: could not parse markup starting with '" + preview + "'"
+            );
+        }
+        return HtmlCompiler.compile_text_with_splices(trimmed, splices, cur);
+    }
+
+    // Success with empty source means "not an element" (caller may fall through).
+    static fun try_compile_element(s: string, splices: List<string>, cur: SpliceCursor): GenResult {
+        let t = s.trim();
+        if (!t.starts_with("<")) {
+            return GenResult.success("");
+        }
+        let after = t.substring(1, t.length);
+        let name_end = HtmlCompiler.tag_name_end(after);
+        let tag = after.substring(0, name_end);
+        if ((tag.length == 0) || tag.starts_with("/")) {
+            return GenResult.success("");
+        }
+        let rest = after.substring(name_end, after.length);
+        let close_angle_opt = rest.index_of(">");
+        if (close_angle_opt.is_none()) {
+            return GenResult.failure("html syntax block: unclosed opening tag '<" + tag + "'");
+        }
+        let close_angle = close_angle_opt.unwrap_or(0);
+        let attrs_raw = rest.substring(0, close_angle);
+        let self_closing = attrs_raw.trim().ends_with("/");
+        let attrs_src = attrs_raw.trim();
+        if (attrs_src.ends_with("/")) {
+            attrs_src = attrs_src.substring(0, attrs_src.length - 1).trim();
+        }
+        let after_open = rest.substring(close_angle + 1, rest.length);
+        let attrs = HtmlCompiler.compile_attrs(attrs_src);
+        if (!attrs.ok) {
+            return attrs;
+        }
+        if (self_closing) {
+            return GenResult.success("Html.el(\"" + tag + "\", " + attrs.source + ", \"\")");
+        }
+        let close_tag = "</" + tag + ">";
+        let close_pos_opt = HtmlCompiler.last_index_of(after_open, close_tag);
+        if (close_pos_opt.is_none()) {
+            return GenResult.failure("html syntax block: missing closing tag '</" + tag + ">'");
+        }
+        let close_pos = close_pos_opt.unwrap_or(0);
+        let inner = HtmlCompiler.compile_children(
+            after_open.substring(0, close_pos),
+            splices,
+            cur
+        );
+        if (!inner.ok) {
+            return inner;
+        }
+        return GenResult.success(
+            "Html.el(\"" + tag + "\", " + attrs.source + ", " + inner.source + ")"
+        );
+    }
+
+    static fun tag_name_end(after: string): int {
+        let i = 0;
+        while (i < after.length) {
+            let c = after.char_at(i);
+            if (c.is_whitespace() || (c == '>') || (c == '/')) {
+                return i;
+            }
+            i = i + 1;
+        }
+        return after.length;
+    }
+
+    static fun last_index_of(hay: string, needle: string): Option<int> {
+        let m = needle.length;
+        if (m == 0) {
+            return Option.Some(hay.length);
+        }
+        if (m > hay.length) {
+            return Option.None;
+        }
+        let i = hay.length - m;
+        while (i >= 0) {
+            if (hay.substring(i, i + m) == needle) {
+                return Option.Some(i);
+            }
+            i = i - 1;
+        }
+        return Option.None;
+    }
+
+    static fun compile_attrs(attrs_src: string): GenResult {
+        if (attrs_src.length == 0) {
+            return GenResult.success("[]");
+        }
+        let parts = List<string>();
+        let rest = attrs_src;
+        while (rest.length > 0) {
+            rest = rest.trim();
+            if (rest.length == 0) {
+                break;
+            }
+            let eq_opt = rest.index_of("=");
+            if (eq_opt.is_none()) {
+                let preview = rest;
+                if (preview.length > 24) {
+                    preview = preview.substring(0, 24);
+                }
+                return GenResult.failure(
+                    "html syntax block: attribute missing '=': '" + preview + "'"
+                );
+            }
+            let eq = eq_opt.unwrap_or(0);
+            let key = rest.substring(0, eq).trim();
+            rest = rest.substring(eq + 1, rest.length).trim();
+            if (!rest.starts_with("\"")) {
+                return GenResult.failure(
+                    "html syntax block: attribute '" + key + "' value must be a double-quoted string"
+                );
+            }
+            let after_q = rest.substring(1, rest.length);
+            let end_opt = after_q.index_of("\"");
+            if (end_opt.is_none()) {
+                return GenResult.failure(
+                    "html syntax block: unclosed attribute value for '" + key + "'"
+                );
+            }
+            let end = end_opt.unwrap_or(0);
+            let val = after_q.substring(0, end);
+            parts.push("\"" + key + "\", \"" + HtmlCompiler.escape_str(val) + "\"");
+            rest = after_q.substring(end + 1, after_q.length);
+        }
+        if (parts.length == 0) {
+            return GenResult.success("[]");
+        }
+        let joined = "";
+        let i = 0;
+        while (i < parts.length) {
+            if (i > 0) {
+                joined = joined + ", ";
+            }
+            joined = joined + parts.get(i).unwrap_or("");
+            i = i + 1;
+        }
+        return GenResult.success("[" + joined + "]");
+    }
+
+    static fun escape_str(s: string): string {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    static fun compile_children(inner: string, splices: List<string>, cur: SpliceCursor): GenResult {
+        let text = inner.trim();
+        if (text.length == 0) {
+            return GenResult.success("\"\"");
+        }
+        let parts = List<string>();
+        let rest = text;
+        while (rest.length > 0) {
+            rest = rest.trim();
+            if (rest.length == 0) {
+                break;
+            }
+            if (rest.starts_with("<")) {
+                let el = HtmlCompiler.try_compile_element(rest, splices, cur);
+                if (!el.ok) {
+                    return el;
+                }
+                if (el.source.length > 0) {
+                    parts.push(el.source);
+                    let len_opt = HtmlCompiler.element_source_len(rest);
+                    if (len_opt.is_some()) {
+                        let len = len_opt.unwrap_or(0);
+                        rest = rest.substring(len, rest.length);
+                        continue;
+                    }
+                }
+                let preview = rest;
+                if (preview.length > 32) {
+                    preview = preview.substring(0, 32);
+                }
+                return GenResult.failure(
+                    "html syntax block: could not parse nested markup '" + preview + "'"
+                );
+            }
+            let next_tag_opt = rest.index_of("<");
+            let next_tag = rest.length;
+            if (next_tag_opt.is_some()) {
+                next_tag = next_tag_opt.unwrap_or(rest.length);
+            }
+            let chunk = rest.substring(0, next_tag).trim();
+            if (chunk.length > 0) {
+                let compiled = HtmlCompiler.compile_text_with_splices(chunk, splices, cur);
+                if (!compiled.ok) {
+                    return compiled;
+                }
+                parts.push(compiled.source);
+            }
+            rest = rest.substring(next_tag, rest.length);
+        }
+        if (parts.length == 0) {
+            return GenResult.success("\"\"");
+        }
+        let joined = "";
+        let i = 0;
+        while (i < parts.length) {
+            if (i > 0) {
+                joined = joined + " + ";
+            }
+            joined = joined + parts.get(i).unwrap_or("");
+            i = i + 1;
+        }
+        return GenResult.success(joined);
+    }
+
+    static fun element_source_len(s: string): Option<int> {
+        if (!s.starts_with("<")) {
+            return Option.None;
+        }
+        let after = s.substring(1, s.length);
+        let name_end = HtmlCompiler.tag_name_end(after);
+        let tag = after.substring(0, name_end);
+        let rest = after.substring(name_end, after.length);
+        let close_angle_opt = rest.index_of(">");
+        if (close_angle_opt.is_none()) {
+            return Option.None;
+        }
+        let close_angle = close_angle_opt.unwrap_or(0);
+        let attrs_raw = rest.substring(0, close_angle);
+        if (attrs_raw.trim().ends_with("/")) {
+            return Option.Some(1 + name_end + close_angle + 1);
+        }
+        let after_open = rest.substring(close_angle + 1, rest.length);
+        let close_tag = "</" + tag + ">";
+        // Match compile: outermost close (last), so nested same-tag lengths are correct.
+        let close_pos_opt = HtmlCompiler.last_index_of(after_open, close_tag);
+        if (close_pos_opt.is_none()) {
+            return Option.None;
+        }
+        let close_pos = close_pos_opt.unwrap_or(0);
+        return Option.Some(1 + name_end + close_angle + 1 + close_pos + close_tag.length);
+    }
+
+    static fun compile_text_with_splices(
+        text: string,
+        splices: List<string>,
+        cur: SpliceCursor
+    ): GenResult {
+        if (text.length == 0) {
+            return GenResult.success("\"\"");
+        }
+        let result_parts = List<string>();
+        let rest = text;
+        while (true) {
+            let start_opt = rest.index_of("{");
+            if (start_opt.is_none()) {
+                break;
+            }
+            let start = start_opt.unwrap_or(0);
+            let before = rest.substring(0, start);
+            if (before.length > 0) {
+                result_parts.push("\"" + HtmlCompiler.escape_str(before) + "\"");
+            }
+            let after = rest.substring(start + 1, rest.length);
+            let end_opt = after.index_of("}");
+            if (end_opt.is_none()) {
+                return GenResult.failure(
+                    "html syntax block: unclosed '{…}' splice (missing closing '}')"
+                );
+            }
+            let end = end_opt.unwrap_or(0);
+            if (cur.i < splices.length) {
+                result_parts.push("(" + splices.get(cur.i).unwrap_or("") + ")");
+                cur.i = cur.i + 1;
+            } else {
+                result_parts.push("(" + after.substring(0, end) + ")");
+            }
+            rest = after.substring(end + 1, after.length);
+        }
+        if (rest.length > 0) {
+            result_parts.push("\"" + HtmlCompiler.escape_str(rest) + "\"");
+        }
+        if (result_parts.length == 0) {
+            return GenResult.success("\"\"");
+        }
+        let joined = "";
+        let i = 0;
+        while (i < result_parts.length) {
+            if (i > 0) {
+                joined = joined + " + ";
+            }
+            joined = joined + result_parts.get(i).unwrap_or("");
+            i = i + 1;
+        }
+        return GenResult.success(joined);
+    }
+}

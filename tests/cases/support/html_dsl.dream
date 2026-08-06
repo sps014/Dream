@@ -1,6 +1,6 @@
 module support.html_dsl;
 
-// Registers `html { ... }` and provides the runtime `Html` helpers the expander emits into.
+// Prefer `support/html/` (runtime + Dream `html { }` generator). Kept for any callers of Html.el.
 
 public class Html {
     public static fun el(tag: string, attrs: string[], inner: string): string {
@@ -16,9 +16,4 @@ public class Html {
     public static fun render(html: string): string {
         return html;
     }
-}
-
-@generator
-@syntax_block("html")
-public fun html(): void {
 }

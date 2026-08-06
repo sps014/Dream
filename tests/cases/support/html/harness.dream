@@ -1,0 +1,74 @@
+import system;
+import system.io;
+import system.collections;
+import system.json;
+import system.codegen;
+import parser;
+
+// Host entry for syntax-DSL expand. Snapshot path in `DREAM_SYNTAX_GEN_SNAPSHOT`.
+// Protocol (stdout):
+//   GenHost.ok_marker() then lines `id\tdream_expr`
+//   GenHost.err_marker() then `id\tmessage` (or bare message)
+
+fun string_list_from_json(arr: JsonValue): List<string> {
+    let out = List<string>();
+    let i = 0;
+    while (i < arr.length) {
+        let item = arr.at(i).unwrap_or(JsonValue.none());
+        out.push(item.as_string().unwrap_or(""));
+        i = i + 1;
+    }
+    return out;
+}
+
+async fun main(): void {
+    let path = System.env_or("DREAM_SYNTAX_GEN_SNAPSHOT", "");
+    if (path.is_empty()) {
+        System.println(GenHost.err_marker());
+        System.println("DREAM_SYNTAX_GEN_SNAPSHOT is not set");
+        return;
+    }
+    let text_res = await File.read(path);
+    switch (text_res) {
+        Ok(text) => {
+            let parsed = Json.parse(text);
+            switch (parsed) {
+                Ok(root) => {
+                    let blocks = root.get("blocks").unwrap_or(JsonValue.array());
+                    let out_lines = List<string>();
+                    let i = 0;
+                    while (i < blocks.length) {
+                        let b = blocks.at(i).unwrap_or(JsonValue.none());
+                        let id = b.get("id").unwrap_or(JsonValue.none()).as_int().unwrap_or(0);
+                        let body = b.get("body").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+                        let splices = string_list_from_json(
+                            b.get("splices").unwrap_or(JsonValue.array())
+                        );
+                        let result = HtmlCompiler.compile(body, splices);
+                        if (!result.ok) {
+                            System.println(GenHost.err_marker());
+                            System.println(id.to_string() + "\t" + result.error);
+                            return;
+                        }
+                        out_lines.push(id.to_string() + "\t" + result.source);
+                        i = i + 1;
+                    }
+                    System.println(GenHost.ok_marker());
+                    let j = 0;
+                    while (j < out_lines.length) {
+                        System.println(out_lines.get(j).unwrap_or(""));
+                        j = j + 1;
+                    }
+                }
+                Err(e) => {
+                    System.println(GenHost.err_marker());
+                    System.println("failed to parse snapshot JSON: " + e.message());
+                }
+            }
+        }
+        Err(e) => {
+            System.println(GenHost.err_marker());
+            System.println("failed to read snapshot: " + e.message());
+        }
+    }
+}

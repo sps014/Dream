@@ -8,7 +8,9 @@ import system.codegen;
 
 HTML and other syntax DSLs are **not** part of this package — see
 [Source generators](../language/generators.md) and
-[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html).
+[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html)
+(Dream `HtmlCompiler` + harness; host only runs WASM / applies `replace`).
+
 
 ## Status
 
@@ -18,7 +20,9 @@ HTML and other syntax DSLs are **not** part of this package — see
 | `GenHost` | Shipped — OK/ERR/LOC stdout markers for harnesses |
 | `GenResult` (`system.json`) | Shipped — expand outcome + optional type/field for spans |
 | Host `GeneratorContext` | Rust only (`driver/generate`) — `emit_*`, `replace`, `error` |
-| User `@generator` Dream bodies | **Registered, not executed yet** — use `@json` / `html` as patterns |
+| User `@generator` Dream bodies | **Registered, not executed yet** (syntax-DSL samples use sibling `harness.dream`) |
+| Builtin `@json` | Shipped in the driver (language derive) |
+| Syntax-DSL harness runner | Shipped — generic snapshot → harness WASM → `replace` |
 
 When a Dream harness runs (as `@json` does), print `GenHost.err_marker()` then the message, and optionally `GenHost.loc_marker()` + `GenHost.format_loc(type, field)` so the host can attach a source span via `DiagnosticBag`. Failures surface as `CompileError::Generator`.
 
@@ -79,7 +83,7 @@ Generators discover work via `@generator` functions / attributes. The compile ho
 
 | Feature | Where |
 |---------|--------|
-| `@json` derive | [JSON](json.md) |
-| `html { }` DSL | [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html) |
+| `@json` derive | [JSON](json.md) — compiler builtin |
+| HTML sample | [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html) — Dream parser + harness |
 
 Full tutorial: [Source generators](../language/generators.md).

@@ -2,13 +2,13 @@
 //! GeneratorContext, registration, and the generate/merge pipeline.
 
 mod context;
-mod html;
 mod json_gen;
 mod manifest;
 mod registration;
 mod rewrite;
 mod semantic;
 mod syntax;
+mod syntax_gen;
 
 pub use context::GeneratorContext;
 pub use registration::{discover_generators, RegisteredGenerator};
@@ -40,9 +40,10 @@ pub fn run_generators<'a>(
     json_gen::expand_from_acc(&mut ctx, &acc.all_structs, &acc.all_enums, diagnostics);
     ctx.apply_emits(arena, acc, diagnostics)?;
 
-    html::expand_if_registered(&mut ctx);
+    syntax_gen::expand_syntax_blocks(&mut ctx, diagnostics);
+
     ctx.apply_replacements(arena, acc, diagnostics)?;
-    // Flush any `ctx.error` reported during html / replacements (apply_emits already flushed once).
+    // Flush any `ctx.error` reported during replacements (apply_emits already flushed once).
     ctx.flush_errors(diagnostics);
 
     report_unexpanded_syntax_blocks(acc, diagnostics);

@@ -1,0 +1,10 @@
+module gen;
+
+import system.codegen;
+
+// Registers the `html { … }` syntax DSL. Markup lowering lives in `parser.dream`;
+// the host runs sibling `harness.dream` when this introducer is claimed.
+
+@generator
+@syntax_block("html")
+public fun html(): void { }

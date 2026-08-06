@@ -97,7 +97,7 @@ flowchart LR
 ```
 
 - User-facing problems are reported as **diagnostics** during lex/parse/generate/analyze and surface as `CompileError::Syntax`, `CompileError::Generator`, or `CompileError::Semantic` (`CompileError::Io` wraps source/artifact I/O).
-- Generator-phase failures (`@json`, unexpanded syntax blocks, html markup errors, unsupported `@compute` statements) use **`CompileError::Generator`**.
+- Generator-phase failures (`@json`, unexpanded syntax blocks, syntax-DSL harness errors, unsupported `@compute` statements) use **`CompileError::Generator`**.
 - The backend has **no user-facing error path**: it expects a fully validated program. A promised invariant it finds violated is a compiler bug (ICE) and `panic!`s rather than returning a diagnostic.
 - The backend never runs on a program that produced any diagnostic error, so poison (`Error`-typed) values never reach lowering.
 

@@ -16,8 +16,8 @@ import system.codegen;
 @generator
 public fun routes(): void {
     // Discovery stub — name is the function name (`routes`).
-    // Bodies are registered today but not executed; `@json` / `html` show the live patterns.
-    // Use CodeBuilder / GenHost when writing a harness.
+    // Declaration bodies are not executed yet; syntax-DSL samples ship a sibling `harness.dream`
+    // the host runs (same idea as the `@json` harness). Use CodeBuilder / GenHost in harnesses.
 }
 ```
 
@@ -76,15 +76,17 @@ Rules:
 
 ### HTML sample
 
-HTML is not a language builtin. The reference sample is
+HTML is **not** a language builtin. Expand is owned by
 [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html):
+Dream `HtmlCompiler` + `harness.dream`, registered via `@syntax_block("html")`. The host only
+snapshots sites and applies replace lines (no Rust markup parser).
 
 ```bash
 cargo run -- run sample/generators/html/app.dream
 ```
 
-That folder registers `@syntax_block("html")`, provides runtime `Html` helpers, and shows a tiny
-app. Copy it to invent your own introducer (`svg { }`, `sql { }`, …).
+Convention for your own introducer: register `@generator` + `@syntax_block("…")`, put a
+`harness.dream` next to the generator file, lower sites in Dream, print `GenHost` OK/ERR lines.
 
 ## `@json` derive
 
@@ -126,10 +128,11 @@ Useful queries on declarations (see [CodeBuilder](../stdlib/codegen.md)):
 1. Decide **emit** (derive) vs **replace** (DSL) vs both.
 2. Use builtin attributes, or define your own with `@attribute` on a top-level function.
 3. Mark a function `@generator` (plus `@syntax_block` if needed).
-4. Register via import or `[[generators]]`.
-5. Prefer `CodeBuilder` for multi-line bodies.
-6. Report failures via harness OK/ERR markers (or host `ctx.error`) so they become `CompileError::Generator`.
-7. Add a sample under `sample/generators/` or a golden test.
+4. For a syntax DSL: ship sibling `harness.dream` that reads the host snapshot and prints replace lines.
+5. Register via import or `[[generators]]`.
+6. Prefer `CodeBuilder` for multi-line bodies.
+7. Report failures via harness OK/ERR markers (or host `ctx.error`) so they become `CompileError::Generator`.
+8. Add a sample under `sample/generators/` or a golden test.
 
 ## See also
 

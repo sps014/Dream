@@ -36,7 +36,7 @@ pub struct Compiler {
     /// set yet; an explicit [`Compiler::with_optimize`] (or CLI `-O`) overrides that default.
     /// Debug builds leave this `None` unless the caller opts in.
     optimize: Option<OptLevel>,
-    /// When `true`, skip the source-generator pass (`@json`, `html { }`, …). Used when compiling
+    /// When `true`, skip the source-generator pass (`@json`, …). Used when compiling
     /// the generator harness itself so nested compiles cannot recurse into generator execution.
     skip_generators: bool,
 }
@@ -135,7 +135,7 @@ impl Compiler {
             return Err(CompileError::Syntax);
         }
 
-        // Source generators: `@json` derive, `html { }` DSL, and registered `@generator`s.
+        // Source generators: `@json` derive and registered `@generator`s (bodies not executed yet).
         // Nested harness compiles set `skip_generators` so this cannot recurse.
         if !self.skip_generators {
             debug_assert!(

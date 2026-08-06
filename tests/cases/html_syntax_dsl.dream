@@ -1,5 +1,6 @@
 import system;
-import support.html_dsl;
+import support.html.html;
+import support.html.gen;
 
 fun page(title: string): string {
     return html {

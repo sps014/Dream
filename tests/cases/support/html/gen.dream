@@ -1,0 +1,7 @@
+module gen;
+
+import system.codegen;
+
+@generator
+@syntax_block("html")
+public fun html(): void { }
