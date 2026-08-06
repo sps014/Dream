@@ -1,0 +1,8 @@
+// Tuple destructuring is not lowered to WGSL.
+import system.gpu;
+
+@compute(64)
+fun bad(out: GpuBuffer<float>): void {
+    let (x, y) = (1, 2);
+    out[0] = (float)(x + y);
+}

@@ -1,6 +1,7 @@
 //! The top-level, typed error returned by [`crate::driver::compiler::Compiler::compile`]. Each
-//! variant names the pipeline phase that failed. User-facing detail for `Syntax`/`Semantic` lives
-//! in the diagnostics that were already rendered; `Io` wraps lower-level source/artifact failures.
+//! variant names the pipeline phase that failed. User-facing detail for `Syntax`/`Semantic`/
+//! `Generator` lives in the diagnostics that were already rendered; `Io` wraps lower-level
+//! source/artifact failures.
 
 use std::fmt;
 
@@ -10,6 +11,8 @@ pub enum CompileError {
     Syntax,
     /// One or more semantic errors were reported during analysis.
     Semantic,
+    /// One or more errors from the generate phase (`@json`, syntax DSLs, `@compute` WGSL emit, …).
+    Generator,
     /// An I/O failure during the pipeline (reading sources, writing artifacts).
     Io(std::io::Error),
     /// Code generation hit an internal invariant violation (see `crate::internal_error!`) - a
@@ -24,6 +27,7 @@ impl fmt::Display for CompileError {
         match self {
             CompileError::Syntax => write!(f, "Syntax errors found during parsing"),
             CompileError::Semantic => write!(f, "Semantic errors found"),
+            CompileError::Generator => write!(f, "Source generator errors found"),
             CompileError::Io(e) => write!(f, "{}", e),
             CompileError::Internal(msg) => write!(f, "{}", msg),
         }

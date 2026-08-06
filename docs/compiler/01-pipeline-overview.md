@@ -25,6 +25,8 @@ flowchart TD
     wat --> abi["driver::abi::emit_wasm_and_abi\nwat→wasm + .abi.json"]
 ```
 
+Generate phase: `run_generators` runs after parse (before analysis). `@compute` WGSL validation runs after analysis (before MIR). Both report `CompileError::Generator` when diagnostics are present.
+
 The `hir → mir → emit` pipeline is the **only** backend.
 
 ## Stage by stage
@@ -88,12 +90,14 @@ Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-s
 ```mermaid
 flowchart LR
     A[Lex/Parse] -->|lexical/syntactic| D[DiagnosticBag]
+    G[Generators / compute WGSL] -->|derive/DSL/kernel| D
     B[Analyze] -->|semantic| D
-    D --> CE1[CompileError::Syntax / Semantic]
+    D --> CE1[CompileError::Syntax / Generator / Semantic]
     IO[fs read/write] --> CE3[CompileError::Io]
 ```
 
-- User-facing problems are reported as **diagnostics** during lex/parse/analyze and surface as `CompileError::Syntax` / `CompileError::Semantic` (`CompileError::Io` wraps source/artifact I/O).
+- User-facing problems are reported as **diagnostics** during lex/parse/generate/analyze and surface as `CompileError::Syntax`, `CompileError::Generator`, or `CompileError::Semantic` (`CompileError::Io` wraps source/artifact I/O).
+- Generator-phase failures (`@json`, unexpanded syntax blocks, html markup errors, unsupported `@compute` statements) use **`CompileError::Generator`**.
 - The backend has **no user-facing error path**: it expects a fully validated program. A promised invariant it finds violated is a compiler bug (ICE) and `panic!`s rather than returning a diagnostic.
 - The backend never runs on a program that produced any diagnostic error, so poison (`Error`-typed) values never reach lowering.
 

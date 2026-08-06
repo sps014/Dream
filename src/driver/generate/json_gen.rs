@@ -21,6 +21,8 @@ const OK_MARKER: &str = "__DREAM_JSON_GEN_OK__";
 #[cfg(feature = "native")]
 const ERR_MARKER: &str = "__DREAM_JSON_GEN_ERR__";
 #[cfg(feature = "native")]
+const LOC_MARKER: &str = "__DREAM_JSON_GEN_LOC__";
+#[cfg(feature = "native")]
 const SNAPSHOT_ENV: &str = "DREAM_JSON_GEN_SNAPSHOT";
 
 /// Expands every `@json` type into synthesized `extend` source through `emit_file`.
@@ -72,7 +74,11 @@ pub fn expand_from_acc(
                 }
             }
             Err(err) => {
-                diagnostics.report_error(err, None);
+                let span = lookup_json_error_span(&err, structs, enums);
+                if let Some(path) = json_error_file_path(&err, structs, enums) {
+                    diagnostics.file_path = Some(path);
+                }
+                diagnostics.report_error(err.message, span);
             }
         }
     }
@@ -259,7 +265,14 @@ fn json_escape(s: &str) -> String {
 }
 
 #[cfg(feature = "native")]
-fn run_dream_json_generator(snapshot: &str) -> Result<String, String> {
+struct JsonGenError {
+    message: String,
+    type_name: Option<String>,
+    field_name: Option<String>,
+}
+
+#[cfg(feature = "native")]
+fn run_dream_json_generator(snapshot: &str) -> Result<String, JsonGenError> {
     // The harness reads the snapshot path from process-global `DREAM_JSON_GEN_SNAPSHOT`.
     // Concurrent `compile()` calls (e2e rayon pool) must not interleave set_var/run/remove_var.
     static SNAPSHOT_GUARD: Mutex<()> = Mutex::new(());
@@ -267,16 +280,33 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, String> {
         .lock()
         .unwrap_or_else(|e| e.into_inner());
 
-    let wat_path = harness_wat_path()?;
-    let mut snap_file = snap_tempfile()?;
+    let wat_path = harness_wat_path().map_err(|e| JsonGenError {
+        message: e,
+        type_name: None,
+        field_name: None,
+    })?;
+    let mut snap_file = snap_tempfile().map_err(|e| JsonGenError {
+        message: e,
+        type_name: None,
+        field_name: None,
+    })?;
     snap_file
         .write_all(snapshot.as_bytes())
-        .map_err(|e| format!("@json generator: failed to write snapshot: {e}"))?;
+        .map_err(|e| JsonGenError {
+            message: format!("@json generator: failed to write snapshot: {e}"),
+            type_name: None,
+            field_name: None,
+        })?;
     let snap_path = snap_file.path.to_string_lossy().into_owned();
 
     std::env::set_var(SNAPSHOT_ENV, &snap_path);
-    let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path)
-        .map_err(|e| format!("@json generator: failed to run Dream harness: {e}"))?;
+    let output = crate::execution::wasm_runner::execute_wasm_capturing(&wat_path).map_err(|e| {
+        JsonGenError {
+            message: format!("@json generator: failed to run Dream harness: {e}"),
+            type_name: None,
+            field_name: None,
+        }
+    })?;
     std::env::remove_var(SNAPSHOT_ENV);
     drop(snap_file);
 
@@ -284,23 +314,132 @@ fn run_dream_json_generator(snapshot: &str) -> Result<String, String> {
 }
 
 #[cfg(feature = "native")]
-fn parse_generator_output(output: &str) -> Result<String, String> {
+fn parse_generator_output(output: &str) -> Result<String, JsonGenError> {
     let trimmed = output.trim_start();
     if let Some(rest) = trimmed.strip_prefix(OK_MARKER) {
         let source = rest.strip_prefix('\n').unwrap_or(rest);
         return Ok(source.to_string());
     }
     if let Some(rest) = trimmed.strip_prefix(ERR_MARKER) {
-        let msg = rest.trim();
-        return Err(if msg.is_empty() {
+        let body = rest.trim_start_matches('\n');
+        let (msg_part, loc_part) = if let Some((m, l)) = body.split_once(LOC_MARKER) {
+            (m.trim(), Some(l.trim()))
+        } else {
+            (body.trim(), None)
+        };
+        let message = if msg_part.is_empty() {
             "@json generator failed".to_string()
         } else {
-            msg.to_string()
+            // Keep the first line as the user-facing message (LOC is separate).
+            msg_part.lines().next().unwrap_or(msg_part).to_string()
+        };
+        let (type_name, field_name) = if let Some(loc) = loc_part {
+            let mut parts = loc.splitn(2, '\t');
+            let ty = parts.next().unwrap_or("").trim();
+            let field = parts.next().unwrap_or("").trim();
+            (
+                if ty.is_empty() {
+                    None
+                } else {
+                    Some(ty.to_string())
+                },
+                if field.is_empty() {
+                    None
+                } else {
+                    Some(field.to_string())
+                },
+            )
+        } else {
+            (
+                extract_quoted_after(msg_part, "class '")
+                    .or_else(|| extract_quoted_after(msg_part, "union '")),
+                extract_quoted_after(msg_part, "field '"),
+            )
+        };
+        return Err(JsonGenError {
+            message,
+            type_name,
+            field_name,
         });
     }
-    Err(format!(
-        "@json generator: unexpected harness output (missing OK/ERR marker):\n{output}"
-    ))
+    Err(JsonGenError {
+        message: format!("@json generator: unexpected harness output: {output}"),
+        type_name: None,
+        field_name: None,
+    })
+}
+
+#[cfg(feature = "native")]
+fn extract_quoted_after(msg: &str, prefix: &str) -> Option<String> {
+    let start = msg.find(prefix)? + prefix.len();
+    let rest = &msg[start..];
+    let end = rest.find('\'')?;
+    Some(rest[..end].to_string())
+}
+
+#[cfg(feature = "native")]
+fn json_error_file_path(
+    err: &JsonGenError,
+    structs: &[StructDeclarationNode<'_>],
+    enums: &[EnumDeclarationNode<'_>],
+) -> Option<String> {
+    let type_name = err.type_name.as_deref()?;
+    for s in structs {
+        if s.name.text == type_name {
+            return s.file_path.as_ref().map(|p| p.to_string());
+        }
+    }
+    for e in enums {
+        if e.name.text == type_name {
+            return e.file_path.as_ref().map(|p| p.to_string());
+        }
+    }
+    None
+}
+
+#[cfg(feature = "native")]
+fn lookup_json_error_span(
+    err: &JsonGenError,
+    structs: &[StructDeclarationNode<'_>],
+    enums: &[EnumDeclarationNode<'_>],
+) -> Option<dream_text::text_span::TextSpan> {
+    let type_name = err.type_name.as_deref()?;
+    if let Some(field_name) = err.field_name.as_deref() {
+        for s in structs {
+            if s.name.text == type_name {
+                for f in &s.fields {
+                    if f.name.text == field_name {
+                        return Some(f.name.position);
+                    }
+                }
+                return Some(s.name.position);
+            }
+        }
+        for e in enums {
+            if e.name.text == type_name {
+                for v in &e.variants {
+                    for f in &v.fields {
+                        if f.name.text == field_name {
+                            return Some(f.name.position);
+                        }
+                    }
+                }
+                return Some(e.name.position);
+            }
+        }
+    } else {
+        for s in structs {
+            if s.name.text == type_name {
+                return Some(s.name.position);
+            }
+        }
+        for e in enums {
+            if e.name.text == type_name {
+                return Some(e.name.position);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(feature = "native")]
@@ -315,6 +454,8 @@ fn harness_wat_path() -> Result<String, String> {
                 let mut h = DefaultHasher::new();
                 HARNESS_SOURCE.hash(&mut h);
                 include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream")
+                    .hash(&mut h);
+                include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream")
                     .hash(&mut h);
                 include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream")
                     .hash(&mut h);

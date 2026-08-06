@@ -338,6 +338,11 @@ public class JsonGenerator {
         }
     }
 
+
+    static fun fail_field(type_name: string, field_name: string, message: string): GenResult {
+        return GenResult.failure_at(message, type_name, field_name);
+    }
+
     static fun expand_class(t: GenType, json_names: List<string>, jsonable: List<string>): GenResult {
         let to_cb = CodeBuilder();
         let from_cb = CodeBuilder();
@@ -354,9 +359,11 @@ public class JsonGenerator {
             if (field.json_ignore) {
                 let def = JsonGenerator.ignore_default(ftype, field.option_inner);
                 if (def.length == 0) {
-                    return GenResult.failure(
-                        "@json class '" + t.name + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default (use `Option<" + ftype + ">` or remove @json_ignore)"
-                    );
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default (use `Option<" + ftype + ">` or remove @json_ignore)",
+                                t.name,
+                                fname
+                            );
                 }
                 if (first_field == false) {
                     from_fields = from_fields + ", ";
@@ -383,9 +390,11 @@ public class JsonGenerator {
                         "__i_" + fname,
                         json_names
                     ) == false) {
-                        return GenResult.failure(
-                            "@json class '" + t.name + "' field '" + fname + "' has unsupported optional array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
-                        );
+                        return GenResult.failure_at(
+                                    "@json class '" + t.name + "' field '" + fname + "' has unsupported optional array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable),
+                                    t.name,
+                                    fname
+                                );
                     }
                     to_cb.line("__o.set(\"" + json_key + "\", __arr_" + fname + ");");
                     to_cb.dedent();
@@ -406,9 +415,11 @@ public class JsonGenerator {
                         "__asrc_" + fname,
                         json_names
                     ) == false) {
-                        return GenResult.failure(
-                            "@json class '" + t.name + "' field '" + fname + "' has unsupported optional array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
-                        );
+                        return GenResult.failure_at(
+                                    "@json class '" + t.name + "' field '" + fname + "' has unsupported optional array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable),
+                                    t.name,
+                                    fname
+                                );
                     }
                     from_cb.line("__" + fname + " = Option.Some(__inner_" + fname + ");");
                     from_cb.dedent();
@@ -431,9 +442,11 @@ public class JsonGenerator {
                     to_inner = "__v_" + fname + ".to_json()";
                     from_inner = base + ".from_json(__src_" + fname + ")";
                 } else {
-                    return GenResult.failure(
-                        "@json class '" + t.name + "' field '" + fname + "' has unsupported optional type '" + ftype + "' (only `Option<string>`, `Option<@json class>`, and `Option<T[]>` of those are supported)" + JsonGenerator.missing_hint(base, jsonable)
-                    );
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported optional type '" + ftype + "' (only `Option<string>`, `Option<@json class>`, and `Option<T[]>` of those are supported)" + JsonGenerator.missing_hint(base, jsonable),
+                                t.name,
+                                fname
+                            );
                 }
                 to_cb.line("switch (this." + fname + ") {");
                 to_cb.indent();
@@ -467,9 +480,11 @@ public class JsonGenerator {
                     "__i_" + fname,
                     json_names
                 ) == false) {
-                    return GenResult.failure(
-                        "@json class '" + t.name + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
-                    );
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable),
+                                t.name,
+                                fname
+                            );
                 }
                 to_cb.line("__o.set(\"" + json_key + "\", __arr_" + fname + ");");
                 if (JsonGenerator.array_from_stmts(
@@ -481,9 +496,11 @@ public class JsonGenerator {
                     "__src_" + fname,
                     json_names
                 ) == false) {
-                    return GenResult.failure(
-                        "@json class '" + t.name + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
-                    );
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable),
+                                t.name,
+                                fname
+                            );
                 }
                 if (first_field == false) {
                     from_fields = from_fields + ", ";
@@ -502,9 +519,11 @@ public class JsonGenerator {
                     "__arr_" + fname,
                     json_names
                 ) == false) {
-                    return GenResult.failure(
-                        "@json class '" + t.name + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                    );
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                                t.name,
+                                fname
+                            );
                 }
                 to_cb.line("__o.set(\"" + json_key + "\", __arr_" + fname + ");");
                 if (JsonGenerator.tuple_from_stmts(
@@ -515,9 +534,11 @@ public class JsonGenerator {
                     "__src_" + fname,
                     json_names
                 ) == false) {
-                    return GenResult.failure(
-                        "@json class '" + t.name + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                    );
+                    return GenResult.failure_at(
+                                "@json class '" + t.name + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                                t.name,
+                                fname
+                            );
                 }
                 if (first_field == false) {
                     from_fields = from_fields + ", ";
@@ -546,9 +567,11 @@ public class JsonGenerator {
                 json_names
             );
             if (to_e.length == 0 || from_e.length == 0) {
-                return GenResult.failure(
-                    "@json class '" + t.name + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                );
+                return GenResult.failure_at(
+                            "@json class '" + t.name + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                            t.name,
+                            fname
+                        );
             }
             to_cb.line("__o.set(\"" + json_key + "\", " + to_e + ");");
             if (first_field == false) {
@@ -631,9 +654,11 @@ public class JsonGenerator {
                         "__i_" + vname + "_" + fname,
                         json_names
                     ) == false) {
-                        return GenResult.failure(
-                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
-                        );
+                        return GenResult.failure_at(
+                                    "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable),
+                                    t.name,
+                                    fname
+                                );
                     }
                     to_cb.line("__o.set(\"" + fname + "\", __arr_" + vname + "_" + fname + ");");
                 } else if (JsonGenerator.is_tuple_type(ftype)) {
@@ -644,17 +669,21 @@ public class JsonGenerator {
                         "__arr_" + vname + "_" + fname,
                         json_names
                     ) == false) {
-                        return GenResult.failure(
-                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                        );
+                        return GenResult.failure_at(
+                                    "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                                    t.name,
+                                    fname
+                                );
                     }
                     to_cb.line("__o.set(\"" + fname + "\", __arr_" + vname + "_" + fname + ");");
                 } else {
                     let expr = JsonGenerator.json_to_expr(ftype, fname, json_names);
                     if (expr.length == 0) {
-                        return GenResult.failure(
-                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                        );
+                        return GenResult.failure_at(
+                                    "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                                    t.name,
+                                    fname
+                                );
                     }
                     to_cb.line("__o.set(\"" + fname + "\", " + expr + ");");
                 }
@@ -662,9 +691,11 @@ public class JsonGenerator {
                 if (field.json_ignore) {
                     let def = JsonGenerator.ignore_default(ftype, field.option_inner);
                     if (def.length == 0) {
-                        return GenResult.failure(
-                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default"
-                        );
+                        return GenResult.failure_at(
+                                    "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default",
+                                    t.name,
+                                    fname
+                                );
                     }
                     if (first_arg == false) {
                         args = args + ", ";
@@ -691,9 +722,11 @@ public class JsonGenerator {
                             "__src_" + vname + "_" + fname,
                             json_names
                         ) == false) {
-                            return GenResult.failure(
-                                "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
-                            );
+                            return GenResult.failure_at(
+                                        "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable),
+                                        t.name,
+                                        fname
+                                    );
                         }
                         if (first_arg == false) {
                             args = args + ", ";
@@ -710,9 +743,11 @@ public class JsonGenerator {
                             "__src_" + vname + "_" + fname,
                             json_names
                         ) == false) {
-                            return GenResult.failure(
-                                "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                            );
+                            return GenResult.failure_at(
+                                        "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                                        t.name,
+                                        fname
+                                    );
                         }
                         if (first_arg == false) {
                             args = args + ", ";
@@ -722,9 +757,11 @@ public class JsonGenerator {
                     } else {
                         let expr = JsonGenerator.json_from_expr(ftype, jexpr, json_names);
                         if (expr.length == 0) {
-                            return GenResult.failure(
-                                "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                            );
+                            return GenResult.failure_at(
+                                        "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                                        t.name,
+                                        fname
+                                    );
                         }
                         if (first_arg == false) {
                             args = args + ", ";
@@ -795,9 +832,11 @@ public class JsonGenerator {
                         "__fbs_" + fname,
                         json_names
                     ) == false) {
-                        return GenResult.failure(
-                            "@json union '" + t.name + "' fallback field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
-                        );
+                        return GenResult.failure_at(
+                                    "@json union '" + t.name + "' fallback field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable),
+                                    t.name,
+                                    fname
+                                );
                     }
                     if (first_arg == false) {
                         args = args + ", ";
@@ -814,9 +853,11 @@ public class JsonGenerator {
                         "__fbs_" + fname,
                         json_names
                     ) == false) {
-                        return GenResult.failure(
-                            "@json union '" + t.name + "' fallback field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
-                        );
+                        return GenResult.failure_at(
+                                    "@json union '" + t.name + "' fallback field '" + fname + "' has unsupported tuple type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable),
+                                    t.name,
+                                    fname
+                                );
                     }
                     if (first_arg == false) {
                         args = args + ", ";

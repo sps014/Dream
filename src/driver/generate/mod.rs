@@ -42,6 +42,8 @@ pub fn run_generators<'a>(
 
     html::expand_if_registered(&mut ctx);
     ctx.apply_replacements(arena, acc, diagnostics)?;
+    // Flush any `ctx.error` reported during html / replacements (apply_emits already flushed once).
+    ctx.flush_errors(diagnostics);
 
     report_unexpanded_syntax_blocks(acc, diagnostics);
     Ok(())

@@ -16,33 +16,43 @@ pub fn expand_if_registered(ctx: &mut GeneratorContext) {
         let Some(site) = ctx.syntax.block_keys.get(&id).cloned() else {
             continue;
         };
-        let dream = compile_html(&site.body_text, &site.splice_sources);
-        ctx.replace(id, dream);
+        match compile_html(&site.body_text, &site.splice_sources) {
+            Ok(dream) => ctx.replace(id, dream),
+            Err(msg) => ctx.error(id, msg),
+        }
     }
 }
 
-fn compile_html(body: &str, splice_sources: &[String]) -> String {
-    format!("Html.render({})", compile_fragment(body.trim(), splice_sources))
+fn compile_html(body: &str, splice_sources: &[String]) -> Result<String, String> {
+    let fragment = compile_fragment(body.trim(), splice_sources)?;
+    Ok(format!("Html.render({})", fragment))
 }
 
-fn compile_fragment(body: &str, splices: &[String]) -> String {
+fn compile_fragment(body: &str, splices: &[String]) -> Result<String, String> {
     let trimmed = body.trim();
     if trimmed.is_empty() {
-        return "\"\"".into();
+        return Ok("\"\"".into());
     }
     if !trimmed.contains('<') {
         return compile_text_with_splices(trimmed, splices);
     }
-    if let Some(compiled) = try_compile_element(trimmed, splices) {
-        return compiled;
+    if let Some(compiled) = try_compile_element(trimmed, splices)? {
+        return Ok(compiled);
+    }
+    // Looks like markup but failed to parse as an element.
+    if trimmed.starts_with('<') {
+        return Err(format!(
+            "html syntax block: could not parse markup starting with '{}'",
+            trimmed.chars().take(32).collect::<String>()
+        ));
     }
     compile_text_with_splices(trimmed, splices)
 }
 
-fn try_compile_element(s: &str, splices: &[String]) -> Option<String> {
+fn try_compile_element(s: &str, splices: &[String]) -> Result<Option<String>, String> {
     let s = s.trim();
     if !s.starts_with('<') {
-        return None;
+        return Ok(None);
     }
     let after = &s[1..];
     let name_end = after
@@ -50,27 +60,33 @@ fn try_compile_element(s: &str, splices: &[String]) -> Option<String> {
         .unwrap_or(after.len());
     let tag = &after[..name_end];
     if tag.is_empty() || tag.starts_with('/') {
-        return None;
+        return Ok(None);
     }
     let rest = &after[name_end..];
-    let close_angle = rest.find('>')?;
+    let Some(close_angle) = rest.find('>') else {
+        return Err(format!("html syntax block: unclosed opening tag '<{tag}'"));
+    };
     let attrs_raw = &rest[..close_angle];
     let self_closing = attrs_raw.trim_end().ends_with('/');
     let attrs_src = attrs_raw.trim().trim_end_matches('/').trim();
     let after_open = &rest[close_angle + 1..];
-    let attrs = compile_attrs(attrs_src);
+    let attrs = compile_attrs(attrs_src)?;
     if self_closing {
-        return Some(format!("Html.el(\"{}\", {}, \"\")", tag, attrs));
+        return Ok(Some(format!("Html.el(\"{}\", {}, \"\")", tag, attrs)));
     }
     let close_tag = format!("</{}>", tag);
-    let close_pos = after_open.rfind(&close_tag)?;
-    let inner = compile_children(&after_open[..close_pos], splices);
-    Some(format!("Html.el(\"{}\", {}, {})", tag, attrs, inner))
+    let Some(close_pos) = after_open.rfind(&close_tag) else {
+        return Err(format!(
+            "html syntax block: missing closing tag '</{tag}>'"
+        ));
+    };
+    let inner = compile_children(&after_open[..close_pos], splices)?;
+    Ok(Some(format!("Html.el(\"{}\", {}, {})", tag, attrs, inner)))
 }
 
-fn compile_attrs(attrs_src: &str) -> String {
+fn compile_attrs(attrs_src: &str) -> Result<String, String> {
     if attrs_src.is_empty() {
-        return "[]".into();
+        return Ok("[]".into());
     }
     let mut parts = Vec::new();
     let mut rest = attrs_src;
@@ -80,24 +96,31 @@ fn compile_attrs(attrs_src: &str) -> String {
             break;
         }
         let Some(eq) = rest.find('=') else {
-            break;
+            return Err(format!(
+                "html syntax block: attribute missing '=': '{}'",
+                rest.chars().take(24).collect::<String>()
+            ));
         };
         let key = rest[..eq].trim();
         rest = rest[eq + 1..].trim_start();
         if !rest.starts_with('"') {
-            break;
+            return Err(format!(
+                "html syntax block: attribute '{key}' value must be a double-quoted string"
+            ));
         }
         let Some(end) = rest[1..].find('"').map(|i| i + 1) else {
-            break;
+            return Err(format!(
+                "html syntax block: unclosed attribute value for '{key}'"
+            ));
         };
         let val = &rest[1..end];
         parts.push(format!("\"{}\", \"{}\"", key, escape_str(val)));
         rest = &rest[end + 1..];
     }
     if parts.is_empty() {
-        "[]".into()
+        Ok("[]".into())
     } else {
-        format!("[{}]", parts.join(", "))
+        Ok(format!("[{}]", parts.join(", ")))
     }
 }
 
@@ -105,12 +128,11 @@ fn escape_str(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn compile_children(inner: &str, splices: &[String]) -> String {
+fn compile_children(inner: &str, splices: &[String]) -> Result<String, String> {
     let inner = inner.trim();
     if inner.is_empty() {
-        return "\"\"".into();
+        return Ok("\"\"".into());
     }
-    // Flatten children to a single string expression via +
     let mut parts = Vec::new();
     let mut rest = inner;
     while !rest.is_empty() {
@@ -119,27 +141,29 @@ fn compile_children(inner: &str, splices: &[String]) -> String {
             break;
         }
         if rest.starts_with('<') {
-            if let Some(el) = try_compile_element(rest, splices) {
+            if let Some(el) = try_compile_element(rest, splices)? {
                 parts.push(el);
                 if let Some(len) = element_source_len(rest) {
                     rest = &rest[len..];
                     continue;
                 }
             }
-            parts.push(compile_text_with_splices(rest, splices));
-            break;
+            return Err(format!(
+                "html syntax block: could not parse nested markup '{}'",
+                rest.chars().take(32).collect::<String>()
+            ));
         }
         let next_tag = rest.find('<').unwrap_or(rest.len());
         let text = rest[..next_tag].trim();
         if !text.is_empty() {
-            parts.push(compile_text_with_splices(text, splices));
+            parts.push(compile_text_with_splices(text, splices)?);
         }
         rest = &rest[next_tag..];
     }
     if parts.is_empty() {
-        "\"\"".into()
+        Ok("\"\"".into())
     } else {
-        parts.join(" + ")
+        Ok(parts.join(" + "))
     }
 }
 
@@ -161,9 +185,9 @@ fn element_source_len(s: &str) -> Option<usize> {
     Some(1 + name_end + close_angle + 1 + close_pos + close_tag.len())
 }
 
-fn compile_text_with_splices(text: &str, splices: &[String]) -> String {
+fn compile_text_with_splices(text: &str, splices: &[String]) -> Result<String, String> {
     if text.is_empty() {
-        return "\"\"".into();
+        return Ok("\"\"".into());
     }
     let mut result_parts: Vec<String> = Vec::new();
     let mut rest = text;
@@ -183,16 +207,17 @@ fn compile_text_with_splices(text: &str, splices: &[String]) -> String {
             }
             rest = &after[end + 1..];
         } else {
-            result_parts.push(format!("\"{}\"", escape_str(rest)));
-            rest = "";
+            return Err(
+                "html syntax block: unclosed '{…}' splice (missing closing '}')".to_string(),
+            );
         }
     }
     if !rest.is_empty() {
         result_parts.push(format!("\"{}\"", escape_str(rest)));
     }
     if result_parts.is_empty() {
-        "\"\"".into()
+        Ok("\"\"".into())
     } else {
-        result_parts.join(" + ")
+        Ok(result_parts.join(" + "))
     }
 }

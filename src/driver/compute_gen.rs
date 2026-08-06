@@ -4,12 +4,14 @@
 //! emits WGSL text plus binding metadata for the `.abi.json` `"gpu"` section / `.wgsl` sidecar.
 
 use dream_abi::attributes::{compute_workgroup_size, has_compute_attr};
+use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::expression::ExpressionNode;
 use dream_syntax::nodes::function::FunctionNode;
 use dream_syntax::nodes::statement::StatementNode;
 use dream_syntax::nodes::types::Type;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::token::token_kind::TokenKind;
+use dream_text::text_span::TextSpan;
 
 /// One storage/uniform binding derived from a kernel parameter.
 #[derive(Debug, Clone)]
@@ -34,11 +36,20 @@ pub struct GpuKernelInfo {
 }
 
 /// Emit WGSL for every `@compute` function in `program`.
-pub fn collect_compute_kernels(program: &ProgramNode<'_>) -> Vec<GpuKernelInfo> {
+/// Unsupported statements are reported on `diagnostics` (and omitted from WGSL).
+pub fn collect_compute_kernels(
+    program: &ProgramNode<'_>,
+    diagnostics: &mut DiagnosticBag,
+) -> Vec<GpuKernelInfo> {
     let mut out = Vec::new();
     for func in &program.functions {
         if has_compute_attr(&func.attributes) {
-            out.push(emit_kernel(func));
+            let saved = diagnostics.file_path.clone();
+            if let Some(path) = &func.file_path {
+                diagnostics.file_path = Some(path.to_string());
+            }
+            out.push(emit_kernel(func, diagnostics));
+            diagnostics.file_path = saved;
         }
     }
     out
@@ -192,7 +203,7 @@ fn collect_workgroup_names(stmts: &[StatementNode<'_>], out: &mut Vec<String>) {
     }
 }
 
-fn emit_kernel(func: &FunctionNode<'_>) -> GpuKernelInfo {
+fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuKernelInfo {
     let name = func.name.text.clone();
     let entry = format!("dream_{}", name);
     let workgroup = compute_workgroup_size(&func.attributes);
@@ -268,7 +279,15 @@ fn emit_kernel(func: &FunctionNode<'_>) -> GpuKernelInfo {
 
     let mut workgroup_decls = String::new();
     let mut body = String::new();
-    emit_stmts(func.body, &mut body, &mut workgroup_decls, 1, &ctx);
+    emit_stmts(
+        func.body,
+        &mut body,
+        &mut workgroup_decls,
+        1,
+        &ctx,
+        diagnostics,
+        &func.name.text,
+    );
 
     let mut wgsl = String::new();
     wgsl.push_str(&header);
@@ -395,15 +414,49 @@ fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
     }
 }
 
+
+fn stmt_span(stmt: &StatementNode<'_>) -> Option<TextSpan> {
+    match stmt {
+        StatementNode::Assignment(tok, _)
+        | StatementNode::Declaration(tok, _, _, _)
+        | StatementNode::WorkgroupDecl(tok, _, _)
+        | StatementNode::FunctionInvocation(tok, _, _)
+        | StatementNode::MethodInvocation(_, tok, _, _)
+        | StatementNode::MemberAssignment(_, tok, _)
+        | StatementNode::ForEach(tok, _, _, _, _) => Some(tok.position),
+        StatementNode::TupleDeclaration { names, init, .. } => names
+            .first()
+            .map(|n| n.position)
+            .or_else(|| init.position()),
+        StatementNode::IndexAssignment(arr, _, _) => arr.position(),
+        StatementNode::Return(Some(e))
+        | StatementNode::ExpressionStatement(e)
+        | StatementNode::AwaitStmt(e)
+        | StatementNode::While(e, _)
+        | StatementNode::DoWhile(_, e)
+        | StatementNode::Lock(e, _)
+        | StatementNode::IfElse(e, _, _, _)
+        | StatementNode::Switch(e, _, _) => e.position(),
+        StatementNode::For(_, Some(cond), _, _) => cond.position(),
+        StatementNode::Labeled(_, inner) => stmt_span(inner),
+        StatementNode::Return(None)
+        | StatementNode::For(_, None, _, _)
+        | StatementNode::Break(_)
+        | StatementNode::Continue(_) => None,
+    }
+}
+
 fn emit_stmts(
     stmts: &[StatementNode<'_>],
     out: &mut String,
     wg: &mut String,
     indent: usize,
     ctx: &EmitCtx<'_>,
+    diagnostics: &mut DiagnosticBag,
+    kernel: &str,
 ) {
     for s in stmts {
-        emit_stmt(s, out, wg, indent, ctx);
+        emit_stmt(s, out, wg, indent, ctx, diagnostics, kernel);
     }
 }
 
@@ -417,6 +470,8 @@ fn emit_stmt(
     wg: &mut String,
     indent: usize,
     ctx: &EmitCtx<'_>,
+    diagnostics: &mut DiagnosticBag,
+    kernel: &str,
 ) {
     let p = pad(indent);
     match stmt {
@@ -467,16 +522,16 @@ fn emit_stmt(
         StatementNode::Return(Some(_)) => out.push_str(&format!("{}return;\n", p)),
         StatementNode::IfElse(cond, then_b, elifs, else_b) => {
             out.push_str(&format!("{}if ({}) {{\n", p, emit_expr(cond, ctx)));
-            emit_stmts(then_b, out, wg, indent + 1, ctx);
+            emit_stmts(then_b, out, wg, indent + 1, ctx, diagnostics, kernel);
             out.push_str(&format!("{}}}\n", p));
             for (c, body) in elifs {
                 out.push_str(&format!("{}else if ({}) {{\n", p, emit_expr(c, ctx)));
-                emit_stmts(body, out, wg, indent + 1, ctx);
+                emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
                 out.push_str(&format!("{}}}\n", p));
             }
             if let Some(eb) = else_b {
                 out.push_str(&format!("{}else {{\n", p));
-                emit_stmts(eb, out, wg, indent + 1, ctx);
+                emit_stmts(eb, out, wg, indent + 1, ctx, diagnostics, kernel);
                 out.push_str(&format!("{}}}\n", p));
             }
         }
@@ -487,12 +542,12 @@ fn emit_stmt(
                 p,
                 emit_expr(cond, ctx)
             ));
-            emit_stmts(body, out, wg, indent + 1, ctx);
+            emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
             out.push_str(&format!("{}}}\n", p));
         }
         StatementNode::DoWhile(body, cond) => {
             out.push_str(&format!("{}loop {{\n", p));
-            emit_stmts(body, out, wg, indent + 1, ctx);
+            emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
             out.push_str(&format!(
                 "{}  if (!({})) {{ break; }}\n",
                 p,
@@ -502,7 +557,7 @@ fn emit_stmt(
         }
         StatementNode::For(init, cond, step, body) => {
             if let Some(i) = init {
-                emit_stmt(i, out, wg, indent, ctx);
+                emit_stmt(i, out, wg, indent, ctx, diagnostics, kernel);
             }
             out.push_str(&format!("{}loop {{\n", p));
             if let Some(c) = cond {
@@ -512,15 +567,15 @@ fn emit_stmt(
                     emit_expr(c, ctx)
                 ));
             }
-            emit_stmts(body, out, wg, indent + 1, ctx);
+            emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
             if let Some(s) = step {
-                emit_stmt(s, out, wg, indent + 1, ctx);
+                emit_stmt(s, out, wg, indent + 1, ctx, diagnostics, kernel);
             }
             out.push_str(&format!("{}}}\n", p));
         }
         StatementNode::Break(_) => out.push_str(&format!("{}break;\n", p)),
         StatementNode::Continue(_) => out.push_str(&format!("{}continue;\n", p)),
-        StatementNode::Labeled(_, inner) => emit_stmt(inner, out, wg, indent, ctx),
+        StatementNode::Labeled(_, inner) => emit_stmt(inner, out, wg, indent, ctx, diagnostics, kernel),
         StatementNode::Switch(subject, cases, default) => {
             // Lower to if-else chain (WGSL switch is more limited).
             let sub = emit_expr(subject, ctx);
@@ -533,12 +588,12 @@ fn emit_stmt(
                 let kw = if first { "if" } else { "else if" };
                 first = false;
                 out.push_str(&format!("{}{} ({}) {{\n", p, kw, conds.join(" || ")));
-                emit_stmts(body, out, wg, indent + 1, ctx);
+                emit_stmts(body, out, wg, indent + 1, ctx, diagnostics, kernel);
                 out.push_str(&format!("{}}}\n", p));
             }
             if let Some(db) = default {
                 out.push_str(&format!("{}else {{\n", p));
-                emit_stmts(db, out, wg, indent + 1, ctx);
+                emit_stmts(db, out, wg, indent + 1, ctx, diagnostics, kernel);
                 out.push_str(&format!("{}}}\n", p));
             }
         }
@@ -554,7 +609,19 @@ fn emit_stmt(
         | StatementNode::AwaitStmt(_)
         | StatementNode::Lock(..)
         | StatementNode::TupleDeclaration { .. } => {
-            out.push_str(&format!("{}/* unsupported in @compute */\n", p));
+            let kind = match stmt {
+                StatementNode::ForEach(..) => "for-each",
+                StatementNode::AwaitStmt(_) => "await",
+                StatementNode::Lock(..) => "lock",
+                StatementNode::TupleDeclaration { .. } => "tuple declaration",
+                _ => "statement",
+            };
+            diagnostics.report_error(
+                format!(
+                    "@compute kernel '{kernel}' contains unsupported {kind}; remove it or rewrite with supported control flow"
+                ),
+                stmt_span(stmt),
+            );
         }
     }
 }

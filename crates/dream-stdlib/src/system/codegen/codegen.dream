@@ -3,6 +3,10 @@ module system.codegen;
 // Compile-time source-generator helpers. The host (`driver/generate`) owns SemanticModel /
 // SyntaxTree / GeneratorContext; this package provides emit helpers generators use when building
 // Dream source strings.
+//
+// User `@generator` Dream functions are registered today; bodies are not executed yet. When a
+// harness runs (as `@json` does), failures should use `GenResult` / `GenHost` markers so the host
+// can map them into `DiagnosticBag` (optionally with type/field spans).
 
 // Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
 // Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth;
@@ -88,5 +92,27 @@ public class CodeBuilder {
     @override
     public fun to_string(): string {
         return this.buf.to_string();
+    }
+}
+
+/// Stdout protocol markers and helpers for Dream-side generator harnesses.
+/// The Rust host parses these markers and reports into `DiagnosticBag` (see `json_gen`).
+public class GenHost {
+    public static fun ok_marker(): string {
+        return "__DREAM_GEN_OK__";
+    }
+
+    public static fun err_marker(): string {
+        return "__DREAM_GEN_ERR__";
+    }
+
+    /// Optional location line after an error marker: `type_name\tfield_name`.
+    public static fun loc_marker(): string {
+        return "__DREAM_GEN_LOC__";
+    }
+
+    /// Formats a span hint the host can attach to a diagnostic (empty field allowed).
+    public static fun format_loc(type_name: string, field_name: string): string {
+        return type_name + "\t" + field_name;
     }
 }

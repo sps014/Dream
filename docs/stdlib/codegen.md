@@ -10,6 +10,18 @@ HTML and other syntax DSLs are **not** part of this package — see
 [Source generators](../language/generators.md) and
 [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html).
 
+## Status
+
+| Piece | Today |
+|-------|--------|
+| `CodeBuilder` | Shipped — build Dream source strings |
+| `GenHost` | Shipped — OK/ERR/LOC stdout markers for harnesses |
+| `GenResult` (`system.json`) | Shipped — expand outcome + optional type/field for spans |
+| Host `GeneratorContext` | Rust only (`driver/generate`) — `emit_*`, `replace`, `error` |
+| User `@generator` Dream bodies | **Registered, not executed yet** — use `@json` / `html` as patterns |
+
+When a Dream harness runs (as `@json` does), print `GenHost.err_marker()` then the message, and optionally `GenHost.loc_marker()` + `GenHost.format_loc(type, field)` so the host can attach a source span via `DiagnosticBag`. Failures surface as `CompileError::Generator`.
+
 ## `CodeBuilder`
 
 Accumulates Dream source for `emit_extend` / `emit_file` bodies. Construct with `CodeBuilder()`
@@ -39,7 +51,14 @@ let src = b.to_string();
 Indent is applied only at the start of a line (after `line`, or initially). Mid-line `append`
 does not re-prefix.
 
-## Generator host API
+## `GenHost`
+
+| Method | Role |
+|--------|------|
+| `ok_marker()` / `err_marker()` / `loc_marker()` | Stdout protocol lines for harnesses |
+| `format_loc(type, field)` | `type\tfield` span hint after `loc_marker` |
+
+## Generator host API (Rust)
 
 Generators discover work via `@generator` functions / attributes. The compile host exposes:
 
@@ -49,21 +68,12 @@ Generators discover work via `@generator` functions / attributes. The compile ho
 - `ctx.functions_with("attr")` → function symbols
 - `ctx.syntax_blocks("introducer")` → sites for `introducer { … }`
 
-### Symbols
-
-Type and member symbols cover class, struct, enum, union, fields, methods, constructors, variants,
-async, ref, and attributes:
-
-- `has_attribute("name")` / `attribute_string("name")`
-- `fields()` / `methods()` / `constructors()` / `variants()`
-- `is_async` / `is_ref` / `is_static` / visibility
-
-### Emit / replace
+### Emit / replace / errors
 
 - `ctx.emit_extend(type_name, body)` — synthesize `extend Type { body }`
 - `ctx.emit_file(path, source)` — parse a synthetic Dream file
 - `ctx.replace(node, dream_expr)` — rewrite a syntax-DSL site
-- `ctx.error(node, message)` — report a generate-time diagnostic
+- `ctx.error(node, message)` — queue a generate-time diagnostic (flushed into `DiagnosticBag`)
 
 ### Shipped generators
 

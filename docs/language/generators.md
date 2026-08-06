@@ -16,7 +16,8 @@ import system.codegen;
 @generator
 public fun routes(): void {
     // Discovery stub — name is the function name (`routes`).
-    // Use CodeBuilder / types_with("Route") / emit_extend …
+    // Bodies are registered today but not executed; `@json` / `html` show the live patterns.
+    // Use CodeBuilder / GenHost when writing a harness.
 }
 ```
 
@@ -127,7 +128,8 @@ Useful queries on declarations (see [CodeBuilder](../stdlib/codegen.md)):
 3. Mark a function `@generator` (plus `@syntax_block` if needed).
 4. Register via import or `[[generators]]`.
 5. Prefer `CodeBuilder` for multi-line bodies.
-6. Add a sample under `sample/generators/` or a golden test.
+6. Report failures via harness OK/ERR markers (or host `ctx.error`) so they become `CompileError::Generator`.
+7. Add a sample under `sample/generators/` or a golden test.
 
 ## See also
 

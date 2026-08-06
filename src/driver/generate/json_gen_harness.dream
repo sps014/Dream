@@ -102,6 +102,10 @@ async fun main(): void {
                     } else {
                         System.println("__DREAM_JSON_GEN_ERR__");
                         System.println(result.error);
+                        if (result.error_type.length > 0) {
+                            System.println("__DREAM_JSON_GEN_LOC__");
+                            System.println(result.error_type + "\t" + result.error_field);
+                        }
                     }
                 }
                 Err(e) => {

@@ -172,6 +172,7 @@ impl GeneratorContext {
         acc: &mut ProgramAccumulator<'a>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), Error> {
+        self.flush_errors(diagnostics);
         if self.replacements.is_empty() {
             return Ok(());
         }

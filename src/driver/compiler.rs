@@ -156,7 +156,7 @@ impl Compiler {
 
         if diagnostics.has_errors() {
             render(&diagnostics, &acc.file_contents);
-            return Err(CompileError::Syntax);
+            return Err(CompileError::Generator);
         }
 
         let combined_program = ProgramNode::new(
@@ -193,6 +193,18 @@ impl Compiler {
         };
 
         info!("finished semantic analysis");
+
+        // Validate `@compute` kernels (unsupported stmts) before MIR so failures don't leave a
+        // half-written `.wat` behind a generator error.
+        let kernels = crate::driver::compute_gen::collect_compute_kernels(
+            ast.get_root(),
+            &mut diagnostics,
+        );
+        if diagnostics.has_errors() {
+            render(&diagnostics, &acc.file_contents);
+            return Err(CompileError::Generator);
+        }
+
         info!("starting code generation");
 
         // Lower the analyzer-emitted HIR to MIR, optimize, and emit a self-contained module.
@@ -271,7 +283,6 @@ impl Compiler {
         // Also emit a binary `.wasm` (what browsers/Node load) and an `.abi.json` sidecar
         // describing extern imports and exports so the JS runtime can auto-marshal values.
         // `@compute` kernels become a sibling `.wgsl` + `"gpu"` ABI section.
-        let kernels = crate::driver::compute_gen::collect_compute_kernels(ast.get_root());
         emit_wasm_and_abi(out_path, &text, ast.get_root(), &kernels)?;
 
         if let Some(level) = self.optimize {
