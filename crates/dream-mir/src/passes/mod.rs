@@ -157,7 +157,7 @@ pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
 /// still run in both modes since they are correctness-relevant, not just optimizations.
 pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool) {
     const MAX_ROUNDS: usize = 8;
-    crate::prune_module(mir);
+    crate::prune_module(mir, interner);
     let rc = RcInsertion;
     for f in &mut mir.functions {
         rc.run(f, interner);
@@ -175,7 +175,7 @@ pub fn optimize_module_opts(mir: &mut Mir, interner: &TypeInterner, inline: bool
         let changed = inliner.run(mir, interner);
         // Drop callees left with no remaining call sites after inlining (plus their transitively
         // dead callees), then loop: the smaller module may expose more inlining.
-        crate::prune_module(mir);
+        crate::prune_module(mir, interner);
         if !changed {
             break;
         }

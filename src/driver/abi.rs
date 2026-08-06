@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Error;
 use std::path::Path;
@@ -6,14 +7,18 @@ use tracing::{error, info};
 use crate::driver::compute_gen::{self, GpuKernelInfo};
 use dream_syntax::nodes::ProgramNode;
 
+/// One live host import after MIR pruning: `(module, field)` as emitted on the WASM import.
+pub type LiveImport = (String, String);
+
 /// Emits a binary `.wasm` next to the `.wat`, plus an `.abi.json` describing the module's
-/// extern imports (for JS interop marshaling) and exported functions. When `kernels` is
+/// **live** extern imports (for JS interop marshaling) and exported functions. When `kernels` is
 /// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
     wat_text: &str,
     program: &ProgramNode,
     kernels: &[GpuKernelInfo],
+    live_imports: &[LiveImport],
 ) -> Result<(), Error> {
     let base = Path::new(wat_path);
 
@@ -35,7 +40,7 @@ pub(crate) fn emit_wasm_and_abi(
     }
 
     let abi_path = base.with_extension("abi.json");
-    fs::write(&abi_path, build_abi_json(program, kernels))?;
+    fs::write(&abi_path, build_abi_json(program, kernels, live_imports))?;
     info!("created file: {}", abi_path.display());
     Ok(())
 }
@@ -57,9 +62,19 @@ fn json_escape(s: &str) -> String {
     out
 }
 
-/// Builds the `.abi.json` describing extern imports and exported functions. The JS runtime uses
-/// this to wrap user-supplied import implementations with the correct value marshaling.
-pub(crate) fn build_abi_json(program: &ProgramNode, kernels: &[GpuKernelInfo]) -> String {
+/// Builds the `.abi.json` describing live extern imports and exported functions. Externs are
+/// taken from the AST (for accurate Dream names / async flags / type strings) but filtered to
+/// `(module, field)` pairs that survived MIR import pruning.
+pub(crate) fn build_abi_json(
+    program: &ProgramNode,
+    kernels: &[GpuKernelInfo],
+    live_imports: &[LiveImport],
+) -> String {
+    let live: BTreeSet<(&str, &str)> = live_imports
+        .iter()
+        .map(|(m, f)| (m.as_str(), f.as_str()))
+        .collect();
+
     fn type_name(t: Option<&dream_syntax::nodes::Type>) -> String {
         match t {
             Some(t) => t.get_type(),
@@ -67,7 +82,7 @@ pub(crate) fn build_abi_json(program: &ProgramNode, kernels: &[GpuKernelInfo]) -
         }
     }
 
-    fn extern_entry(func: &dream_syntax::nodes::FunctionNode) -> Option<String> {
+    fn extern_entry(func: &dream_syntax::nodes::FunctionNode) -> Option<(String, String, String)> {
         if !func.is_extern || dream_abi::intrinsics::has_intrinsic_attr(&func.attributes) {
             return None;
         }
@@ -83,7 +98,7 @@ pub(crate) fn build_abi_json(program: &ProgramNode, kernels: &[GpuKernelInfo]) -
             .iter()
             .map(|p| format!("\"{}\"", json_escape(&p.type_.get_type())))
             .collect();
-        Some(format!(
+        let entry = format!(
             "    {{ \"name\": \"{}\", \"module\": \"{}\", \"field\": \"{}\", \"params\": [{}], \"result\": \"{}\", \"async\": {} }}",
             json_escape(&func.name.text),
             json_escape(&import_module),
@@ -91,10 +106,12 @@ pub(crate) fn build_abi_json(program: &ProgramNode, kernels: &[GpuKernelInfo]) -
             params.join(", "),
             json_escape(&type_name(func.return_type.as_ref())),
             func.is_async,
-        ))
+        );
+        Some((import_module, import_name, entry))
     }
 
     let mut externs = Vec::new();
+    let mut seen_fields: BTreeSet<(String, String)> = BTreeSet::new();
     let class_methods = program.structs.iter().flat_map(|s| s.methods.iter());
     let extend_methods = program.extends.iter().flat_map(|e| e.methods.iter());
     for func in program
@@ -103,7 +120,13 @@ pub(crate) fn build_abi_json(program: &ProgramNode, kernels: &[GpuKernelInfo]) -
         .chain(class_methods)
         .chain(extend_methods)
     {
-        if let Some(entry) = extern_entry(func) {
+        if let Some((module, field, entry)) = extern_entry(func) {
+            if !live.contains(&(module.as_str(), field.as_str())) {
+                continue;
+            }
+            if !seen_fields.insert((module, field)) {
+                continue;
+            }
             externs.push(entry);
         }
     }
@@ -113,7 +136,6 @@ pub(crate) fn build_abi_json(program: &ProgramNode, kernels: &[GpuKernelInfo]) -
         if func.is_extern || func.generic_parameters.is_some() {
             continue;
         }
-        // `@compute` kernels are not WASM exports.
         if dream_abi::attributes::has_compute_attr(&func.attributes) {
             continue;
         }

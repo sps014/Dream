@@ -322,10 +322,10 @@ fn run_all_e2e_cases_release() {
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
-/// independently-seeded `HashMap`s within this process) must yield byte-identical `.wat`. This
-/// guards the `IndexMap` conversion of the emission-driving tables against regressions that would
-/// reintroduce `HashMap`-iteration nondeterminism. Uses release mode so the check covers the
-/// production emit path (`strip_dead_functions`).
+/// independently-seeded `HashMap`s within this process) must yield byte-identical `.wat` and
+/// `.runtime.js`. This guards the `IndexMap` conversion of the emission-driving tables against
+/// regressions that would reintroduce `HashMap`-iteration nondeterminism. Uses release mode so the
+/// check covers the production emit path (`strip_dead_functions`).
 #[test]
 fn codegen_is_deterministic() {
     let cases_dir = Path::new("tests/cases");
@@ -346,7 +346,8 @@ fn codegen_is_deterministic() {
             continue;
         }
         let src_str = src.to_str().unwrap().to_string();
-        let mut prev: Option<String> = None;
+        let mut prev_wat: Option<String> = None;
+        let mut prev_rt: Option<String> = None;
         for run in 0..4 {
             let out = std::env::temp_dir().join(format!("dream_det_{}_{}.wat", name, run));
             let out_str = out.to_str().unwrap().to_string();
@@ -355,16 +356,71 @@ fn codegen_is_deterministic() {
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
             let wat = fs::read_to_string(&out).unwrap();
+            let rt_path = out.with_extension("runtime.js");
+            let rt = fs::read_to_string(&rt_path).unwrap_or_else(|e| {
+                panic!("missing selective runtime for {}: {}", name, e)
+            });
             let _ = fs::remove_file(&out);
-            if let Some(ref first) = prev {
+            let _ = fs::remove_file(&rt_path);
+            let _ = fs::remove_file(out.with_extension("wasm"));
+            let _ = fs::remove_file(out.with_extension("abi.json"));
+            if let Some(ref first) = prev_wat {
                 assert_eq!(
                     first, &wat,
                     "Nondeterministic codegen for {} (run {})",
                     name, run
                 );
             } else {
-                prev = Some(wat);
+                prev_wat = Some(wat);
+            }
+            if let Some(ref first) = prev_rt {
+                assert_eq!(
+                    first, &rt,
+                    "Nondeterministic selective runtime for {} (run {})",
+                    name, run
+                );
+            } else {
+                prev_rt = Some(rt);
             }
         }
     }
+}
+
+/// `runtime/dream.js` must match a fresh bundle of `runtime/src/` (edit sources, then run
+/// `node scripts/bundle-runtime.mjs`).
+#[test]
+fn dream_js_bundle_is_fresh() {
+    let status = std::process::Command::new("node")
+        .args(["scripts/bundle-runtime.mjs", "--check"])
+        .status()
+        .expect("failed to spawn node for bundle-runtime check");
+    assert!(
+        status.success(),
+        "runtime/dream.js is stale; run: node scripts/bundle-runtime.mjs"
+    );
+}
+
+/// A compute-free arithmetic program must not pull GPU/FS/crypto host chunks into its selective
+/// runtime (js bridges may still appear when layouts exist for marshaler keepalive).
+#[test]
+fn selective_runtime_omits_unused_host_chunks() {
+    let src = Path::new("tests/cases/arithmetic.dream");
+    if !src.exists() {
+        return;
+    }
+    let out = std::env::temp_dir().join("dream_sel_runtime_check.wat");
+    let out_str = out.to_str().unwrap().to_string();
+    let src_str = src.to_str().unwrap().to_string();
+    Compiler::new(Target::Wasm)
+        .compile(&src_str, &out_str)
+        .expect("arithmetic compile");
+    let rt = fs::read_to_string(out.with_extension("runtime.js")).expect("runtime.js");
+    let _ = fs::remove_file(&out);
+    let _ = fs::remove_file(out.with_extension("runtime.js"));
+    let _ = fs::remove_file(out.with_extension("wasm"));
+    let _ = fs::remove_file(out.with_extension("abi.json"));
+    assert!(!rt.contains("makeGpuHost"), "gpu chunk should be absent");
+    assert!(!rt.contains("makeFsHost"), "fs chunk should be absent");
+    assert!(!rt.contains("makeCryptoHost"), "crypto chunk should be absent");
+    assert!(rt.contains("function load("));
 }

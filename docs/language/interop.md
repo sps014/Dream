@@ -45,13 +45,21 @@ extern fun log(msg: string): void;
 
 ## Running it from JavaScript
 
-Compiling a `.dream` file produces a `.wasm` module (and a sibling `.abi.json` the runtime uses to marshal values). You load it with `runtime/dream.js`:
+Compiling a `.dream` file produces a `.wasm` module, a sibling `.abi.json` the runtime uses to
+marshal values, and a tree-shaken `.runtime.js` host that includes only the Dream host chunks that
+program needs (GPU, filesystem, crypto, workers, …). You can load with either the full shared
+runtime or the per-program one:
 
 ```javascript
-import { run } from "./runtime/dream.js";
+import { run } from "./runtime/dream.js";       // full host (always available)
+// import { run } from "./hello.runtime.js";    // selective host next to hello.wasm
 
 await run("hello.wasm");   // loads hello.abi.json, binds externs, calls main
 ```
+
+The full runtime is assembled from modular sources under `runtime/src/` via
+`node scripts/bundle-runtime.mjs` (regenerate after editing those files; `node scripts/bundle-runtime.mjs --check`
+fails if `runtime/dream.js` is stale).
 
 ### Auto-binding to JS globals
 

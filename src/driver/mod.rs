@@ -13,6 +13,7 @@ pub mod compute_gen;
 pub mod error;
 pub mod generate;
 pub mod interface_defaults;
+pub mod js_runtime;
 pub mod prelude;
 pub mod source_loader;
 pub mod wasm_opt;

@@ -11,8 +11,8 @@
 //! - [`hir_edges`]: the HIR call-edge walkers ([`hir_body_edges`]) that recover call/type/string
 //!   edges from an `async` body's preserved HIR (reused by the emitter for liveness of async bodies
 //!   and string/itable shaking).
-//! - [`dead_code`]: the MIR reachability core ([`prune_module`]) that drops unreachable functions and
-//!   then removes dead globals.
+//! - [`dead_code`]: the MIR reachability core ([`prune_module`]) that drops unreachable functions,
+//!   dead globals, and unreferenced `extern` imports.
 
 use dream_types::{DefId, TypeId};
 

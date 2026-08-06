@@ -5,7 +5,7 @@ use super::hir_edges::{hir_body_edges, HirEdges};
 use super::FnKey;
 use crate::lower;
 use crate::{Global, Mir, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::TypeId;
+use dream_types::{TyKind, TypeId, TypeInterner};
 use std::collections::{HashMap, HashSet};
 
 /// Records every callable this rvalue statically references (direct calls, first-class function
@@ -24,20 +24,92 @@ fn rvalue_callees(rv: &Rvalue, out: &mut Vec<FnKey>) {
 
 /// Removes functions unreachable from the module's entry points, then tree-shakes the module's other
 /// symbol tables. Dead pure stores to never-read globals are removed (then the now-unreferenced
-/// globals are dropped). See [`prune_functions`] for the reachability core; the extra shaking lives
-/// in [`prune_dead_globals`].
-pub fn prune_module(mir: &mut Mir) {
+/// globals are dropped), and unreferenced `extern` imports are dropped. See [`prune_functions`] for
+/// the reachability core; the extra shaking lives in [`prune_dead_globals`] / [`prune_dead_imports`].
+pub fn prune_module(mir: &mut Mir, interner: &TypeInterner) {
     prune_functions(mir);
     prune_dead_globals(mir);
+    prune_dead_imports(mir, interner);
+}
+
+/// Drops `mir.imports` whose `DefId` is not referenced by any surviving call / `JsCall` / `FuncRef`.
+///
+/// Generated struct↔js marshalers (emitted later as WAT) call the `js*` host bridges by symbol, so
+/// whenever a surviving `Cast` involves `js` — or any `JsCall` remains — every import whose host
+/// `field` starts with `js` is kept even if no MIR call edge names it.
+fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
+    let mut live_defs: HashSet<dream_types::DefId> = HashSet::new();
+    let mut keep_js_bridges = false;
+    for f in &mir.functions {
+        for b in &f.blocks {
+            for s in &b.stmts {
+                match s {
+                    Statement::Call { callee, .. } | Statement::JsCall { callee, .. } => {
+                        live_defs.insert(callee.def);
+                        if matches!(s, Statement::JsCall { .. }) {
+                            keep_js_bridges = true;
+                        }
+                    }
+                    Statement::Assign(_, rv) => {
+                        collect_import_defs_rvalue(rv, &mut live_defs);
+                        if let Rvalue::JsCall { .. } = rv {
+                            keep_js_bridges = true;
+                        }
+                        if let Rvalue::Cast(_, from, to) = rv {
+                            if matches!(interner.kind(*from), TyKind::Js)
+                                || matches!(interner.kind(*to), TyKind::Js)
+                            {
+                                keep_js_bridges = true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if let Terminator::TailCall { callee, .. } = &b.terminator {
+                live_defs.insert(callee.def);
+            }
+        }
+        if f.is_async {
+            if let Some(hir_fn) = &f.hir_fn {
+                let mut edges = HirEdges::default();
+                hir_body_edges(&hir_fn.body, &mut edges);
+                for (def, _) in edges.callees {
+                    live_defs.insert(def);
+                }
+            }
+        }
+    }
+
+    let keep_js_for_layouts = keep_js_bridges || !mir.layouts.structs.is_empty();
+    mir.imports.retain(|imp| {
+        // Generated `$Foo_to_js` / `$js_to_Foo` marshalers call `js*` bridges by symbol. Keep every
+        // `js*` import when a cast/`JsCall` needs them or when layouts exist (marshaler emission).
+        live_defs.contains(&imp.def) || (imp.field.starts_with("js") && keep_js_for_layouts)
+    });
+}
+
+fn collect_import_defs_rvalue(rv: &Rvalue, out: &mut HashSet<dream_types::DefId>) {
+    match rv {
+        Rvalue::Call { callee, .. } | Rvalue::FuncRef(callee) | Rvalue::JsCall { callee, .. } => {
+            out.insert(callee.def);
+        }
+        Rvalue::New {
+            ctor: Some(ctor), ..
+        } => {
+            out.insert(*ctor);
+        }
+        _ => {}
+    }
 }
 
 /// Removes functions unreachable from the module's entry points (the reachability core of
 /// [`prune_module`]).
 ///
-/// Reachability starts from `main` and the synthesized global initializer and follows direct calls,
-/// `FuncRef`s, and constructors. An `IndirectCall` has no static target, but its only possible
-/// targets are functions whose address was taken by a `FuncRef` in reachable code — which the
-/// `FuncRef` edges already keep — so the result stays sound.
+/// Reachability starts from `main` and the synthesized global initializer and follows direct calls
+/// (including [`Terminator::TailCall`]), `FuncRef`s, and constructors. An `IndirectCall` has no
+/// static target, but its only possible targets are functions whose address was taken by a
+/// `FuncRef` in reachable code — which the `FuncRef` edges already keep — so the result stays sound.
 fn prune_functions(mir: &mut Mir) {
     let index: HashMap<FnKey, usize> = mir
         .functions
@@ -111,6 +183,11 @@ fn prune_functions(mir: &mut Mir) {
                         Statement::Print { ty, .. } => type_worklist.push(*ty),
                         _ => {}
                     }
+                }
+                // TCO rewrites call+return into `TailCall` after module prune today, but walk it
+                // anyway so a future pass reordering cannot drop a still-reachable callee.
+                if let Terminator::TailCall { callee, .. } = &block.terminator {
+                    callees.push((callee.def, callee.args.clone()));
                 }
             }
             // An async function's MIR body is a stub; its real call/type edges live in the preserved
@@ -375,6 +452,9 @@ fn collect_global_reads_terminator(t: &Terminator, out: &mut HashSet<Global>) {
         Terminator::Switch { value, .. } => collect_global_reads_operand(value, out),
         Terminator::Return(Some(o)) | Terminator::AsyncComplete(Some(o)) => {
             collect_global_reads_operand(o, out)
+        }
+        Terminator::TailCall { args, .. } => {
+            args.iter().for_each(|a| collect_global_reads_operand(a, out))
         }
         _ => {}
     }

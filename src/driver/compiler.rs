@@ -253,16 +253,22 @@ impl Compiler {
             for f in &mut mir.functions {
                 pipeline.run(f, interner);
             }
-            match target {
+            let live_imports: Vec<(String, String)> = mir
+                .imports
+                .iter()
+                .map(|imp| (imp.module.clone(), imp.field.clone()))
+                .collect();
+            let (text, debug_map) = match target {
                 Target::Wasm => {
                     dream_mir::emit::emit_module_with_debug(&mir, interner, debug, debug_info)
                 }
-            }
+            };
+            (text, debug_map, live_imports)
         }));
         std::panic::set_hook(previous_hook);
         drop(hook_guard);
 
-        let (text, debug_map) = codegen_result.map_err(|panic_payload| {
+        let (text, debug_map, live_imports) = codegen_result.map_err(|panic_payload| {
             let message = panic_message(&panic_payload);
             render_internal_error(&message);
             CompileError::Internal(message)
@@ -281,9 +287,12 @@ impl Compiler {
         }
 
         // Also emit a binary `.wasm` (what browsers/Node load) and an `.abi.json` sidecar
-        // describing extern imports and exports so the JS runtime can auto-marshal values.
+        // describing live extern imports and exports so the JS runtime can auto-marshal values.
         // `@compute` kernels become a sibling `.wgsl` + `"gpu"` ABI section.
-        emit_wasm_and_abi(out_path, &text, ast.get_root(), &kernels)?;
+        emit_wasm_and_abi(out_path, &text, ast.get_root(), &kernels, &live_imports)?;
+
+        // Tree-shaken JS host next to the `.wasm` (only the host chunks required by live imports).
+        crate::driver::js_runtime::emit_selective_runtime(out_path, &live_imports)?;
 
         if let Some(level) = self.optimize {
             let wasm_path = std::path::Path::new(out_path).with_extension("wasm");

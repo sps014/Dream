@@ -10,6 +10,8 @@ site/
 *.wat
 *.wasm
 *.abi.json
+*.runtime.js
+
 *.wgsl
 
 # Keep the hand-written runtime WAT assets that the codegen embeds via include_str!.
