@@ -1,0 +1,118 @@
+import system;
+import system.io;
+import system.collections;
+import system.json;
+
+// Compile-host entry for the `@json` source generator. The host writes a snapshot JSON file,
+// sets `DREAM_JSON_GEN_SNAPSHOT` to its path, and runs this module with generators skipped.
+// Output protocol (stdout):
+//   `__DREAM_JSON_GEN_OK__\n` + source   on success
+//   `__DREAM_JSON_GEN_ERR__\n` + message on failure
+
+fun string_list_from_json(arr: JsonValue): List<string> {
+    let out = List<string>();
+    let i = 0;
+    while (i < arr.size()) {
+        let item = arr.at(i).unwrap_or(JsonValue.none());
+        out.push(item.as_string().unwrap_or(""));
+        i = i + 1;
+    }
+    return out;
+}
+
+fun field_from_json(v: JsonValue): GenField {
+    return GenField.make(
+        v.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("type_name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("json_ignore").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false),
+        v.get("property_name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("option_inner").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        v.get("is_type_param").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false)
+    );
+}
+
+fun fields_from_json(arr: JsonValue): List<GenField> {
+    let out = List<GenField>();
+    let i = 0;
+    while (i < arr.size()) {
+        out.push(field_from_json(arr.at(i).unwrap_or(JsonValue.none())));
+        i = i + 1;
+    }
+    return out;
+}
+
+fun variant_from_json(v: JsonValue): GenVariant {
+    return GenVariant.make(
+        v.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""),
+        fields_from_json(v.get("fields").unwrap_or(JsonValue.array()))
+    );
+}
+
+fun type_from_json(v: JsonValue): GenType {
+    let name = v.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+    let is_union = v.get("is_union").unwrap_or(JsonValue.none()).as_bool().unwrap_or(false);
+    let generic_params = string_list_from_json(v.get("generic_params").unwrap_or(JsonValue.array()));
+    if (is_union) {
+        let variants = List<GenVariant>();
+        let arr = v.get("variants").unwrap_or(JsonValue.array());
+        let i = 0;
+        while (i < arr.size()) {
+            variants.push(variant_from_json(arr.at(i).unwrap_or(JsonValue.none())));
+            i = i + 1;
+        }
+        return GenType.union_type(name, generic_params, variants);
+    }
+    return GenType.class_type(
+        name,
+        generic_params,
+        fields_from_json(v.get("fields").unwrap_or(JsonValue.array()))
+    );
+}
+
+fun types_from_json(arr: JsonValue): List<GenType> {
+    let out = List<GenType>();
+    let i = 0;
+    while (i < arr.size()) {
+        out.push(type_from_json(arr.at(i).unwrap_or(JsonValue.none())));
+        i = i + 1;
+    }
+    return out;
+}
+
+async fun main(): void {
+    let path = System.env_or("DREAM_JSON_GEN_SNAPSHOT", "");
+    if (path.is_empty()) {
+        System.println("__DREAM_JSON_GEN_ERR__");
+        System.println("DREAM_JSON_GEN_SNAPSHOT is not set");
+        return;
+    }
+    let text_res = await File.read(path);
+    switch (text_res) {
+        Ok(text) => {
+            let parsed = JSON.parse(text);
+            switch (parsed) {
+                Ok(root) => {
+                    let types = types_from_json(root.get("types").unwrap_or(JsonValue.array()));
+                    let json_names = string_list_from_json(root.get("json_names").unwrap_or(JsonValue.array()));
+                    let jsonable = string_list_from_json(root.get("jsonable").unwrap_or(JsonValue.array()));
+                    let result = JsonGenerator.expand(types, json_names, jsonable);
+                    if (result.ok) {
+                        System.println("__DREAM_JSON_GEN_OK__");
+                        System.print(result.source);
+                    } else {
+                        System.println("__DREAM_JSON_GEN_ERR__");
+                        System.println(result.error);
+                    }
+                }
+                Err(e) => {
+                    System.println("__DREAM_JSON_GEN_ERR__");
+                    System.println("failed to parse snapshot JSON: " + e.message());
+                }
+            }
+        }
+        Err(e) => {
+            System.println("__DREAM_JSON_GEN_ERR__");
+            System.println("failed to read snapshot: " + e.message());
+        }
+    }
+}

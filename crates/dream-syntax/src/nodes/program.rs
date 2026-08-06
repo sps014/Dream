@@ -64,6 +64,8 @@ impl ImportNode {
 /// (enforced by the parser). Files that declare none belong to the implicit, unnamed root module.
 #[derive(Debug, Clone)]
 pub struct ModuleDeclNode {
+    /// Attributes on the module declaration (e.g. `@generator_module`).
+    pub attributes: Vec<crate::nodes::AttributeNode>,
     /// The dot-joined module path (e.g. `"utils.math"`), stored verbatim (not slash-joined like
     /// [`ImportNode::module_name`], since this never touches the filesystem).
     pub path: SyntaxToken,

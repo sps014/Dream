@@ -29,7 +29,7 @@ The repository is structured as a Rust-centric multi-component monorepo:
     *   `driver/`: Orchestrates the compiler lifecycle.
         *   `source_loader.rs`: Recursively resolves imports, parses multiple files, and merges every file's declarations into a `ProgramAccumulator`.
         *   `prelude.rs`: Merges the embedded standard-library prelude.
-        *   `json_derive.rs`: Generates `to_json`/`from_json` `extend` blocks for `@json` classes and discriminated unions.
+        *   `generate/`: Compile-time source generators (`@json` Dream harness, registered syntax DSLs, registration).
         *   `error.rs`: Top-level `CompileError` enum returned by the pipeline.
         *   `compiler.rs`: High-level orchestrator starting with parsing and concluding with code generation and artifact emission.
     *   *Parsing stage:* lives in the `crates/dream-syntax/` crate (re-exported as `crate::syntax`). `lexer.rs` tokenizes with `logos`; `parser/` is recursive descent over declarations/statements/expressions; `nodes/` defines the AST (`ProgramNode`, `Type`, `ExpressionNode`, `StatementNode`, etc.).

@@ -541,6 +541,18 @@ impl<'a> Analyzer<'a> {
                     inner.position(),
                 ))
             }
+            // Syntax DSL blocks must be expanded by the generate pipeline before analysis.
+            ExpressionNode::SyntaxBlock(block) => {
+                self.hir_none();
+                Err(report(
+                    diagnostics,
+                    format!(
+                        "unexpanded syntax block '{}'; no generator ran for this introducer",
+                        block.name.text
+                    ),
+                    Some(block.name.position),
+                ))
+            }
         }
     }
 

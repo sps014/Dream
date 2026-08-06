@@ -78,6 +78,8 @@ nav:
   - Advanced Features:
     - Generics: language/generics.md
     - Interfaces: language/interfaces.md
+    - Source Generators: language/generators.md
+    - Syntax DSLs: language/syntax-dsls.md
     - Async/Await: language/async.md
     - WebWorkers: language/webworkers.md
     - Imports & Modules: language/imports.md
@@ -96,6 +98,7 @@ nav:
     - Random: stdlib/random.md
     - System & IO:
       - JSON: stdlib/json.md
+      - Codegen: stdlib/codegen.md
       - File I/O: stdlib/file.md
       - HTTP: stdlib/http.md
       - Regex: stdlib/regex.md

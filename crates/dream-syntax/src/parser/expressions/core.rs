@@ -165,7 +165,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let expr = self.parse_generic_static_step(receiver, class_args)?;
                 return self.parse_postfix_chain(expr);
             } else {
-                // A bare identifier may be followed by an index/member/method postfix chain.
+                // A bare identifier may be followed by `{ ... }` (syntax DSL block) or a
+                // index/member/method postfix chain.
+                if self.peek_token(1).kind == TokenKind::CurlyOpenBracketToken {
+                    return self.parse_syntax_block();
+                }
                 let expr = ExpressionNode::Identifier(self.next_token());
                 return self.parse_postfix_chain(expr);
             }

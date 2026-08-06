@@ -1,13 +1,36 @@
 use super::host::{
     enable_ansi_support, link_console_functions, link_crypto_functions, link_datetime_functions,
     link_file_functions, link_http_functions, link_math_functions, link_process_functions,
-    link_text_functions, link_worker_functions, read_string_from_memory, set_worker_module, set_worker_runtime,
-    shared_memory_for, threaded_wasm_config,
+    link_text_functions, link_worker_functions, read_string_from_memory, set_worker_module,
+    set_worker_runtime, shared_memory_for, threaded_wasm_config,
 };
+use std::cell::RefCell;
 use std::fs;
 use wasmtime::*;
 
+thread_local! {
+    /// When `Some`, `print_*` / `println` append here instead of writing to process stdout.
+    static PRINT_CAPTURE: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
 pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    run_wasm(wat_path, false)?;
+    Ok(())
+}
+
+/// Like [`execute_wasm`], but captures all `print_*` / `println` output into the returned string
+/// instead of writing to the process stdout. Used by compile-time Dream source generators.
+pub fn execute_wasm_capturing(wat_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    PRINT_CAPTURE.with(|c| {
+        *c.borrow_mut() = Some(String::new());
+    });
+    let result = run_wasm(wat_path, true);
+    let captured = PRINT_CAPTURE.with(|c| c.borrow_mut().take().unwrap_or_default());
+    result?;
+    Ok(captured)
+}
+
+fn run_wasm(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
     enable_ansi_support();
     let wat_content = fs::read_to_string(wat_path)?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
@@ -48,11 +71,22 @@ pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(main_func) = instance.get_typed_func::<(), ()>(&mut store, dream_mir::abi::ENTRY_FN)
     {
         main_func.call(&mut store, ())?;
-    } else {
+    } else if !capturing {
         println!("No main function found in module");
     }
 
     Ok(())
+}
+
+fn append_capture(text: &str) -> bool {
+    PRINT_CAPTURE.with(|c| {
+        if let Some(buf) = c.borrow_mut().as_mut() {
+            buf.push_str(text);
+            true
+        } else {
+            false
+        }
+    })
 }
 
 /// Wires every fixed host binding a compiled Dream module may import — the `print_*` builtins and the
@@ -76,25 +110,37 @@ pub fn link_noop_debug_hooks(linker: &mut Linker<()>) -> Result<()> {
     Ok(())
 }
 
-/// Wires the `print_*`/`println` builtins to real process stdout. The debugger provides its own
-/// variants that forward to DAP `output` events instead (so program output does not corrupt the DAP
-/// stream on stdout), so this is factored out of [`link_runtime_host_functions`].
+/// Wires the `print_*`/`println` builtins to real process stdout (or a thread-local capture buffer
+/// when [`execute_wasm_capturing`] is active). The debugger provides its own variants that forward
+/// to DAP `output` events instead.
 pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
     linker.func_wrap("env", "print_int", |v: i32| {
-        print!("{}", v);
+        let s = format!("{}", v);
+        if !append_capture(&s) {
+            print!("{}", s);
+        }
     })?;
 
     linker.func_wrap("env", "print_float", |v: f32| {
-        print!("{}", v);
+        let s = format!("{}", v);
+        if !append_capture(&s) {
+            print!("{}", s);
+        }
     })?;
 
     linker.func_wrap("env", "print_double", |v: f64| {
-        print!("{}", v);
+        let s = format!("{}", v);
+        if !append_capture(&s) {
+            print!("{}", s);
+        }
     })?;
 
     linker.func_wrap("env", "print_char", |v: i32| {
         if let Some(c) = char::from_u32(v as u32) {
-            print!("{}", c);
+            let s = format!("{}", c);
+            if !append_capture(&s) {
+                print!("{}", s);
+            }
         }
     })?;
 
@@ -107,7 +153,9 @@ pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
                 .and_then(Extern::into_shared_memory)
                 .ok_or_else(|| Error::msg("module must export `memory`"))?;
             let s = read_string_from_memory(&memory, ptr);
-            print!("{}", s);
+            if !append_capture(&s) {
+                print!("{}", s);
+            }
             Ok(())
         },
     )?;
@@ -121,7 +169,9 @@ pub fn link_print_functions(linker: &mut Linker<()>) -> Result<()> {
                 .and_then(Extern::into_shared_memory)
                 .ok_or_else(|| Error::msg("module must export `memory`"))?;
             let s = read_string_from_memory(&memory, ptr);
-            println!("{}", s);
+            if !append_capture(&(s.clone() + "\n")) {
+                println!("{}", s);
+            }
             Ok(())
         },
     )?;

@@ -36,7 +36,7 @@ Dream/
 │   ├── main.rs                     CLI entry point
 │   ├── lib.rs                      Thin facade: driver + execution (+ debug_schema)
 │   ├── driver/                     Pipeline orchestration (parse → analyze → HIR → MIR → emit)
-│   │   ├── source_loader.rs, prelude.rs, json_derive/, error.rs, compiler.rs, …
+│   │   ├── source_loader.rs, prelude.rs, generate/, error.rs, compiler.rs, …
 │   ├── execution/                  (feature "native") wasmtime runner, host fns, DAP debugger
 │   └── debug_schema.rs             Debug info schema
 ├── tooling/

@@ -463,6 +463,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
+    /// True when the cursor is on `@...` that precedes a `module` keyword (for `@generator_module`).
+    fn peek_past_attributes_is_module(&self) -> bool {
+        self.core_keyword_after_attrs() == TokenKind::ModuleToken
+    }
+
     ///get all functions in the file
     fn parse_program(&mut self) -> Result<ProgramNode<'a>, Error> {
         let mut imports = vec![];
@@ -476,9 +481,18 @@ impl<'a, 'b> Parser<'a, 'b> {
         // A `module a.b.c;` declaration, if present, must be the very first item in the file —
         // enforced simply by only ever looking for it here, before the `import`/declaration loops:
         // a second occurrence anywhere else in the file falls through to the "expected a
-        // declaration" error below instead of being treated as a module decl.
-        let module = if self.current_token().kind == TokenKind::ModuleToken {
-            match self.parse_module_decl() {
+        // declaration" error below instead of being treated as a module decl. Leading `@attrs`
+        // (e.g. `@generator_module`) are allowed immediately before `module`.
+        let module = if self.current_token().kind == TokenKind::ModuleToken
+            || (self.current_token().kind == TokenKind::AtToken
+                && self.peek_past_attributes_is_module())
+        {
+            let attrs = if self.current_token().kind == TokenKind::AtToken {
+                self.parse_attributes()
+            } else {
+                Vec::new()
+            };
+            match self.parse_module_decl_with_attrs(attrs) {
                 Ok(module_decl) => Some(module_decl),
                 Err(_) => {
                     self.recover_to_next_declaration();

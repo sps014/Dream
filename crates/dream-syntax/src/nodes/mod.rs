@@ -7,7 +7,10 @@ pub mod statement;
 pub mod struct_node;
 pub mod types;
 
-pub use expression::{ExpressionNode, LambdaBody, LambdaNode, SwitchArm, SwitchArmBody};
+pub use expression::{
+    ExpressionNode, LambdaBody, LambdaNode, SwitchArm, SwitchArmBody, SyntaxBlockNode,
+    SyntaxBlockPart,
+};
 pub use function::{FunctionNode, ParameterNode};
 pub use interface_node::InterfaceDeclarationNode;
 pub use pattern::PatternNode;

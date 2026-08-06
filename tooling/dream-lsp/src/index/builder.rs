@@ -8,7 +8,7 @@ use dream::syntax::nodes::struct_node::StructDeclarationNode;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream::syntax::nodes::{
     ExpressionNode, FunctionNode, LambdaBody, PatternNode, ProgramNode, StatementNode,
-    SwitchArmBody, Type,
+    SwitchArmBody, SyntaxBlockPart, Type,
 };
 use dream::syntax::token::syntax_token::SyntaxToken;
 
@@ -692,6 +692,13 @@ impl Builder {
             }
             ExpressionNode::NamedArg(_, e) => self.walk_expr(e, scope),
             ExpressionNode::RefArgument(e) => self.walk_expr(e, scope),
+            ExpressionNode::SyntaxBlock(block) => {
+                for part in &block.parts {
+                    if let SyntaxBlockPart::Splice(e) = part {
+                        self.walk_expr(e, scope);
+                    }
+                }
+            }
         }
     }
 

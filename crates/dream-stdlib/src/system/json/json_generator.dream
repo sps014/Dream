@@ -1,0 +1,507 @@
+module system.json;
+
+// Dream `@json` source generator: builds `extend Type { to_json / from_json }` source from a
+// [`GenType`] snapshot. Invoked by the compile host during the generate pass.
+
+public class JsonGenerator {
+    public static fun expand(types: List<GenType>, json_names: List<string>, jsonable: List<string>): GenResult {
+        let out = "";
+        let i = 0;
+        while (i < types.size()) {
+            let t = types.get(i).unwrap_or(GenType.class_type("", List<string>(), List<GenField>()));
+            let one = GenResult.failure("");
+            if (t.is_union) {
+                one = JsonGenerator.expand_union(t, json_names, jsonable);
+            } else {
+                one = JsonGenerator.expand_class(t, json_names, jsonable);
+            }
+            if (one.ok == false) {
+                return one;
+            }
+            out = out + one.source + "\n";
+            i = i + 1;
+        }
+        return GenResult.success(out);
+    }
+
+    static fun name_in(list: List<string>, name: string): bool {
+        let i = 0;
+        while (i < list.size()) {
+            if (list.get(i).unwrap_or("") == name) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    static fun missing_hint(core: string, jsonable: List<string>): string {
+        if (JsonGenerator.name_in(jsonable, core)) {
+            return "; '" + core + "' must itself be marked @json (add the @json attribute to it)";
+        }
+        return "";
+    }
+
+    static fun ignore_default(ftype: string, option_inner: string): string {
+        if (option_inner.size() > 0) {
+            return "Option.None";
+        }
+        if (ftype.ends_with("[]")) {
+            let elem = ftype.substring(0, ftype.size() - 2);
+            return "Buffer.alloc<" + elem + ">(0)";
+        }
+        if (ftype == "int" || ftype == "long" || ftype == "uint" || ftype == "ulong" || ftype == "byte") {
+            return "0";
+        }
+        if (ftype == "float") {
+            return "0.0f";
+        }
+        if (ftype == "double") {
+            return "0.0";
+        }
+        if (ftype == "bool") {
+            return "false";
+        }
+        if (ftype == "string") {
+            return "\"\"";
+        }
+        if (ftype == "char") {
+            return "'\\0'";
+        }
+        return "";
+    }
+
+    static fun json_to_expr(elem_type: string, access: string, json_names: List<string>): string {
+        if (elem_type == "int") {
+            return "JsonValue.from_int(" + access + ")";
+        }
+        if (elem_type == "double") {
+            return "JsonValue.number(" + access + ")";
+        }
+        if (elem_type == "float") {
+            return "JsonValue.number((double)" + access + ")";
+        }
+        if (elem_type == "bool") {
+            return "JsonValue.boolean(" + access + ")";
+        }
+        if (elem_type == "string") {
+            return "JsonValue.from_string(" + access + ")";
+        }
+        if (JsonGenerator.name_in(json_names, elem_type)) {
+            return access + ".to_json()";
+        }
+        return "";
+    }
+
+    static fun json_from_expr(elem_type: string, jexpr: string, json_names: List<string>): string {
+        if (elem_type == "int") {
+            return jexpr + ".as_int().unwrap_or(0)";
+        }
+        if (elem_type == "double") {
+            return jexpr + ".as_double().unwrap_or(0.0d)";
+        }
+        if (elem_type == "float") {
+            return "(float)" + jexpr + ".as_double().unwrap_or(0.0d)";
+        }
+        if (elem_type == "bool") {
+            return jexpr + ".as_bool().unwrap_or(false)";
+        }
+        if (elem_type == "string") {
+            return jexpr + ".as_string().unwrap_or(\"\")";
+        }
+        if (JsonGenerator.name_in(json_names, elem_type)) {
+            return elem_type + ".from_json(" + jexpr + ")";
+        }
+        return "";
+    }
+
+    static fun array_to_stmts(
+        elem: string,
+        access: string,
+        arr_var: string,
+        idx_var: string,
+        json_names: List<string>
+    ): string {
+        let to_e = JsonGenerator.json_to_expr(elem, access + "[" + idx_var + "]", json_names);
+        if (to_e.size() == 0) {
+            return "";
+        }
+        return "let " + arr_var + " = JsonValue.array();\n        let " + idx_var + " = 0;\n        while (" + idx_var + " < " + access + ".size()) {\n            " + arr_var + ".push(" + to_e + ");\n            " + idx_var + " = " + idx_var + " + 1;\n        }\n";
+    }
+
+    static fun array_from_stmts(
+        elem: string,
+        jexpr: string,
+        out_var: string,
+        idx_var: string,
+        src_var: string,
+        json_names: List<string>
+    ): string {
+        let from_e = JsonGenerator.json_from_expr(
+            elem,
+            src_var + ".at(" + idx_var + ").unwrap_or(JsonValue.none())",
+            json_names
+        );
+        if (from_e.size() == 0) {
+            return "";
+        }
+        return "let " + src_var + " = " + jexpr + ";\n        let " + out_var + " = Buffer.alloc<" + elem + ">(" + src_var + ".size());\n        let " + idx_var + " = 0;\n        while (" + idx_var + " < " + src_var + ".size()) {\n            " + out_var + "[" + idx_var + "] = " + from_e + ";\n            " + idx_var + " = " + idx_var + " + 1;\n        }\n";
+    }
+
+    static fun expand_class(t: GenType, json_names: List<string>, jsonable: List<string>): GenResult {
+        let to_body = "        let __o = JsonValue.dict();\n";
+        let from_prelude = "";
+        let from_fields = "";
+        let first_field = true;
+        let fi = 0;
+        while (fi < t.fields.size()) {
+            let field = t.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
+            let fname = field.name;
+            let ftype = field.type_name;
+            let json_key = field.json_key();
+
+            if (field.json_ignore) {
+                let def = JsonGenerator.ignore_default(ftype, field.option_inner);
+                if (def.size() == 0) {
+                    return GenResult.failure(
+                        "@json class '" + t.name + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default (use `Option<" + ftype + ">` or remove @json_ignore)"
+                    );
+                }
+                if (first_field == false) {
+                    from_fields = from_fields + ", ";
+                }
+                from_fields = from_fields + def;
+                first_field = false;
+                fi = fi + 1;
+                continue;
+            }
+
+            if (field.option_inner.size() > 0) {
+                let base = field.option_inner;
+                if (base.ends_with("[]")) {
+                    let elem = base.substring(0, base.size() - 2);
+                    let to_s = JsonGenerator.array_to_stmts(
+                        elem,
+                        "__v_" + fname,
+                        "__arr_" + fname,
+                        "__i_" + fname,
+                        json_names
+                    );
+                    let from_s = JsonGenerator.array_from_stmts(
+                        elem,
+                        "__src_" + fname,
+                        "__inner_" + fname,
+                        "__i_" + fname,
+                        "__asrc_" + fname,
+                        json_names
+                    );
+                    if (to_s.size() == 0 || from_s.size() == 0) {
+                        return GenResult.failure(
+                            "@json class '" + t.name + "' field '" + fname + "' has unsupported optional array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
+                        );
+                    }
+                    to_body = to_body + "        switch (this." + fname + ") {\n            Some(__v_" + fname + ") => {\n                " + to_s + "                __o.set(\"" + json_key + "\", __arr_" + fname + ");\n            }\n            None => { __o.set(\"" + json_key + "\", JsonValue.none()); }\n        }\n";
+                    from_prelude = from_prelude + "        let __" + fname + ": Option<" + base + "> = Option.None;\n        let __src_" + fname + " = v.get(\"" + json_key + "\").unwrap_or(JsonValue.none());\n        if (__src_" + fname + ".is_null() == false) {\n            " + from_s + "            __" + fname + " = Option.Some(__inner_" + fname + ");\n        }\n";
+                    if (first_field == false) {
+                        from_fields = from_fields + ", ";
+                    }
+                    from_fields = from_fields + "__" + fname;
+                    first_field = false;
+                    fi = fi + 1;
+                    continue;
+                }
+
+                let to_inner = "";
+                let from_inner = "";
+                if (base == "string") {
+                    to_inner = "JsonValue.from_string(__v_" + fname + ")";
+                    from_inner = "__src_" + fname + ".as_string().unwrap_or(\"\")";
+                } else if (JsonGenerator.name_in(json_names, base)) {
+                    to_inner = "__v_" + fname + ".to_json()";
+                    from_inner = base + ".from_json(__src_" + fname + ")";
+                } else {
+                    return GenResult.failure(
+                        "@json class '" + t.name + "' field '" + fname + "' has unsupported optional type '" + ftype + "' (only `Option<string>`, `Option<@json class>`, and `Option<T[]>` of those are supported)" + JsonGenerator.missing_hint(base, jsonable)
+                    );
+                }
+                to_body = to_body + "        switch (this." + fname + ") {\n            Some(__v_" + fname + ") => { __o.set(\"" + json_key + "\", " + to_inner + "); }\n            None => { __o.set(\"" + json_key + "\", JsonValue.none()); }\n        }\n";
+                from_prelude = from_prelude + "        let __" + fname + ": Option<" + base + "> = Option.None;\n        let __src_" + fname + " = v.get(\"" + json_key + "\").unwrap_or(JsonValue.none());\n        if (__src_" + fname + ".is_null() == false) {\n            __" + fname + " = Option.Some(" + from_inner + ");\n        }\n";
+                if (first_field == false) {
+                    from_fields = from_fields + ", ";
+                }
+                from_fields = from_fields + "__" + fname;
+                first_field = false;
+                fi = fi + 1;
+                continue;
+            }
+
+            if (ftype.ends_with("[]")) {
+                let elem = ftype.substring(0, ftype.size() - 2);
+                let to_s = JsonGenerator.array_to_stmts(
+                    elem,
+                    "this." + fname,
+                    "__arr_" + fname,
+                    "__i_" + fname,
+                    json_names
+                );
+                let from_s = JsonGenerator.array_from_stmts(
+                    elem,
+                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.none())",
+                    "__" + fname,
+                    "__i_" + fname,
+                    "__src_" + fname,
+                    json_names
+                );
+                if (to_s.size() == 0 || from_s.size() == 0) {
+                    return GenResult.failure(
+                        "@json class '" + t.name + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
+                    );
+                }
+                to_body = to_body + "        " + to_s + "        __o.set(\"" + json_key + "\", __arr_" + fname + ");\n";
+                from_prelude = from_prelude + "        " + from_s;
+                if (first_field == false) {
+                    from_fields = from_fields + ", ";
+                }
+                from_fields = from_fields + "__" + fname;
+                first_field = false;
+                fi = fi + 1;
+                continue;
+            }
+
+            if (field.is_type_param) {
+                to_body = to_body + "        __o.set(\"" + json_key + "\", JSON.parse(JSON.serialize(this." + fname + ")).unwrap_or(JsonValue.none()));\n";
+                if (first_field == false) {
+                    from_fields = from_fields + ", ";
+                }
+                from_fields = from_fields + "JSON.deserialize<" + ftype + ">(JSON.stringify(v.get(\"" + json_key + "\").unwrap_or(JsonValue.none())))";
+                first_field = false;
+                fi = fi + 1;
+                continue;
+            }
+
+            let to_e = JsonGenerator.json_to_expr(ftype, "this." + fname, json_names);
+            let from_e = JsonGenerator.json_from_expr(
+                ftype,
+                "v.get(\"" + json_key + "\").unwrap_or(JsonValue.none())",
+                json_names
+            );
+            if (to_e.size() == 0 || from_e.size() == 0) {
+                return GenResult.failure(
+                    "@json class '" + t.name + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
+                );
+            }
+            to_body = to_body + "        __o.set(\"" + json_key + "\", " + to_e + ");\n";
+            if (first_field == false) {
+                from_fields = from_fields + ", ";
+            }
+            from_fields = from_fields + from_e;
+            first_field = false;
+            fi = fi + 1;
+        }
+        to_body = to_body + "        return __o;\n";
+        let self_ty = t.self_ty();
+        let from_body = from_prelude + "        return " + self_ty + "(" + from_fields + ");\n";
+        let src = "extend " + t.name + t.params_clause() + " {\n    public fun to_json(): JsonValue {\n" + to_body + "    }\n    public static fun from_json(v: JsonValue): " + self_ty + " {\n" + from_body + "    }\n}\n";
+        return GenResult.success(src);
+    }
+
+    static fun expand_union(t: GenType, json_names: List<string>, jsonable: List<string>): GenResult {
+        let to_body = "        let __o = JsonValue.dict();\n        switch (this) {\n";
+        let from_arms = "";
+        let vi = 0;
+        while (vi < t.variants.size()) {
+            let variant = t.variants.get(vi).unwrap_or(GenVariant.make("", List<GenField>()));
+            let vname = variant.name;
+            let pattern = vname;
+            if (variant.fields.is_empty() == false) {
+                pattern = vname + "(";
+                let bi = 0;
+                while (bi < variant.fields.size()) {
+                    if (bi > 0) {
+                        pattern = pattern + ", ";
+                    }
+                    pattern = pattern + variant.fields.get(bi).unwrap_or(GenField.make("", "", false, "", "", false)).name;
+                    bi = bi + 1;
+                }
+                pattern = pattern + ")";
+            }
+            to_body = to_body + "            " + pattern + " => {\n";
+            to_body = to_body + "                __o.set(\"type\", JsonValue.from_string(\"" + vname + "\"));\n";
+
+            let from_prelude = "";
+            let args = "";
+            let first_arg = true;
+            let fi = 0;
+            while (fi < variant.fields.size()) {
+                let field = variant.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
+                let fname = field.name;
+                let ftype = field.type_name;
+                if (field.json_ignore) {
+                    // skip serialize
+                } else if (field.is_type_param) {
+                    to_body = to_body + "                __o.set(\"" + fname + "\", JSON.parse(JSON.serialize(" + fname + ")).unwrap_or(JsonValue.none()));\n";
+                } else if (ftype.ends_with("[]")) {
+                    let elem = ftype.substring(0, ftype.size() - 2);
+                    let to_s = JsonGenerator.array_to_stmts(
+                        elem,
+                        fname,
+                        "__arr_" + vname + "_" + fname,
+                        "__i_" + vname + "_" + fname,
+                        json_names
+                    );
+                    if (to_s.size() == 0) {
+                        return GenResult.failure(
+                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
+                        );
+                    }
+                    to_body = to_body + "                " + to_s.replace("\n", "\n                ");
+                    to_body = to_body + "                __o.set(\"" + fname + "\", __arr_" + vname + "_" + fname + ");\n";
+                } else {
+                    let expr = JsonGenerator.json_to_expr(ftype, fname, json_names);
+                    if (expr.size() == 0) {
+                        return GenResult.failure(
+                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
+                        );
+                    }
+                    to_body = to_body + "                __o.set(\"" + fname + "\", " + expr + ");\n";
+                }
+
+                // from_json args
+                if (field.json_ignore) {
+                    let def = JsonGenerator.ignore_default(ftype, field.option_inner);
+                    if (def.size() == 0) {
+                        return GenResult.failure(
+                            "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has @json_ignore but type '" + ftype + "' has no zero default"
+                        );
+                    }
+                    if (first_arg == false) {
+                        args = args + ", ";
+                    }
+                    args = args + def;
+                    first_arg = false;
+                } else {
+                    let jexpr = "v.get(\"" + fname + "\").unwrap_or(JsonValue.none())";
+                    if (field.is_type_param) {
+                        if (first_arg == false) {
+                            args = args + ", ";
+                        }
+                        args = args + "JSON.deserialize<" + ftype + ">(JSON.stringify(" + jexpr + "))";
+                        first_arg = false;
+                    } else if (ftype.ends_with("[]")) {
+                        let elem = ftype.substring(0, ftype.size() - 2);
+                        let out_var = "__" + vname + "_" + fname;
+                        let from_s = JsonGenerator.array_from_stmts(
+                            elem,
+                            jexpr,
+                            out_var,
+                            "__i_" + vname + "_" + fname,
+                            "__src_" + vname + "_" + fname,
+                            json_names
+                        );
+                        if (from_s.size() == 0) {
+                            return GenResult.failure(
+                                "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported array element type '" + elem + "'" + JsonGenerator.missing_hint(elem, jsonable)
+                            );
+                        }
+                        from_prelude = from_prelude + "            " + from_s.replace("\n", "\n            ");
+                        if (first_arg == false) {
+                            args = args + ", ";
+                        }
+                        args = args + out_var;
+                        first_arg = false;
+                    } else {
+                        let expr = JsonGenerator.json_from_expr(ftype, jexpr, json_names);
+                        if (expr.size() == 0) {
+                            return GenResult.failure(
+                                "@json union '" + t.name + "' variant '" + vname + "' field '" + fname + "' has unsupported type '" + ftype + "'" + JsonGenerator.missing_hint(ftype, jsonable)
+                            );
+                        }
+                        if (first_arg == false) {
+                            args = args + ", ";
+                        }
+                        args = args + expr;
+                        first_arg = false;
+                    }
+                }
+                fi = fi + 1;
+            }
+            to_body = to_body + "            }\n";
+
+            let ctor_block = "";
+            if (variant.fields.is_empty()) {
+                ctor_block = "            return " + t.name + "." + vname + ";\n";
+            } else {
+                ctor_block = from_prelude + "            return " + t.name + "." + vname + "(" + args + ");\n";
+            }
+            from_arms = from_arms + "        if (__t == \"" + vname + "\") {\n" + ctor_block + "        }\n";
+            vi = vi + 1;
+        }
+        to_body = to_body + "        }\n        return __o;\n";
+
+        // fallback: first variant
+        if (t.variants.is_empty()) {
+            return GenResult.failure("@json union '" + t.name + "' has no variants");
+        }
+        let first = t.variants.get(0).unwrap_or(GenVariant.make("", List<GenField>()));
+        let fallback_prelude = "";
+        let fallback = "";
+        if (first.fields.is_empty()) {
+            fallback = t.name + "." + first.name;
+        } else {
+            let args = "";
+            let first_arg = true;
+            let vname = first.name;
+            let fi = 0;
+            while (fi < first.fields.size()) {
+                let field = first.fields.get(fi).unwrap_or(GenField.make("", "", false, "", "", false));
+                let fname = field.name;
+                let ftype = field.type_name;
+                let jexpr = "v.get(\"" + fname + "\").unwrap_or(JsonValue.none())";
+                if (field.json_ignore) {
+                    let def = JsonGenerator.ignore_default(ftype, field.option_inner);
+                    if (first_arg == false) {
+                        args = args + ", ";
+                    }
+                    args = args + def;
+                    first_arg = false;
+                } else if (field.is_type_param) {
+                    if (first_arg == false) {
+                        args = args + ", ";
+                    }
+                    args = args + "JSON.deserialize<" + ftype + ">(JSON.stringify(" + jexpr + "))";
+                    first_arg = false;
+                } else if (ftype.ends_with("[]")) {
+                    let elem = ftype.substring(0, ftype.size() - 2);
+                    let out_var = "__fb_" + fname;
+                    let from_s = JsonGenerator.array_from_stmts(
+                        elem,
+                        jexpr,
+                        out_var,
+                        "__fbi_" + fname,
+                        "__fbs_" + fname,
+                        json_names
+                    );
+                    fallback_prelude = fallback_prelude + "        " + from_s.replace("\n", "\n        ");
+                    if (first_arg == false) {
+                        args = args + ", ";
+                    }
+                    args = args + out_var;
+                    first_arg = false;
+                } else {
+                    if (first_arg == false) {
+                        args = args + ", ";
+                    }
+                    args = args + JsonGenerator.json_from_expr(ftype, jexpr, json_names);
+                    first_arg = false;
+                }
+                fi = fi + 1;
+            }
+            fallback = t.name + "." + vname + "(" + args + ")";
+        }
+
+        let from_body = "        let __t = v.get(\"type\").unwrap_or(JsonValue.none()).as_string().unwrap_or(\"\");\n" + from_arms + fallback_prelude + "        return " + fallback + ";\n";
+        let self_ty = t.self_ty();
+        let src = "extend " + t.name + t.params_clause() + " {\n    public fun to_json(): JsonValue {\n" + to_body + "    }\n    public static fun from_json(v: JsonValue): " + self_ty + " {\n" + from_body + "    }\n}\n";
+        return GenResult.success(src);
+    }
+}

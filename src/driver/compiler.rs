@@ -5,7 +5,7 @@ use tracing::{info, warn};
 use dream_diagnostics::{render, DiagnosticBag};
 use crate::driver::abi::emit_wasm_and_abi;
 use crate::driver::error::CompileError;
-use crate::driver::json_derive::generate_json_derives;
+use crate::driver::generate::run_generators;
 use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
 use crate::driver::wasm_opt::OptLevel;
@@ -36,6 +36,9 @@ pub struct Compiler {
     /// set yet; an explicit [`Compiler::with_optimize`] (or CLI `-O`) overrides that default.
     /// Debug builds leave this `None` unless the caller opts in.
     optimize: Option<OptLevel>,
+    /// When `true`, skip the source-generator pass (`@json`, `html { }`, …). Used when compiling
+    /// the generator harness itself so nested compiles cannot recurse into generator execution.
+    skip_generators: bool,
 }
 
 impl Compiler {
@@ -45,7 +48,14 @@ impl Compiler {
             debug: true,
             debug_info: false,
             optimize: None,
+            skip_generators: false,
         }
+    }
+
+    /// Builder: skip `@json` / syntax-DSL generators (for compiling generator harnesses).
+    pub fn with_skip_generators(mut self, on: bool) -> Self {
+        self.skip_generators = on;
+        self
     }
 
     /// Builder: when `on` is `true`, produce a release module — uninstrumented allocator, structural
@@ -121,22 +131,15 @@ impl Compiler {
             return Err(CompileError::Syntax);
         }
 
-        // Auto-derive `to_json`/`from_json` converters for every `@json` class (must run after
-        // all classes are collected so `@json` field cross-references resolve). The prelude merge
-        // above always contributes stdlib structs (List/Map/...), so an empty struct set here means
-        // the derive is running before collection completed.
-        debug_assert!(
-            !acc.all_structs.is_empty(),
-            "generate_json_derives must run after prelude merge / class collection"
-        );
-        generate_json_derives(
-            &arena,
-            &acc.all_structs,
-            &acc.all_enums,
-            &mut acc.all_extends,
-            &mut diagnostics,
-            &mut acc.file_contents,
-        )?;
+        // Source generators: `@json` derive, `html { }` DSL, and registered `@generator_module`s.
+        // Nested harness compiles set `skip_generators` so this cannot recurse.
+        if !self.skip_generators {
+            debug_assert!(
+                !acc.all_structs.is_empty(),
+                "run_generators must run after prelude merge / class collection"
+            );
+            run_generators(&arena, &mut acc, main_file_path, &mut diagnostics)?;
+        }
 
         // Inherit interface default-method bodies into implementing classes that omit them, by
         // appending synthesized `extend` blocks (must run after class collection so `implements`

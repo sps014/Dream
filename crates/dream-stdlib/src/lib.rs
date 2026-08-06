@@ -293,6 +293,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 "<std>/system/json/json.dream",
                 include_str!("system/json/json.dream"),
             ),
+            (
+                "<std>/system/json/json_gen_model.dream",
+                include_str!("system/json/json_gen_model.dream"),
+            ),
+            (
+                "<std>/system/json/json_generator.dream",
+                include_str!("system/json/json_generator.dream"),
+            ),
         ],
     },
     StdPackage {
@@ -427,6 +435,14 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/debug.dream"),
             ),
         ],
+    },
+    StdPackage {
+        name: "system.codegen",
+        deps: &["system.core", "system.primitives", "system.text"],
+        files: &[(
+            "<std>/system/codegen/codegen.dream",
+            include_str!("system/codegen/codegen.dream"),
+        )],
     },
     StdPackage {
         name: "system.logging",

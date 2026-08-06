@@ -70,7 +70,7 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
 
     ---
 
-    Variables, operators, control flow, and functions.
+    Variables, operators, control flow, functions, comments, panics.
 
     [:octicons-arrow-right-24: Learn the syntax](language/variables.md)
 
@@ -78,9 +78,17 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
 
     ---
 
-    Primitives, arrays, enums, unions, classes, and structs.
+    Primitives, arrays, enums, unions, classes, structs, and `object`.
 
     [:octicons-arrow-right-24: Model your data](language/types.md)
+
+-   :material-package-variant: **Packages**
+
+    ---
+
+    Publish and consume libraries with `dreamer`.
+
+    [:octicons-arrow-right-24: Package manager](tooling/package-manager.md)
 
 -   :material-cog: **Compiler Internals**
 
@@ -89,6 +97,46 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
     How the compiler turns `.dream` source into WebAssembly, for contributors.
 
     [:octicons-arrow-right-24: Read the handbook](compiler/README.md)
+
+</div>
+
+## Language
+
+<div class="grid cards" markdown>
+
+-   :material-variable: **Basics**
+
+    ---
+
+    [Variables](language/variables.md) · [Operators](language/operators.md) ·
+    [Control flow](language/control-flow.md) · [Functions](language/functions.md) ·
+    [Comments](language/comments.md) · [Panics](language/panics.md) ·
+    [Invariants](language/invariants.md)
+
+-   :material-cube: **Types & data**
+
+    ---
+
+    [Overview](language/types.md) · [Primitives](language/primitives.md) ·
+    [Arrays](language/arrays.md) · [Enums & unions](language/enums-unions.md) ·
+    [Classes & structs](language/classes-structs.md) · [object](language/objects.md)
+
+-   :material-puzzle: **Advanced**
+
+    ---
+
+    [Generics](language/generics.md) · [Interfaces](language/interfaces.md) ·
+    [Async/await](language/async.md) · [WebWorkers](language/webworkers.md) ·
+    [Imports & modules](language/imports.md) · [Memory](language/memory.md)
+
+-   :material-auto-fix: **Source generators**
+
+    ---
+
+    Compile-time derives and custom syntax DSLs (`html { … }`).
+
+    [:octicons-arrow-right-24: Generators](language/generators.md) ·
+    [Syntax DSLs](language/syntax-dsls.md)
 
 </div>
 
@@ -124,9 +172,17 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
 
     ---
 
-    `List<T>`, `Map<K, V>`, and `Set<T>`.
+    `List<T>`, `Map<K, V>`, `Set<T>`, `Queue`, `Stack`.
 
     [:octicons-arrow-right-24: Collections](stdlib/collections.md)
+
+-   :material-lock: **Lock & Semaphore** · `system.sync`
+
+    ---
+
+    Mutual exclusion and counting semaphores for `shared` / workers.
+
+    [:octicons-arrow-right-24: Sync](stdlib/sync.md)
 
 -   :material-code-json: **JSON** · `system.json`
 
@@ -135,6 +191,14 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
     Parse, build, and stringify JSON, plus `@json` auto-derive.
 
     [:octicons-arrow-right-24: JSON](stdlib/json.md)
+
+-   :material-auto-fix: **Codegen** · `system.codegen`
+
+    ---
+
+    `CodeBuilder` for source generators (HTML DSL sample under `sample/generators/`).
+
+    [:octicons-arrow-right-24: Codegen](stdlib/codegen.md)
 
 -   :material-file-document: **File I/O** · `system.io`
 
@@ -152,6 +216,14 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
 
     [:octicons-arrow-right-24: HTTP](stdlib/http.md)
 
+-   :material-regex: **Regex** · `system.text`
+
+    ---
+
+    Pattern matching and replace over strings.
+
+    [:octicons-arrow-right-24: Regex](stdlib/regex.md)
+
 -   :material-calendar-clock: **DateTime** · `system`
 
     ---
@@ -159,6 +231,38 @@ Stdlib APIs are organized as `system.*` packages (`import system.collections;`, 
     Dates, times, arithmetic, and comparisons.
 
     [:octicons-arrow-right-24: DateTime](stdlib/datetime.md)
+
+-   :material-dice-multiple: **Random** · `system`
+
+    ---
+
+    Pseudo-random numbers for games and tests.
+
+    [:octicons-arrow-right-24: Random](stdlib/random.md)
+
+-   :material-binary: **Encoding** · `system.encoding`
+
+    ---
+
+    Hex / base64 and related byte↔text helpers.
+
+    [:octicons-arrow-right-24: Encoding](stdlib/encoding.md)
+
+-   :material-text-box: **Logging** · `system.logging`
+
+    ---
+
+    Structured log levels and sinks.
+
+    [:octicons-arrow-right-24: Logging](stdlib/logging.md)
+
+-   :material-shield-key: **Crypto** · `system.crypto`
+
+    ---
+
+    Digests, HMAC, and secure random bytes.
+
+    [:octicons-arrow-right-24: Crypto](stdlib/crypto.md)
 
 </div>
 

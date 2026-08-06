@@ -1,0 +1,18 @@
+import system;
+import html;
+
+// Demo app for the `html { }` source-generator sample.
+// From this directory: `dream run app.dream` (see dream.toml).
+
+fun page(title: string): string {
+    return html {
+        <div class="hero">
+            <h1>{title}</h1>
+            <p>Welcome</p>
+        </div>
+    };
+}
+
+fun main() {
+    System.println(page("Hello"));
+}

@@ -79,6 +79,31 @@ pub enum ExpressionNode<'a> {
     /// parameter slot (or a plain argument supplied to a `ref` slot) is also rejected. Never a
     /// valid standalone expression.
     RefArgument(&'a ExpressionNode<'a>),
+    /// `name { ... }` — a custom syntax-DSL block (e.g. `html { <div>{title}</div> }`). Parsed when
+    /// an identifier is followed by `{` in expression position. The generate pipeline replaces these
+    /// with ordinary Dream expressions before semantic analysis; reaching the analyzer unexpanded is
+    /// a compile error.
+    SyntaxBlock(&'a SyntaxBlockNode<'a>),
+}
+
+/// One part of a [`ExpressionNode::SyntaxBlock`] body: raw DSL text or a Dream expression splice.
+#[derive(Debug, Clone)]
+pub enum SyntaxBlockPart<'a> {
+    /// Literal text outside `{...}` splices (HTML markup, SQL fragments, …).
+    Text(String),
+    /// `{ expression }` — a nested Dream expression available to the generator.
+    Splice(&'a ExpressionNode<'a>),
+}
+
+/// A registered DSL introducer block: `html { ... }`, `sql { ... }`, etc.
+#[derive(Debug, Clone)]
+pub struct SyntaxBlockNode<'a> {
+    /// Introducer identifier (`html`, `sql`, …).
+    pub name: SyntaxToken,
+    /// Span covering the opening `{` through the matching `}`.
+    pub block_span: TextSpan,
+    /// Ordered text / splice parts inside the braces.
+    pub parts: Vec<SyntaxBlockPart<'a>>,
 }
 
 /// An arrow-lambda literal: `(x: int, y: int) => x + y` or `(x: int) => { ...; return x; }`.
@@ -160,6 +185,7 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::Lambda(l) => Some(l.open_paren_position),
             ExpressionNode::NamedArg(name, _) => Some(name.position),
             ExpressionNode::RefArgument(inner) => inner.position(),
+            ExpressionNode::SyntaxBlock(block) => Some(block.name.position),
         }
     }
 

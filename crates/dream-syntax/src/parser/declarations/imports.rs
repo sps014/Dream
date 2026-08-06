@@ -68,6 +68,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::SemicolonToken);
 
         let path = SyntaxToken::new(TokenKind::IdentifierToken, position, path);
-        Ok(ModuleDeclNode { path })
+        Ok(ModuleDeclNode {
+            attributes: Vec::new(),
+            path,
+        })
+    }
+
+    /// Parses `@attrs module a.b.c;` — attributes are collected by the caller and passed in.
+    pub(crate) fn parse_module_decl_with_attrs(
+        &mut self,
+        attributes: Vec<crate::nodes::AttributeNode>,
+    ) -> Result<ModuleDeclNode, Error> {
+        let mut decl = self.parse_module_decl()?;
+        decl.attributes = attributes;
+        Ok(decl)
     }
 }

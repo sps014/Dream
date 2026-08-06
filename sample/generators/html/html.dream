@@ -1,0 +1,40 @@
+@generator_module
+module html;
+
+// Runtime `Html` helpers plus `@syntax_block("html")` registration in one module.
+// Import this file (or list it in dream.toml) to enable `html { ... }`.
+
+/// Builds an HTML element string from a tag, alternating attr key/value pairs, and inner HTML.
+public class Html {
+    public static fun el(tag: string, attrs: string[], inner: string): string {
+        let a = "";
+        let i = 0;
+        while (i + 1 < attrs.size()) {
+            a = a + " " + attrs[i] + "=\"" + attrs[i + 1] + "\"";
+            i = i + 2;
+        }
+        return "<" + tag + a + ">" + inner + "</" + tag + ">";
+    }
+
+    /// Identity helper so `Html.render(expr)` works for nested `el` results and splices.
+    public static fun render(html: string): string {
+        return html;
+    }
+
+    /// Joins mixed string parts (text + splices).
+    public static fun text(parts: string[]): string {
+        let s = "";
+        let i = 0;
+        while (i < parts.size()) {
+            s = s + parts[i];
+            i = i + 1;
+        }
+        return s;
+    }
+}
+
+@generator("html")
+@syntax_block("html")
+public fun expand_html(): void {
+    // Discovery stub: the compile host expands `html { }` sites for this introducer.
+}

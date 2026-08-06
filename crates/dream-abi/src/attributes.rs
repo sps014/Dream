@@ -53,6 +53,8 @@ pub enum AttributeTarget {
     Interface,
     /// A method signature inside an `interface`.
     InterfaceMethod,
+    /// A file-level `module` declaration.
+    Module,
 }
 
 impl AttributeTarget {
@@ -69,6 +71,7 @@ impl AttributeTarget {
             AttributeTarget::Union => "a discriminated union",
             AttributeTarget::Interface => "an interface",
             AttributeTarget::InterfaceMethod => "an interface method",
+            AttributeTarget::Module => "a module declaration",
         }
     }
 }
@@ -220,6 +223,33 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
         args: ArgShape::None,
         repeatable: false,
+    },
+    // Source-generator framework (`system.codegen` / `driver/generate`).
+    AttributeSpec {
+        name: "generator_module",
+        targets: &[AttributeTarget::Module],
+        args: ArgShape::None,
+        repeatable: false,
+    },
+    AttributeSpec {
+        name: "generator",
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+        ],
+        args: ArgShape::Strings { min: 1, max: 1 },
+        repeatable: false,
+    },
+    AttributeSpec {
+        name: "syntax_block",
+        targets: &[
+            AttributeTarget::Function,
+            AttributeTarget::Method,
+            AttributeTarget::StaticMethod,
+        ],
+        args: ArgShape::Strings { min: 1, max: 1 },
+        repeatable: true,
     },
 ];
 

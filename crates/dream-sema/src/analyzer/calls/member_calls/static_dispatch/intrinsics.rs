@@ -313,7 +313,7 @@ impl<'a> Analyzer<'a> {
         }
 
         // `JSON.serialize<T>(v)` / `JSON.deserialize<T>(text)`: the `@json` derive emits
-        // `<T>.to_json()` / `<T>.from_json()` (see `driver::json_derive`), and `JSON.stringify` /
+        // `<T>.to_json()` / `<T>.from_json()` (see `driver::generate` / Dream `JsonGenerator`), and `JSON.stringify` /
         // `JSON.parse` are ordinary static methods. Expand the intrinsic into that composition so
         // the whole thing lowers through MIR as ordinary calls.
         let json_op = intrinsics::IntrinsicOp::from_attributes(&template.attributes);

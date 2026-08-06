@@ -2,7 +2,7 @@
 
 **Package:** `system.json` — `import system.json;` (also auto-loaded when any type carries `@json`)
 
-Native JSON: a `JsonValue` data model, `JSON.parse` / `JSON.stringify`, and a `@json` attribute that derives converters for your own types. It is pure Dream with no interop, so it runs on every host, including the `wasmtime` test harness.
+Native JSON: a `JsonValue` data model, `JSON.parse` / `JSON.stringify`, and a `@json` attribute that derives converters for your own types via a Dream source generator (`JsonGenerator` in this package). It is pure Dream with no interop, so it runs on every host, including the `wasmtime` test harness.
 
 Most of the time you want `@json` auto-derive. Reach for `JsonValue` when you need to build or inspect arbitrary, untyped JSON.
 

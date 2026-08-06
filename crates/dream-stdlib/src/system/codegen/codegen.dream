@@ -1,0 +1,27 @@
+module system.codegen;
+
+// Compile-time source-generator helpers. The host (`driver/generate`) owns SemanticModel /
+// SyntaxTree / GeneratorContext; this package provides emit helpers generators use when building
+// Dream source strings.
+
+/// Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
+public class CodeBuilder {
+    buf: StringBuilder;
+
+    constructor() {
+        this.buf = StringBuilder();
+    }
+
+    public fun line(text: string): void {
+        this.buf.append_line(text);
+    }
+
+    public fun append(text: string): void {
+        this.buf.append(text);
+    }
+
+    @override
+    public fun to_string(): string {
+        return this.buf.to_string();
+    }
+}

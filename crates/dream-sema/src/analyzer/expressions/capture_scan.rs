@@ -228,6 +228,13 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             LambdaBody::Block(stmts) => walk_stmts_for_ref_targets(stmts, out),
         },
         ExpressionNode::NamedArg(_, e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::SyntaxBlock(block) => {
+            for part in &block.parts {
+                if let dream_syntax::nodes::SyntaxBlockPart::Splice(e) = part {
+                    walk_expr_for_ref_targets(e, out);
+                }
+            }
+        }
     }
 }
 
@@ -387,6 +394,13 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
         ExpressionNode::Lambda(l) => out.extend(lambda_free_names(l)),
         ExpressionNode::NamedArg(_, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::RefArgument(e) => walk_expr_for_lambdas(e, out),
+        ExpressionNode::SyntaxBlock(block) => {
+            for part in &block.parts {
+                if let dream_syntax::nodes::SyntaxBlockPart::Splice(e) = part {
+                    walk_expr_for_lambdas(e, out);
+                }
+            }
+        }
     }
 }
 
@@ -656,5 +670,12 @@ fn collect_names_expr(
         }
         ExpressionNode::NamedArg(_, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::RefArgument(e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::SyntaxBlock(block) => {
+            for part in &block.parts {
+                if let dream_syntax::nodes::SyntaxBlockPart::Splice(e) = part {
+                    collect_names_expr(e, scopes, referenced);
+                }
+            }
+        }
     }
 }
