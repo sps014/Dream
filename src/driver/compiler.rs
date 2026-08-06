@@ -6,6 +6,7 @@ use dream_diagnostics::{render, DiagnosticBag};
 use crate::driver::abi::emit_wasm_and_abi;
 use crate::driver::error::CompileError;
 use crate::driver::generate::run_generators;
+use crate::driver::js_runtime::JsRuntimeTarget;
 use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{parse_file_recursive, ProgramAccumulator};
 use crate::driver::wasm_opt::OptLevel;
@@ -39,6 +40,9 @@ pub struct Compiler {
     /// When `true`, skip the source-generator pass (`@json`, …). Used when compiling
     /// the generator harness itself so nested compiles cannot recurse into generator execution.
     skip_generators: bool,
+    /// When set (CLI `--runtime --web` / `--runtime --node`), emit a tree-shaken sibling
+    /// `*.runtime.js` for that host.
+    runtime: Option<JsRuntimeTarget>,
 }
 
 impl Compiler {
@@ -49,6 +53,7 @@ impl Compiler {
             debug_info: false,
             optimize: None,
             skip_generators: false,
+            runtime: None,
         }
     }
 
@@ -83,6 +88,13 @@ impl Compiler {
     /// [`Compiler::with_release`]); `None` clears post-processing entirely.
     pub fn with_optimize(mut self, level: Option<OptLevel>) -> Self {
         self.optimize = level;
+        self
+    }
+
+    /// Builder: emit a selective `*.runtime.js` for the given JS host (`--runtime --web` /
+    /// `--runtime --node`). `None` skips runtime emission (default).
+    pub fn with_runtime(mut self, target: Option<JsRuntimeTarget>) -> Self {
+        self.runtime = target;
         self
     }
 
@@ -291,8 +303,10 @@ impl Compiler {
         // `@compute` kernels become a sibling `.wgsl` + `"gpu"` ABI section.
         emit_wasm_and_abi(out_path, &text, ast.get_root(), &kernels, &live_imports)?;
 
-        // Tree-shaken JS host next to the `.wasm` (only the host chunks required by live imports).
-        crate::driver::js_runtime::emit_selective_runtime(out_path, &live_imports)?;
+        // Opt-in tree-shaken JS host (`--runtime --web` / `--runtime --node`).
+        if let Some(rt) = self.runtime {
+            crate::driver::js_runtime::emit_selective_runtime(out_path, &live_imports, rt)?;
+        }
 
         if let Some(level) = self.optimize {
             let wasm_path = std::path::Path::new(out_path).with_extension("wasm");

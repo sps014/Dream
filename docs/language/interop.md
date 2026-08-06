@@ -45,16 +45,25 @@ extern fun log(msg: string): void;
 
 ## Running it from JavaScript
 
-Compiling a `.dream` file produces a `.wasm` module, a sibling `.abi.json` the runtime uses to
-marshal values, and a tree-shaken `.runtime.js` host that includes only the Dream host chunks that
-program needs (GPU, filesystem, crypto, workers, …). You can load with either the full shared
-runtime or the per-program one:
+Compiling a `.dream` file produces a `.wasm` module and a sibling `.abi.json` the runtime uses to
+marshal values. Load with the full shared host:
 
 ```javascript
-import { run } from "./runtime/dream.js";       // full host (always available)
-// import { run } from "./hello.runtime.js";    // selective host next to hello.wasm
-
+import { run } from "./runtime/dream.js";
 await run("hello.wasm");   // loads hello.abi.json, binds externs, calls main
+```
+
+Optionally emit a tree-shaken sibling `*.runtime.js` (only the host chunks that program needs) with
+`--runtime` plus a host flag:
+
+```bash
+dream --runtime --web hello.dream    # browser (fetch, isNode=false)
+dream --runtime --node hello.dream   # Node ≥ 18 (fs/crypto preloads)
+```
+
+```javascript
+import { run } from "./hello.runtime.js";
+await run("hello.wasm");
 ```
 
 The full runtime is assembled from modular sources under `runtime/src/` via

@@ -1,6 +1,6 @@
 //! Selective JS runtime emission: assemble a tree-shaken `*.runtime.js` next to each `.wasm`
 //! from the modular sources under `runtime/src/`, including only the host chunks required by
-//! live WASM imports.
+//! live WASM imports. Opt-in via CLI `--runtime --web` / `--runtime --node`.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -9,6 +9,24 @@ use std::path::{Path, PathBuf};
 use tracing::info;
 
 use crate::driver::abi::LiveImport;
+
+/// Target host for a selective `*.runtime.js` (CLI `--web` / `--node`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsRuntimeTarget {
+    /// Browser: `isNode = false`, no `node:*` preloads; `fetch` for bytes.
+    Web,
+    /// Node ≥ 18: `isNode = true`, preload `node:fs` / `node:crypto` when those chunks are present.
+    Node,
+}
+
+impl JsRuntimeTarget {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            JsRuntimeTarget::Web => "web",
+            JsRuntimeTarget::Node => "node",
+        }
+    }
+}
 
 const ALWAYS_MODULES: &[&str] = &[
     "platform.js",
@@ -125,26 +143,23 @@ fn factory_spread(chunks: &BTreeSet<&str>) -> String {
     }
 }
 
-fn load_footer(chunks: &BTreeSet<&str>) -> String {
+fn load_footer(chunks: &BTreeSet<&str>, target: JsRuntimeTarget) -> String {
     let need_crypto = chunks.contains("crypto");
     let need_workers = chunks.contains("workers");
     let need_fs = chunks.contains("fs") || chunks.contains("console_process");
     let compose = factory_spread(chunks);
+    let is_node = matches!(target, JsRuntimeTarget::Node);
 
-    let crypto_preload = if need_crypto {
+    let crypto_preload = if is_node && need_crypto {
         r#"
-  if (isNode) {
-    try { setNodeCrypto(await import("node:crypto")); } catch (_) {}
-  }
+  try { setNodeCrypto(await import("node:crypto")); } catch (_) {}
 "#
     } else {
         ""
     };
-    let fs_preload = if need_fs {
+    let fs_preload = if is_node && need_fs {
         r#"
-  if (isNode) {
-    try { setNodeFs(await import("node:fs")); } catch (_) {}
-  }
+  try { setNodeFs(await import("node:fs")); } catch (_) {}
 "#
     } else {
         ""
@@ -166,6 +181,26 @@ fn load_footer(chunks: &BTreeSet<&str>) -> String {
         ""
     };
 
+    let fetch_bytes = if is_node {
+        r#"async function fetchBytes(source) {
+  if (source instanceof ArrayBuffer) return new Uint8Array(source);
+  if (source instanceof Uint8Array) return source;
+  const { readFile } = await import("node:fs/promises");
+  return new Uint8Array(await readFile(source));
+}"#
+    } else {
+        r#"async function fetchBytes(source) {
+  if (source instanceof ArrayBuffer) return new Uint8Array(source);
+  if (source instanceof Uint8Array) return source;
+  if (typeof fetch !== "function") {
+    throw new Error("fetch unavailable; compile with --runtime --node for filesystem loads");
+  }
+  const res = await fetch(source);
+  if (!res.ok) throw new Error(`failed to fetch ${source}: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}"#
+    };
+
     format!(
         r#"
 function defaultDreamModule(getInstance) {{
@@ -175,17 +210,7 @@ function defaultDreamModule(getInstance) {{
 const FALLBACK_INITIAL_MEMORY_PAGES = 64;
 const FALLBACK_MAX_MEMORY_PAGES = 65536;
 
-async function fetchBytes(source) {{
-  if (source instanceof ArrayBuffer) return new Uint8Array(source);
-  if (source instanceof Uint8Array) return source;
-  if (!isNode && typeof fetch === "function") {{
-    const res = await fetch(source);
-    if (!res.ok) throw new Error(`failed to fetch ${{source}}: ${{res.status}}`);
-    return new Uint8Array(await res.arrayBuffer());
-  }}
-  const {{ readFile }} = await import("node:fs/promises");
-  return new Uint8Array(await readFile(source));
-}}
+{fetch_bytes}
 
 async function loadAbi(abi) {{
   if (!abi) return null;
@@ -283,8 +308,31 @@ export default {{ load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE }};
     )
 }
 
-/// Assemble a selective runtime from live import `(module, field)` pairs.
-pub(crate) fn assemble_selective_runtime(live_imports: &[LiveImport]) -> Result<String, Error> {
+/// Pin `isNode` for the selected host so host chunks take the right branch without probing.
+fn pin_is_node(text: &str, target: JsRuntimeTarget) -> String {
+    let pinned = match target {
+        JsRuntimeTarget::Web => "const isNode = false;",
+        JsRuntimeTarget::Node => "const isNode = true;",
+    };
+    // platform.js becomes `const isNode = <runtime detect>;` after transform.
+    if let Some(idx) = text.find("const isNode =") {
+        let after = &text[idx..];
+        if let Some(end) = after.find(';') {
+            let mut out = String::with_capacity(text.len());
+            out.push_str(&text[..idx]);
+            out.push_str(pinned);
+            out.push_str(&after[end + 1..]);
+            return out;
+        }
+    }
+    format!("{}\n{}\n", pinned, text)
+}
+
+/// Assemble a selective runtime from live import `(module, field)` pairs for `target`.
+pub(crate) fn assemble_selective_runtime(
+    live_imports: &[LiveImport],
+    target: JsRuntimeTarget,
+) -> Result<String, Error> {
     let mut chunks: BTreeSet<&str> = BTreeSet::new();
     for (_module, field) in live_imports {
         if let Some(c) = chunk_for_field(field) {
@@ -293,20 +341,26 @@ pub(crate) fn assemble_selective_runtime(live_imports: &[LiveImport]) -> Result<
     }
 
     let src = runtime_src_dir();
-    let mut out = String::from(
-        "// Dream JS interop runtime (selective — generated per compile).\n\
+    let mut out = format!(
+        "// Dream JS interop runtime (selective — generated per compile for {}).\n\
          // Only host chunks required by this module's live imports are included.\n\
-         // Full runtime: runtime/dream.js (from runtime/src via scripts/bundle-runtime.mjs).\n",
+         // Full runtime: runtime/dream.js (from runtime/src via scripts/bundle-runtime.mjs).\n\
+         // Emit with: dream --runtime --{} <file.dream>\n",
+        target.as_str(),
+        target.as_str(),
     );
 
     for rel in ALWAYS_MODULES {
         let path = src.join(rel);
         let text = fs::read_to_string(&path)?;
-        out.push_str(&transform_module(&text, rel));
+        let mut transformed = transform_module(&text, rel);
+        if *rel == "platform.js" {
+            transformed = pin_is_node(&transformed, target);
+        }
+        out.push_str(&transformed);
         out.push('\n');
     }
 
-    // Deterministic chunk order for byte-identical output.
     for chunk in ["js", "http", "fs", "crypto", "gpu", "console_process", "datetime_text", "workers"] {
         if !chunks.contains(chunk) {
             continue;
@@ -318,7 +372,7 @@ pub(crate) fn assemble_selective_runtime(live_imports: &[LiveImport]) -> Result<
         out.push('\n');
     }
 
-    out.push_str(&load_footer(&chunks));
+    out.push_str(&load_footer(&chunks, target));
     Ok(out)
 }
 
@@ -326,9 +380,10 @@ pub(crate) fn assemble_selective_runtime(live_imports: &[LiveImport]) -> Result<
 pub(crate) fn emit_selective_runtime(
     wat_path: &str,
     live_imports: &[LiveImport],
+    target: JsRuntimeTarget,
 ) -> Result<(), Error> {
     let path = Path::new(wat_path).with_extension("runtime.js");
-    let text = assemble_selective_runtime(live_imports)?;
+    let text = assemble_selective_runtime(live_imports, target)?;
     fs::write(&path, text)?;
     info!("created file: {}", path.display());
     Ok(())
@@ -340,18 +395,26 @@ mod tests {
 
     #[test]
     fn minimal_print_runtime_omits_gpu_and_fs() {
-        let text = assemble_selective_runtime(&[]).expect("assemble");
-        assert!(!text.contains("makeGpuHost"), "gpu must be absent:\n{}", &text[..200.min(text.len())]);
+        let text = assemble_selective_runtime(&[], JsRuntimeTarget::Web).expect("assemble");
+        assert!(!text.contains("makeGpuHost"));
         assert!(!text.contains("makeFsHost"));
         assert!(!text.contains("makeCryptoHost"));
         assert!(text.contains("function load("));
-        assert!(text.contains("TAGS"));
+        assert!(text.contains("const isNode = false;"));
+        assert!(!text.contains("node:fs"));
+    }
+
+    #[test]
+    fn node_target_pins_is_node() {
+        let text = assemble_selective_runtime(&[], JsRuntimeTarget::Node).expect("assemble");
+        assert!(text.contains("const isNode = true;"));
+        assert!(text.contains("node:fs/promises"));
     }
 
     #[test]
     fn gpu_field_pulls_gpu_chunk() {
         let live = vec![("Dream".into(), "gpuDispatch".into())];
-        let text = assemble_selective_runtime(&live).expect("assemble");
+        let text = assemble_selective_runtime(&live, JsRuntimeTarget::Web).expect("assemble");
         assert!(text.contains("makeGpuHost"));
         assert!(!text.contains("makeFsHost"));
     }
@@ -362,8 +425,8 @@ mod tests {
             ("Dream".into(), "jsGlobal".into()),
             ("Dream".into(), "fileRead".into()),
         ];
-        let a = assemble_selective_runtime(&live).unwrap();
-        let b = assemble_selective_runtime(&live).unwrap();
+        let a = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
+        let b = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
         assert_eq!(a, b);
     }
 }

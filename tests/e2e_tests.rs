@@ -323,9 +323,9 @@ fn run_all_e2e_cases_release() {
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
 /// independently-seeded `HashMap`s within this process) must yield byte-identical `.wat` and
-/// `.runtime.js`. This guards the `IndexMap` conversion of the emission-driving tables against
-/// regressions that would reintroduce `HashMap`-iteration nondeterminism. Uses release mode so the
-/// check covers the production emit path (`strip_dead_functions`).
+/// (with `--runtime`) `.runtime.js`. This guards the `IndexMap` conversion of the emission-driving
+/// tables against regressions that would reintroduce `HashMap`-iteration nondeterminism. Uses
+/// release mode so the check covers the production emit path (`strip_dead_functions`).
 #[test]
 fn codegen_is_deterministic() {
     let cases_dir = Path::new("tests/cases");
@@ -353,6 +353,7 @@ fn codegen_is_deterministic() {
             let out_str = out.to_str().unwrap().to_string();
             Compiler::new(Target::Wasm)
                 .with_release(true)
+                .with_runtime(Some(dream::driver::js_runtime::JsRuntimeTarget::Web))
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
             let wat = fs::read_to_string(&out).unwrap();
@@ -412,6 +413,7 @@ fn selective_runtime_omits_unused_host_chunks() {
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
     Compiler::new(Target::Wasm)
+        .with_runtime(Some(dream::driver::js_runtime::JsRuntimeTarget::Web))
         .compile(&src_str, &out_str)
         .expect("arithmetic compile");
     let rt = fs::read_to_string(out.with_extension("runtime.js")).expect("runtime.js");
