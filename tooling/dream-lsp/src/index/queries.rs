@@ -5,7 +5,11 @@ use super::attr_ide::{
     attribute_arg_completions, attribute_arg_context, attribute_hover, attribute_name_completions,
     attribute_name_partial, attribute_signature,
 };
-use super::{is_ident_byte, keywords, Decl, Index, Located, Ref, SymKind, GLOBAL};
+use super::{
+    is_ident_byte, keywords, substitute_method_type_args, type_base, Decl, Index, Located, Ref,
+    SymKind, GLOBAL,
+};
+use super::detail_is_static_method;
 use crate::code_actions::imported_packages;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream_abi::attributes::find_spec;
@@ -234,9 +238,22 @@ impl Index {
         })
     }
 
-    /// Resolves any field or method named `name` (the first match across all structs), used as a
-    /// fallback for member access where the precise receiver type is unknown.
-    fn resolve_member(&self, name: &str) -> Option<&Decl> {
+    /// Resolves a field or method named `name`. When `receiver_ty` is known, prefer the member
+    /// whose `detail` is qualified by that type (`Owner.` / `async Owner.`) so same-named methods
+    /// on different types (e.g. `ComputePass.dispatch` vs `WebWorkerPool.dispatch`) disambiguate.
+    fn resolve_member(&self, receiver_ty: Option<&str>, name: &str) -> Option<&Decl> {
+        if let Some(ty) = receiver_ty {
+            let base = type_base(ty);
+            let prefix = format!("{base}.");
+            let async_prefix = format!("async {prefix}");
+            if let Some(d) = self.decls.iter().find(|d| {
+                d.name == name
+                    && matches!(d.kind, SymKind::Field | SymKind::Method)
+                    && (d.detail.starts_with(&prefix) || d.detail.starts_with(&async_prefix))
+            }) {
+                return Some(d);
+            }
+        }
         self.decls.iter().find(|d| {
             d.name == name
                 && matches!(
@@ -244,6 +261,33 @@ impl Index {
                     SymKind::Field | SymKind::Method | SymKind::EnumMember
                 )
         })
+    }
+
+    /// Type of a receiver identifier: variable/param type, or the bare type name itself when it
+    /// names a class/struct/interface/enum (static access `ComputePass.dispatch`).
+    fn receiver_type_name(&self, receiver: &str, scope: usize, before: usize) -> Option<String> {
+        if let Some(ty) = self.variable_type(receiver, scope, before) {
+            return Some(ty);
+        }
+        if self.decls.iter().any(|d| {
+            d.name == receiver
+                && matches!(
+                    d.kind,
+                    SymKind::Class | SymKind::Struct | SymKind::Interface | SymKind::Enum
+                )
+        }) {
+            return Some(receiver.to_string());
+        }
+        None
+    }
+
+    /// True when `detail` is a member of `base` (`Owner.` / `async Owner.` / `static Owner.` / …).
+    fn detail_belongs_to(detail: &str, base: &str) -> bool {
+        let prefix = format!("{base}.");
+        detail.starts_with(&prefix)
+            || detail.starts_with(&format!("async {prefix}"))
+            || detail.starts_with(&format!("static {prefix}"))
+            || detail.starts_with(&format!("static async {prefix}"))
     }
 
     /// Resolves an enum variant reference. When the receiver (the `Enum` in `Enum.Variant`) is
@@ -289,7 +333,7 @@ impl Index {
             .replace(" T ", &format!(" {} ", generic_arg))
     }
 
-    pub fn hover(&self, offset: usize) -> Option<Located> {
+    pub fn hover(&self, text: &str, offset: usize) -> Option<Located> {
         let mut receiver_ty_opt = None;
         let (start, end, decl) = if let Some(decl) = self.decl_at(offset) {
             (decl.start, decl.end, decl)
@@ -307,13 +351,13 @@ impl Index {
             let d = match reference.kind {
                 SymKind::EnumMember => self.resolve_enum_member(receiver, &reference.name),
                 SymKind::Field | SymKind::Method => {
-                    // Try to infer the receiver's type so generic details (e.g. `List<int>`) can be
-                    // substituted into the member signature below.
+                    let mut recv_ty = None;
                     if let Some(recv) = receiver {
-                        receiver_ty_opt =
-                            self.variable_type(recv, reference.scope, reference.start);
+                        recv_ty =
+                            self.receiver_type_name(recv, reference.scope, reference.start);
+                        receiver_ty_opt = recv_ty.clone();
                     }
-                    self.resolve_member(&reference.name)
+                    self.resolve_member(recv_ty.as_deref(), &reference.name)
                 }
                 _ => self.resolve(&reference.name, reference.scope, reference.start),
             }?;
@@ -321,8 +365,13 @@ impl Index {
         };
 
         let mut detail = decl.detail.clone();
-        if let Some(receiver_ty) = receiver_ty_opt {
-            detail = Self::substitute_generic(&detail, &receiver_ty);
+        if let Some(receiver_ty) = &receiver_ty_opt {
+            detail = Self::substitute_generic(&detail, receiver_ty);
+        }
+        if decl.kind == SymKind::Method {
+            if let Some(args) = method_type_args_at(text, end) {
+                detail = substitute_method_type_args(&detail, &args);
+            }
         }
 
         let mut contents = format!("```dream\n{}\n```", detail);
@@ -346,8 +395,14 @@ impl Index {
         }
         let reference = self.ref_at(offset)?;
         match reference.kind {
-            SymKind::Field | SymKind::Method | SymKind::EnumMember => {
-                self.resolve_member(&reference.name)
+            SymKind::EnumMember => {
+                self.resolve_enum_member(reference.receiver.as_deref(), &reference.name)
+            }
+            SymKind::Field | SymKind::Method => {
+                let recv_ty = reference.receiver.as_ref().and_then(|recv| {
+                    self.receiver_type_name(recv, reference.scope, reference.start)
+                });
+                self.resolve_member(recv_ty.as_deref(), &reference.name)
             }
             _ => self.resolve(&reference.name, reference.scope, reference.start),
         }
@@ -498,12 +553,16 @@ impl Index {
                 recv_obj_start -= 1;
             }
             let receiver_obj = &text[recv_obj_start..recv_obj_end];
-            let receiver_ty_opt = self.variable_type(receiver_obj, scope, recv_obj_start);
+            let receiver_ty_opt =
+                self.receiver_type_name(receiver_obj, scope, recv_obj_start);
 
-            if let Some(decl) = self.resolve_member(name) {
+            if let Some(decl) = self.resolve_member(receiver_ty_opt.as_deref(), name) {
                 let mut d = decl.clone();
-                if let Some(receiver_ty) = receiver_ty_opt {
-                    d.detail = Self::substitute_generic(&d.detail, &receiver_ty);
+                if let Some(receiver_ty) = &receiver_ty_opt {
+                    d.detail = Self::substitute_generic(&d.detail, receiver_ty);
+                }
+                if let Some(args) = method_type_args_at(text, recv_end) {
+                    d.detail = substitute_method_type_args(&d.detail, &args);
                 }
                 return Some(d);
             }
@@ -513,7 +572,7 @@ impl Index {
                     if let Some(ctor_decl) = self.decls.iter().find(|d| {
                         d.name == CONSTRUCTOR_NAME
                             && d.kind == SymKind::Method
-                            && d.detail.starts_with(&format!("{}.", name))
+                            && Self::detail_belongs_to(&d.detail, name)
                     }) {
                         return Some(ctor_decl.clone());
                     }
@@ -525,7 +584,7 @@ impl Index {
             if let Some(decl) = self.decls.iter().find(|d| {
                 d.name == CONSTRUCTOR_NAME
                     && d.kind == SymKind::Method
-                    && d.detail.starts_with(&format!("{}.", name))
+                    && Self::detail_belongs_to(&d.detail, name)
             }) {
                 return Some(decl.clone());
             }
@@ -641,8 +700,8 @@ impl Index {
 
     /// Members available on `receiver`, resolved by type. If `receiver` is a variable/parameter
     /// (including `this`) whose type is a known struct, only that struct's fields and methods are
-    /// offered. If `receiver` names an enum, its members are offered. Otherwise nothing is
-    /// offered, so member access never dumps unrelated symbols.
+    /// offered. If `receiver` names an enum, its members are offered. A bare class/struct name
+    /// only offers **static** methods (instance methods require a value receiver).
     fn member_completions(
         &self,
         receiver: &str,
@@ -660,7 +719,7 @@ impl Index {
 
         if let Some(ty) = self.variable_type(receiver, scope, before) {
             let base = ty.trim_end_matches('?').trim_end_matches("[]");
-            return self.members_of_struct(base);
+            return self.members_of_struct(base, /*static_only*/ false);
         }
 
         // A bare class/struct/interface name used as a receiver (e.g. static method access `Point.`).
@@ -670,25 +729,36 @@ impl Index {
                 SymKind::Class | SymKind::Struct | SymKind::Interface
             ) && d.name == receiver
         }) {
-            return self.members_of_struct(receiver);
+            return self.members_of_struct(receiver, /*static_only*/ true);
         }
 
         Vec::new()
     }
 
-    fn members_of_struct(&self, ty: &str) -> Vec<(String, SymKind, String, Option<String>)> {
+    fn members_of_struct(
+        &self,
+        ty: &str,
+        static_only: bool,
+    ) -> Vec<(String, SymKind, String, Option<String>)> {
         // `ty` may carry generic arguments (`Box<int>`); members are registered under the bare
         // struct name (`Box.value`), so match on that while keeping the full type for argument
         // substitution in member signatures.
-        let base = ty.split('<').next().unwrap_or(ty).trim();
-        let prefix = format!("{}.", base);
+        let base = type_base(ty);
         self.decls
             .iter()
             .filter(|d| {
                 matches!(d.kind, SymKind::Field | SymKind::Method)
                     && d.scope == GLOBAL
-                    && d.detail.starts_with(&prefix)
+                    && Self::detail_belongs_to(&d.detail, base)
                     && d.name != CONSTRUCTOR_NAME
+                    && if static_only {
+                        // Type-name access: only static methods (no fields / instance methods).
+                        d.kind == SymKind::Method && detail_is_static_method(&d.detail)
+                    } else {
+                        // Value receiver: fields + instance methods (not static).
+                        d.kind == SymKind::Field
+                            || (d.kind == SymKind::Method && !detail_is_static_method(&d.detail))
+                    }
             })
             .map(|d| {
                 let detail = Self::substitute_generic(&d.detail, ty);
@@ -731,4 +801,45 @@ impl Index {
         }
         best.map(|(scope, _)| scope).unwrap_or(GLOBAL)
     }
+}
+
+/// Parses call-site method type arguments after a method name token: `dispatch<int, string>(`.
+/// `name_end` is the exclusive end offset of the method identifier.
+fn method_type_args_at(text: &str, name_end: usize) -> Option<Vec<String>> {
+    let bytes = text.as_bytes();
+    let mut i = name_end.min(bytes.len());
+    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t' || bytes[i] == b'\n') {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'<' {
+        return None;
+    }
+    let start = i + 1;
+    let mut depth = 1i32;
+    let mut j = start;
+    while j < bytes.len() {
+        match bytes[j] {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    let inner = text[start..j].trim();
+                    if inner.is_empty() {
+                        return Some(Vec::new());
+                    }
+                    return Some(
+                        inner
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect(),
+                    );
+                }
+            }
+            b'(' if depth == 1 => return None, // malformed
+            _ => {}
+        }
+        j += 1;
+    }
+    None
 }

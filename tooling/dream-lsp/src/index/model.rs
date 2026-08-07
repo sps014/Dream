@@ -118,10 +118,52 @@ pub(crate) fn fn_value_type(func: &FunctionNode) -> String {
     format!("fun({}): {}", params, ret)
 }
 
-/// Renders a function declaration's signature, e.g. `fun add(a: int, b: int): int`.
+/// Renders a free-function declaration's signature, e.g. `fun add(a: int, b: int): int`
+/// or `async fun f(): int`.
 pub(crate) fn signature(func: &FunctionNode) -> String {
-    let params = func
-        .parameters
+    let params = param_list(func);
+    let ret = return_type_str(func);
+
+    let prefix = if func.is_async { "async fun " } else { "fun " };
+
+    if func.name.text == CONSTRUCTOR_NAME || func.name.text == DESTRUCTOR_NAME {
+        format!("{}({}): {}", func.name.text, params, ret)
+    } else {
+        format!("{}{}({}): {}", prefix, func.name.text, params, ret)
+    }
+}
+
+/// Renders a method/field-owner detail for the index, e.g.
+/// `static ComputePass.begin(): ComputePass`,
+/// `ComputePass.dispatch(kernel: string, …): void`, or
+/// `async WebWorkerPool.dispatch<TIn, TOut>(msg: TIn, …): TOut`.
+pub(crate) fn method_detail(owner: &str, func: &FunctionNode) -> String {
+    let params = param_list(func);
+    let ret = return_type_str(func);
+    let generics = type_params_str(func);
+    let static_prefix = if func.is_static { "static " } else { "" };
+    let async_prefix = if func.is_async { "async " } else { "" };
+
+    if func.name.text == CONSTRUCTOR_NAME || func.name.text == DESTRUCTOR_NAME {
+        format!(
+            "{static_prefix}{async_prefix}{owner}.{}({}): {}",
+            func.name.text, params, ret
+        )
+    } else {
+        format!(
+            "{static_prefix}{async_prefix}{owner}.{}{generics}({}): {}",
+            func.name.text, params, ret
+        )
+    }
+}
+
+/// True when a method detail string was indexed as a `static` method.
+pub(crate) fn detail_is_static_method(detail: &str) -> bool {
+    detail.starts_with("static ")
+}
+
+fn param_list(func: &FunctionNode) -> String {
+    func.parameters
         .iter()
         .map(|p| {
             if let Some(def) = &p.default {
@@ -136,20 +178,89 @@ pub(crate) fn signature(func: &FunctionNode) -> String {
             }
         })
         .collect::<Vec<_>>()
-        .join(", ");
-    let ret = func
-        .return_type
+        .join(", ")
+}
+
+fn return_type_str(func: &FunctionNode) -> String {
+    func.return_type
         .as_ref()
         .map(|t| t.display_name())
-        .unwrap_or_else(|| "void".to_string());
+        .unwrap_or_else(|| "void".to_string())
+}
 
-    let prefix = if func.is_async { "async fun " } else { "fun " };
+fn type_params_str(func: &FunctionNode) -> String {
+    func.generic_parameters
+        .as_ref()
+        .map(|params| {
+            let names = params
+                .iter()
+                .map(|p| p.text.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("<{names}>")
+        })
+        .unwrap_or_default()
+}
 
-    if func.name.text == CONSTRUCTOR_NAME || func.name.text == DESTRUCTOR_NAME {
-        format!("{}({}): {}", func.name.text, params, ret)
-    } else {
-        format!("{}{}({}): {}", prefix, func.name.text, params, ret)
+/// Strips `?` / `[]` suffixes and takes the bare type name before `<…>` (e.g. `List<int>` → `List`).
+pub(crate) fn type_base(ty: &str) -> &str {
+    let base = ty.trim_end_matches('?').trim_end_matches("[]").trim();
+    base.split('<').next().unwrap_or(base).trim()
+}
+
+/// Substitutes method type parameters in a detail string when call-site type args are known.
+/// `detail` looks like `async WebWorkerPool.dispatch<TIn, TOut>(msg: TIn, …): TOut`;
+/// `type_args` are the call-site args (`["int", "string"]`).
+pub(crate) fn substitute_method_type_args(detail: &str, type_args: &[String]) -> String {
+    if type_args.is_empty() {
+        return detail.to_string();
     }
+    // Type params sit in the first `<…>` after the method name and before `(`.
+    let Some(paren) = detail.find('(') else {
+        return detail.to_string();
+    };
+    let head = &detail[..paren];
+    let Some(lt) = head.rfind('<') else {
+        return detail.to_string();
+    };
+    let Some(gt) = head[lt..].find('>') else {
+        return detail.to_string();
+    };
+    let params_str = &head[lt + 1..lt + gt];
+    let params: Vec<&str> = params_str.split(',').map(|s| s.trim()).collect();
+    if params.is_empty() {
+        return detail.to_string();
+    }
+
+    let mut out = detail.to_string();
+    // Drop the `<TIn, TOut>` clause from the displayed name once substituted.
+    let generics_span = format!("<{params_str}>");
+    out = out.replacen(&generics_span, "", 1);
+
+    for (param, arg) in params.iter().zip(type_args.iter()) {
+        if param.is_empty() {
+            continue;
+        }
+        // Same word-ish replacements used for receiver `T`, generalized to any param name.
+        out = out
+            .replace(&format!("<{param}>"), &format!("<{arg}>"))
+            .replace(&format!(": {param}"), &format!(": {arg}"))
+            .replace(&format!(" {param},"), &format!(" {arg},"))
+            .replace(&format!(" {param})"), &format!(" {arg})"))
+            .replace(&format!(" {param}>"), &format!(" {arg}>"))
+            .replace(&format!(" {param} "), &format!(" {arg} "))
+            .replace(&format!("({param})"), &format!("({arg})"))
+            .replace(&format!("({param},"), &format!("({arg},"))
+            .replace(&format!(", {param},"), &format!(", {arg},"))
+            .replace(&format!(", {param})"), &format!(", {arg})"))
+            .replace(&format!("fun({param}):"), &format!("fun({arg}):"))
+            .replace(&format!("fun({param})"), &format!("fun({arg})"));
+        // Trailing bare return type `…: TOut` when TOut is the whole return.
+        if out.ends_with(&format!(": {param}")) {
+            out = format!("{}: {arg}", &out[..out.len() - param.len() - 2]);
+        }
+    }
+    out
 }
 
 pub(crate) fn is_ident_byte(b: u8) -> bool {

@@ -17,7 +17,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index.hover(harness.offset).expect("Expected hover info");
+    let hover = index.hover(&harness.src, harness.offset).expect("Expected hover info");
     assert!(hover.contents.contains("fun add"));
 }
 
@@ -135,13 +135,298 @@ fn option_local_member_completions() {
 #[test]
 fn result_inferred_from_gpu_try_init_member_completions() {
     let harness = TestHarness::new(
-        "import system.gpu;\nfun main(): void {\n    let a = await Gpu.try_init();\n    a.|\n}\n",
+        "import system.gpu;\nasync fun main(): void {\n    let a = await Gpu.try_init();\n    a.|\n}\n",
     );
     let comps = harness.index().completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"is_ok") && names.contains(&"unwrap_or") && names.contains(&"and_then"),
-        "expected Result instance methods on a. after Gpu.try_init, got {names:?}"
+        "expected Result instance methods on a. after await Gpu.try_init, got {names:?}"
+    );
+}
+
+#[test]
+fn async_call_without_await_is_future_not_result() {
+    // `Gpu.try_init()` is async → `Future<Result<bool, GpuError>>`. Without `await`, Result
+    // methods must not appear (matches the analyzer: Future has no `is_err`).
+    let harness = TestHarness::new(
+        "import system.gpu;\nfun main(): void {\n    let a = Gpu.try_init();\n    a.|\n}\n",
+    );
+    let index = harness.index();
+    let a_ty = index
+        .decls
+        .iter()
+        .find(|d| d.name == "a" && d.is_main)
+        .and_then(|d| d.ty.as_deref());
+    assert!(
+        a_ty.is_some_and(|t| t.starts_with("Future<") && t.contains("Result")),
+        "expected Future<Result<…>> for bare Gpu.try_init(), got {a_ty:?}"
+    );
+    let comps = index.completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        !names.contains(&"is_err") && !names.contains(&"is_ok") && !names.contains(&"unwrap_or"),
+        "Result methods must not complete on an un-awaited Future: {names:?}"
+    );
+}
+
+#[test]
+fn same_named_methods_resolve_by_receiver() {
+    let harness = TestHarness::new(
+        r#"
+class Alpha {
+    public fun run(x: int): int { return x; }
+}
+class Beta {
+    public fun run(s: string): string { return s; }
+}
+fun main(): void {
+    let a = Alpha();
+    a.ru|n(1);
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on Alpha.run");
+    assert!(
+        hover.contents.contains("Alpha.run") && hover.contents.contains("x: int"),
+        "expected Alpha.run, got {}",
+        hover.contents
+    );
+    assert!(
+        !hover.contents.contains("Beta.run"),
+        "must not show Beta.run for Alpha receiver"
+    );
+
+    let harness_b = TestHarness::new(
+        r#"
+class Alpha {
+    public fun run(x: int): int { return x; }
+}
+class Beta {
+    public fun run(s: string): string { return s; }
+}
+fun main(): void {
+    Beta.run(|);
+}
+"#,
+    );
+    let sig = harness_b
+        .index()
+        .signature_help(&harness_b.src, harness_b.offset)
+        .expect("signature help on Beta.run");
+    assert!(
+        sig.detail.contains("Beta.run") && sig.detail.contains("s: string"),
+        "expected Beta.run signature, got {}",
+        sig.detail
+    );
+    assert!(
+        !sig.detail.contains("Alpha.run"),
+        "must not show Alpha.run for Beta receiver"
+    );
+}
+
+#[test]
+fn compute_pass_dispatch_not_webworker_pool() {
+    let harness = TestHarness::new(
+        r#"
+import system.gpu;
+async fun main(): void {
+    let p = ComputePass.begin();
+    p.dispa|tch("k", Buffer.alloc<GpuBuffer<float>>(0), 1, 1, 1);
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on ComputePass.dispatch");
+    assert!(
+        hover.contents.contains("ComputePass.dispatch"),
+        "expected ComputePass.dispatch, got {}",
+        hover.contents
+    );
+    assert!(
+        !hover.contents.contains("WebWorkerPool"),
+        "must not show WebWorkerPool.dispatch: {}",
+        hover.contents
+    );
+    assert!(
+        hover.contents.contains("kernel: string"),
+        "expected ComputePass param names: {}",
+        hover.contents
+    );
+
+    let sig_harness = TestHarness::new(
+        r#"
+import system.gpu;
+async fun main(): void {
+    let p = ComputePass.begin();
+    p.dispatch(|);
+}
+"#,
+    );
+    let sig = sig_harness
+        .index()
+        .signature_help(&sig_harness.src, sig_harness.offset)
+        .expect("signature help");
+    assert!(
+        sig.detail.contains("ComputePass.dispatch") && !sig.detail.contains("WebWorkerPool"),
+        "signature help must be ComputePass.dispatch, got {}",
+        sig.detail
+    );
+}
+
+#[test]
+fn method_generic_args_expanded_on_hover() {
+    let harness = TestHarness::new(
+        r#"
+import system;
+async fun main(): void {
+    let pool = WebWorkerPool(2);
+    pool.dispa|tch<int, string>(1, (n: int) => "x");
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on dispatch");
+    assert!(
+        hover.contents.contains("WebWorkerPool.dispatch")
+            && hover.contents.contains("msg: int")
+            && hover.contents.contains("fun(int): string")
+            && hover.contents.contains(": string"),
+        "expected TIn/TOut substituted, got {}",
+        hover.contents
+    );
+    assert!(
+        !hover.contents.contains("TIn") && !hover.contents.contains("TOut"),
+        "type params should be expanded away: {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn colliding_fields_resolve_by_receiver() {
+    let harness = TestHarness::new(
+        r#"
+class A { public value: int; }
+class B { public value: string; }
+fun main(): void {
+    let a = A(1);
+    let _ = a.val|ue;
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on A.value");
+    assert!(
+        hover.contents.contains("A.value") && hover.contents.contains("int"),
+        "expected A.value: int, got {}",
+        hover.contents
+    );
+    assert!(!hover.contents.contains("B.value") && !hover.contents.contains("string"));
+}
+
+#[test]
+fn type_name_completion_only_static_methods() {
+    let harness = TestHarness::new(
+        r#"
+import system.gpu;
+fun main(): void {
+    ComputePass.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"begin"),
+        "static begin should appear on ComputePass.: {names:?}"
+    );
+    assert!(
+        !names.contains(&"dispatch") && !names.contains(&"submit"),
+        "instance methods must not complete on ComputePass. type name: {names:?}"
+    );
+}
+
+#[test]
+fn instance_completion_excludes_static_methods() {
+    let harness = TestHarness::new(
+        r#"
+import system.gpu;
+fun main(): void {
+    let p = ComputePass.begin();
+    p.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"dispatch") && names.contains(&"submit"),
+        "instance methods should appear on p.: {names:?}"
+    );
+    assert!(
+        !names.contains(&"begin"),
+        "static begin must not complete on instance receiver: {names:?}"
+    );
+}
+
+#[test]
+fn method_detail_display_omits_fun_keyword() {
+    let harness = TestHarness::new(
+        r#"
+import system.gpu;
+async fun main(): void {
+    Gpu.try_in|it();
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover");
+    assert!(
+        hover.contents.contains("static async Gpu.try_init"),
+        "expected clean static async Owner.name form, got {}",
+        hover.contents
+    );
+    assert!(
+        !hover.contents.contains("async fun try_init")
+            && !hover.contents.contains("Gpu.async fun"),
+        "old `Owner.async fun name` form must be gone: {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn bare_async_call_inlay_shows_future() {
+    use dream_lsp::index::{Index, InlayKind};
+    let src = "
+async fun delayedDouble(n: int): int {
+    return n * 2;
+}
+async fun main(): void {
+    let a = delayedDouble(10);
+}
+";
+    let index = Index::build(None, src);
+    let labels: Vec<&str> = index
+        .inlay_hints
+        .iter()
+        .filter(|h| h.kind == InlayKind::Type)
+        .map(|h| h.label.as_str())
+        .collect();
+    assert!(
+        labels.contains(&": Future<int>"),
+        "`let a = delayedDouble(10)` should show `: Future<int>`; got {:?}",
+        labels
     );
 }
 
@@ -239,7 +524,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index.hover(harness.offset).expect("Expected hover info");
+    let hover = index.hover(&harness.src, harness.offset).expect("Expected hover info");
     assert!(
         hover.contents.contains("int"),
         "Hover should contain field type"
@@ -264,7 +549,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("Expected hover info on union variant");
     assert!(
         hover
@@ -300,7 +585,7 @@ fun area(s: Shape): int {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("Expected hover info on match-arm variant");
     assert!(
         hover
@@ -326,7 +611,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("Expected hover info on generic enum type");
     assert!(
         hover.contents.contains("enum Opt<T>"),
@@ -409,7 +694,7 @@ class User { age: int; }
 
     // Check hover for the reference
     let hover_ref = index
-        .hover(harness.offset - 1)
+        .hover(&harness.src, harness.offset - 1)
         .expect("Expected hover info on ref");
     assert!(
         hover_ref.contents.contains("User"),
@@ -433,7 +718,7 @@ class User { age: int; }
 
     // Check hover for the reference
     let hover_ref = index
-        .hover(harness.offset - 1)
+        .hover(&harness.src, harness.offset - 1)
         .expect("Expected hover info on ref");
     assert!(
         hover_ref.contents.contains("User"),
@@ -564,7 +849,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("Expected hover info on builtin method");
     println!("HOVER CONTENTS: {}", hover.contents);
     // With generic substitution, it should show 'push(value: int)' instead of 'push(value: T)'
@@ -582,7 +867,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
     let hover = index
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("Expected hover info on Math.floor");
     println!("HOVER CONTENTS MATH.FLOOR: {}", hover.contents);
 }
@@ -835,7 +1120,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let hover = harness
         .index()
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("Expected hover info on `a`");
     assert!(
         hover.contents.contains("int"),
@@ -910,7 +1195,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let hover = harness
         .index()
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("Expected hover info on `a`");
     assert!(
         hover.contents.contains("fun(int): int"),
@@ -933,7 +1218,7 @@ fun main(): void {
 ";
     let offset = src.find("print(1)").unwrap() + 1; // inside the `print` reference
     let index = dream_lsp::index::Index::build(None, src);
-    let hover = index.hover(offset).expect("expected hover on System.print");
+    let hover = index.hover(src, offset).expect("expected hover on System.print");
     assert!(
         hover.contents.contains("Prints a value to standard output"),
         "doc comment above an attribute should still appear in hover; got {}",
@@ -959,7 +1244,7 @@ fun main(): void {
 ";
     let offset = src.find("enum Foo").unwrap() + 5; // inside `Foo`
     let index = dream_lsp::index::Index::build(None, src);
-    let hover = index.hover(offset).expect("expected hover on Foo");
+    let hover = index.hover(src, offset).expect("expected hover on Foo");
     assert!(
         hover.contents.contains("The doc comment for Foo"),
         "hover should include the directly-attached doc comment; got {}",
@@ -983,7 +1268,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
     let hover = index
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("expected hover on a top-level global");
     assert!(
         hover.contents.contains("FACTOR") && hover.contents.contains("const"),
@@ -1392,7 +1677,7 @@ fn hover_on_attribute_shows_docs() {
     );
     let hover = harness
         .index()
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("expected hover on @json");
     assert!(
         hover.contents.contains("@json") && hover.contents.contains("JSON"),
@@ -1413,7 +1698,7 @@ class System {
     );
     let hover = harness
         .index()
-        .hover(harness.offset)
+        .hover(&harness.src, harness.offset)
         .expect("expected hover on @intrinsic");
     assert!(
         hover.contents.contains("@intrinsic") && hover.contents.contains("intrinsic"),

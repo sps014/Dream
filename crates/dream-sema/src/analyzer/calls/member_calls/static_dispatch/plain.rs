@@ -115,6 +115,20 @@ impl<'a> Analyzer<'a> {
             }
         };
 
+        // Instance methods are also registered under `{Type}_{method}` (with an implicit `this`
+        // parameter). Calling them as `Type.method(...)` must not fall through to a confusing
+        // arity error ("expects N parameters"); reject with an explicit instance-method diagnostic.
+        if !store_sig.is_static {
+            return Err(report(
+                diagnostics,
+                format!(
+                    "'{}' is an instance method of '{}'; call it on a '{}' value, not on the type name",
+                    method.text, type_name, type_name
+                ),
+                Some(method.position),
+            ));
+        }
+
         self.pack_variadic_analyzed_args(
             &store_sig,
             &mut arg_types,

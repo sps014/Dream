@@ -1,0 +1,1 @@
+'dispatch' is an instance method of 'ComputePass'; call it on a 'ComputePass' value, not on the type name

@@ -13,8 +13,8 @@ use dream::syntax::nodes::{
 use dream::syntax::token::syntax_token::SyntaxToken;
 
 use super::{
-    base_struct, fn_value_type, param_names, signature, Decl, Index, InlayHintOut, InlayKind, Ref,
-    SymKind, GLOBAL,
+    base_struct, fn_value_type, method_detail, param_names, signature, substitute_method_type_args,
+    type_base, Decl, Index, InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
 };
 
 pub(crate) struct Builder {
@@ -34,6 +34,82 @@ pub(crate) struct Builder {
 impl Builder {
     fn infer_type(&self, expr: &ExpressionNode, scope: usize) -> Option<String> {
         self.infer_type_internal(expr, scope)
+    }
+
+    /// Async call sites produce `Future<T>` from a declared return `T`. Sync calls pass through.
+    /// Free-function details look like `async fun f(): T`; methods like `async Gpu.try_init(): T`
+    /// or `static async Owner.name(): T`.
+    fn async_call_type(detail: &str, ret_ty: String) -> String {
+        let is_async = detail.contains("async ") || detail.contains("async fun");
+        if is_async && !ret_ty.starts_with("Future<") {
+            format!("Future<{ret_ty}>")
+        } else {
+            ret_ty
+        }
+    }
+
+    /// Resolves a field/method by receiver type prefix when known (mirrors Index::resolve_member).
+    fn resolve_member_decl(&self, receiver_ty: Option<&str>, name: &str) -> Option<&Decl> {
+        if let Some(ty) = receiver_ty {
+            let base = type_base(ty);
+            let prefix = format!("{base}.");
+            // Prefer detail that starts with `Owner.` or `async Owner.`.
+            if let Some(d) = self.decls.iter().find(|d| {
+                d.name == name
+                    && matches!(d.kind, SymKind::Field | SymKind::Method)
+                    && (d.detail.starts_with(&prefix)
+                        || d.detail.starts_with(&format!("async {prefix}"))
+                        || d.detail.starts_with(&format!("static {prefix}"))
+                        || d.detail.starts_with(&format!("static async {prefix}")))
+            }) {
+                return Some(d);
+            }
+        }
+        self.decls.iter().find(|d| {
+            d.name == name && matches!(d.kind, SymKind::Field | SymKind::Method)
+        })
+    }
+
+    fn method_param_names(&self, recv: &ExpressionNode, method: &str, scope: usize) -> Option<Vec<String>> {
+        let key = self.receiver_type_of(recv, scope).map(|ty| {
+            format!("{}.{}", type_base(&ty), method)
+        });
+        if let Some(k) = &key {
+            if let Some(params) = self.method_params.get(k) {
+                return Some(params.clone());
+            }
+        }
+        // Fallback: unique bare suffix match (last resort when receiver type unknown).
+        let suffix = format!(".{method}");
+        let mut matches = self
+            .method_params
+            .iter()
+            .filter(|(k, _)| k.ends_with(&suffix));
+        let first = matches.next()?;
+        if matches.next().is_some() {
+            return None;
+        }
+        Some(first.1.clone())
+    }
+
+    fn receiver_type_of(&self, recv: &ExpressionNode, scope: usize) -> Option<String> {
+        match recv {
+            ExpressionNode::Identifier(id) => {
+                // Bare type name used as static receiver (`ComputePass.dispatch`).
+                if self.decls.iter().any(|d| {
+                    d.name == id.text
+                        && matches!(
+                            d.kind,
+                            SymKind::Class | SymKind::Struct | SymKind::Interface | SymKind::Enum
+                        )
+                }) {
+                    Some(id.text.clone())
+                } else {
+                    self.infer_type(recv, scope)
+                }
+            }
+            _ => self.infer_type(recv, scope),
+        }
     }
 
     fn infer_type_internal(&self, expr: &ExpressionNode, scope: usize) -> Option<String> {
@@ -67,12 +143,9 @@ impl Builder {
             ExpressionNode::Identifier(token) => self
                 .resolve(&token.text, scope, token.position.start)
                 .and_then(|d| d.ty.clone()),
-            ExpressionNode::MemberAccess(_recv, member) => {
-                // To properly type `obj.field`, we'd resolve `obj`'s type, then find the field in that struct.
-                // For a simple heuristic, just find *any* field with this name.
-                self.decls
-                    .iter()
-                    .find(|d| d.name == member.text && d.kind == SymKind::Field)
+            ExpressionNode::MemberAccess(recv, member) => {
+                let receiver_ty = self.receiver_type_of(recv, scope);
+                self.resolve_member_decl(receiver_ty.as_deref(), &member.text)
                     .and_then(|d| d.ty.clone())
             }
             ExpressionNode::FunctionCall(name, generic_args, _) => {
@@ -95,6 +168,7 @@ impl Builder {
                             }
                         } else {
                             // detail string usually looks like: fun(int, int): string
+                            // or `async fun foo(): T` — async calls yield `Future<T>` until awaited.
                             if let Some(colon_idx) = d.detail.rfind(':') {
                                 let mut ret_ty = d.detail[colon_idx + 1..].trim().to_string();
                                 if let Some(args) = generic_args {
@@ -109,7 +183,7 @@ impl Builder {
                                         }
                                     }
                                 }
-                                Some(ret_ty)
+                                Some(Self::async_call_type(&d.detail, ret_ty))
                             } else {
                                 None
                             }
@@ -121,28 +195,29 @@ impl Builder {
                 // type from the index heuristic; fall through to walking the callee alone.
                 self.infer_type(callee, scope)
             }
-            ExpressionNode::MethodCall(recv, method, _, _) => {
-                let receiver_ty_opt = self.infer_type(recv, scope);
-                self.decls
-                    .iter()
-                    .find(|d| d.name == method.text && d.kind == SymKind::Method)
+            ExpressionNode::MethodCall(recv, method, generic_args, _) => {
+                let receiver_ty_opt = self.receiver_type_of(recv, scope);
+                self.resolve_member_decl(receiver_ty_opt.as_deref(), &method.text)
                     .and_then(|d| {
-                        let detail = if let Some(receiver_ty) = &receiver_ty_opt {
-                            Index::substitute_generic(&d.detail, receiver_ty)
-                        } else {
-                            d.detail.clone()
-                        };
-                        detail
-                            .rfind(':')
-                            .map(|colon_idx| detail[colon_idx + 1..].trim().to_string())
+                        let mut detail = d.detail.clone();
+                        if let Some(receiver_ty) = &receiver_ty_opt {
+                            detail = Index::substitute_generic(&detail, receiver_ty);
+                        }
+                        if let Some(args) = generic_args {
+                            let type_args: Vec<String> =
+                                args.iter().map(|a| a.display_name()).collect();
+                            detail = substitute_method_type_args(&detail, &type_args);
+                        }
+                        detail.rfind(':').map(|colon_idx| {
+                            let ret_ty = detail[colon_idx + 1..].trim().to_string();
+                            Self::async_call_type(&d.detail, ret_ty)
+                        })
                     })
             }
             ExpressionNode::Parenthesized(inner) => self.infer_type(inner, scope),
             ExpressionNode::Await(inner) => {
-                // `await` unwraps a `Future<T>` to `T`. Call inference already reports an async
-                // function's *declared* return type (e.g. `int` for `async fun f(): int`), so the
-                // inner type is usually the awaited type already; only an explicit `Future<T>`
-                // needs unwrapping.
+                // `await` unwraps `Future<T>` → `T`. Async call inference wraps declared returns
+                // as `Future<T>`, so bare `f()` and `await f()` stay distinct for member completion.
                 let inner_ty = self.infer_type(inner, scope)?;
                 let unwrapped = inner_ty
                     .strip_prefix("Future<")
@@ -215,14 +290,16 @@ impl Builder {
                 self.push_decl(&field.name, SymKind::Field, detail, GLOBAL, Some(field_ty));
             }
             for method in &st.methods {
-                let detail = format!("{}.{}", st.name.text, signature(method));
+                let detail = method_detail(&st.name.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
                 if method.name.text == CONSTRUCTOR_NAME {
                     self.ctor_params
                         .insert(st.name.text.clone(), param_names(method));
                 } else {
-                    self.method_params
-                        .insert(method.name.text.clone(), param_names(method));
+                    self.method_params.insert(
+                        format!("{}.{}", st.name.text, method.name.text),
+                        param_names(method),
+                    );
                 }
             }
         }
@@ -269,10 +346,12 @@ impl Builder {
                 }
             }
             for method in &en.methods {
-                let detail = format!("{}.{}", en.name.text, signature(method));
+                let detail = method_detail(&en.name.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
-                self.method_params
-                    .insert(method.name.text.clone(), param_names(method));
+                self.method_params.insert(
+                    format!("{}.{}", en.name.text, method.name.text),
+                    param_names(method),
+                );
             }
         }
         for iface in &program.interfaces {
@@ -291,18 +370,22 @@ impl Builder {
             let detail = format!("interface {}{}", iface.name.text, generics);
             self.push_decl(&iface.name, SymKind::Interface, detail, GLOBAL, None);
             for method in &iface.methods {
-                let detail = format!("{}.{}", iface.name.text, signature(method));
+                let detail = method_detail(&iface.name.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
-                self.method_params
-                    .insert(method.name.text.clone(), param_names(method));
+                self.method_params.insert(
+                    format!("{}.{}", iface.name.text, method.name.text),
+                    param_names(method),
+                );
             }
         }
         for ext in &program.extends {
             for method in &ext.methods {
-                let detail = format!("{}.{}", ext.target.text, signature(method));
+                let detail = method_detail(&ext.target.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
-                self.method_params
-                    .insert(method.name.text.clone(), param_names(method));
+                self.method_params.insert(
+                    format!("{}.{}", ext.target.text, method.name.text),
+                    param_names(method),
+                );
             }
         }
         // Top-level `let`/`const` variables live at file scope and are visible from every
@@ -533,8 +616,8 @@ impl Builder {
                     _ => SymKind::Method,
                 };
                 self.add_ref_with_receiver(method, kind, scope, receiver_ident(recv));
-                if let Some(params) = self.method_params.get(&method.text) {
-                    self.push_param_hints(&params.clone(), args);
+                if let Some(params) = self.method_param_names(recv, &method.text, scope) {
+                    self.push_param_hints(&params, args);
                 }
                 for arg in args {
                     self.walk_expr(arg, scope);
@@ -688,8 +771,8 @@ impl Builder {
                     _ => SymKind::Method,
                 };
                 self.add_ref_with_receiver(method, kind, scope, receiver_ident(recv));
-                if let Some(params) = self.method_params.get(&method.text) {
-                    self.push_param_hints(&params.clone(), args);
+                if let Some(params) = self.method_param_names(recv, &method.text, scope) {
+                    self.push_param_hints(&params, args);
                 }
                 for arg in args {
                     self.walk_expr(arg, scope);

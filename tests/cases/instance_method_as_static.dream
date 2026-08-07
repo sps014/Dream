@@ -1,0 +1,8 @@
+import system.gpu;
+
+// Calling an instance method as `Type.method(...)` must fail clearly — not with a misleading
+// arity error against the implicit `this` parameter.
+
+async fun main(): void {
+    ComputePass.dispatch();
+}
