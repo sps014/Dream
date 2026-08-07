@@ -1,5 +1,5 @@
 // Gray–Scott reaction–diffusion — continuous chemical simulation on the GPU.
-// Two fields (u, v) evolve with diffusion + nonlinear reaction; paint maps v → color.
+// Two fields (u, v) evolve with diffusion + nonlinear reaction; paint maps chemistry → color.
 //
 // Build: cargo run -- sample/compute/life/life.dream
 // Browser: serve repo root, open life.html
@@ -34,8 +34,13 @@ fun rd_step(
 
     let u = u_in[i];
     let v = v_in[i];
-    let lap_u = u_in[ym * n + x] + u_in[yp * n + x] + u_in[y * n + xm] + u_in[y * n + xp] - 4.0 * u;
-    let lap_v = v_in[ym * n + x] + v_in[yp * n + x] + v_in[y * n + xm] + v_in[y * n + xp] - 4.0 * v;
+    // 9-point Laplacian (corners weighted) — smoother fronts than 5-point.
+    let lap_u = 0.2 * (u_in[ym * n + x] + u_in[yp * n + x] + u_in[y * n + xm] + u_in[y * n + xp])
+        + 0.05 * (u_in[ym * n + xm] + u_in[ym * n + xp] + u_in[yp * n + xm] + u_in[yp * n + xp])
+        - u;
+    let lap_v = 0.2 * (v_in[ym * n + x] + v_in[yp * n + x] + v_in[y * n + xm] + v_in[y * n + xp])
+        + 0.05 * (v_in[ym * n + xm] + v_in[ym * n + xp] + v_in[yp * n + xm] + v_in[yp * n + xp])
+        - v;
     let uvv = u * v * v;
     let u2 = u + du * lap_u - uvv + feed * (1.0 - u);
     let v2 = v + dv * lap_v + uvv - (feed + kill) * v;
@@ -49,8 +54,8 @@ fun rd_step(
 
 @compute(8, 8)
 fun rd_paint(
-    @readonly u: GpuBuffer<float>,
-    @readonly v: GpuBuffer<float>,
+    @readonly u_buf: GpuBuffer<float>,
+    @readonly v_buf: GpuBuffer<float>,
     tex: GpuTexture,
     n: int
 ): void {
@@ -58,16 +63,93 @@ fun rd_paint(
     let y = global_id.y;
     if (x >= n || y >= n) { return; }
     let i = y * n + x;
-    let t = v[i];
-    let s = u[i];
-    // Organic palette: deep ink → teal → lime → amber as reactant v grows.
-    let r: float = 0.02 + t * 0.85 + s * 0.05;
-    let g: float = 0.04 + t * 0.55 + (1.0 - s) * 0.25;
-    let b: float = 0.10 + (1.0 - t) * 0.35 + s * 0.15;
+    let xm = (x + n - 1) % n;
+    let xp = (x + 1) % n;
+    let ym = (y + n - 1) % n;
+    let yp = (y + 1) % n;
+
+    let vv = v_buf[i];
+    let uu = u_buf[i];
+    // Edge glow from local v gradient — brightens reaction fronts.
+    let gx = v_buf[y * n + xp] - v_buf[y * n + xm];
+    let gy = v_buf[yp * n + x] - v_buf[ym * n + x];
+    let grad = GpuMath.sqrt(gx * gx + gy * gy);
+    if (grad > 1.0) { grad = 1.0; }
+
+    let t = vv * 1.15;
+    if (t < 0.0) { t = 0.0; }
+    if (t > 1.0) { t = 1.0; }
+    // Ease midtones so thin filaments pop.
+    t = t * t * (3.0 - 2.0 * t);
+
+    // Ember / seafoam on near-black: void → teal → mint → gold → coral → white-hot.
+    let r: float = 0.0;
+    let g: float = 0.0;
+    let b: float = 0.0;
+    if (t < 0.15) {
+        let w = t / 0.15;
+        r = 0.01 + w * 0.02;
+        g = 0.02 + w * 0.08;
+        b = 0.04 + w * 0.18;
+    } else if (t < 0.35) {
+        let w = (t - 0.15) / 0.20;
+        r = 0.03 + w * 0.05;
+        g = 0.10 + w * 0.45;
+        b = 0.22 + w * 0.35;
+    } else if (t < 0.55) {
+        let w = (t - 0.35) / 0.20;
+        r = 0.08 + w * 0.20;
+        g = 0.55 + w * 0.35;
+        b = 0.57 - w * 0.25;
+    } else if (t < 0.75) {
+        let w = (t - 0.55) / 0.20;
+        r = 0.28 + w * 0.55;
+        g = 0.90 - w * 0.25;
+        b = 0.32 - w * 0.20;
+    } else {
+        let w = (t - 0.75) / 0.25;
+        r = 0.83 + w * 0.17;
+        g = 0.65 - w * 0.25;
+        b = 0.12 + w * 0.55;
+    }
+
+    // Substrate (u) cools the background slightly; fronts get a warm halo.
+    let cool = (1.0 - uu) * 0.08;
+    r = r - cool * 0.15;
+    g = g + cool * 0.05;
+    b = b + cool * 0.12;
+    r = r + grad * 0.55;
+    g = g + grad * 0.35;
+    b = b + grad * 0.15;
+    if (r < 0.0) { r = 0.0; }
+    if (g < 0.0) { g = 0.0; }
+    if (b < 0.0) { b = 0.0; }
     if (r > 1.0) { r = 1.0; }
     if (g > 1.0) { g = 1.0; }
     if (b > 1.0) { b = 1.0; }
     Gpu.texture_store(tex, x, y, r, g, b, 1.0);
+}
+
+fun soft_disk(u: float[], v: float[], n: int, cx: int, cy: int, rad: int, v0: float): void {
+    let r2 = rad * rad;
+    for (let y = cy - rad; y <= cy + rad; y = y + 1) {
+        if (y < 0 || y >= n) { continue; }
+        for (let x = cx - rad; x <= cx + rad; x = x + 1) {
+            if (x < 0 || x >= n) { continue; }
+            let dx = x - cx;
+            let dy = y - cy;
+            let d2 = dx * dx + dy * dy;
+            if (d2 <= r2) {
+                let w: float = 1.0 - (float)d2 / (float)r2;
+                w = w * w;
+                let i = y * n + x;
+                let nv = v[i] + v0 * w;
+                if (nv > 1.0) { nv = 1.0; }
+                v[i] = nv;
+                u[i] = 1.0 - 0.55 * nv;
+            }
+        }
+    }
 }
 
 fun seed_field(u: float[], v: float[], n: int): void {
@@ -76,30 +158,27 @@ fun seed_field(u: float[], v: float[], n: int): void {
         u[i] = 1.0;
         v[i] = 0.0;
     }
-    // Central square + a few offset blobs so patterns break symmetry.
-    let r = n / 10;
+    // Soft disks + a thin ring — breaks symmetry into coral / worm growth.
+    soft_disk(u, v, n, n / 2, n / 2, n / 14, 0.55);
+    soft_disk(u, v, n, n / 3, (2 * n) / 5, n / 22, 0.70);
+    soft_disk(u, v, n, (2 * n) / 3, (3 * n) / 5, n / 20, 0.65);
+    soft_disk(u, v, n, n / 4, (3 * n) / 4, n / 28, 0.80);
+    soft_disk(u, v, n, (3 * n) / 4, n / 5, n / 26, 0.75);
+
     let cx = n / 2;
     let cy = n / 2;
-    for (let y = cy - r; y <= cy + r; y = y + 1) {
-        for (let x = cx - r; x <= cx + r; x = x + 1) {
-            let i = y * n + x;
-            u[i] = 0.50;
-            v[i] = 0.25;
-        }
-    }
-    let r2 = n / 16;
-    for (let y = cy / 2 - r2; y <= cy / 2 + r2; y = y + 1) {
-        for (let x = (3 * n) / 4 - r2; x <= (3 * n) / 4 + r2; x = x + 1) {
-            let i = y * n + x;
-            u[i] = 0.40;
-            v[i] = 0.35;
-        }
-    }
-    for (let y = (3 * n) / 4 - r2; y <= (3 * n) / 4 + r2; y = y + 1) {
-        for (let x = n / 4 - r2; x <= n / 4 + r2; x = x + 1) {
-            let i = y * n + x;
-            u[i] = 0.45;
-            v[i] = 0.30;
+    let r_in = n / 9;
+    let r_out = n / 7;
+    for (let y = cy - r_out; y <= cy + r_out; y = y + 1) {
+        for (let x = cx - r_out; x <= cx + r_out; x = x + 1) {
+            let dx = x - cx;
+            let dy = y - cy;
+            let d2 = dx * dx + dy * dy;
+            if (d2 >= r_in * r_in && d2 <= r_out * r_out) {
+                let i = y * n + x;
+                v[i] = 0.45;
+                u[i] = 0.50;
+            }
         }
     }
 }
@@ -124,11 +203,11 @@ async fun run_browser(n: int): void {
     let surface = surface_r.unwrap_or(GpuSurface());
     surface.configure(n, n);
 
-    // Coral / mitosis-ish Gray–Scott parameters.
-    let step_u = Uniforms.pack_f32([0.16, 0.08, 0.035, 0.065]);
+    // Fingerprint / coral Gray–Scott (Du, Dv, feed, kill).
+    let step_u = Uniforms.pack_f32([0.21, 0.105, 0.026, 0.051]);
     let empty_u = Buffer.alloc<byte>(0);
     let no_samplers = Buffer.alloc<int>(0);
-    let steps_per_frame = 8;
+    let steps_per_frame = 14;
 
     System.println("reaction-diffusion gpu — Gray-Scott");
     while (true) {
@@ -142,8 +221,6 @@ async fun run_browser(n: int): void {
             }
             s = s + 1;
         }
-        // Even step count → result in u/v after the last odd write? 
-        // s=0: u,v → u2,v2; s=1: u2,v2 → u,v; ... s=7: u2,v2 → u,v. Paint u,v.
         pass.dispatch_resources(
             "rd_paint",
             [u.id, v.id],
@@ -178,5 +255,5 @@ async fun main(): void {
         System.println("no canvas — open sample/compute/life/life.html (reaction-diffusion)");
         return;
     }
-    await run_browser(256);
+    await run_browser(768);
 }

@@ -4,39 +4,68 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dream Reaction–Diffusion</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700&display=swap" rel="stylesheet" />
     <style>
-      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #04060a; }
+      :root {
+        --void: #06080c;
+        --fog: #9ec9c0;
+        --ember: #e8a06a;
+      }
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background:
+          radial-gradient(ellipse 90% 70% at 50% 40%, #0c1218 0%, var(--void) 70%);
+      }
       canvas#life {
         display: block;
-        width: 100vw;
-        height: 100vh;
-        image-rendering: auto;
-        background: #04060a;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: var(--void);
+      }
+      .vignette {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1;
+        background:
+          radial-gradient(ellipse 75% 65% at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.45) 100%);
       }
       #hud {
         position: fixed;
-        left: 1rem;
-        bottom: 1rem;
+        left: 1.25rem;
+        bottom: 1.25rem;
         z-index: 2;
-        color: #c8e8ff;
-        font-family: "IBM Plex Sans", system-ui, sans-serif;
-        font-size: 0.85rem;
-        opacity: 0.8;
+        color: var(--fog);
+        font-family: "Syne", system-ui, sans-serif;
+        font-weight: 500;
+        font-size: 0.9rem;
+        letter-spacing: 0.04em;
+        opacity: 0.85;
         pointer-events: none;
-        text-shadow: 0 1px 4px #000;
+        text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
       }
+      #hud .accent { color: var(--ember); }
       #hud.err { color: #ff8a8a; opacity: 1; }
     </style>
   </head>
   <body>
-    <canvas id="life" width="256" height="256"></canvas>
+    <canvas id="life" width="768" height="768"></canvas>
+    <div class="vignette" aria-hidden="true"></div>
     <div id="hud">loading…</div>
     <script type="module">
       import { run } from "../../../runtime/dream.js";
 
       const hud = document.getElementById("hud");
       const setHud = (msg, err = false) => {
-        hud.textContent = msg;
+        hud.innerHTML = msg;
         hud.classList.toggle("err", err);
       };
 
@@ -46,7 +75,7 @@
 
       try {
         await run("./life.wasm");
-        setHud("Gray–Scott reaction–diffusion · @compute");
+        setHud('Gray–Scott <span class="accent">reaction–diffusion</span> · Dream @compute');
       } catch (e) {
         console.error(e);
         setHud(String(e && e.message ? e.message : e), true);
