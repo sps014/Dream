@@ -252,19 +252,14 @@ function formatCliArgs(args: string[]): string {
     return args.length === 0 ? '' : `${args.join(' ')} `;
 }
 
-/** Walk upward from `start` looking for a directory that contains `dream.toml`. */
+/** Use `dreamer` only when the opened workspace folder's root contains `dream.toml`. */
 function findDreamProjectRoot(startFile: string): string | null {
-    let dir = path.dirname(startFile);
-    for (;;) {
-        if (fs.existsSync(path.join(dir, 'dream.toml'))) {
-            return dir;
-        }
-        const parent = path.dirname(dir);
-        if (parent === dir) {
-            return null;
-        }
-        dir = parent;
+    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(startFile));
+    if (!folder) {
+        return null;
     }
+    const manifest = path.join(folder.uri.fsPath, 'dream.toml');
+    return fs.existsSync(manifest) ? folder.uri.fsPath : null;
 }
 
 function ensureDreamTerminal(cwd?: string): vscode.Terminal {
