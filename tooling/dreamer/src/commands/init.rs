@@ -37,7 +37,7 @@ pub fn run(dir: &Path, name: Option<String>, runtime_spec: Option<String>) -> Re
     if !entry_path.exists() {
         std::fs::write(
             &entry_path,
-            "fun main() {\n    print(\"Hello from Dream!\");\n}\n",
+            "import system;\n\nfun main() {\n    System.println(\"Hello from Dream!\");\n}\n",
         )
         .with_context(|| format!("writing {}", entry_path.display()))?;
     }
