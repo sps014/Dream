@@ -63,6 +63,16 @@
           ],
           "default": "native",
           "description": "Execution/runtime target for Run and compile commands."
+        },
+        "dream.home": {
+          "type": "string",
+          "default": "",
+          "description": "Directory containing the `dream` and `dream-lsp` binaries (development). Overrides the DREAM_HOME environment variable when set. Prefer this over bundling binaries into the extension."
+        },
+        "dreamer.home": {
+          "type": "string",
+          "default": "",
+          "description": "Directory containing the `dreamer` package-manager binary (development). Overrides the DREAMER_HOME environment variable when set."
         }
       }
     },

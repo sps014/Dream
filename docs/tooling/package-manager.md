@@ -15,9 +15,25 @@ cargo install --path tooling/dreamer
 ```
 
 This installs a `dreamer` binary onto your `PATH`. `dreamer build`/`dreamer run` also need the
-`dream` compiler binary discoverable — either also on `PATH`, via the `DREAM_BIN` environment
-variable, or (while developing inside this repo) simply already built at `target/debug/dream` or
-`target/release/dream`.
+`dream` compiler binary discoverable. Resolution order:
+
+1. `DREAM_BIN` — exact path to the `dream` binary
+2. `DREAM_HOME` — directory containing `dream` (typical dev value: `<repo>/target/debug`)
+3. `dream` on `PATH`
+4. Sibling of the `dreamer` executable / walk for `target/{debug,release}/dream`
+
+For tooling that needs to invoke the package manager itself, set `DREAMER_HOME` to the directory
+containing `dreamer` (often the same `target/debug` or `target/release` folder). From the Dream
+repo root you can do both the build and the exports in one step:
+
+```bash
+source ./use-toolchain.sh          # release (default)
+# source ./use-toolchain.sh --debug
+```
+
+The VS Code extension mirrors these via settings `dream.home` and `dreamer.home` (preferred over
+bundling binaries into the `.vsix` while developing). Launch the editor from a shell that has
+sourced the script (or set the settings) so it sees the same paths.
 
 ## The manifest: `dream.toml`
 

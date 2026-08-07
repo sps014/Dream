@@ -171,6 +171,16 @@ npm run compile
 npx @vscode/vsce package   # produce .vsix
 ```
 
+For local development, point the extension at your Cargo build output instead of bundling binaries:
+
+```bash
+source ./use-toolchain.sh          # builds release dream / dream-lsp / dreamer, sets DREAM_* + PATH
+# source ./use-toolchain.sh --debug
+code .                             # launch VS Code from this shell so it inherits the env
+```
+
+Or set VS Code settings `dream.home` / `dreamer.home` to `<repo>/target/release` (or `target/debug`).
+
 ### Pre-commit / "done" gate — all three must pass
 ```bash
 cargo build --workspace

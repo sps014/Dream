@@ -58,23 +58,99 @@ function resolveBundledBinary(binDir: string, namePrefix: string): string | null
     return binPath;
 }
 
+function exeName(base: string): string {
+    return process.platform === 'win32' ? `${base}.exe` : base;
+}
+
+function binaryInHome(home: string, name: string): string | null {
+    const candidate = path.join(home, exeName(name));
+    return fs.existsSync(candidate) ? candidate : null;
+}
+
 /**
- * Resolves a shell command prefix for invoking the bundled `dream` compiler CLI binary.
- * Returns `null` (and shows an error message) if no bundled binary is found for this
- * platform/arch, rather than falling back to building it from source.
+ * Development-first resolution for toolchain binaries (`dream`, `dream-lsp`, `dreamer`):
+ * configured home dir → PATH → optional bundled fallback. Avoids requiring extension-bundled
+ * compilers when developing against a local `cargo build` output.
+ */
+function resolveToolBinary(
+    name: 'dream' | 'dream-lsp' | 'dreamer',
+    bundledBinDir: string | null
+): { path: string; source: string } | null {
+    if (name === 'dream' || name === 'dream-lsp') {
+        const home =
+            vscode.workspace.getConfiguration('dream').get<string>('home')?.trim() ||
+            process.env.DREAM_HOME?.trim();
+        if (home) {
+            const hit = binaryInHome(home, name);
+            if (hit) {
+                return { path: hit, source: `DREAM_HOME (${home})` };
+            }
+        }
+        if (name === 'dream') {
+            const dreamBin = process.env.DREAM_BIN?.trim();
+            if (dreamBin && fs.existsSync(dreamBin)) {
+                return { path: dreamBin, source: 'DREAM_BIN' };
+            }
+        }
+    } else {
+        const home =
+            vscode.workspace.getConfiguration('dreamer').get<string>('home')?.trim() ||
+            process.env.DREAMER_HOME?.trim();
+        if (home) {
+            const hit = binaryInHome(home, 'dreamer');
+            if (hit) {
+                return { path: hit, source: `DREAMER_HOME (${home})` };
+            }
+        }
+    }
+
+    const onPath = findOnPath(name);
+    if (onPath) {
+        return { path: onPath, source: 'PATH' };
+    }
+
+    if (bundledBinDir) {
+        const bundled = resolveBundledBinary(bundledBinDir, name);
+        if (bundled) {
+            return { path: bundled, source: 'extension bin/' };
+        }
+    }
+
+    return null;
+}
+
+function findOnPath(name: string): string | null {
+    const pathVar = process.env.PATH || process.env.Path;
+    if (!pathVar) {
+        return null;
+    }
+    const needle = exeName(name);
+    for (const dir of pathVar.split(path.delimiter)) {
+        if (!dir) {
+            continue;
+        }
+        const candidate = path.join(dir, needle);
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    return null;
+}
+
+/**
+ * Resolves a shell command prefix for invoking the `dream` compiler CLI.
+ * Prefers `dream.home` / `DREAM_HOME` / `DREAM_BIN` / PATH over a bundled binary.
  */
 function resolveDreamCliCommand(context: vscode.ExtensionContext): string | null {
-    const binPath = resolveBundledBinary(path.join(context.extensionPath, 'bin'), 'dream');
-    if (!binPath) {
-        const platform = process.platform;
-        const arch = process.arch;
-        const ext = platform === 'win32' ? '.exe' : '';
+    const resolved = resolveToolBinary('dream', path.join(context.extensionPath, 'bin'));
+    if (!resolved) {
         vscode.window.showErrorMessage(
-            `Dream: no bundled compiler binary found for ${platform}-${arch} (expected "dream-${platform}-${arch}${ext}" or "dream${ext}" in the extension's bin/ folder).`
+            'Dream: no compiler found. Set dream.home / DREAM_HOME to your cargo target dir ' +
+                '(e.g. …/Dream/target/debug), or put `dream` on PATH, or ship a binary in the extension bin/ folder.'
         );
         return null;
     }
-    return quotePath(binPath);
+    return quotePath(resolved.path);
 }
 
 /** Escapes a path for safe interpolation inside a double-quoted shell argument. */
@@ -250,12 +326,12 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
 }
 
 /**
- * Resolves the path to the bundled `dream` CLI binary (without shell quoting), or `null` if none is
+ * Resolves the path to the `dream` CLI binary (without shell quoting), or `null` if none is
  * found. Mirrors `resolveDreamCliCommand` but returns a bare path suitable for a
  * `DebugAdapterExecutable`, which invokes the program directly (no shell).
  */
 function resolveDreamBinaryPath(context: vscode.ExtensionContext): string | null {
-    return resolveBundledBinary(path.join(context.extensionPath, 'bin'), 'dream');
+    return resolveToolBinary('dream', path.join(context.extensionPath, 'bin'))?.path ?? null;
 }
 
 /**
@@ -325,7 +401,7 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
             const binPath = resolveDreamBinaryPath(context);
             if (!binPath) {
                 vscode.window.showErrorMessage(
-                    'Dream: no bundled compiler binary found; cannot start the debugger.'
+                    'Dream: no compiler found; cannot start the debugger. Set dream.home / DREAM_HOME.'
                 );
                 return undefined;
             }
@@ -624,20 +700,37 @@ export async function activate(context: vscode.ExtensionContext) {
     registerBuildModeCommands(context);
     registerStatusBar(context);
 
-    // Check for a bundled platform-specific binary (e.g. dream-lsp-darwin-arm64).
-    const binPath = resolveBundledBinary(path.join(__dirname, '..', 'bin'), 'dream-lsp');
+    const dreamerResolved = resolveToolBinary('dreamer', null);
+    if (dreamerResolved) {
+        outputChannel.appendLine(
+            `dreamer available from ${dreamerResolved.source}: ${dreamerResolved.path}`
+        );
+    } else {
+        outputChannel.appendLine(
+            'dreamer not found (set dreamer.home / DREAMER_HOME when using package-manager commands).'
+        );
+    }
+
+    // Prefer a locally built LSP from dream.home / DREAM_HOME (dev), then PATH, then bundled,
+    // then `cargo run` from the monorepo checkout.
+    const lspResolved = resolveToolBinary(
+        'dream-lsp',
+        path.join(context.extensionPath, 'bin')
+    );
 
     let serverOptions: ServerOptions;
 
-    if (binPath) {
-        outputChannel.appendLine(`Found bundled binary at ${binPath}`);
+    if (lspResolved) {
+        outputChannel.appendLine(`Using dream-lsp from ${lspResolved.source}: ${lspResolved.path}`);
         serverOptions = {
-            command: binPath,
+            command: lspResolved.path,
             args: [],
             options: { env: process.env }
         };
     } else {
-        outputChannel.appendLine('Bundled binary not found. Falling back to cargo...');
+        outputChannel.appendLine(
+            'No dream-lsp via DREAM_HOME/PATH/bundle. Falling back to cargo...'
+        );
 
         const isCargoAvailable = await new Promise<boolean>((resolve) => {
             exec('cargo --version', (error) => resolve(!error));
@@ -645,7 +738,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (!isCargoAvailable) {
             const msg =
-                'Dream LSP failed to start: "cargo" is not available in your PATH, and no bundled binary was found.';
+                'Dream LSP failed to start: set dream.home / DREAM_HOME to a directory containing ' +
+                'dream-lsp, put dream-lsp on PATH, ship a bundled binary, or ensure cargo is available.';
             vscode.window.showErrorMessage(msg);
             outputChannel.appendLine(msg);
             outputChannel.show();
