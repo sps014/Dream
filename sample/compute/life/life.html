@@ -3,22 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Dream Game of Life</title>
+    <title>Dream Reaction–Diffusion</title>
     <style>
-      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #05080a; }
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #04060a; }
       canvas#life {
         display: block;
         width: 100vw;
         height: 100vh;
-        image-rendering: pixelated;
-        background: #05080a;
+        image-rendering: auto;
+        background: #04060a;
       }
       #hud {
         position: fixed;
         left: 1rem;
         bottom: 1rem;
         z-index: 2;
-        color: #d8f5e4;
+        color: #c8e8ff;
         font-family: "IBM Plex Sans", system-ui, sans-serif;
         font-size: 0.85rem;
         opacity: 0.8;
@@ -29,7 +29,7 @@
     </style>
   </head>
   <body>
-    <canvas id="life" width="128" height="128"></canvas>
+    <canvas id="life" width="256" height="256"></canvas>
     <div id="hud">loading…</div>
     <script type="module">
       import { run } from "../../../runtime/dream.js";
@@ -46,7 +46,7 @@
 
       try {
         await run("./life.wasm");
-        setHud("Conway's Game of Life · @compute step + paint");
+        setHud("Gray–Scott reaction–diffusion · @compute");
       } catch (e) {
         console.error(e);
         setHud(String(e && e.message ? e.message : e), true);

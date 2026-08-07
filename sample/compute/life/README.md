@@ -1,41 +1,35 @@
-# Game of Life (WebGPU)
+# Reaction–diffusion (WebGPU)
 
-Conway's Game of Life as Dream `@compute` kernels: a 2D `life_step` ping-pong plus
-`life_paint` into a `GpuTexture`, batched with `ComputePass`. Distinct from the
-[fluid](../../fluid/) sample (stable fluids / mouse paint).
+Gray–Scott continuous chemical simulation: fields `u` / `v` diffuse and react on the GPU
+(`rd_step`), then `rd_paint` writes a storage texture. Eight steps are batched per frame in
+one `ComputePass`. This replaces the old Game of Life demo with a richer evolving system.
 
 ## User-facing kernels
 
 ```dream
 @compute(8, 8)
-fun life_step(@readonly cur: GpuBuffer<float>, next: GpuBuffer<float>, n: int): void {
-    // … neighbor count, B3/S23 rules …
-}
+fun rd_step(
+    @readonly u_in: GpuBuffer<float>,
+    @readonly v_in: GpuBuffer<float>,
+    u_out: GpuBuffer<float>,
+    v_out: GpuBuffer<float>,
+    n: int, _ey: int, _ez: int,
+    du: float, dv: float, feed: float, kill: float
+): void { /* laplacian + u·v² reaction */ }
 
 @compute(8, 8)
-fun life_paint(@readonly cells: GpuBuffer<float>, tex: GpuTexture, n: int): void {
-    // … Gpu.texture_store …
-}
+fun rd_paint(
+    @readonly u: GpuBuffer<float>,
+    @readonly v: GpuBuffer<float>,
+    tex: GpuTexture,
+    n: int
+): void { /* Gpu.texture_store */ }
 ```
 
-## Build
+## Build / run
 
 ```sh
 cargo run -- sample/compute/life/life.dream
-```
-
-## Run
-
-Native / headless (`dream run`) prints an ASCII CPU demo (WebGPU dispatch is a no-op on
-native; kernels still emit WGSL):
-
-```sh
-cargo run -- run sample/compute/life/life.dream
-```
-
-Browser — serve the **repository root**:
-
-```sh
 npx serve .
 # open http://localhost:3000/sample/compute/life/life.html
 ```

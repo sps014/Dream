@@ -1457,17 +1457,16 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
   }
 
   async function ensureTexture(dev, t, storage) {
+    // Always request STORAGE_BINDING + TEXTURE_BINDING together. Compute paint writes
+    // via storage; blit samples the same texture. Recreating when the flags differed
+    // wiped GPU contents and produced a black canvas with no error.
+    if (storage) t.storage = true;
     const usage =
       GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.STORAGE_BINDING |
       GPUTextureUsage.COPY_DST |
-      GPUTextureUsage.COPY_SRC |
-      (storage ? GPUTextureUsage.STORAGE_BINDING : 0);
-    if (t.texture && t.storage === !!storage) return t.texture;
-    if (t.texture) {
-      t.texture.destroy();
-      t.texture = null;
-    }
-    t.storage = !!storage;
+      GPUTextureUsage.COPY_SRC;
+    if (t.texture) return t.texture;
     t.texture = dev.createTexture({
       size: [t.width, t.height],
       format: "rgba8unorm",
@@ -1933,8 +1932,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         if (b.cpu) device.queue.writeBuffer(b.gpuBuffer, 0, b.cpu);
       }
       const usage =
-        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC |
-        (t.storage ? GPUTextureUsage.STORAGE_BINDING : 0);
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.STORAGE_BINDING |
+        GPUTextureUsage.COPY_DST |
+        GPUTextureUsage.COPY_SRC;
       if (!t.texture) {
         t.texture = device.createTexture({ size: [t.width, t.height], format: "rgba8unorm", usage });
       }
@@ -1978,8 +1979,10 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, };
         if (b.cpu) device.queue.writeBuffer(b.gpuBuffer, 0, b.cpu);
       }
       const usage =
-        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC |
-        (t.storage ? GPUTextureUsage.STORAGE_BINDING : 0);
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.STORAGE_BINDING |
+        GPUTextureUsage.COPY_DST |
+        GPUTextureUsage.COPY_SRC;
       if (!t.texture) {
         t.texture = device.createTexture({ size: [t.width, t.height], format: "rgba8unorm", usage });
         if (t.cpu) {

@@ -4,7 +4,7 @@ Dream can compile ordinary-looking functions into **WebGPU compute shaders** (WG
 top-level function with `@compute` and dispatch it through `system.gpu` — no bind-group
 boilerplate for the common case.
 
-You can start with a one-kernel SAXPY, build a multi-kernel Game of Life, or study the full
+You can start with a one-kernel SAXPY, build a reaction–diffusion sim, or study the full
 fluid demo. Native `dream run` stages GPU buffers but does **not** execute WGSL; use a
 browser with WebGPU for real GPU results (see [stdlib GPU](../stdlib/gpu.md)).
 
@@ -73,28 +73,33 @@ async fun main(): void {
 cargo run -- run sample/compute/saxpy.dream
 ```
 
-## Complex sample: Game of Life
+## Complex sample: reaction–diffusion
 
 [`sample/compute/life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life) —
-2D kernels, `ComputePass` ping-pong, and `Gpu.texture_store` paint:
+Gray–Scott chemical simulation (not cellular automata): dual fields, multi-step
+`ComputePass`, texture paint.
 
 ```dream
 @compute(8, 8)
-fun life_step(@readonly cur: GpuBuffer<float>, next: GpuBuffer<float>, n: int): void {
-    let x = global_id.x;
-    let y = global_id.y;
-    if (x >= n || y >= n) { return; }
-    // … count neighbors, apply B3/S23 …
-    next[y * n + x] = /* 0.0 or 1.0 */;
+fun rd_step(
+    @readonly u_in: GpuBuffer<float>,
+    @readonly v_in: GpuBuffer<float>,
+    u_out: GpuBuffer<float>,
+    v_out: GpuBuffer<float>,
+    n: int, _ey: int, _ez: int,
+    du: float, dv: float, feed: float, kill: float
+): void {
+    // … laplacian(u/v) + u·v² reaction …
 }
 
 @compute(8, 8)
-fun life_paint(@readonly cells: GpuBuffer<float>, tex: GpuTexture, n: int): void {
-    let x = global_id.x;
-    let y = global_id.y;
-    if (x >= n || y >= n) { return; }
-    let v = cells[y * n + x];
-    Gpu.texture_store(tex, x, y, v, v, v, 1.0);
+fun rd_paint(
+    @readonly u: GpuBuffer<float>,
+    @readonly v: GpuBuffer<float>,
+    tex: GpuTexture,
+    n: int
+): void {
+    Gpu.texture_store(tex, global_id.x, global_id.y, /* palette from v */);
 }
 ```
 
@@ -102,10 +107,10 @@ Host batch (browser path):
 
 ```dream
 let pass = ComputePass.begin();
-pass.dispatch("life_step", [front, back], n, n, 1);
+// several rd_step dispatches (ping-pong), then:
 pass.dispatch_resources(
-    "life_paint",
-    [back.id],
+    "rd_paint",
+    [u.id, v.id],
     [tex.id],
     Buffer.alloc<int>(0),
     n, n, 1,
@@ -113,28 +118,26 @@ pass.dispatch_resources(
 );
 let _ = await pass.submit();
 await GpuRenderPass.blit(surface, tex);
-await surface.present();
 ```
 
 ```bash
-cargo run -- run sample/compute/life/life.dream   # ASCII CPU demo on native
-# Browser: cargo run -- sample/compute/life/life.dream
-#          serve repo root → sample/compute/life/life.html
+cargo run -- sample/compute/life/life.dream
+# serve repo root → sample/compute/life/life.html
 ```
 
 ## Larger demo: fluid
 
 [`sample/fluid/`](https://github.com/sps014/Dream/tree/main/sample/fluid) — Jos Stam–style
-2D stable fluids with interactive canvas paint. The live loop runs on the CPU so motion
-works without WebGPU; `@compute` kernels still emit WGSL for the browser host.
+2D stable fluids on the GPU: `ComputePass` batches splat / advect / Jacobi project / decay /
+paint; the CPU only tracks mouse + frame.
 
 ```dream
 @compute(8, 8)
 fun advect(
-    src: GpuBuffer<float>,
+    @readonly src: GpuBuffer<float>,
     dst: GpuBuffer<float>,
-    vx: GpuBuffer<float>,
-    vy: GpuBuffer<float>,
+    @readonly vx: GpuBuffer<float>,
+    @readonly vy: GpuBuffer<float>,
     n: int
 ): void {
     let x = global_id.x;
@@ -142,6 +145,12 @@ fun advect(
     if (x >= n || y >= n) { return; }
     // … bilinear sample of src at (x - dt*vx, y - dt*vy) …
 }
+
+// Host: several ComputePass submits per frame, then blit.
+let pass = ComputePass.begin();
+pass.dispatch("advect", [vx, vx_tmp, vx, vy], n, n, 1);
+pass.dispatch("advect", [vy, vy_tmp, vx, vy], n, n, 1);
+let _ = await pass.submit();
 ```
 
 ```bash
@@ -253,7 +262,7 @@ let r = await Compute.run_shader(shader, [buf], 64, 1, 1);
 |--------|------|
 | [`sample/compute/saxpy.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/saxpy.dream) | Beginner — one kernel + readback |
 | [`sample/compute/gpu_ext.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/gpu_ext.dream) | API surface — `@readonly`, `ComputePass`, indirect |
-| [`sample/compute/life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life) | Complex — 2D Life, paint, canvas |
+| [`sample/compute/life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life) | Complex — Gray–Scott reaction–diffusion |
 | [`sample/fluid/`](https://github.com/sps014/Dream/tree/main/sample/fluid) | Larger demo — interactive stable fluids |
 
 ## See also

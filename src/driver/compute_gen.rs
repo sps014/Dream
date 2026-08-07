@@ -12,7 +12,8 @@ use dream_syntax::nodes::types::Type;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
+use std::cell::RefCell;
 
 /// One storage/uniform/texture/sampler binding derived from a kernel parameter.
 #[derive(Debug, Clone)]
@@ -127,6 +128,8 @@ struct EmitCtx<'a> {
     bindings: &'a [GpuBinding],
     /// Dream names of `@workgroup` locals declared in this kernel (rewritten with `prefix_`).
     workgroup_names: &'a [String],
+    /// WGSL types of `var` locals declared so far (for mixed-type arithmetic casts).
+    locals: RefCell<IndexMap<String, String>>,
 }
 
 impl EmitCtx<'_> {
@@ -349,6 +352,7 @@ fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuK
         prefix: &entry,
         bindings: &bindings,
         workgroup_names: &workgroup_names,
+        locals: RefCell::new(IndexMap::new()),
     };
 
     let mut workgroup_decls = String::new();
@@ -618,6 +622,48 @@ fn dream_ty_to_wgsl(ty: &Type) -> String {
     }
 }
 
+/// Emit `expr`, inserting a WGSL constructor cast when the inferred type differs from `want`.
+fn coerce_expr_to_wgsl_ty(expr: &ExpressionNode<'_>, want: &str, ctx: &EmitCtx<'_>) -> String {
+    let got = infer_wgsl_ty(expr, ctx);
+    let rendered = emit_expr(expr, ctx);
+    cast_wgsl_if_needed(rendered, &got, want)
+}
+
+fn cast_wgsl_if_needed(rendered: String, got: &str, want: &str) -> String {
+    if got == want || want.is_empty() {
+        rendered
+    } else {
+        format!("{want}({rendered})")
+    }
+}
+
+fn common_numeric_wgsl_ty(lt: &str, rt: &str) -> String {
+    if lt == "f32" || rt == "f32" {
+        "f32".into()
+    } else if lt == "u32" && rt == "u32" {
+        "u32".into()
+    } else if lt == "bool" || rt == "bool" {
+        "bool".into()
+    } else {
+        // Default integer lane (i32), including mixed i32/u32.
+        "i32".into()
+    }
+}
+
+fn is_bool_producing_binop(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::EqualEqualToken
+            | TokenKind::NotEqualToken
+            | TokenKind::SmallerThanToken
+            | TokenKind::SmallerThanEqualToken
+            | TokenKind::GreaterThanToken
+            | TokenKind::GreaterThanEqualToken
+            | TokenKind::AmpersandAmpersandToken
+            | TokenKind::PipePipeToken
+    )
+}
+
 /// Best-effort WGSL type for unannotated `let` bindings (casts/literals/float ops).
 fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
     match expr {
@@ -625,9 +671,18 @@ fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
         ExpressionNode::Parenthesized(inner)
         | ExpressionNode::NamedArg(_, inner)
         | ExpressionNode::RefArgument(inner)
-        | ExpressionNode::Unary(_, inner)
         | ExpressionNode::IncDec { target: inner, .. } => infer_wgsl_ty(inner, ctx),
-        ExpressionNode::Binary(l, _, r) => {
+        ExpressionNode::Unary(op, inner) => {
+            if op.kind == TokenKind::BangToken {
+                "bool".into()
+            } else {
+                infer_wgsl_ty(inner, ctx)
+            }
+        }
+        ExpressionNode::Binary(l, op, r) => {
+            if is_bool_producing_binop(op.kind) {
+                return "bool".into();
+            }
             let lt = infer_wgsl_ty(l, ctx);
             let rt = infer_wgsl_ty(r, ctx);
             if lt == "f32" || rt == "f32" {
@@ -656,6 +711,9 @@ fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
         ExpressionNode::Identifier(name) => {
             if let Some(b) = ctx.bindings.iter().find(|b| b.name == name.text) {
                 return b.wgsl_ty.clone();
+            }
+            if let Some(t) = ctx.locals.borrow().get(&name.text) {
+                return t.clone();
             }
             "i32".into()
         }
@@ -747,6 +805,7 @@ fn emit_stmt(
                     .as_ref()
                     .map(dream_ty_to_wgsl)
                     .unwrap_or_else(|| infer_wgsl_ty(init, ctx));
+                ctx.locals.borrow_mut().insert(name.text.clone(), t.clone());
                 if *prefix {
                     out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
                     out.push_str(&format!("{}var {}: {} = {};\n", p, name.text, t, place));
@@ -760,17 +819,26 @@ fn emit_stmt(
                 .as_ref()
                 .map(dream_ty_to_wgsl)
                 .unwrap_or_else(|| infer_wgsl_ty(init, ctx));
+            let init_s = coerce_expr_to_wgsl_ty(init, &t, ctx);
+            ctx.locals.borrow_mut().insert(name.text.clone(), t.clone());
             out.push_str(&format!(
                 "{}var {}: {} = {};\n",
                 p,
                 name.text,
                 t,
-                emit_expr(init, ctx)
+                init_s
             ));
         }
         StatementNode::Assignment(name, value) => {
             let lhs = ctx.rewrite_ident(&name.text);
-            out.push_str(&format!("{}{} = {};\n", p, lhs, emit_expr(value, ctx)));
+            let want = ctx
+                .locals
+                .borrow()
+                .get(&name.text)
+                .cloned()
+                .unwrap_or_else(|| infer_wgsl_ty(value, ctx));
+            let rhs = coerce_expr_to_wgsl_ty(value, &want, ctx);
+            out.push_str(&format!("{}{} = {};\n", p, lhs, rhs));
         }
         StatementNode::IndexAssignment(arr, idx, value) => {
             let arr_s = emit_expr(arr, ctx);
@@ -1070,11 +1138,23 @@ fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
                 TokenKind::BitWisePipeToken => "|",
                 _ => "+",
             };
+            let ls = emit_expr(l, ctx);
+            let rs = emit_expr(r, ctx);
+            // Logical ops stay bool/bool; everything else needs matching WGSL scalar types.
+            if matches!(
+                op.kind,
+                TokenKind::AmpersandAmpersandToken | TokenKind::PipePipeToken
+            ) {
+                return format!("({ls} {op_s} {rs})");
+            }
+            let lt = infer_wgsl_ty(l, ctx);
+            let rt = infer_wgsl_ty(r, ctx);
+            let common = common_numeric_wgsl_ty(&lt, &rt);
             format!(
                 "({} {} {})",
-                emit_expr(l, ctx),
+                cast_wgsl_if_needed(ls, &lt, &common),
                 op_s,
-                emit_expr(r, ctx)
+                cast_wgsl_if_needed(rs, &rt, &common)
             )
         }
         ExpressionNode::Unary(op, e) => {

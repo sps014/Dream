@@ -7,7 +7,7 @@ Progressive `@compute` / `system.gpu` examples. Language guide:
 |--------|------|
 | [`saxpy.dream`](saxpy.dream) | Beginner — SAXPY kernel + readback |
 | [`gpu_ext.dream`](gpu_ext.dream) | `@readonly`, `ComputePass`, indirect dispatch |
-| [`life/`](life/) | Complex — Conway's Game of Life (GPU + canvas) |
+| [`life/`](life/) | Complex — Gray–Scott reaction–diffusion |
 | [`../fluid/`](../fluid/) | Larger demo — interactive stable fluids |
 
 ```bash
