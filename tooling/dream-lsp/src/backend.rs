@@ -771,13 +771,13 @@ impl LanguageServer for Backend {
                     end: map_position(line_index.position(decl.end)),
                 };
 
-                // Add Run CodeLens
+                // Add Run CodeLens — extension routes to `dreamer run` when a dream.toml exists.
                 lenses.push(CodeLens {
                     range,
                     command: Some(Command {
                         title: "▶ Run".to_string(),
                         command: "dream.runFile".to_string(),
-                        arguments: None,
+                        arguments: Some(vec![serde_json::json!(uri.to_string())]),
                     }),
                     data: None,
                 });
@@ -788,7 +788,7 @@ impl LanguageServer for Backend {
                     command: Some(Command {
                         title: "▶ Debug".to_string(),
                         command: "dream.debugFile".to_string(),
-                        arguments: None,
+                        arguments: Some(vec![serde_json::json!(uri.to_string())]),
                     }),
                     data: None,
                 });

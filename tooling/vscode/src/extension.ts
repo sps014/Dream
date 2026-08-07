@@ -252,25 +252,71 @@ function formatCliArgs(args: string[]): string {
     return args.length === 0 ? '' : `${args.join(' ')} `;
 }
 
-/** Runs `dream [flags] run <file>` (or compile-only for web/node) in the Dream terminal. */
+/** Walk upward from `start` looking for a directory that contains `dream.toml`. */
+function findDreamProjectRoot(startFile: string): string | null {
+    let dir = path.dirname(startFile);
+    for (;;) {
+        if (fs.existsSync(path.join(dir, 'dream.toml'))) {
+            return dir;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            return null;
+        }
+        dir = parent;
+    }
+}
+
+function ensureDreamTerminal(cwd?: string): vscode.Terminal {
+    if (!runTerminal || runTerminal.exitStatus !== undefined) {
+        runTerminal = vscode.window.createTerminal({
+            name: 'Dream',
+            cwd: cwd || undefined
+        });
+    }
+    runTerminal.show();
+    return runTerminal;
+}
+
+/**
+ * Run via `dreamer` when a `dream.toml` is found above the file; otherwise `dream run` /
+ * compile-only for the open file (same as a standalone `.dream` outside a package project).
+ */
 function runProgramInTerminal(filePath: string, settings: DreamBuildSettings): void {
+    const projectRoot = findDreamProjectRoot(filePath);
+
+    if (projectRoot) {
+        const dreamer = resolveToolBinary('dreamer');
+        if (!dreamer) {
+            vscode.window.showErrorMessage(
+                `Dream: found dream.toml at ${projectRoot} but dreamer is not available. ${TOOLCHAIN_HINT}`
+            );
+            return;
+        }
+        const terminal = ensureDreamTerminal(projectRoot);
+        // Always pass --target so multi-target manifests and the status-bar host stay aligned.
+        const cmd = `${quotePath(dreamer.path)} run --target ${settings.runtimeTarget}`;
+        terminal.sendText(`cd ${quotePath(projectRoot)} && ${cmd}`);
+        if (settings.runtimeTarget === 'web') {
+            vscode.window.showInformationMessage(
+                'Dream: dreamer is serving the web target (see terminal for the local URL).'
+            );
+        }
+        return;
+    }
+
     const dreamCmd = resolveDreamCliCommand();
     if (!dreamCmd) {
         return;
     }
     const flagArgs = buildDreamCliArgs(settings);
-
-    if (!runTerminal || runTerminal.exitStatus !== undefined) {
-        runTerminal = vscode.window.createTerminal('Dream');
-    }
-    runTerminal.show();
+    const terminal = ensureDreamTerminal(path.dirname(filePath));
+    const flags = formatCliArgs(flagArgs);
 
     if (settings.runtimeTarget === 'native') {
-        const flags = formatCliArgs(flagArgs);
-        runTerminal.sendText(`${dreamCmd} ${flags}run ${quotePath(filePath)}`);
+        terminal.sendText(`${dreamCmd} ${flags}run ${quotePath(filePath)}`);
     } else {
-        const flags = formatCliArgs(flagArgs);
-        runTerminal.sendText(`${dreamCmd} ${flags}${quotePath(filePath)}`);
+        terminal.sendText(`${dreamCmd} ${flags}${quotePath(filePath)}`);
         const targetLabel = settings.runtimeTarget === 'web' ? 'browser' : 'Node';
         vscode.window.showInformationMessage(
             `Dream: compiled with ${targetLabel} runtime (use the generated *.${settings.runtimeTarget}.runtime.js host).`
@@ -280,43 +326,42 @@ function runProgramInTerminal(filePath: string, settings: DreamBuildSettings): v
 
 function registerRunFileCommand(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
-        vscode.commands.registerCommand('dream.runFile', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document.languageId !== 'dream') {
-                vscode.window.showWarningMessage('Open a .dream file to run it.');
-                return;
+        vscode.commands.registerCommand(
+            'dream.runFile',
+            async (resource?: vscode.Uri | string) => {
+                const filePath = await resolveDreamFilePath(resource);
+                if (!filePath) {
+                    vscode.window.showWarningMessage('Open a .dream file to run it.');
+                    return;
+                }
+                runProgramInTerminal(filePath, readBuildSettings());
             }
-
-            await saveActiveDreamFile(editor);
-            runProgramInTerminal(editor.document.uri.fsPath, readBuildSettings());
-        })
+        )
     );
 }
 
 function registerDebugFileCommand(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
-        vscode.commands.registerCommand('dream.debugFile', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document.languageId !== 'dream') {
-                vscode.window.showWarningMessage('Open a .dream file to debug it.');
-                return;
-            }
+        vscode.commands.registerCommand(
+            'dream.debugFile',
+            async (resource?: vscode.Uri | string) => {
+                const filePath = await resolveDreamFilePath(resource);
+                if (!filePath) {
+                    vscode.window.showWarningMessage('Open a .dream file to debug it.');
+                    return;
+                }
 
-            await saveActiveDreamFile(editor);
+                const settings = readBuildSettings();
+                if (settings.runtimeTarget !== 'native') {
+                    vscode.window.showWarningMessage(
+                        'Dream: debugging requires the native runtime target (status bar).'
+                    );
+                    return;
+                }
 
-            const settings = readBuildSettings();
-            if (settings.runtimeTarget !== 'native') {
-                vscode.window.showWarningMessage(
-                    'Dream: debugging requires the native runtime target (status bar).'
-                );
-                return;
-            }
-
-            const filePath = editor.document.uri.fsPath;
-            const modeLabel = settings.buildMode === 'release' ? 'Release' : 'Debug';
-            await vscode.debug.startDebugging(
-                vscode.workspace.getWorkspaceFolder(editor.document.uri),
-                {
+                const uri = vscode.Uri.file(filePath);
+                const modeLabel = settings.buildMode === 'release' ? 'Release' : 'Debug';
+                await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
                     type: 'dream',
                     request: 'launch',
                     name: `Dream: Debug (${modeLabel})`,
@@ -324,10 +369,38 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
                     buildMode: settings.buildMode,
                     optimizeLevel: settings.optimizeLevel,
                     stopOnEntry: false
-                }
-            );
-        })
+                });
+            }
+        )
     );
+}
+
+/** Resolve a `.dream` path from a CodeLens URI argument or the active editor. */
+async function resolveDreamFilePath(
+    resource?: vscode.Uri | string
+): Promise<string | undefined> {
+    if (typeof resource === 'string' && resource.length > 0) {
+        const uri = vscode.Uri.parse(resource);
+        const doc = await vscode.workspace.openTextDocument(uri);
+        if (doc.isDirty) {
+            await doc.save();
+        }
+        return doc.uri.fsPath;
+    }
+    if (resource instanceof vscode.Uri) {
+        const doc = await vscode.workspace.openTextDocument(resource);
+        if (doc.isDirty) {
+            await doc.save();
+        }
+        return doc.uri.fsPath;
+    }
+
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.languageId !== 'dream') {
+        return undefined;
+    }
+    await saveActiveDreamFile(editor);
+    return editor.document.uri.fsPath;
 }
 
 /**
