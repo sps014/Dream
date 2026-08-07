@@ -10,6 +10,60 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
+    /// C#/Rust-style discard binding: `let _ = …` / tuple `_` never enters the symbol table.
+    pub(in crate::analyzer) fn is_discard_binding(name: &str) -> bool {
+        name == "_"
+    }
+
+    /// Binds a local, or evaluates+drops it when `name` is the discard `_`.
+    fn bind_or_discard_local(
+        &mut self,
+        name: &SyntaxToken,
+        var_type: Type,
+        value: Option<dream_hir::HExpr>,
+        is_const: bool,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        if Self::is_discard_binding(&name.text) {
+            // Generic function items are not runtime values — nothing to drop.
+            if !matches!(var_type, Type::GenericFunctionItem(_)) {
+                self.hir_expr_stmt(value);
+            }
+            return;
+        }
+        if matches!(var_type, Type::GenericFunctionItem(_)) {
+            if let Err(e) = (*symbol_table)
+                .as_ref()
+                .borrow_mut()
+                .add_symbol(name.text.clone(), var_type)
+            {
+                diagnostics.report_error(e.to_string(), Some(name.position));
+            }
+            if is_const {
+                (*symbol_table)
+                    .as_ref()
+                    .borrow_mut()
+                    .mark_const(name.text.clone());
+            }
+            return;
+        }
+        self.record_capturing_fun_local(&name.text, &var_type, value.as_ref());
+        self.hir_declare_local(&name.text, &var_type, value);
+        {
+            let mut st = (*symbol_table).as_ref().borrow_mut();
+            if let Err(e) = st.add_symbol(name.text.clone(), var_type) {
+                drop(st);
+                diagnostics.report_error(e.to_string(), Some(name.position));
+            } else {
+                st.track_local(name.text.clone(), name.position);
+                if is_const {
+                    st.mark_const(name.text.clone());
+                }
+            }
+        }
+    }
+
     pub(in crate::analyzer) fn analyze_declaration(
         &mut self,
         left: &SyntaxToken,
@@ -19,7 +73,9 @@ impl<'a> Analyzer<'a> {
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        self.check_reserved_name(left, "variable", diagnostics);
+        if !Self::is_discard_binding(&left.text) {
+            self.check_reserved_name(left, "variable", diagnostics);
+        }
         // Inside a monomorphized generic body, substitute the type parameters in the annotation with
         // their concrete types (e.g. `let cmp: fun(T, T): int` becomes `fun(int, int): int`), so the
         // published expected type, the initializer check, and the recorded variable type are all
@@ -71,41 +127,16 @@ impl<'a> Analyzer<'a> {
             right_type.clone()
         };
 
-        // A polymorphic generic function item is not a runtime value until instantiated at a use
-        // site — bind it in the symbol table only (no HIR local).
-        if matches!(var_type, Type::GenericFunctionItem(_)) {
-            if let Err(e) = (*ctx.symbol_table)
-                .as_ref()
-                .borrow_mut()
-                .add_symbol(left.text.clone(), var_type)
-            {
-                diagnostics.report_error(e.to_string(), Some(left.position));
-            }
-            if is_const {
-                (*ctx.symbol_table)
-                    .as_ref()
-                    .borrow_mut()
-                    .mark_const(left.text.clone());
-            }
-            return Ok(());
-        }
-
-        self.record_capturing_fun_local(&left.text, &var_type, value.as_ref());
-        self.hir_declare_local(&left.text, &var_type, value);
-        self.hir_flush_ref_writebacks();
-
-        if let Err(e) = (*ctx.symbol_table)
-            .as_ref()
-            .borrow_mut()
-            .add_symbol(left.text.clone(), var_type)
-        {
-            diagnostics.report_error(e.to_string(), Some(left.position));
-        }
-        if is_const {
-            (*ctx.symbol_table)
-                .as_ref()
-                .borrow_mut()
-                .mark_const(left.text.clone());
+        self.bind_or_discard_local(
+            left,
+            var_type,
+            value,
+            is_const,
+            ctx.symbol_table,
+            diagnostics,
+        );
+        if !Self::is_discard_binding(&left.text) {
+            self.hir_flush_ref_writebacks();
         }
         Ok(())
     }
@@ -123,7 +154,9 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         for name in names {
-            self.check_reserved_name(name, "variable", diagnostics);
+            if !Self::is_discard_binding(&name.text) {
+                self.check_reserved_name(name, "variable", diagnostics);
+            }
         }
         let mono_annotation = type_annotation
             .as_ref()
@@ -181,21 +214,14 @@ impl<'a> Analyzer<'a> {
                     } else {
                         elem_ty
                     };
-                    self.record_capturing_fun_local(&name.text, &var_type, value.as_ref());
-                    self.hir_declare_local(&name.text, &var_type, value);
-                    if let Err(e) = (*ctx.symbol_table)
-                        .as_ref()
-                        .borrow_mut()
-                        .add_symbol(name.text.clone(), var_type)
-                    {
-                        diagnostics.report_error(e.to_string(), Some(name.position));
-                    }
-                    if is_const {
-                        (*ctx.symbol_table)
-                            .as_ref()
-                            .borrow_mut()
-                            .mark_const(name.text.clone());
-                    }
+                    self.bind_or_discard_local(
+                        name,
+                        var_type,
+                        value,
+                        is_const,
+                        ctx.symbol_table,
+                        diagnostics,
+                    );
                 }
                 self.hir_flush_ref_writebacks();
                 return Ok(());
@@ -261,21 +287,14 @@ impl<'a> Analyzer<'a> {
             let base = self.hir_take();
             self.hir_set_field(base, i, &elem_ty);
             let field_val = self.hir_take();
-            self.record_capturing_fun_local(&name.text, &elem_ty, field_val.as_ref());
-            self.hir_declare_local(&name.text, &elem_ty, field_val);
-            if let Err(e) = (*ctx.symbol_table)
-                .as_ref()
-                .borrow_mut()
-                .add_symbol(name.text.clone(), elem_ty)
-            {
-                diagnostics.report_error(e.to_string(), Some(name.position));
-            }
-            if is_const {
-                (*ctx.symbol_table)
-                    .as_ref()
-                    .borrow_mut()
-                    .mark_const(name.text.clone());
-            }
+            self.bind_or_discard_local(
+                name,
+                elem_ty,
+                field_val,
+                is_const,
+                ctx.symbol_table,
+                diagnostics,
+            );
         }
         self.hir_flush_ref_writebacks();
         Ok(())
@@ -289,6 +308,14 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
+        if Self::is_discard_binding(&left.text) {
+            diagnostics.report_error(
+                "'_' is a discard and cannot be assigned to".to_string(),
+                Some(left.position),
+            );
+            self.hir_fail();
+            return Ok(());
+        }
         if (*symbol_table).as_ref().borrow().is_const(&left.text) {
             diagnostics.report_error(
                 format!(

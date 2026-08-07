@@ -1,0 +1,19 @@
+import system;
+
+fun side(): int {
+    return 7;
+}
+
+async fun tick(): int {
+    return 1;
+}
+
+async fun main(): void {
+    let _ = 1;
+    let _ = side();
+    let (_, _) = (1, 2);
+    let (_, y) = (3, 4);
+    System.println(y);
+    let _ = await tick();
+    await tick();
+}

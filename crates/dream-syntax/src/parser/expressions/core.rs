@@ -24,7 +24,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else if unary_precedence != 0 && unary_precedence >= parent_precedence {
             let operator_token = self.next_token();
             let operand = self.parse_expression(unary_precedence)?;
-            left = ExpressionNode::Unary(operator_token, self.arena.alloc(operand));
+            if matches!(
+                operator_token.kind,
+                TokenKind::PlusPlusToken | TokenKind::MinusMinusToken
+            ) {
+                left = ExpressionNode::IncDec {
+                    prefix: true,
+                    is_inc: operator_token.kind == TokenKind::PlusPlusToken,
+                    target: self.arena.alloc(operand),
+                    op: operator_token,
+                };
+            } else {
+                left = ExpressionNode::Unary(operator_token, self.arena.alloc(operand));
+            }
         } else {
             left = self.parse_primary_expression()?;
         }
@@ -365,6 +377,19 @@ impl<'a, 'b> Parser<'a, 'b> {
             {
                 self.match_token(TokenKind::QuestionMarkToken);
                 expr = ExpressionNode::Try(self.arena.alloc(expr));
+            } else if matches!(
+                self.current_token().kind,
+                TokenKind::PlusPlusToken | TokenKind::MinusMinusToken
+            ) {
+                let op = self.next_token();
+                expr = ExpressionNode::IncDec {
+                    prefix: false,
+                    is_inc: op.kind == TokenKind::PlusPlusToken,
+                    target: self.arena.alloc(expr),
+                    op,
+                };
+                // Postfix ++/-- does not chain (`i++++` is invalid).
+                break;
             } else {
                 break;
             }

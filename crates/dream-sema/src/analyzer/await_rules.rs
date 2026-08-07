@@ -144,6 +144,7 @@ impl<'a> Analyzer<'a> {
                 self.scan_expr_await(r, message, diagnostics);
             }
             ExpressionNode::Unary(_, e)
+            | ExpressionNode::IncDec { target: e, .. }
             | ExpressionNode::Parenthesized(e)
             | ExpressionNode::Try(e)
             | ExpressionNode::Cast(_, e)

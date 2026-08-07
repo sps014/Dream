@@ -1,0 +1,6 @@
+import system;
+
+fun main(): void {
+    let _ = 1;
+    System.println(_);
+}

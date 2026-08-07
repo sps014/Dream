@@ -25,6 +25,14 @@ pub enum ExpressionNode<'a> {
     MapLiteral(Vec<(ExpressionNode<'a>, ExpressionNode<'a>)>),
     Binary(&'a ExpressionNode<'a>, SyntaxToken, &'a ExpressionNode<'a>),
     Unary(SyntaxToken, &'a ExpressionNode<'a>),
+    /// `++x` / `--x` / `x++` / `x--`. Sema (and `@compute` emission) desugar to assign ±1;
+    /// postfix yields the old value, prefix the new.
+    IncDec {
+        prefix: bool,
+        is_inc: bool,
+        target: &'a ExpressionNode<'a>,
+        op: SyntaxToken,
+    },
     Identifier(SyntaxToken),
     Parenthesized(&'a ExpressionNode<'a>),
     FunctionCall(SyntaxToken, Option<Vec<Type>>, Vec<ExpressionNode<'a>>),
@@ -171,6 +179,9 @@ impl<'a> ExpressionNode<'a> {
             | ExpressionNode::MethodCall(_, token, _, _)
             | ExpressionNode::Binary(_, token, _)
             | ExpressionNode::Unary(token, _) => Some(token.position),
+            ExpressionNode::IncDec { op, target, .. } => {
+                Some(op.position).or_else(|| target.position())
+            }
             ExpressionNode::Call(callee, _, _) => callee.position(),
             ExpressionNode::Parenthesized(inner)
             | ExpressionNode::Await(inner)
@@ -206,6 +217,16 @@ impl<'a> ExpressionNode<'a> {
             ExpressionNode::MethodCall(receiver, _, _, _) => receiver.start_position(),
             ExpressionNode::Call(callee, _, _) => callee.start_position(),
             ExpressionNode::Binary(left, _, _) => left.start_position(),
+            ExpressionNode::IncDec {
+                prefix: true,
+                op,
+                ..
+            } => Some(op.position),
+            ExpressionNode::IncDec {
+                prefix: false,
+                target,
+                ..
+            } => target.start_position(),
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.start_position(),
             ExpressionNode::Parenthesized(inner)
             | ExpressionNode::Await(inner)

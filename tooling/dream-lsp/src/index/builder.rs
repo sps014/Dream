@@ -611,7 +611,9 @@ impl Builder {
                 self.walk_expr(l, scope);
                 self.walk_expr(r, scope);
             }
-            ExpressionNode::Unary(_, e) | ExpressionNode::Parenthesized(e) => {
+            ExpressionNode::Unary(_, e)
+            | ExpressionNode::IncDec { target: e, .. }
+            | ExpressionNode::Parenthesized(e) => {
                 self.walk_expr(e, scope)
             }
             ExpressionNode::FunctionCall(name, _, args) => {

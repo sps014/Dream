@@ -377,7 +377,8 @@ fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
         ExpressionNode::Parenthesized(inner)
         | ExpressionNode::NamedArg(_, inner)
         | ExpressionNode::RefArgument(inner)
-        | ExpressionNode::Unary(_, inner) => infer_wgsl_ty(inner, ctx),
+        | ExpressionNode::Unary(_, inner)
+        | ExpressionNode::IncDec { target: inner, .. } => infer_wgsl_ty(inner, ctx),
         ExpressionNode::Binary(l, _, r) => {
             let lt = infer_wgsl_ty(l, ctx);
             let rt = infer_wgsl_ty(r, ctx);
@@ -485,6 +486,28 @@ fn emit_stmt(
             ));
         }
         StatementNode::Declaration(name, ty, init, _) => {
+            if let ExpressionNode::IncDec {
+                prefix,
+                is_inc,
+                target,
+                ..
+            } = init
+            {
+                let place = emit_expr(target, ctx);
+                let op = if *is_inc { "+" } else { "-" };
+                let t = ty
+                    .as_ref()
+                    .map(dream_ty_to_wgsl)
+                    .unwrap_or_else(|| infer_wgsl_ty(init, ctx));
+                if *prefix {
+                    out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
+                    out.push_str(&format!("{}var {}: {} = {};\n", p, name.text, t, place));
+                } else {
+                    out.push_str(&format!("{}var {}: {} = {};\n", p, name.text, t, place));
+                    out.push_str(&format!("{}{} = {} {} 1;\n", p, place, place, op));
+                }
+                return;
+            }
             let t = ty
                 .as_ref()
                 .map(dream_ty_to_wgsl)
@@ -761,6 +784,10 @@ fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
             };
             format!("({}{})", op_s, emit_expr(e, ctx))
         }
+        // Statement `i++`/`++i` are desugared to Assignment before emission. Value-producing
+        // forms in kernels are expanded in `emit_stmt` for declarations; nested uses fall back
+        // to the place (side effect must be written as `i = i + 1` in kernels).
+        ExpressionNode::IncDec { target, .. } => emit_expr(target, ctx),
         ExpressionNode::Parenthesized(e) => format!("({})", emit_expr(e, ctx)),
         ExpressionNode::IndexAccess(arr, idx) => {
             format!(

@@ -131,13 +131,29 @@ arr[0] = 99;
 point.x = 3;
 ```
 
-Compound forms update in place, and `++`/`--` step by one:
+Compound forms update in place, and `++`/`--` step by one (prefix or postfix; as statements or
+expressions). Postfix yields the old value; prefix yields the new:
 
 ```dream
 total += 5;   // total = total + 5
 count++;
-i--;
+++i;
+let prev = j++;
+let next = ++j;
+for (let k = 0; k < n; k++) { }
 ```
+
+Discard a value without binding a name using `_` (like a pattern wildcard):
+
+```dream
+let _ = sideEffect();
+let (_, y) = pair;
+let _ = await fetch();
+```
+
+Unread `let`/`const` locals produce a warning (compile still succeeds). Use `_` when the value is intentionally ignored.
+
+Any expression can be used as a statement (`expr;`); the result is evaluated and dropped.
 
 ## Operator overloading
 

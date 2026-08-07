@@ -100,6 +100,165 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
+    /// Parses a block `{ ... }` or a single statement (brace-optional control-flow body).
+    pub(super) fn parse_block_or_statement(&mut self) -> Result<&'a [StatementNode<'a>], Error> {
+        if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
+            self.parse_block()
+        } else {
+            let stmt = self.parse_statement()?;
+            Ok(self.arena.alloc_slice_fill_iter([stmt]))
+        }
+    }
+
+    /// True when the current token can start an expression used as a statement.
+    fn can_start_expression_statement(kind: TokenKind) -> bool {
+        matches!(
+            kind,
+            TokenKind::IdentifierToken
+                | TokenKind::DataTypeToken
+                | TokenKind::NumberToken
+                | TokenKind::StringToken
+                | TokenKind::InterpolatedStringToken
+                | TokenKind::BooleanToken
+                | TokenKind::CharToken
+                | TokenKind::OpenParenthesisToken
+                | TokenKind::OpenBracketToken
+                | TokenKind::CurlyOpenBracketToken
+                | TokenKind::PlusToken
+                | TokenKind::MinusToken
+                | TokenKind::BangToken
+                | TokenKind::TildeToken
+                | TokenKind::PlusPlusToken
+                | TokenKind::MinusMinusToken
+                | TokenKind::SwitchToken
+                | TokenKind::AsyncToken
+                | TokenKind::SmallerThanToken
+        )
+    }
+
+    /// Desugars `target++` / `target--` / `++target` / `--target` to an assignment statement.
+    fn inc_dec_to_assignment(
+        &mut self,
+        target: ExpressionNode<'a>,
+        is_inc: bool,
+        op_pos: dream_text::text_span::TextSpan,
+        cur: &SyntaxToken,
+    ) -> Result<StatementNode<'a>, Error> {
+        let plain_kind = if is_inc {
+            TokenKind::PlusToken
+        } else {
+            TokenKind::MinusToken
+        };
+        let plain_token =
+            SyntaxToken::new(plain_kind, op_pos, Self::operator_text(plain_kind));
+        let one_token = SyntaxToken::new(TokenKind::NumberToken, op_pos, "1".to_string());
+        let one = ExpressionNode::Literal(Type::Integer(one_token));
+        let left_operand = self.arena.alloc(target.clone());
+        let value = ExpressionNode::Binary(left_operand, plain_token, self.arena.alloc(one));
+        self.make_assignment_statement(target, value, cur)
+    }
+
+    /// Finishes a statement that began with an expression: assignment, compound assign, or
+    /// expression/`IncDec` statement terminated by `;`.
+    fn finish_expression_statement(
+        &mut self,
+        expr: ExpressionNode<'a>,
+        cur: &SyntaxToken,
+    ) -> Result<StatementNode<'a>, Error> {
+        if self.current_token().kind == TokenKind::EqualToken {
+            self.match_token(TokenKind::EqualToken);
+            let value = self.parse_expression(0)?;
+            self.match_token(TokenKind::SemicolonToken);
+            self.make_assignment_statement(expr, value, cur)
+        } else if let Some(plain_kind) = Self::compound_assign_operator(self.current_token().kind)
+        {
+            let op_tok = self.next_token();
+            let rhs = self.parse_expression(0)?;
+            self.match_token(TokenKind::SemicolonToken);
+            let plain_token =
+                SyntaxToken::new(plain_kind, op_tok.position, Self::operator_text(plain_kind));
+            let left_operand = self.arena.alloc(expr.clone());
+            let value = ExpressionNode::Binary(left_operand, plain_token, self.arena.alloc(rhs));
+            self.make_assignment_statement(expr, value, cur)
+        } else if self.current_token().kind == TokenKind::SemicolonToken {
+            self.match_token(TokenKind::SemicolonToken);
+            match expr {
+                ExpressionNode::IncDec {
+                    is_inc,
+                    target,
+                    op,
+                    ..
+                } => self.inc_dec_to_assignment(target.clone(), is_inc, op.position, cur),
+                ExpressionNode::FunctionCall(name, generic_args, params) => Ok(
+                    StatementNode::FunctionInvocation(name, generic_args, params),
+                ),
+                ExpressionNode::MethodCall(obj, member, generic_args, params) => Ok(
+                    StatementNode::MethodInvocation(obj, member, generic_args, params),
+                ),
+                other => Ok(StatementNode::ExpressionStatement(other)),
+            }
+        } else {
+            self.diagnostics.report_error(
+                format!(
+                    "Unexpected token {:?} after expression",
+                    self.current_token().kind
+                ),
+                Some(self.current_token().position),
+            );
+            self.recover_to_next_statement();
+            Ok(StatementNode::ExpressionStatement(expr))
+        }
+    }
+
+    /// Parses a for-loop increment clause (no trailing `;`): `i = …`, `i += …`, or `i++`/`++i`.
+    fn parse_for_increment(&mut self) -> Result<StatementNode<'a>, Error> {
+        let cur = self.current_token().clone();
+        // Prefix ++/-- before the lvalue.
+        if matches!(
+            self.current_token().kind,
+            TokenKind::PlusPlusToken | TokenKind::MinusMinusToken
+        ) {
+            let op = self.next_token();
+            let target = self.parse_primary_expression()?;
+            return self.inc_dec_to_assignment(
+                target,
+                op.kind == TokenKind::PlusPlusToken,
+                op.position,
+                &cur,
+            );
+        }
+        // `parse_primary_expression` already folds postfix `++`/`--` into `IncDec`.
+        let expr = self.parse_primary_expression()?;
+        if let ExpressionNode::IncDec {
+            is_inc,
+            target,
+            op,
+            ..
+        } = expr
+        {
+            return self.inc_dec_to_assignment(target.clone(), is_inc, op.position, &cur);
+        }
+        if self.current_token().kind == TokenKind::EqualToken {
+            self.match_token(TokenKind::EqualToken);
+            let value = self.parse_expression(0)?;
+            return self.make_assignment_statement(expr, value, &cur);
+        }
+        if let Some(plain_kind) = Self::compound_assign_operator(self.current_token().kind) {
+            let op_tok = self.next_token();
+            let rhs = self.parse_expression(0)?;
+            let plain_token =
+                SyntaxToken::new(plain_kind, op_tok.position, Self::operator_text(plain_kind));
+            let left_operand = self.arena.alloc(expr.clone());
+            let value = ExpressionNode::Binary(left_operand, plain_token, self.arena.alloc(rhs));
+            return self.make_assignment_statement(expr, value, &cur);
+        }
+        self.diagnostics.report_error(
+            "Invalid for-loop increment; expected assignment or ++/--".to_string(),
+            Some(self.current_token().position),
+        );
+        Ok(StatementNode::Break(None))
+    }
+
     pub(super) fn parse_statement(&mut self) -> Result<StatementNode<'a>, Error> {
         let cur = self.current_token();
         match cur.kind {
@@ -152,87 +311,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let inner_ref = self.arena.alloc(inner);
                 Ok(StatementNode::Labeled(label.text, inner_ref))
             }
-            // A primitive keyword (`string`, `int`, ...) can head a static-method call statement,
-            // e.g. `string.set(buf, i, c);` (an `extend <primitive> { static fun ... }` member) —
-            // the same call shape as an identifier-headed one, just spelled with the reserved
-            // keyword since primitives have no capitalized alias to fall back on.
-            TokenKind::IdentifierToken | TokenKind::DataTypeToken => {
-                // Parse an expression first
-                let expr = self.parse_primary_expression()?;
-
-                if self.current_token().kind == TokenKind::EqualToken {
-                    self.match_token(TokenKind::EqualToken);
-                    let value = self.parse_expression(0)?;
-                    self.match_token(TokenKind::SemicolonToken);
-                    self.make_assignment_statement(expr, value, &cur)
-                } else if let Some(plain_kind) =
-                    Self::compound_assign_operator(self.current_token().kind)
-                {
-                    // Compound assignment `target OP= rhs` desugars to `target = target OP (rhs)`.
-                    let op_tok = self.next_token();
-                    let rhs = self.parse_expression(0)?;
-                    self.match_token(TokenKind::SemicolonToken);
-                    let plain_token = SyntaxToken::new(
-                        plain_kind,
-                        op_tok.position,
-                        Self::operator_text(plain_kind),
-                    );
-                    let left_operand = self.arena.alloc(expr.clone());
-                    let value =
-                        ExpressionNode::Binary(left_operand, plain_token, self.arena.alloc(rhs));
-                    self.make_assignment_statement(expr, value, &cur)
-                } else if matches!(
-                    self.current_token().kind,
-                    TokenKind::PlusPlusToken | TokenKind::MinusMinusToken
-                ) {
-                    // `target++` / `target--` desugars to `target = target +/- 1`.
-                    let op_tok = self.next_token();
-                    let plain_kind = if op_tok.kind == TokenKind::PlusPlusToken {
-                        TokenKind::PlusToken
-                    } else {
-                        TokenKind::MinusToken
-                    };
-                    self.match_token(TokenKind::SemicolonToken);
-                    let plain_token = SyntaxToken::new(
-                        plain_kind,
-                        op_tok.position,
-                        Self::operator_text(plain_kind),
-                    );
-                    let one_token =
-                        SyntaxToken::new(TokenKind::NumberToken, op_tok.position, "1".to_string());
-                    let one = ExpressionNode::Literal(Type::Integer(one_token));
-                    let left_operand = self.arena.alloc(expr.clone());
-                    let value =
-                        ExpressionNode::Binary(left_operand, plain_token, self.arena.alloc(one));
-                    self.make_assignment_statement(expr, value, &cur)
-                } else if self.current_token().kind == TokenKind::SemicolonToken {
-                    self.match_token(TokenKind::SemicolonToken);
-                    match expr {
-                        ExpressionNode::FunctionCall(name, generic_args, params) => Ok(
-                            StatementNode::FunctionInvocation(name, generic_args, params),
-                        ),
-                        ExpressionNode::MethodCall(obj, member, generic_args, params) => Ok(
-                            StatementNode::MethodInvocation(obj, member, generic_args, params),
-                        ),
-                        _ => {
-                            self.diagnostics.report_error(
-                                "Expected function call but found expression".to_string(),
-                                Some(cur.position),
-                            );
-                            Ok(StatementNode::ExpressionStatement(expr))
-                        }
-                    }
-                } else {
-                    self.diagnostics.report_error(
-                        format!(
-                            "Unexpected token {:?} after expression",
-                            self.current_token().kind
-                        ),
-                        Some(self.current_token().position),
-                    );
-                    self.recover_to_next_statement();
-                    Ok(StatementNode::ExpressionStatement(expr))
-                }
+            kind if Self::can_start_expression_statement(kind) => {
+                let expr = self.parse_expression(0)?;
+                self.finish_expression_statement(expr, &cur)
             }
             _ => {
                 self.diagnostics.report_error(
@@ -391,7 +472,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::OpenParenthesisToken);
         let condition = self.parse_expression(0)?;
         self.match_token(TokenKind::CloseParenthesisToken);
-        let then_branch = self.parse_block()?;
+        let then_branch = self.parse_block_or_statement()?;
         let mut else_ifs = vec![];
         while self.current_token().kind == TokenKind::ElseToken {
             //eat the else keyword
@@ -402,10 +483,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.match_token(TokenKind::OpenParenthesisToken);
                 let condition = self.parse_expression(0)?;
                 self.match_token(TokenKind::CloseParenthesisToken);
-                let then_branch = self.parse_block()?;
+                let then_branch = self.parse_block_or_statement()?;
                 else_ifs.push((condition, then_branch));
             } else {
-                let else_branch = self.parse_block()?;
+                let else_branch = self.parse_block_or_statement()?;
                 return Ok(StatementNode::IfElse(
                     condition,
                     then_branch,
@@ -438,7 +519,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::InToken);
             let iterable = self.parse_expression(0)?;
             self.match_token(TokenKind::CloseParenthesisToken);
-            let body = self.parse_block()?;
+            let body = self.parse_block_or_statement()?;
 
             let n = self.foreach_counter;
             self.foreach_counter += 1;
@@ -468,32 +549,12 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let mut increment: Option<&'a StatementNode<'a>> = None;
         if self.current_token().kind != TokenKind::CloseParenthesisToken {
-            // Parse the increment assignment expression (without semicolon)
-            let expr = self.parse_primary_expression()?;
-            self.match_token(TokenKind::EqualToken);
-            let value = self.parse_expression(0)?;
-
-            let stmt = match expr {
-                ExpressionNode::Identifier(id) => StatementNode::Assignment(id, value),
-                ExpressionNode::IndexAccess(arr, idx) => {
-                    StatementNode::IndexAssignment(arr, idx, value)
-                }
-                ExpressionNode::MemberAccess(obj, member) => {
-                    StatementNode::MemberAssignment(obj, member, value)
-                }
-                _ => {
-                    self.diagnostics.report_error(
-                        "Invalid assignment target in for loop increment".to_string(),
-                        Some(self.current_token().position),
-                    );
-                    StatementNode::Break(None)
-                }
-            };
+            let stmt = self.parse_for_increment()?;
             increment = Some(self.arena.alloc(stmt));
         }
         self.match_token(TokenKind::CloseParenthesisToken);
 
-        let body = self.parse_block()?;
+        let body = self.parse_block_or_statement()?;
         Ok(StatementNode::For(init, condition, increment, body))
     }
 
@@ -504,7 +565,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::OpenParenthesisToken);
         let condition = self.parse_expression(0)?;
         self.match_token(TokenKind::CloseParenthesisToken);
-        let body = self.parse_block()?;
+        let body = self.parse_block_or_statement()?;
         Ok(StatementNode::While(condition, body))
     }
     /// Parses `lock (target) { body }` — mutual exclusion on `target` (an `@shared class` instance
@@ -514,7 +575,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::OpenParenthesisToken);
         let target = self.parse_expression(0)?;
         self.match_token(TokenKind::CloseParenthesisToken);
-        let body = self.parse_block()?;
+        let body = self.parse_block_or_statement()?;
         Ok(StatementNode::Lock(target, body))
     }
     /// Parses a do-while loop: `do { body } while (condition);`.

@@ -1,0 +1,22 @@
+import system;
+
+fun main(): void {
+    let n = 3;
+    if (n > 0) System.println(1); else System.println(0);
+    let i = 0;
+    while (i < 2) {
+        System.println(i);
+        i++;
+    }
+    for (let j = 0; j < 2; j++) System.println(j);
+    let k = 0;
+    let a = k++;
+    let b = ++k;
+    System.println(a);
+    System.println(b);
+    side() + 1;
+}
+
+fun side(): int {
+    return 9;
+}

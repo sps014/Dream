@@ -306,4 +306,122 @@ impl<'a> Analyzer<'a> {
             }
         }
     }
+
+    /// `++x` / `--x` / `x++` / `x--` — desugars to a read, assign ±1, and yields old (postfix) or
+    /// new (prefix) value. Targets must be assignable lvalues with an integer type.
+    pub(in crate::analyzer) fn analyze_inc_dec(
+        &mut self,
+        kind: (bool, bool), // (prefix, is_inc)
+        target: &'a ExpressionNode<'a>,
+        op: &SyntaxToken,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        let (prefix, is_inc) = kind;
+        match target {
+            ExpressionNode::Identifier(_)
+            | ExpressionNode::IndexAccess(_, _)
+            | ExpressionNode::MemberAccess(_, _) => {}
+            _ => {
+                let spell = if is_inc { "++" } else { "--" };
+                diagnostics.report_error(
+                    format!(
+                        "'{}' requires an assignable variable, field, or index",
+                        spell
+                    ),
+                    Some(op.position),
+                );
+                self.hir_fail();
+                return Ok(Type::Unknown);
+            }
+        }
+
+        let target_ty = self
+            .analyze_expression(target, parent_function, symbol_table, diagnostics)
+            .unwrap_or(Type::Unknown);
+        let old_val = self.hir_take();
+
+        if !target_ty.is_unknown() && !target_ty.is_integer() {
+            diagnostics.report_error(
+                format!(
+                    "'++'/'--' require an integer operand, got {}",
+                    target_ty.display_name()
+                ),
+                Some(op.position),
+            );
+        }
+
+        let tmp_name = format!("__incdec_{}", op.position.start);
+        self.hir_declare_local(&tmp_name, &target_ty, old_val);
+
+        let plain_kind = if is_inc {
+            TokenKind::PlusToken
+        } else {
+            TokenKind::MinusToken
+        };
+        let plain_tok = SyntaxToken::new(
+            plain_kind,
+            op.position,
+            if is_inc { "+" } else { "-" }.into(),
+        );
+        self.hir_set_var(&tmp_name);
+        let left = self.hir_take();
+        let one_ty = Type::Integer(SyntaxToken::new(
+            TokenKind::NumberToken,
+            op.position,
+            "1".into(),
+        ));
+        self.hir_set_literal(&one_ty);
+        let one_hir = self.hir_take();
+        self.hir_set_binary(left, &plain_tok, one_hir, &target_ty);
+        let new_val = self.hir_take();
+
+        match target {
+            ExpressionNode::Identifier(id) => {
+                self.hir_assign_local(&id.text, new_val.clone());
+            }
+            ExpressionNode::IndexAccess(arr, idx) => {
+                let _ = self.analyze_expression(arr, parent_function, symbol_table, diagnostics);
+                let arr_hir = self.hir_take();
+                let _ = self.analyze_expression(idx, parent_function, symbol_table, diagnostics);
+                let idx_hir = self.hir_take();
+                self.hir_assign_index(arr_hir, idx_hir, new_val.clone());
+            }
+            ExpressionNode::MemberAccess(obj, member) => {
+                let obj_type = self
+                    .analyze_expression(obj, parent_function, symbol_table, diagnostics)
+                    .unwrap_or(Type::Unknown);
+                let obj_hir = self.hir_take();
+                if let Type::Tuple(elems) = &obj_type {
+                    if let Ok(idx) = member.text.parse::<usize>() {
+                        if idx < elems.len() {
+                            self.hir_assign_field(obj_hir, idx, new_val.clone());
+                        } else {
+                            self.hir_fail();
+                        }
+                    } else {
+                        self.hir_fail();
+                    }
+                } else if let MemberField::Field { struct_name, .. } =
+                    self.resolve_member_field(&obj_type, member, parent_function, diagnostics)
+                {
+                    match self.struct_field_index(&struct_name, &member.text) {
+                        Some(index) => self.hir_assign_field(obj_hir, index, new_val.clone()),
+                        None => self.hir_fail(),
+                    }
+                } else {
+                    self.hir_fail();
+                }
+            }
+            _ => self.hir_fail(),
+        }
+
+        if prefix {
+            self.hir_set_last(new_val);
+        } else {
+            self.hir_set_var(&tmp_name);
+        }
+        Ok(target_ty)
+    }
 }

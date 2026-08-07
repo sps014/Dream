@@ -40,6 +40,8 @@ impl<'a> Analyzer<'a> {
             })
         })?;
         self.hir_finish_function(diagnostics, errors_before);
+        // Unused `let`/`const` bindings (warnings only — do not fail the compile).
+        param_table.as_ref().borrow().report_unused_locals(diagnostics);
         // check return
         let mut graph = FunctionControlGraph::new(function);
         if let Err(e) = graph.build() {

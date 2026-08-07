@@ -4,6 +4,8 @@ Control flow decides which code runs and how often. Dream has the usual `if`, lo
 
 ## if / else
 
+Bodies may be a braced block or a single statement:
+
 ```dream
 if (score >= 90) {
     print("A\n");
@@ -12,6 +14,9 @@ if (score >= 90) {
 } else {
     print("F\n");
 }
+
+if (ok) return;
+if (flag) print("yes\n"); else print("no\n");
 ```
 
 Conditions are parenthesized and must be `bool`. For selecting a *value*, the ternary `cond ? a : b` is often cleaner — see [Operators](operators.md).
@@ -26,8 +31,9 @@ Runs the body while the condition holds:
 let i = 0;
 while (i < 10) {
     println(i);
-    i = i + 1;
+    i++;
 }
+while (done) break;
 ```
 
 ### do / while
@@ -47,7 +53,7 @@ do {
 A three-part loop: initializer, condition, increment. All three parts are optional. The initializer runs once, the condition is checked before each pass, and the increment runs after each body:
 
 ```dream
-for (let i = 0; i < 5; i = i + 1) {
+for (let i = 0; i < 5; i++) {
     println(i);
 }
 ```

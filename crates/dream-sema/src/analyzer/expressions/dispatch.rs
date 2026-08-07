@@ -385,6 +385,19 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             }
+            ExpressionNode::IncDec {
+                prefix,
+                is_inc,
+                target,
+                op,
+            } => self.analyze_inc_dec(
+                (*prefix, *is_inc),
+                target,
+                op,
+                parent_function,
+                symbol_table,
+                diagnostics,
+            ),
             ExpressionNode::Binary(left, opr, right) => Ok(self.analyze_binary_expression(
                 left,
                 opr,

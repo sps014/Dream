@@ -1,6 +1,7 @@
 use crate::errors::SymbolError;
 use dream_syntax::nodes::Type;
 use dream_syntax::token::syntax_token::SyntaxToken;
+use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -13,6 +14,10 @@ pub struct SymbolTable {
     symbols: IndexMap<String, Type>,
     /// Names declared with `const` in this scope; reassigning them is an error.
     const_symbols: HashSet<String>,
+    /// Locals (`let`/`const`/tuple bindings) subject to unused-variable warnings, with decl span.
+    tracked_locals: IndexMap<String, TextSpan>,
+    /// Names that have been read (not merely assigned to) in this scope or via lookup here.
+    used_locals: HashSet<String>,
     parent: Option<Rc<RefCell<SymbolTable>>>,
     pub children: Vec<Rc<RefCell<SymbolTable>>>,
 }
@@ -22,6 +27,8 @@ impl SymbolTable {
         SymbolTable {
             symbols: IndexMap::new(),
             const_symbols: HashSet::new(),
+            tracked_locals: IndexMap::new(),
+            used_locals: HashSet::new(),
             parent,
             children: Vec::new(),
         }
@@ -61,6 +68,41 @@ impl SymbolTable {
             None => Ok(()),
         }
     }
+
+    /// Registers a user `let`/`const`/destructure binding for unused-variable warnings.
+    pub fn track_local(&mut self, name: String, span: TextSpan) {
+        if name.starts_with("__") || name == "_" {
+            return;
+        }
+        self.tracked_locals.insert(name, span);
+    }
+
+    /// Records that `name` was read. Walks parents so a use in an inner scope counts.
+    pub fn mark_used(&mut self, name: &str) {
+        if self.symbols.contains_key(name) {
+            self.used_locals.insert(name.to_string());
+            return;
+        }
+        if let Some(ref parent) = self.parent {
+            parent.as_ref().borrow_mut().mark_used(name);
+        }
+    }
+
+    /// Emits unused-local warnings for this scope and all child scopes.
+    pub fn report_unused_locals(&self, diagnostics: &mut dream_diagnostics::DiagnosticBag) {
+        for (name, span) in &self.tracked_locals {
+            if !self.used_locals.contains(name) {
+                diagnostics.report_warning(
+                    format!("unused variable '{}'", name),
+                    Some(*span),
+                );
+            }
+        }
+        for child in &self.children {
+            child.as_ref().borrow().report_unused_locals(diagnostics);
+        }
+    }
+
     pub fn get_symbol(&self, name: &SyntaxToken) -> Result<Type, SymbolError> {
         if let Some(symbol) = self.symbols.get(&name.text) {
             return Ok(symbol.clone());

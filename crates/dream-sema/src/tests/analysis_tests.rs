@@ -227,6 +227,7 @@ fn test_unresolved_identifier_does_not_cascade() {
     let errors: Vec<&str> = diagnostics
         .diagnostics
         .iter()
+        .filter(|d| d.severity == dream_diagnostics::Severity::Error)
         .map(|d| d.message.as_str())
         .collect();
     // Three uses of `missing`, so three "does not exist" errors -- and nothing else.
@@ -262,6 +263,7 @@ fn test_unknown_call_result_does_not_cascade() {
     let errors: Vec<&str> = diagnostics
         .diagnostics
         .iter()
+        .filter(|d| d.severity == dream_diagnostics::Severity::Error)
         .map(|d| d.message.as_str())
         .collect();
     assert_eq!(
@@ -1526,4 +1528,20 @@ fn test_no_false_positive_for_distinct_parent_child_types() {
         class Parent { public child: Child; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
+fn test_unused_local_warns_but_discard_does_not() {
+    let code = "fun main(): void { let x = 1; let _ = 2; let _ = 3; }";
+    let diagnostics = analyze_code(code);
+    assert!(!diagnostics.has_errors());
+    assert!(diagnostics.has_warnings());
+    assert!(diagnostics.diagnostics.iter().any(|d| {
+        d.severity == dream_diagnostics::Severity::Warning
+            && d.message.contains("unused variable 'x'")
+    }));
+    assert!(!diagnostics
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("unused variable '_'")));
 }

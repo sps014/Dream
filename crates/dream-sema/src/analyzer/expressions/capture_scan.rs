@@ -178,6 +178,7 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(r, out);
         }
         ExpressionNode::Unary(_, e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::IncDec { target, .. } => walk_expr_for_ref_targets(target, out),
         ExpressionNode::Parenthesized(e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::FunctionCall(_, _, args) => {
             for a in args {
@@ -355,6 +356,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_lambdas(r, out);
         }
         ExpressionNode::Unary(_, e) => walk_expr_for_lambdas(e, out),
+        ExpressionNode::IncDec { target, .. } => walk_expr_for_lambdas(target, out),
         ExpressionNode::Parenthesized(e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::FunctionCall(_, _, args) => {
             for a in args {
@@ -625,6 +627,7 @@ fn collect_names_expr(
             collect_names_expr(r, scopes, referenced);
         }
         ExpressionNode::Unary(_, e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::IncDec { target, .. } => collect_names_expr(target, scopes, referenced),
         ExpressionNode::Parenthesized(e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::FunctionCall(name, _, args) => {
             if !is_bound(scopes, &name.text) {

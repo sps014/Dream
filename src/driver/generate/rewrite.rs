@@ -120,6 +120,17 @@ fn rewrite_expr<'a>(
             op.clone(),
             arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
         ),
+        ExpressionNode::IncDec {
+            prefix,
+            is_inc,
+            target,
+            op,
+        } => ExpressionNode::IncDec {
+            prefix: *prefix,
+            is_inc: *is_inc,
+            target: arena.alloc(rewrite_expr(arena, target, by_site, diagnostics, changed)?),
+            op: op.clone(),
+        },
         ExpressionNode::Parenthesized(x) => ExpressionNode::Parenthesized(arena.alloc(
             rewrite_expr(arena, x, by_site, diagnostics, changed)?,
         )),

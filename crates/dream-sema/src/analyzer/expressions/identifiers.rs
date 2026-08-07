@@ -17,8 +17,21 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let r = match (*symbol_table).as_ref().borrow().get_symbol(id) {
+        if id.text == "_" {
+            diagnostics.report_error(
+                "'_' is a discard and cannot be used as a value".to_string(),
+                Some(id.position),
+            );
+            self.hir_fail();
+            return Ok(Type::Unknown);
+        }
+        let lookup = (*symbol_table).as_ref().borrow().get_symbol(id);
+        let r = match lookup {
             Ok(t) => {
+                (*symbol_table)
+                    .as_ref()
+                    .borrow_mut()
+                    .mark_used(&id.text);
                 // A local bound to a polymorphic generic function item instantiates when the
                 // use site publishes a concrete `fun(...)` expected type.
                 if let Type::GenericFunctionItem(ref gname) = t {

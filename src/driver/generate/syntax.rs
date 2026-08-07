@@ -173,6 +173,7 @@ impl SyntaxTreeView {
                 self.walk_expr(i, parent);
             }
             ExpressionNode::Unary(_, x)
+            | ExpressionNode::IncDec { target: x, .. }
             | ExpressionNode::Parenthesized(x)
             | ExpressionNode::Await(x)
             | ExpressionNode::Try(x)
