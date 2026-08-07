@@ -1,6 +1,6 @@
 module system.gpu;
 
-// Device lifecycle, host bridges, kernel barriers.
+// Device lifecycle, host bridges, kernel barriers / atomics / texture builtins.
 
 public class Gpu {
     @js("Dream", "gpuIsAvailable")
@@ -60,14 +60,35 @@ public class Gpu {
     @js("Dream", "gpuBufferReadBytesAt")
     static extern async fun buffer_read_bytes_at(id: int, byte_offset: int, n: int): byte[];
 
+    @js("Dream", "gpuBufferCopy")
+    static extern fun buffer_copy(
+        src_id: int,
+        dst_id: int,
+        src_offset: int,
+        dst_offset: int,
+        size: int
+    ): void;
+
     @js("Dream", "gpuDispatch")
     static extern async fun dispatch(
         kernel: string,
         buffer_ids: int[],
+        texture_ids: int[],
+        sampler_ids: int[],
         ex: int,
         ey: int,
         ez: int,
         uniforms: byte[]
+    ): int;
+
+    @js("Dream", "gpuDispatchIndirect")
+    static extern async fun dispatch_indirect(
+        kernel: string,
+        buffer_ids: int[],
+        texture_ids: int[],
+        sampler_ids: int[],
+        indirect_id: int,
+        indirect_offset: int
     ): int;
 
     @js("Dream", "gpuShaderFromWgsl")
@@ -81,6 +102,9 @@ public class Gpu {
         wy: int,
         wz: int
     ): int;
+
+    @js("Dream", "gpuSamplerCreate")
+    static extern fun sampler_create(filter: int): int;
 
     @js("Dream", "gpuTextureCreateRgba8")
     static extern fun texture_create_rgba8(width: int, height: int): int;
@@ -98,6 +122,28 @@ public class Gpu {
     @js("Dream", "gpuTextureReadRgba")
     static extern async fun texture_read_rgba(id: int): byte[];
 
+    @js("Dream", "gpuTextureCopyFromBuffer")
+    static extern fun texture_copy_from_buffer(
+        tex_id: int,
+        buf_id: int,
+        byte_offset: int,
+        x: int,
+        y: int,
+        w: int,
+        h: int
+    ): void;
+
+    @js("Dream", "gpuTextureCopyToBuffer")
+    static extern fun texture_copy_to_buffer(
+        tex_id: int,
+        buf_id: int,
+        byte_offset: int,
+        x: int,
+        y: int,
+        w: int,
+        h: int
+    ): void;
+
     @js("Dream", "gpuSurfaceFromCanvas")
     static extern fun surface_from_canvas(canvas_id: string): int;
 
@@ -110,8 +156,63 @@ public class Gpu {
     @js("Dream", "gpuRenderBlit")
     static extern async fun render_blit(surface_id: int, texture_id: int): int;
 
+    @js("Dream", "gpuPassBegin")
+    static extern fun pass_begin(): int;
+
+    @js("Dream", "gpuPassDispatch")
+    static extern fun pass_dispatch(
+        pass_id: int,
+        kernel: string,
+        buffer_ids: int[],
+        texture_ids: int[],
+        sampler_ids: int[],
+        ex: int,
+        ey: int,
+        ez: int,
+        uniforms: byte[]
+    ): void;
+
+    @js("Dream", "gpuPassDispatchIndirect")
+    static extern fun pass_dispatch_indirect(
+        pass_id: int,
+        kernel: string,
+        buffer_ids: int[],
+        texture_ids: int[],
+        sampler_ids: int[],
+        indirect_id: int,
+        indirect_offset: int
+    ): void;
+
+    @js("Dream", "gpuPassSubmit")
+    static extern async fun pass_submit(pass_id: int): int;
+
     // Workgroup barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).
     public static fun workgroup_barrier(): void {}
     // Storage memory barrier (no-op on CPU; WGSL emitter maps this inside `@compute`).
     public static fun storage_barrier(): void {}
+
+    // Atomic helpers (WGSL `atomic*` inside `@compute`; CPU stubs return 0 / no-op).
+    public static fun atomic_load(buf: GpuBuffer<int>, i: int): int { return 0; }
+    public static fun atomic_store(buf: GpuBuffer<int>, i: int, v: int): void {}
+    public static fun atomic_add(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+    public static fun atomic_exchange(buf: GpuBuffer<int>, i: int, v: int): int { return 0; }
+
+    // Texture builtins for `@compute` (mapped to WGSL; CPU stubs are no-ops / zeros).
+    public static fun texture_load(tex: GpuTexture, x: int, y: int): float { return 0.0; }
+    public static fun texture_store(
+        tex: GpuTexture,
+        x: int,
+        y: int,
+        r: float,
+        g: float,
+        b: float,
+        a: float
+    ): void {}
+    public static fun texture_sample_level(
+        tex: GpuTexture,
+        samp: GpuSampler,
+        u: float,
+        v: float,
+        level: float
+    ): float { return 0.0; }
 }

@@ -72,7 +72,7 @@ impl<'a> Analyzer<'a> {
                     if !is_compute_param_type(&p.type_) {
                         diagnostics.report_error(
                             format!(
-                                "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, and GpuBuffer<T> storage buffers are allowed",
+                                "@compute kernel '{}' parameter '{}' has type '{}'; only primitives, unmanaged value structs, GpuBuffer<T>, GpuTexture, and GpuSampler are allowed",
                                 function.name.text,
                                 p.name.text,
                                 p.type_.get_type()
@@ -294,7 +294,7 @@ pub(crate) fn gpu_buffer_elem_type(ty: &Type) -> Option<&Type> {
     }
 }
 
-/// Kernel parameters: scalars (`int`/`uint`/`float`/`bool`/`byte`) or `GpuBuffer<T>` of those.
+/// Kernel parameters: scalars, unmanaged value structs, `GpuBuffer<T>`, `GpuTexture`, `GpuSampler`.
 fn is_compute_param_type(ty: &Type) -> bool {
     match ty {
         Type::Integer(_)
@@ -308,6 +308,9 @@ fn is_compute_param_type(ty: &Type) -> bool {
             is_compute_elem_type(&args[0])
         }
         Type::Struct(tok, None) => {
+            if matches!(tok.text.as_str(), "GpuTexture" | "GpuSampler") {
+                return true;
+            }
             // Allow unmanaged value structs by name; GpuId3 is synthetic. Reject known heap types.
             !matches!(
                 tok.text.as_str(),

@@ -15,6 +15,8 @@ struct GpuState {
     buffers: HashMap<i32, Vec<u8>>,
     shaders: HashMap<i32, (String, String)>,
     textures: HashMap<i32, (i32, i32, Vec<u8>)>, // w, h, rgba
+    samplers: HashMap<i32, i32>,                  // filter mode
+    passes: HashMap<i32, Vec<()>>,                // staging: empty ops list
     ready: bool,
 }
 
@@ -25,6 +27,8 @@ impl Default for GpuState {
             buffers: HashMap::new(),
             shaders: HashMap::new(),
             textures: HashMap::new(),
+            samplers: HashMap::new(),
+            passes: HashMap::new(),
             ready: false,
         }
     }
@@ -201,6 +205,8 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
         |mut caller: Caller<'_, ()>,
          kernel_ptr: i32,
          _bufs_ptr: i32,
+         _tex_ptr: i32,
+         _samp_ptr: i32,
          _ex: i32,
          _ey: i32,
          _ez: i32,
@@ -209,6 +215,164 @@ pub fn link_gpu_functions(linker: &mut Linker<()>) -> Result<()> {
             let _name = read_arg_string(&mut caller, kernel_ptr)?;
             let _ = read_arg_bytes(&mut caller, uniforms_ptr)?;
             resolve_host_future_i32(&mut caller, 0)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "gpuDispatchIndirect",
+        |mut caller: Caller<'_, ()>,
+         kernel_ptr: i32,
+         _bufs: i32,
+         _tex: i32,
+         _samp: i32,
+         _indirect: i32,
+         _off: i32|
+         -> Result<i32> {
+            let _ = read_arg_string(&mut caller, kernel_ptr)?;
+            resolve_host_future_i32(&mut caller, 0)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "gpuBufferCopy",
+        |src_id: i32, dst_id: i32, src_off: i32, dst_off: i32, size: i32| {
+            let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+            let n = size.max(0) as usize;
+            let so = src_off.max(0) as usize;
+            let d_off = dst_off.max(0) as usize;
+            let src = st
+                .buffers
+                .get(&src_id)
+                .cloned()
+                .unwrap_or_default();
+            let dst = st.buffers.entry(dst_id).or_default();
+            let end = d_off + n;
+            if end > dst.len() {
+                dst.resize(end, 0);
+            }
+            let take = n.min(src.len().saturating_sub(so));
+            if take > 0 {
+                dst[d_off..d_off + take].copy_from_slice(&src[so..so + take]);
+            }
+        },
+    )?;
+
+    linker.func_wrap("Dream", "gpuSamplerCreate", |filter: i32| -> i32 {
+        let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+        let id = st.next_id;
+        st.next_id += 1;
+        st.samplers.insert(id, filter);
+        id
+    })?;
+
+    linker.func_wrap("Dream", "gpuPassBegin", || -> i32 {
+        let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+        let id = st.next_id;
+        st.next_id += 1;
+        st.passes.insert(id, Vec::new());
+        id
+    })?;
+
+    linker.func_wrap(
+        "Dream",
+        "gpuPassDispatch",
+        |mut caller: Caller<'_, ()>,
+         _pass: i32,
+         kernel_ptr: i32,
+         _bufs: i32,
+         _tex: i32,
+         _samp: i32,
+         _ex: i32,
+         _ey: i32,
+         _ez: i32,
+         uniforms_ptr: i32| {
+            let _ = read_arg_string(&mut caller, kernel_ptr);
+            let _ = read_arg_bytes(&mut caller, uniforms_ptr);
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "gpuPassDispatchIndirect",
+        |mut caller: Caller<'_, ()>,
+         _pass: i32,
+         kernel_ptr: i32,
+         _bufs: i32,
+         _tex: i32,
+         _samp: i32,
+         _indirect: i32,
+         _off: i32| {
+            let _ = read_arg_string(&mut caller, kernel_ptr);
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "gpuPassSubmit",
+        |mut caller: Caller<'_, ()>, pass_id: i32| -> Result<i32> {
+            {
+                let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+                st.passes.remove(&pass_id);
+            }
+            resolve_host_future_i32(&mut caller, 0)
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "gpuTextureCopyFromBuffer",
+        |tex_id: i32, buf_id: i32, byte_offset: i32, x: i32, y: i32, w: i32, h: i32| {
+            let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+            let Some(buf) = st.buffers.get(&buf_id).cloned() else {
+                return;
+            };
+            let Some((tw, _th, tex)) = st.textures.get_mut(&tex_id) else {
+                return;
+            };
+            let off = byte_offset.max(0) as usize;
+            let px = x.max(0) as usize;
+            let py = y.max(0) as usize;
+            let pw = w.max(0) as usize;
+            let ph = h.max(0) as usize;
+            for row in 0..ph {
+                let dst = ((py + row) * (*tw as usize) + px) * 4;
+                let src = off + row * pw * 4;
+                if src + pw * 4 <= buf.len() && dst + pw * 4 <= tex.len() {
+                    tex[dst..dst + pw * 4].copy_from_slice(&buf[src..src + pw * 4]);
+                }
+            }
+        },
+    )?;
+
+    linker.func_wrap(
+        "Dream",
+        "gpuTextureCopyToBuffer",
+        |tex_id: i32, buf_id: i32, byte_offset: i32, x: i32, y: i32, w: i32, h: i32| {
+            let mut st = state().lock().unwrap_or_else(|e| e.into_inner());
+            let Some((tw, _th, tex)) = st.textures.get(&tex_id).cloned() else {
+                return;
+            };
+            let Some(buf) = st.buffers.get_mut(&buf_id) else {
+                return;
+            };
+            let off = byte_offset.max(0) as usize;
+            let px = x.max(0) as usize;
+            let py = y.max(0) as usize;
+            let pw = w.max(0) as usize;
+            let ph = h.max(0) as usize;
+            let need = off + pw * ph * 4;
+            if need > buf.len() {
+                buf.resize(need, 0);
+            }
+            for row in 0..ph {
+                let src = ((py + row) * (tw as usize) + px) * 4;
+                let dst = off + row * pw * 4;
+                if src + pw * 4 <= tex.len() && dst + pw * 4 <= buf.len() {
+                    buf[dst..dst + pw * 4].copy_from_slice(&tex[src..src + pw * 4]);
+                }
+            }
         },
     )?;
 

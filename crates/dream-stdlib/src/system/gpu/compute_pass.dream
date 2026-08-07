@@ -1,0 +1,103 @@
+module system.gpu;
+
+// Batched compute submits: record several dispatches, then one `submit` (single queue submit).
+
+public class ComputePass {
+    _id: int;
+
+    // Starts a new empty pass (no GPU work until `submit`).
+    public static fun begin(): ComputePass {
+        let p = ComputePass();
+        p._id = Gpu.pass_begin();
+        return p;
+    }
+
+    // Records a named-kernel dispatch over a 3D thread grid (same semantics as `Compute.run_3d`).
+    public fun dispatch(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        sx: int,
+        sy: int,
+        sz: int
+    ): void {
+        this.dispatch_uniforms(kernel, buffers, sx, sy, sz, Buffer.alloc<byte>(0));
+    }
+
+    // Like `dispatch`, with a little-endian uniform blob after extent i32s.
+    public fun dispatch_uniforms(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        sx: int,
+        sy: int,
+        sz: int,
+        uniforms: byte[]
+    ): void {
+        let ids = Buffer.alloc<int>(buffers.length);
+        for (let i = 0; i < buffers.length; i = i + 1) {
+            ids[i] = buffers[i].id;
+        }
+        Gpu.pass_dispatch(
+            this._id,
+            kernel,
+            ids,
+            Buffer.alloc<int>(0),
+            Buffer.alloc<int>(0),
+            sx,
+            sy,
+            sz,
+            uniforms
+        );
+    }
+
+    // Records a dispatch with explicit buffer / texture / sampler resource ids (ABI binding order).
+    public fun dispatch_resources(
+        kernel: string,
+        buffer_ids: int[],
+        texture_ids: int[],
+        sampler_ids: int[],
+        sx: int,
+        sy: int,
+        sz: int,
+        uniforms: byte[]
+    ): void {
+        Gpu.pass_dispatch(
+            this._id,
+            kernel,
+            buffer_ids,
+            texture_ids,
+            sampler_ids,
+            sx,
+            sy,
+            sz,
+            uniforms
+        );
+    }
+
+    // Records an indirect dispatch (`dispatchWorkgroupsIndirect`); `args` holds 3×u32 workgroup counts.
+    public fun dispatch_indirect(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        args: GpuBuffer<int>
+    ): void {
+        let ids = Buffer.alloc<int>(buffers.length);
+        for (let i = 0; i < buffers.length; i = i + 1) {
+            ids[i] = buffers[i].id;
+        }
+        Gpu.pass_dispatch_indirect(
+            this._id,
+            kernel,
+            ids,
+            Buffer.alloc<int>(0),
+            Buffer.alloc<int>(0),
+            args.id,
+            0
+        );
+    }
+
+    // Submits all recorded dispatches in one queue submit.
+    public async fun submit(): Result<bool, GpuError> {
+        let code = await Gpu.pass_submit(this._id);
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "ComputePass.submit failed"));
+    }
+}

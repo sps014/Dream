@@ -57,6 +57,8 @@ pub enum AttributeTarget {
     InterfaceMethod,
     /// A file-level `module` declaration.
     Module,
+    /// A formal parameter (`@readonly a: GpuBuffer<T>`).
+    Parameter,
 }
 
 impl AttributeTarget {
@@ -74,6 +76,7 @@ impl AttributeTarget {
             AttributeTarget::Interface => "an interface",
             AttributeTarget::InterfaceMethod => "an interface method",
             AttributeTarget::Module => "a module declaration",
+            AttributeTarget::Parameter => "a function parameter",
         }
     }
 }
@@ -297,7 +300,20 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         },
         repeatable: false,
     },
+    // Storage-buffer access mode for `@compute` params: WGSL `var<storage, read>` instead of
+    // `read_write`. Only meaningful on `GpuBuffer<T>` kernel parameters.
+    AttributeSpec {
+        name: "readonly",
+        targets: &[AttributeTarget::Parameter],
+        args: ArgShape::None,
+        repeatable: false,
+    },
 ];
+
+/// True when a parameter carries `@readonly` (compute storage → WGSL `read`).
+pub fn has_readonly_attr(attributes: &[AttributeNode]) -> bool {
+    attributes.iter().any(|a| a.name.text == "readonly")
+}
 
 fn find_spec(name: &str) -> Option<&'static AttributeSpec> {
     ATTRIBUTES.iter().find(|s| s.name == name)
@@ -564,12 +580,22 @@ fn validate_function_list(
 ) {
     for f in functions {
         diagnostics.file_path = file_path_string(&f.file_path);
-        let target = match function_target(f) {
-            Some(AttributeTarget::Method) if top_level => AttributeTarget::Function,
-            Some(t) => t,
-            None => continue,
-        };
-        validate_attributes_with(&f.attributes, target, user_attrs, diagnostics);
+        if let Some(target) = function_target(f) {
+            let target = if matches!(target, AttributeTarget::Method) && top_level {
+                AttributeTarget::Function
+            } else {
+                target
+            };
+            validate_attributes_with(&f.attributes, target, user_attrs, diagnostics);
+        }
+        for p in &f.parameters {
+            validate_attributes_with(
+                &p.attributes,
+                AttributeTarget::Parameter,
+                user_attrs,
+                diagnostics,
+            );
+        }
     }
 }
 

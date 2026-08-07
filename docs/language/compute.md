@@ -44,7 +44,17 @@ Only **top-level** `fun`s may carry `@compute`. Kernels must return `void`, cann
 
 Kernel storage buffers are **`GpuBuffer<T>`** (not bare `T[]`). Inside a kernel you can index them (`a[i]`) and read **`a.length`** (WGSL `arrayLength`). Scalars and unmanaged value structs become uniforms.
 
-Host dispatch still passes `GpuBuffer` instances to `Compute.run_*` in binding order.
+Prefix a buffer (or texture) with **`@readonly`** for WGSL `var<storage, read>` / sampled `texture_2d` instead of `read_write` / storage-texture write:
+
+```dream
+@compute(64)
+fun scale(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
+    let i = global_id.x;
+    if (i < n) { out[i] = a[i] * 2.0; }
+}
+```
+
+Host dispatch still passes `GpuBuffer` instances to `Compute.run_*` in binding order. Kernels may also take `GpuTexture` / `GpuSampler`; use `Compute.run_resources` or `ComputePass.dispatch_resources` to supply their host ids.
 
 ## Builtins
 
@@ -57,7 +67,7 @@ Inside a kernel, these locals are in scope (typed as `GpuId3` with `.x`/`.y`/`.z
 
 ## Language surface
 
-Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue` (including labels), early `return`, ternary, integer `switch`, arithmetic/bitwise, `GpuBuffer` indexing / `.length`, unmanaged value structs, calls to other `@compute` helpers, `Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `GpuMath.*`.
+Allowed: `if`/`else`, `while`/`do`/`for`, `break`/`continue` (including labels), early `return`, ternary, integer `switch`, arithmetic/bitwise, `GpuBuffer` indexing / `.length`, unmanaged value structs, calls to other `@compute` helpers, `Gpu.workgroup_barrier` / `Gpu.storage_barrier`, `Gpu.atomic_*`, `Gpu.texture_*`, `GpuMath.*`.
 
 Forbidden: bare `T[]` as a kernel param, `string`/`List`/`class`/`js`/`async`, `for..in`, union pattern-match `switch`, `lock`, recursion, calling ordinary CPU functions.
 
@@ -82,7 +92,18 @@ Dream's existing `@shared` attribute marks **CPU / WebWorker** heap classes (loc
 
 ## Multi-pass sync
 
-WebGPU has **no** global barrier across workgroups. Algorithms that need one (e.g. Jacobi pressure solve) issue multiple `await Compute.run_…` calls; host queue order provides happens-before.
+WebGPU has **no** global barrier across workgroups. Algorithms that need one (e.g. Jacobi pressure solve) issue multiple dispatches; host queue order provides happens-before.
+
+Prefer **`ComputePass`** to batch several dispatches into one `queue.submit`:
+
+```dream
+let pass = ComputePass.begin();
+pass.dispatch("advect", [src, dst, vx, vy], n, n, 1);
+pass.dispatch("divergence", [vx, vy, div], n, n, 1);
+let _ = await pass.submit();
+```
+
+For GPU-written workgroup counts, pack three i32s with `GpuDispatchIndirect` and call `Compute.dispatch_indirect` (or `pass.dispatch_indirect`).
 
 ## Escape hatch
 

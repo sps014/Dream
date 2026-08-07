@@ -1,0 +1,34 @@
+import system;
+import system.gpu;
+
+// Histogram-style atomic increment (WGSL uses atomicAdd; native dispatch is a no-op).
+@compute(64)
+fun hist(data: GpuBuffer<int>, bins: GpuBuffer<int>, n: int): void {
+    let i = global_id.x;
+    if (i < n) {
+        let v = data[i];
+        if (v >= 0 && v < bins.length) {
+            let _ = Gpu.atomic_add(bins, v, 1);
+        }
+    }
+}
+
+async fun main(): void {
+    let _ = await Gpu.try_init();
+    let data = GpuBuffer<int>.from([0, 1, 0, 2, 1]);
+    let bins = GpuBuffer<int>.from([0, 0, 0]);
+    // Dispatch is a no-op on native; exercise staging + API surface.
+    let _r = await Compute.run_resources(
+        "hist",
+        [data.id, bins.id],
+        Buffer.alloc<int>(0),
+        Buffer.alloc<int>(0),
+        5,
+        1,
+        1,
+        Buffer.alloc<byte>(0)
+    );
+    let rb = await bins.read();
+    System.println(rb[0]);
+    System.println(bins.length);
+}

@@ -90,6 +90,27 @@ public struct GpuBuffer<T : unmanaged> {
         return GpuBuffer<T>.decode(bytes, count, this._stride);
     }
 
+    // GPU-side copy of `count` elements into `dst` (no CPU round-trip).
+    public fun copy_to(dst: GpuBuffer<T>, src_offset: int, dst_offset: int, count: int): void {
+        if (count <= 0) { return; }
+        if (src_offset < 0 || dst_offset < 0) { return; }
+        if (src_offset + count > this._length || dst_offset + count > dst._length) {
+            System.println("GpuBuffer.copy_to: out of bounds");
+            return;
+        }
+        if (this._stride != dst._stride) {
+            System.println("GpuBuffer.copy_to: stride mismatch");
+            return;
+        }
+        Gpu.buffer_copy(
+            this._id,
+            dst._id,
+            src_offset * this._stride,
+            dst_offset * this._stride,
+            count * this._stride
+        );
+    }
+
     static fun decode(bytes: byte[], count: int, stride: int): T[] {
         let out = Buffer.alloc<T>(count);
         for (let i = 0; i < count; i = i + 1) {

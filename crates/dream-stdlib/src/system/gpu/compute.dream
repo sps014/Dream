@@ -46,9 +46,65 @@ public class Compute {
         for (let i = 0; i < buffers.length; i = i + 1) {
             ids[i] = buffers[i].id;
         }
-        let code = await Gpu.dispatch(kernel, ids, sx, sy, sz, uniforms);
+        let code = await Gpu.dispatch(
+            kernel,
+            ids,
+            Buffer.alloc<int>(0),
+            Buffer.alloc<int>(0),
+            sx,
+            sy,
+            sz,
+            uniforms
+        );
         if (code == 0) { return Result.Ok(true); }
         return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
+    }
+
+    // Dispatches with explicit buffer / texture / sampler resource ids (ABI binding order).
+    public static async fun run_resources(
+        kernel: string,
+        buffer_ids: int[],
+        texture_ids: int[],
+        sampler_ids: int[],
+        sx: int,
+        sy: int,
+        sz: int,
+        uniforms: byte[]
+    ): Result<bool, GpuError> {
+        let code = await Gpu.dispatch(
+            kernel,
+            buffer_ids,
+            texture_ids,
+            sampler_ids,
+            sx,
+            sy,
+            sz,
+            uniforms
+        );
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "compute dispatch failed: " + kernel));
+    }
+
+    // Indirect dispatch: `args` is a GPU buffer of three u32 workgroup counts at byte offset 0.
+    public static async fun dispatch_indirect(
+        kernel: string,
+        buffers: GpuBuffer<float>[],
+        args: GpuBuffer<int>
+    ): Result<bool, GpuError> {
+        let ids = Buffer.alloc<int>(buffers.length);
+        for (let i = 0; i < buffers.length; i = i + 1) {
+            ids[i] = buffers[i].id;
+        }
+        let code = await Gpu.dispatch_indirect(
+            kernel,
+            ids,
+            Buffer.alloc<int>(0),
+            Buffer.alloc<int>(0),
+            args.id,
+            0
+        );
+        if (code == 0) { return Result.Ok(true); }
+        return Result.Err(GpuError.from_code(code, "indirect dispatch failed: " + kernel));
     }
 
     // Dispatches a raw `GpuShader` over a 3D workgroup grid.

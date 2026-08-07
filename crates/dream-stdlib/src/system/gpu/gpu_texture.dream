@@ -40,4 +40,14 @@ public class GpuTexture {
     public async fun read_rgba(): byte[] {
         return await Gpu.texture_read_rgba(this.id);
     }
+
+    // GPU-side copy from a tightly packed RGBA8 buffer (bytes = width×height×4 for a full copy).
+    public fun copy_from_buffer(src: GpuBuffer<byte>, byte_offset: int): void {
+        Gpu.texture_copy_from_buffer(this.id, src.id, byte_offset, 0, 0, this.width, this.height);
+    }
+
+    // GPU-side copy of the full texture into a byte buffer (must hold width×height×4 bytes).
+    public fun copy_to_buffer(dst: GpuBuffer<byte>, byte_offset: int): void {
+        Gpu.texture_copy_to_buffer(this.id, dst.id, byte_offset, 0, 0, this.width, this.height);
+    }
 }

@@ -7,6 +7,8 @@ use std::rc::Rc;
 /// Represents a function parameter in the AST
 #[derive(Debug, Clone)]
 pub struct ParameterNode {
+    /// Attributes preceding the parameter (`@readonly a: GpuBuffer<float>`).
+    pub attributes: Vec<crate::nodes::AttributeNode>,
     pub name: SyntaxToken,
     pub type_: Type,
     /// An optional default value, restricted to a constant literal (`= 5`, `= "hi"`, `= true`,
@@ -30,6 +32,7 @@ impl ParameterNode {
     /// Creates a new required parameter node (no default value).
     pub fn new(name: SyntaxToken, type_: Type) -> ParameterNode {
         ParameterNode {
+            attributes: Vec::new(),
             name,
             type_,
             default: None,
@@ -41,6 +44,7 @@ impl ParameterNode {
     /// Creates a parameter node with a constant-literal default value.
     pub fn with_default(name: SyntaxToken, type_: Type, default: Option<Type>) -> ParameterNode {
         ParameterNode {
+            attributes: Vec::new(),
             name,
             type_,
             default,
@@ -52,6 +56,7 @@ impl ParameterNode {
     /// Creates a variadic parameter node (`...name: T[]`).
     pub fn variadic(name: SyntaxToken, type_: Type) -> ParameterNode {
         ParameterNode {
+            attributes: Vec::new(),
             name,
             type_,
             default: None,
@@ -63,12 +68,19 @@ impl ParameterNode {
     /// Creates a `ref name: T` parameter node.
     pub fn by_ref(name: SyntaxToken, type_: Type) -> ParameterNode {
         ParameterNode {
+            attributes: Vec::new(),
             name,
             type_,
             default: None,
             is_variadic: false,
             is_ref: true,
         }
+    }
+
+    /// Attaches attributes parsed before the parameter name.
+    pub fn with_attributes(mut self, attributes: Vec<crate::nodes::AttributeNode>) -> Self {
+        self.attributes = attributes;
+        self
     }
 }
 

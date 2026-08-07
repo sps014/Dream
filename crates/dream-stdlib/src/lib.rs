@@ -389,6 +389,18 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/gpu/compute.dream"),
             ),
             (
+                "<std>/system/gpu/gpu_dispatch_indirect.dream",
+                include_str!("system/gpu/gpu_dispatch_indirect.dream"),
+            ),
+            (
+                "<std>/system/gpu/compute_pass.dream",
+                include_str!("system/gpu/compute_pass.dream"),
+            ),
+            (
+                "<std>/system/gpu/gpu_sampler.dream",
+                include_str!("system/gpu/gpu_sampler.dream"),
+            ),
+            (
                 "<std>/system/gpu/gpu_texture.dream",
                 include_str!("system/gpu/gpu_texture.dream"),
             ),

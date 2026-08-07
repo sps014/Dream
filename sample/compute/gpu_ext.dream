@@ -1,0 +1,57 @@
+// Exercises `@readonly`, GpuBuffer.copy_to, ComputePass, and GpuDispatchIndirect.
+// Browser: real WebGPU. Native: staging only (dispatch no-ops).
+
+import system;
+import system.gpu;
+
+@compute(64)
+fun double_it(@readonly src: GpuBuffer<float>, dst: GpuBuffer<float>, n: int): void {
+    let i = global_id.x;
+    if (i < n) {
+        dst[i] = src[i] * 2.0;
+    }
+}
+
+@compute(64)
+fun add_one(buf: GpuBuffer<float>, n: int): void {
+    let i = global_id.x;
+    if (i < n) {
+        buf[i] = buf[i] + 1.0;
+    }
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    let src = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
+    let dst = GpuBuffer<float>.alloc(4);
+    let scratch = GpuBuffer<float>.alloc(4);
+    src.copy_to(scratch, 0, 0, 4);
+
+    let pass = ComputePass.begin();
+    pass.dispatch("double_it", [src, dst], 4, 1, 1);
+    pass.dispatch("add_one", [dst], 4, 1, 1);
+    let sub = await pass.submit();
+    if (sub.is_err()) {
+        System.println("submit failed");
+        return;
+    }
+
+    let indirect = GpuDispatchIndirect();
+    indirect.x = 1;
+    indirect.y = 1;
+    indirect.z = 1;
+    let args = indirect.to_buffer();
+    let _ = await Compute.dispatch_indirect("add_one", [dst], args);
+
+    let samp = GpuSampler.linear();
+    let tex = GpuTexture.rgba8(2, 2);
+    System.println(src.length);
+    System.println(samp.id > 0);
+    System.println(tex.width);
+    System.println(args.length);
+}

@@ -3,26 +3,29 @@
 //! Kernel bodies never enter MIR/WAT. This pass walks the AST of every `@compute` function and
 //! emits WGSL text plus binding metadata for the `.abi.json` `"gpu"` section / `.wgsl` sidecar.
 
-use dream_abi::attributes::{compute_workgroup_size, has_compute_attr};
+use dream_abi::attributes::{compute_workgroup_size, has_compute_attr, has_readonly_attr};
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::expression::ExpressionNode;
-use dream_syntax::nodes::function::FunctionNode;
+use dream_syntax::nodes::function::{FunctionNode, ParameterNode};
 use dream_syntax::nodes::statement::StatementNode;
 use dream_syntax::nodes::types::Type;
 use dream_syntax::nodes::ProgramNode;
 use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
+use indexmap::IndexSet;
 
-/// One storage/uniform binding derived from a kernel parameter.
+/// One storage/uniform/texture/sampler binding derived from a kernel parameter.
 #[derive(Debug, Clone)]
 pub struct GpuBinding {
     pub name: String,
     pub binding: u32,
-    /// `"storage"` or `"uniform"`.
+    /// `"storage"`, `"uniform"`, `"texture"`, `"storage_texture"`, or `"sampler"`.
     pub kind: &'static str,
-    /// WGSL element / scalar type (`f32`, `i32`, …).
+    /// WGSL element / scalar / texture type (`f32`, `i32`, `texture_2d<f32>`, …).
     pub wgsl_ty: String,
     pub read_write: bool,
+    /// When true, storage element type is `atomic<…>` (int/uint buffers used with atomics).
+    pub atomic: bool,
 }
 
 /// Metadata for one `@compute` kernel.
@@ -76,12 +79,13 @@ pub fn gpu_abi_json(kernels: &[GpuKernelInfo]) -> String {
             .iter()
             .map(|b| {
                 format!(
-                    "{{ \"name\": \"{}\", \"binding\": {}, \"kind\": \"{}\", \"type\": \"{}\", \"read_write\": {} }}",
+                    "{{ \"name\": \"{}\", \"binding\": {}, \"kind\": \"{}\", \"type\": \"{}\", \"read_write\": {}, \"atomic\": {} }}",
                     json_escape(&b.name),
                     b.binding,
                     b.kind,
                     json_escape(&b.wgsl_ty),
-                    b.read_write
+                    b.read_write,
+                    b.atomic
                 )
             })
             .collect();
@@ -140,21 +144,30 @@ impl EmitCtx<'_> {
             .any(|b| b.kind == "uniform" && b.name == name)
     }
 
-    fn is_storage(&self, name: &str) -> bool {
+    fn is_resource(&self, name: &str) -> bool {
+        self.bindings.iter().any(|b| {
+            matches!(
+                b.kind,
+                "storage" | "texture" | "storage_texture" | "sampler"
+            ) && b.name == name
+        })
+    }
+
+    fn is_atomic_buf(&self, name: &str) -> bool {
         self.bindings
             .iter()
-            .any(|b| b.kind == "storage" && b.name == name)
+            .any(|b| b.kind == "storage" && b.atomic && b.name == name)
     }
 
     fn is_workgroup(&self, name: &str) -> bool {
         self.workgroup_names.iter().any(|n| n == name)
     }
 
-    /// Map a Dream identifier that refers to module-scope storage/workgroup memory.
+    /// Map a Dream identifier that refers to module-scope storage/workgroup/texture memory.
     fn rewrite_ident(&self, name: &str) -> String {
         if self.is_uniform(name) {
             format!("{}.{}", self.uniforms_var(), name)
-        } else if self.is_storage(name) || self.is_workgroup(name) {
+        } else if self.is_resource(name) || self.is_workgroup(name) {
             self.mangle(name)
         } else {
             name.to_string()
@@ -207,6 +220,8 @@ fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuK
     let name = func.name.text.clone();
     let entry = format!("dream_{}", name);
     let workgroup = compute_workgroup_size(&func.attributes);
+    let atomic_bufs = collect_atomic_buffer_names(func.body);
+
     let mut bindings = Vec::new();
     let mut binding_idx = 0u32;
     let mut header = String::new();
@@ -215,16 +230,26 @@ fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuK
 
     for param in &func.parameters {
         let pname = param.name.text.clone();
-        match classify_param(&param.type_) {
-            ParamClass::Storage { elem, read_write } => {
+        let is_atomic = atomic_bufs.contains(pname.as_str());
+        match classify_param(param, is_atomic) {
+            ParamClass::Storage {
+                elem,
+                read_write,
+                atomic,
+            } => {
                 let access = if read_write {
                     "read_write"
                 } else {
                     "read"
                 };
+                let elem_ty = if atomic {
+                    format!("atomic<{elem}>")
+                } else {
+                    elem.clone()
+                };
                 let wgsl_name = format!("{entry}_{pname}");
                 header.push_str(&format!(
-                    "@group(0) @binding({binding_idx}) var<storage, {access}> {wgsl_name}: array<{elem}>;\n"
+                    "@group(0) @binding({binding_idx}) var<storage, {access}> {wgsl_name}: array<{elem_ty}>;\n"
                 ));
                 bindings.push(GpuBinding {
                     name: pname,
@@ -232,6 +257,54 @@ fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuK
                     kind: "storage",
                     wgsl_ty: elem,
                     read_write,
+                    atomic,
+                });
+                binding_idx += 1;
+            }
+            ParamClass::Texture { storage } => {
+                let wgsl_name = format!("{entry}_{pname}");
+                let (kind, decl) = if storage {
+                    (
+                        "storage_texture",
+                        format!(
+                            "@group(0) @binding({binding_idx}) var {wgsl_name}: texture_storage_2d<rgba8unorm, write>;\n"
+                        ),
+                    )
+                } else {
+                    (
+                        "texture",
+                        format!(
+                            "@group(0) @binding({binding_idx}) var {wgsl_name}: texture_2d<f32>;\n"
+                        ),
+                    )
+                };
+                header.push_str(&decl);
+                bindings.push(GpuBinding {
+                    name: pname,
+                    binding: binding_idx,
+                    kind,
+                    wgsl_ty: if storage {
+                        "texture_storage_2d<rgba8unorm, write>".into()
+                    } else {
+                        "texture_2d<f32>".into()
+                    },
+                    read_write: storage,
+                    atomic: false,
+                });
+                binding_idx += 1;
+            }
+            ParamClass::Sampler => {
+                let wgsl_name = format!("{entry}_{pname}");
+                header.push_str(&format!(
+                    "@group(0) @binding({binding_idx}) var {wgsl_name}: sampler;\n"
+                ));
+                bindings.push(GpuBinding {
+                    name: pname,
+                    binding: binding_idx,
+                    kind: "sampler",
+                    wgsl_ty: "sampler".into(),
+                    read_write: false,
+                    atomic: false,
                 });
                 binding_idx += 1;
             }
@@ -244,6 +317,7 @@ fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuK
                     kind: "uniform",
                     wgsl_ty: ty,
                     read_write: false,
+                    atomic: false,
                 });
             }
         }
@@ -334,22 +408,196 @@ fn emit_kernel(func: &FunctionNode<'_>, diagnostics: &mut DiagnosticBag) -> GpuK
 }
 
 enum ParamClass {
-    Storage { elem: String, read_write: bool },
-    Uniform { ty: String },
+    Storage {
+        elem: String,
+        read_write: bool,
+        atomic: bool,
+    },
+    Texture {
+        /// `true` → `texture_storage_2d` (write); `false` → sampled `texture_2d`.
+        storage: bool,
+    },
+    Sampler,
+    Uniform {
+        ty: String,
+    },
 }
 
-fn classify_param(ty: &Type) -> ParamClass {
-    match ty {
+fn classify_param(param: &ParameterNode, is_atomic: bool) -> ParamClass {
+    let readonly = has_readonly_attr(&param.attributes);
+    match &param.type_ {
         // Bare `T[]` params are rejected in sema; only `GpuBuffer<T>` is storage.
         Type::Struct(tok, Some(args)) if tok.text == "GpuBuffer" && args.len() == 1 => {
+            let elem = dream_ty_to_wgsl(&args[0]);
+            let atomic = is_atomic && matches!(elem.as_str(), "i32" | "u32");
             ParamClass::Storage {
-                elem: dream_ty_to_wgsl(&args[0]),
-                read_write: true,
+                elem,
+                read_write: !readonly,
+                atomic,
             }
         }
+        Type::Struct(tok, None) if tok.text == "GpuTexture" => {
+            // `@readonly GpuTexture` → sampled; otherwise storage texture (write).
+            ParamClass::Texture {
+                storage: !readonly,
+            }
+        }
+        Type::Struct(tok, None) if tok.text == "GpuSampler" => ParamClass::Sampler,
         other => ParamClass::Uniform {
             ty: dream_ty_to_wgsl(other),
         },
+    }
+}
+
+/// Buffer names passed to `Gpu.atomic_*` helpers — those storage bindings become `atomic<T>`.
+fn collect_atomic_buffer_names(stmts: &[StatementNode<'_>]) -> IndexSet<String> {
+    let mut out = IndexSet::new();
+    walk_stmts_atomics(stmts, &mut out);
+    out
+}
+
+fn walk_stmts_atomics(stmts: &[StatementNode<'_>], out: &mut IndexSet<String>) {
+    for s in stmts {
+        match s {
+            StatementNode::ExpressionStatement(e)
+            | StatementNode::Return(Some(e))
+            | StatementNode::AwaitStmt(e) => walk_expr_atomics(e, out),
+            StatementNode::Assignment(_, e)
+            | StatementNode::Declaration(_, _, e, _)
+            | StatementNode::MemberAssignment(_, _, e) => walk_expr_atomics(e, out),
+            StatementNode::IndexAssignment(arr, idx, value) => {
+                walk_expr_atomics(arr, out);
+                walk_expr_atomics(idx, out);
+                walk_expr_atomics(value, out);
+            }
+            StatementNode::FunctionInvocation(_, _, args) => {
+                for a in args {
+                    walk_expr_atomics(a, out);
+                }
+            }
+            StatementNode::MethodInvocation(obj, method, _, args) => {
+                if matches!(
+                    method.text.as_str(),
+                    "atomic_load" | "atomic_add" | "atomic_exchange" | "atomic_store"
+                ) {
+                    if let Some(ExpressionNode::Identifier(name)) = args.first() {
+                        out.insert(name.text.clone());
+                    }
+                }
+                walk_expr_atomics(obj, out);
+                for a in args {
+                    walk_expr_atomics(a, out);
+                }
+            }
+            StatementNode::IfElse(cond, then_b, elifs, else_b) => {
+                walk_expr_atomics(cond, out);
+                walk_stmts_atomics(then_b, out);
+                for (c, body) in elifs {
+                    walk_expr_atomics(c, out);
+                    walk_stmts_atomics(body, out);
+                }
+                if let Some(eb) = else_b {
+                    walk_stmts_atomics(eb, out);
+                }
+            }
+            StatementNode::While(cond, body) => {
+                walk_expr_atomics(cond, out);
+                walk_stmts_atomics(body, out);
+            }
+            StatementNode::DoWhile(body, cond) => {
+                walk_stmts_atomics(body, out);
+                walk_expr_atomics(cond, out);
+            }
+            StatementNode::For(init, cond, step, body) => {
+                if let Some(i) = init {
+                    walk_stmts_atomics(std::slice::from_ref(i), out);
+                }
+                if let Some(c) = cond {
+                    walk_expr_atomics(c, out);
+                }
+                if let Some(s) = step {
+                    walk_stmts_atomics(std::slice::from_ref(s), out);
+                }
+                walk_stmts_atomics(body, out);
+            }
+            StatementNode::Switch(subj, cases, default) => {
+                walk_expr_atomics(subj, out);
+                for (_, body) in cases {
+                    walk_stmts_atomics(body, out);
+                }
+                if let Some(d) = default {
+                    walk_stmts_atomics(d, out);
+                }
+            }
+            StatementNode::Labeled(_, inner) => walk_stmts_atomics(std::slice::from_ref(inner), out),
+            StatementNode::Lock(e, body) => {
+                walk_expr_atomics(e, out);
+                walk_stmts_atomics(body, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn walk_expr_atomics(expr: &ExpressionNode<'_>, out: &mut IndexSet<String>) {
+    match expr {
+        ExpressionNode::MethodCall(obj, method, _, args)
+            if matches!(
+                method.text.as_str(),
+                "atomic_load" | "atomic_add" | "atomic_exchange" | "atomic_store"
+            ) =>
+        {
+            if let Some(ExpressionNode::Identifier(name)) = args.first() {
+                out.insert(name.text.clone());
+            }
+            walk_expr_atomics(obj, out);
+            for a in args {
+                walk_expr_atomics(a, out);
+            }
+        }
+        ExpressionNode::FunctionCall(name, _, args)
+            if matches!(
+                name.text.as_str(),
+                "atomic_load" | "atomic_add" | "atomic_exchange" | "atomic_store"
+            ) =>
+        {
+            if let Some(ExpressionNode::Identifier(n)) = args.first() {
+                out.insert(n.text.clone());
+            }
+            for a in args {
+                walk_expr_atomics(a, out);
+            }
+        }
+        ExpressionNode::Binary(l, _, r) | ExpressionNode::IndexAccess(l, r) => {
+            walk_expr_atomics(l, out);
+            walk_expr_atomics(r, out);
+        }
+        ExpressionNode::MemberAccess(l, _) => walk_expr_atomics(l, out),
+        ExpressionNode::Ternary(c, t, e) => {
+            walk_expr_atomics(c, out);
+            walk_expr_atomics(t, out);
+            walk_expr_atomics(e, out);
+        }
+        ExpressionNode::Unary(_, e)
+        | ExpressionNode::Parenthesized(e)
+        | ExpressionNode::Cast(_, e)
+        | ExpressionNode::NamedArg(_, e)
+        | ExpressionNode::RefArgument(e)
+        | ExpressionNode::Await(e)
+        | ExpressionNode::Try(e)
+        | ExpressionNode::IncDec { target: e, .. } => walk_expr_atomics(e, out),
+        ExpressionNode::FunctionCall(_, _, args) => {
+            for a in args {
+                walk_expr_atomics(a, out);
+            }
+        }
+        ExpressionNode::MethodCall(obj, _, _, args) | ExpressionNode::Call(obj, _, args) => {
+            walk_expr_atomics(obj, out);
+            for a in args {
+                walk_expr_atomics(a, out);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -525,13 +773,18 @@ fn emit_stmt(
             out.push_str(&format!("{}{} = {};\n", p, lhs, emit_expr(value, ctx)));
         }
         StatementNode::IndexAssignment(arr, idx, value) => {
-            out.push_str(&format!(
-                "{}{}[u32({})] = {};\n",
-                p,
-                emit_expr(arr, ctx),
-                emit_expr(idx, ctx),
-                emit_expr(value, ctx)
-            ));
+            let arr_s = emit_expr(arr, ctx);
+            let idx_s = emit_expr(idx, ctx);
+            let val_s = emit_expr(value, ctx);
+            let atomic = matches!(arr, ExpressionNode::Identifier(n) if ctx.is_atomic_buf(&n.text));
+            if atomic {
+                out.push_str(&format!(
+                    "{}atomicStore(&{}[u32({})], {});\n",
+                    p, arr_s, idx_s, val_s
+                ));
+            } else {
+                out.push_str(&format!("{}{}[u32({})] = {};\n", p, arr_s, idx_s, val_s));
+            }
         }
         StatementNode::MemberAssignment(obj, member, value) => {
             out.push_str(&format!(
@@ -654,6 +907,55 @@ fn emit_call(name: &str, args: &[ExpressionNode<'_>], ctx: &EmitCtx<'_>) -> Stri
     match name {
         "workgroup_barrier" => "workgroupBarrier()".into(),
         "storage_barrier" => "storageBarrier()".into(),
+        "atomic_load" => {
+            let buf = args_s.first().cloned().unwrap_or_else(|| "buf".into());
+            let idx = args_s.get(1).cloned().unwrap_or_else(|| "0".into());
+            format!("atomicLoad(&{buf}[u32({idx})])")
+        }
+        "atomic_store" => {
+            let buf = args_s.first().cloned().unwrap_or_else(|| "buf".into());
+            let idx = args_s.get(1).cloned().unwrap_or_else(|| "0".into());
+            let val = args_s.get(2).cloned().unwrap_or_else(|| "0".into());
+            format!("atomicStore(&{buf}[u32({idx})], {val})")
+        }
+        "atomic_add" => {
+            let buf = args_s.first().cloned().unwrap_or_else(|| "buf".into());
+            let idx = args_s.get(1).cloned().unwrap_or_else(|| "0".into());
+            let val = args_s.get(2).cloned().unwrap_or_else(|| "0".into());
+            format!("atomicAdd(&{buf}[u32({idx})], {val})")
+        }
+        "atomic_exchange" => {
+            let buf = args_s.first().cloned().unwrap_or_else(|| "buf".into());
+            let idx = args_s.get(1).cloned().unwrap_or_else(|| "0".into());
+            let val = args_s.get(2).cloned().unwrap_or_else(|| "0".into());
+            format!("atomicExchange(&{buf}[u32({idx})], {val})")
+        }
+        "texture_load" => {
+            let tex = args_s.first().cloned().unwrap_or_else(|| "tex".into());
+            let x = args_s.get(1).cloned().unwrap_or_else(|| "0".into());
+            let y = args_s.get(2).cloned().unwrap_or_else(|| "0".into());
+            format!("textureLoad({tex}, vec2<i32>({x}, {y}), 0)")
+        }
+        "texture_store" => {
+            let tex = args_s.first().cloned().unwrap_or_else(|| "tex".into());
+            let x = args_s.get(1).cloned().unwrap_or_else(|| "0".into());
+            let y = args_s.get(2).cloned().unwrap_or_else(|| "0".into());
+            let r = args_s.get(3).cloned().unwrap_or_else(|| "0.0".into());
+            let g = args_s.get(4).cloned().unwrap_or_else(|| "0.0".into());
+            let b = args_s.get(5).cloned().unwrap_or_else(|| "0.0".into());
+            let a = args_s.get(6).cloned().unwrap_or_else(|| "1.0".into());
+            format!(
+                "textureStore({tex}, vec2<i32>({x}, {y}), vec4<f32>({r}, {g}, {b}, {a}))"
+            )
+        }
+        "texture_sample_level" => {
+            let tex = args_s.first().cloned().unwrap_or_else(|| "tex".into());
+            let samp = args_s.get(1).cloned().unwrap_or_else(|| "samp".into());
+            let u = args_s.get(2).cloned().unwrap_or_else(|| "0.0".into());
+            let v = args_s.get(3).cloned().unwrap_or_else(|| "0.0".into());
+            let level = args_s.get(4).cloned().unwrap_or_else(|| "0.0".into());
+            format!("textureSampleLevel({tex}, {samp}, vec2<f32>({u}, {v}), {level})")
+        }
         "min" => format!(
             "min({}, {})",
             args_s.first().cloned().unwrap_or_else(|| "0".into()),
@@ -790,11 +1092,14 @@ fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
         ExpressionNode::IncDec { target, .. } => emit_expr(target, ctx),
         ExpressionNode::Parenthesized(e) => format!("({})", emit_expr(e, ctx)),
         ExpressionNode::IndexAccess(arr, idx) => {
-            format!(
-                "{}[u32({})]",
-                emit_expr(arr, ctx),
-                emit_expr(idx, ctx)
-            )
+            let arr_s = emit_expr(arr, ctx);
+            let idx_s = emit_expr(idx, ctx);
+            let atomic = matches!(arr, ExpressionNode::Identifier(n) if ctx.is_atomic_buf(&n.text));
+            if atomic {
+                format!("atomicLoad(&{arr_s}[u32({idx_s})])")
+            } else {
+                format!("{arr_s}[u32({idx_s})]")
+            }
         }
         ExpressionNode::MemberAccess(obj, member) => {
             let base = emit_expr(obj, ctx);

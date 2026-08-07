@@ -1,0 +1,20 @@
+module system.gpu;
+
+// Indirect dispatch workgroup counts (12 bytes / 3×u32) for `Compute.dispatch_indirect`.
+// Values are workgroup counts (not thread extents).
+
+public struct GpuDispatchIndirect {
+    public x: int;
+    public y: int;
+    public z: int;
+
+    // Builds an indirect-args buffer of three i32 workgroup counts.
+    public fun to_buffer(): GpuBuffer<int> {
+        return GpuBuffer<int>.from([this.x, this.y, this.z]);
+    }
+
+    // Writes workgroup counts into an existing buffer at element offset 0.
+    public fun write_to(buf: GpuBuffer<int>): void {
+        buf.write_at(0, [this.x, this.y, this.z]);
+    }
+}

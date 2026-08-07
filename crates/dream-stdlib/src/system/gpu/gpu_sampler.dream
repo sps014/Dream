@@ -1,0 +1,21 @@
+module system.gpu;
+
+// Sampling state for `@compute` texture reads (`textureSampleLevel`).
+
+public class GpuSampler {
+    public id: int;
+
+    // Linear filtering sampler.
+    public static fun linear(): GpuSampler {
+        let s = GpuSampler();
+        s.id = Gpu.sampler_create(1);
+        return s;
+    }
+
+    // Nearest-neighbor filtering sampler.
+    public static fun nearest(): GpuSampler {
+        let s = GpuSampler();
+        s.id = Gpu.sampler_create(0);
+        return s;
+    }
+}

@@ -1,0 +1,33 @@
+import system;
+import system.gpu;
+
+// `@readonly` on storage → WGSL `var<storage, read>`; `out` stays read_write.
+@compute(64)
+fun scale(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
+    let i = global_id.x;
+    if (i < a.length && i < n) {
+        out[i] = a[i] * 2.0;
+    }
+}
+
+async fun main(): void {
+    let _ = await Gpu.try_init();
+    let a = GpuBuffer<float>.from([1.0, 2.0, 3.0]);
+    let out = GpuBuffer<float>.alloc(3);
+    let _r = await Compute.run_1d("scale", [a, out], 3);
+    a.copy_to(out, 0, 0, 3);
+    let ra = await out.read();
+    System.println((int)ra[0]);
+    System.println((int)ra[2]);
+
+    let pass = ComputePass.begin();
+    pass.dispatch("scale", [a, out], 3, 1, 1);
+    let _s = await pass.submit();
+
+    let args = GpuDispatchIndirect();
+    args.x = 1;
+    args.y = 1;
+    args.z = 1;
+    let ibuf = args.to_buffer();
+    System.println(ibuf.length);
+}

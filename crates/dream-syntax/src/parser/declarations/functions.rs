@@ -248,6 +248,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let index_before = self.current_token_index;
 
+            let attributes = self.parse_attributes();
+
             // A `ref name: T` parameter: the callee shares the caller's storage. Mutually
             // exclusive with variadic/default, enforced below.
             let is_ref = self.current_token().kind == TokenKind::RefToken;
@@ -296,7 +298,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     );
                 }
                 seen_variadic = true;
-                params.push(ParameterNode::variadic(param, param_type));
+                params.push(ParameterNode::variadic(param, param_type).with_attributes(attributes));
             } else {
                 if seen_variadic {
                     self.diagnostics.report_error(
@@ -317,7 +319,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                             Some(param.position),
                         );
                     }
-                    params.push(ParameterNode::by_ref(param, param_type));
+                    params.push(ParameterNode::by_ref(param, param_type).with_attributes(attributes));
                 } else {
                     // Optional default value: `= <literal>`. Restricted to constant literals so no
                     // evaluation is needed at the call site.
@@ -337,7 +339,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                         }
                         None
                     };
-                    params.push(ParameterNode::with_default(param, param_type, default));
+                    params.push(
+                        ParameterNode::with_default(param, param_type, default)
+                            .with_attributes(attributes),
+                    );
                 }
             }
 
@@ -348,10 +353,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             //if we have comma and it is not trailing comma
             if self.current_token().kind == TokenKind::CommaToken {
-                //next token of comma is identifier (or `...`/`ref` starting the next parameter) eat comma then
+                //next token of comma is identifier (or `...`/`ref`/`@` starting the next parameter) eat comma then
                 if matches!(
                     self.peek_token(1).kind,
-                    TokenKind::IdentifierToken | TokenKind::DotDotDotToken | TokenKind::RefToken
+                    TokenKind::IdentifierToken
+                        | TokenKind::DotDotDotToken
+                        | TokenKind::RefToken
+                        | TokenKind::AtToken
                 ) {
                     //eat the comma
                     self.match_token(TokenKind::CommaToken);
