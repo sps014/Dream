@@ -1,47 +1,82 @@
 module system.collections;
 
-// FIFO queue backed by `List<T>`.
+// FIFO queue backed by a ring buffer (`T[]` + head/count).
 public class Queue<T> : Collection<T> {
-    items: List<T>;
+    items: T[];
+    head: int;
+    count: int;
 
     // Creates an empty queue.
     public constructor() {
-        this.items = List<T>();
+        this.items = Buffer.alloc<T>(sequence_min_capacity());
+        this.head = 0;
+        this.count = 0;
     }
 
     // Number of elements currently stored.
     public get length(): int {
-        return this.items.length;
+        return this.count;
+    }
+
+    fun grow(): void {
+        let old_cap = this.items.length;
+        let new_cap = old_cap * 2;
+        if (new_cap < sequence_min_capacity()) {
+            new_cap = sequence_min_capacity();
+        }
+        let next = Buffer.alloc<T>(new_cap);
+        let i = 0;
+        while (i < this.count) {
+            next[i] = this.items[(this.head + i) % old_cap];
+            i = i + 1;
+        }
+        this.items = next;
+        this.head = 0;
     }
 
     // Appends `value` at the back of the queue.
     public fun enqueue(value: T): void {
-        this.items.push(value);
+        if (this.count == this.items.length) {
+            this.grow();
+        }
+        let tail = (this.head + this.count) % this.items.length;
+        this.items[tail] = value;
+        this.count = this.count + 1;
     }
 
     // Removes and returns the front element, or `None` when empty.
     public fun dequeue(): Option<T> {
-        if (this.items.length == 0) {
+        if (this.count == 0) {
             return Option.None;
         }
-        let v = this.items.get(0);
-        this.items.remove_at(0);
-        return v;
+        let v = this.items[this.head];
+        this.head = (this.head + 1) % this.items.length;
+        this.count = this.count - 1;
+        return Option.Some(v);
     }
 
     // Returns the front element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
-        return this.items.get(0);
+        if (this.count == 0) {
+            return Option.None;
+        }
+        return Option.Some(this.items[this.head]);
     }
 
     // Removes every element.
     public fun clear(): void {
-        this.items.clear();
+        this.head = 0;
+        this.count = 0;
     }
 
     // Iterates elements from front to back.
     @iterator
-    public fun iterator(): ListIterator<T> {
-        return this.items.iterator();
+    public fun iterator(): QueueIterator<T> {
+        return QueueIterator<T>(this);
+    }
+
+    // Slot access for `QueueIterator` (same-module).
+    internal fun at_offset(offset: int): T {
+        return this.items[(this.head + offset) % this.items.length];
     }
 }

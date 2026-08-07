@@ -4,19 +4,26 @@ module system.net;
 public class HttpHeaders : Collection<KeyValuePair<string, string>> {
     keys: List<string>;
     values: List<string>;
+    // Lowercased name -> index into `keys`/`values`.
+    index: Map<string, int>;
 
     // Creates an empty header map.
     public constructor() {
         this.keys = List<string>();
         this.values = List<string>();
+        this.index = Map<string, int>();
     }
 
     // Sets header `name` to `value`, overwriting any existing entry (case-insensitive name match).
     public fun set(name: string, value: string): void {
-        let i = this._find(name);
-        if (i >= 0) {
+        let lower = name.to_lower();
+        let existing = this.index.get(lower);
+        if (existing.is_some()) {
+            let i = existing.unwrap_or(0);
+            this.keys.set(i, name);
             this.values.set(i, value);
         } else {
+            this.index.set(lower, this.keys.length);
             this.keys.push(name);
             this.values.push(value);
         }
@@ -24,26 +31,35 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
 
     // Value for `name`, or `None` when absent (case-insensitive).
     public fun get(name: string): Option<string> {
-        let i = this._find(name);
-        if (i >= 0) {
-            return this.values.get(i);
+        let existing = this.index.get(name.to_lower());
+        if (existing.is_some()) {
+            return this.values.get(existing.unwrap_or(0));
         }
-        return Option.None;
+        let none: Option<string> = Option.None;
+        return none;
     }
 
     // True when a header named `name` is present (case-insensitive).
     public fun contains(name: string): bool {
-        return this._find(name) >= 0;
+        return this.index.contains(name.to_lower());
     }
 
     // Removes `name` if present; returns whether a header was removed.
     public fun remove(name: string): bool {
-        let i = this._find(name);
-        if (i < 0) {
+        let lower = name.to_lower();
+        let existing = this.index.get(lower);
+        if (existing.is_none()) {
             return false;
         }
+        let i = existing.unwrap_or(0);
         this.keys.remove_at(i);
         this.values.remove_at(i);
+        this.index.clear();
+        let j = 0;
+        while (j < this.keys.length) {
+            this.index.set(this.keys.get(j).unwrap_or("").to_lower(), j);
+            j = j + 1;
+        }
         return true;
     }
 
@@ -52,19 +68,10 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         return this.keys.length;
     }
 
-    // Iterates `(name, value)` pairs in insertion order.
+    // Iterates `(name, value)` pairs in insertion order without snapshotting into a new list.
     @iterator
-    public fun iterator(): ListIterator<KeyValuePair<string, string>> {
-        let pairs = List<KeyValuePair<string, string>>();
-        let i = 0;
-        while (i < this.keys.length) {
-            pairs.push(KeyValuePair<string, string>(
-                this.keys.get(i).unwrap_or(""),
-                this.values.get(i).unwrap_or("")
-            ));
-            i = i + 1;
-        }
-        return pairs.iterator();
+    public fun iterator(): HttpHeadersIterator {
+        return HttpHeadersIterator(this);
     }
 
     // Wire format for the host bridge (JSON object string).
@@ -103,15 +110,11 @@ public class HttpHeaders : Collection<KeyValuePair<string, string>> {
         return headers;
     }
 
-    fun _find(name: string): int {
-        let want = name.to_lower();
-        let i = 0;
-        while (i < this.keys.length) {
-            if (this.keys.get(i).unwrap_or("").to_lower() == want) {
-                return i;
-            }
-            i = i + 1;
-        }
-        return 0 - 1;
+    internal fun key_at(i: int): string {
+        return this.keys.get(i).unwrap_or("");
+    }
+
+    internal fun value_at(i: int): string {
+        return this.values.get(i).unwrap_or("");
     }
 }

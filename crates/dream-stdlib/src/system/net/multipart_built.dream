@@ -2,7 +2,7 @@ module system.net;
 
 // Result of `MultipartForm.build`.
 
-public class MultipartBuilt {
+public struct MultipartBuilt {
     // Headers including `Content-Type` with boundary.
     public headers: HttpHeaders;
     // Encoded multipart body.

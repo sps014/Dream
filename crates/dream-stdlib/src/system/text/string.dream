@@ -84,6 +84,8 @@ extend string : Comparable<string> {
     }
 
     // The index of the first occurrence of substring `sub`, or `None`.
+    // Index of the first occurrence of substring `sub`, or `None`. Uses Boyer–Moore–Horspool
+    // skipping for `m > 1`.
     public fun index_of(sub: string): Option<int> {
         let n = this.length;
         let m = sub.length;
@@ -93,34 +95,37 @@ extend string : Comparable<string> {
         if (m > n) {
             return Option.None;
         }
+        if (m == 1) {
+            let want = sub.char_at(0);
+            let i = 0;
+            while (i < n) {
+                if (this.char_at(i) == want) {
+                    return Option.Some(i);
+                }
+                i = i + 1;
+            }
+            return Option.None;
+        }
+        let skip = Map<char, int>();
+        let j = 0;
+        while (j < m - 1) {
+            skip.set(sub.char_at(j), m - 1 - j);
+            j = j + 1;
+        }
         let i = 0;
         while (i <= n - m) {
             if (this._matches_at(sub, i) == true) {
                 return Option.Some(i);
             }
-            i = i + 1;
+            let shift = skip.get(this.char_at(i + m - 1)).unwrap_or(m);
+            i = i + shift;
         }
         return Option.None;
     }
 
     // True if `sub` occurs anywhere in this string.
     public fun contains(sub: string): bool {
-        let n = this.length;
-        let m = sub.length;
-        if (m == 0) {
-            return true;
-        }
-        if (m > n) {
-            return false;
-        }
-        let i = 0;
-        while (i <= n - m) {
-            if (this._matches_at(sub, i) == true) {
-                return true;
-            }
-            i = i + 1;
-        }
-        return false;
+        return this.index_of(sub).is_some();
     }
 
     // True if this string begins with `prefix`.
@@ -294,18 +299,18 @@ extend string : Comparable<string> {
             return this;
         }
         let n = this.length;
-        let result = "";
+        let sb = StringBuilder(n);
         let i = 0;
         while (i < n) {
             if ((i <= n - m) && (this._matches_at(old, i) == true)) {
-                result = result + replacement;
+                sb.append(replacement);
                 i = i + m;
             } else {
-                result = result + this.substring(i, i + 1);
+                sb.append_char(this.char_at(i));
                 i = i + 1;
             }
         }
-        return result;
+        return sb.build();
     }
 
     fun _is_space_at(index: int): bool {

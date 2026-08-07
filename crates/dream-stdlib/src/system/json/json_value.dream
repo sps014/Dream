@@ -7,22 +7,32 @@ public class JsonValue {
     public num_val: double;
     public str_val: string;
     public items: List<JsonValue>;
+    // Insertion-ordered keys for objects (stringify order).
     public obj_keys: List<string>;
-    public obj_vals: List<JsonValue>;
+    // O(1) object field lookup.
+    obj_map: Map<string, JsonValue>;
 
-    public constructor(kind: int, bool_val: bool, num_val: double, str_val: string, items: List<JsonValue>, obj_keys: List<string>, obj_vals: List<JsonValue>) {
+    public constructor(
+        kind: int,
+        bool_val: bool,
+        num_val: double,
+        str_val: string,
+        items: List<JsonValue>,
+        obj_keys: List<string>,
+        obj_map: Map<string, JsonValue>
+    ) {
         this.kind = kind;
         this.bool_val = bool_val;
         this.num_val = num_val;
         this.str_val = str_val;
         this.items = items;
         this.obj_keys = obj_keys;
-        this.obj_vals = obj_vals;
+        this.obj_map = obj_map;
     }
 
     // Allocates a fresh JsonValue.
     static fun _new(k: int): JsonValue {
-        return JsonValue(k, false, 0.0d, "", List<JsonValue>(), List<string>(), List<JsonValue>());
+        return JsonValue(k, false, 0.0d, "", List<JsonValue>(), List<string>(), Map<string, JsonValue>());
     }
 
     // A new null JSON value.
@@ -86,7 +96,7 @@ public class JsonValue {
         return this.kind == 5;
     }
 
-    // Returns the value as a boolean when this is a JSON bool.
+    // Returns the value as a bool when this is a JSON boolean.
     public fun as_bool(): Option<bool> {
         if (this.kind != 1) {
             return Option.None;
@@ -118,42 +128,24 @@ public class JsonValue {
         return Option.Some(this.str_val);
     }
 
-    fun _find_key(key: string): int {
-        let i = 0;
-        while (i < this.obj_keys.length) {
-            if (this.obj_keys.get(i).unwrap_or("") == key) {
-                return i;
-            }
-            i = i + 1;
-        }
-        return 0 - 1;
-    }
-
     // True if the object has the given key.
     public fun has(key: string): bool {
-        return this._find_key(key) >= 0;
+        return this.obj_map.contains(key);
     }
 
     // The value for `key`, or `None`.
     @get_indexer
     public fun get(key: string): Option<JsonValue> {
-        let idx = this._find_key(key);
-        if (idx >= 0) {
-            return this.obj_vals.get(idx);
-        }
-        return Option.None;
+        return this.obj_map.get(key);
     }
 
     // Sets the value for `key`.
     @set_indexer
     public fun set(key: string, value: JsonValue): void {
-        let idx = this._find_key(key);
-        if (idx >= 0) {
-            this.obj_vals.set(idx, value);
-        } else {
+        if (this.obj_map.contains(key) == false) {
             this.obj_keys.push(key);
-            this.obj_vals.push(value);
         }
+        this.obj_map.set(key, value);
     }
 
     // The object key at `index`, or `None`.

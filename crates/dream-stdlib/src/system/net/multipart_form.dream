@@ -37,58 +37,91 @@ public class MultipartForm {
     // Returns `(Content-Type headers, body bytes)` for `request_bytes`.
     public fun build(): MultipartBuilt {
         let boundary = "dreamform" + this.field_names.length.to_string() + "x" + this.file_names.length.to_string();
-        let body = Buffer.alloc<byte>(0);
+        let total = 0;
         let i = 0;
         while (i < this.field_names.length) {
-            body = MultipartForm._append_str(body, "--" + boundary + "\r\n");
-            body = MultipartForm._append_str(
-                body,
-                "Content-Disposition: form-data; name=\"" + this.field_names.get(i).unwrap_or("") + "\"\r\n\r\n"
+            let name = this.field_names.get(i).unwrap_or("");
+            let value = this.field_values.get(i).unwrap_or("");
+            total = total + MultipartForm._str_bytes("--" + boundary + "\r\n");
+            total = total + MultipartForm._str_bytes(
+                "Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n"
             );
-            body = MultipartForm._append_str(body, this.field_values.get(i).unwrap_or(""));
-            body = MultipartForm._append_str(body, "\r\n");
+            total = total + MultipartForm._str_bytes(value);
+            total = total + 2; // \r\n
             i = i + 1;
         }
         i = 0;
         while (i < this.file_names.length) {
-            body = MultipartForm._append_str(body, "--" + boundary + "\r\n");
-            body = MultipartForm._append_str(
-                body,
-                "Content-Disposition: form-data; name=\"" + this.file_names.get(i).unwrap_or("")
-                    + "\"; filename=\"" + this.file_filenames.get(i).unwrap_or("") + "\"\r\n"
+            let name = this.file_names.get(i).unwrap_or("");
+            let filename = this.file_filenames.get(i).unwrap_or("");
+            let ctype = this.file_types.get(i).unwrap_or("application/octet-stream");
+            let body = this.file_bodies.get(i).unwrap_or(Buffer.alloc<byte>(0));
+            total = total + MultipartForm._str_bytes("--" + boundary + "\r\n");
+            total = total + MultipartForm._str_bytes(
+                "Content-Disposition: form-data; name=\"" + name + "\"; filename=\"" + filename + "\"\r\n"
             );
-            body = MultipartForm._append_str(
-                body,
-                "Content-Type: " + this.file_types.get(i).unwrap_or("application/octet-stream") + "\r\n\r\n"
-            );
-            body = MultipartForm._append_bytes(body, this.file_bodies.get(i).unwrap_or(Buffer.alloc<byte>(0)));
-            body = MultipartForm._append_str(body, "\r\n");
+            total = total + MultipartForm._str_bytes("Content-Type: " + ctype + "\r\n\r\n");
+            total = total + body.length;
+            total = total + 2;
             i = i + 1;
         }
-        body = MultipartForm._append_str(body, "--" + boundary + "--\r\n");
+        total = total + MultipartForm._str_bytes("--" + boundary + "--\r\n");
+
+        let body_buf = Buffer.alloc<byte>(total);
+        let offset = 0;
+        i = 0;
+        while (i < this.field_names.length) {
+            let name = this.field_names.get(i).unwrap_or("");
+            let value = this.field_values.get(i).unwrap_or("");
+            offset = MultipartForm._write_str(body_buf, offset, "--" + boundary + "\r\n");
+            offset = MultipartForm._write_str(
+                body_buf,
+                offset,
+                "Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n"
+            );
+            offset = MultipartForm._write_str(body_buf, offset, value);
+            offset = MultipartForm._write_str(body_buf, offset, "\r\n");
+            i = i + 1;
+        }
+        i = 0;
+        while (i < this.file_names.length) {
+            let name = this.file_names.get(i).unwrap_or("");
+            let filename = this.file_filenames.get(i).unwrap_or("");
+            let ctype = this.file_types.get(i).unwrap_or("application/octet-stream");
+            let file_body = this.file_bodies.get(i).unwrap_or(Buffer.alloc<byte>(0));
+            offset = MultipartForm._write_str(body_buf, offset, "--" + boundary + "\r\n");
+            offset = MultipartForm._write_str(
+                body_buf,
+                offset,
+                "Content-Disposition: form-data; name=\"" + name + "\"; filename=\"" + filename + "\"\r\n"
+            );
+            offset = MultipartForm._write_str(body_buf, offset, "Content-Type: " + ctype + "\r\n\r\n");
+            offset = MultipartForm._write_bytes(body_buf, offset, file_body);
+            offset = MultipartForm._write_str(body_buf, offset, "\r\n");
+            i = i + 1;
+        }
+        MultipartForm._write_str(body_buf, offset, "--" + boundary + "--\r\n");
+
         let headers = HttpHeaders();
         headers.set("Content-Type", "multipart/form-data; boundary=" + boundary);
-        return MultipartBuilt(headers, body);
+        return MultipartBuilt(headers, body_buf);
     }
 
-    static fun _append_str(base: byte[], text: string): byte[] {
-        return MultipartForm._append_bytes(base, Bytes.fromWireString(text));
+    static fun _str_bytes(text: string): int {
+        return text.length;
     }
 
-    static fun _append_bytes(base: byte[], extra: byte[]): byte[] {
-        let n = base.length + extra.length;
-        let out = Buffer.alloc<byte>(n);
+    static fun _write_str(dst: byte[], offset: int, text: string): int {
+        return MultipartForm._write_bytes(dst, offset, Bytes.fromWireString(text));
+    }
+
+    static fun _write_bytes(dst: byte[], offset: int, extra: byte[]): int {
+        let src = Span<byte>.of(extra);
         let i = 0;
-        while (i < base.length) {
-            out[i] = base[i];
+        while (i < src.length) {
+            dst[offset + i] = src.get(i);
             i = i + 1;
         }
-        let j = 0;
-        while (j < extra.length) {
-            out[i] = extra[j];
-            i = i + 1;
-            j = j + 1;
-        }
-        return out;
+        return offset + src.length;
     }
 }

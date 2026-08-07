@@ -1,0 +1,28 @@
+import system;
+import system.collections;
+
+fun main(): void {
+    let q = Queue<int>();
+    let i = 0;
+    while (i < 100) {
+        q.enqueue(i);
+        i = i + 1;
+    }
+    i = 0;
+    while (i < 50) {
+        System.println(q.dequeue().unwrap_or(0 - 1));
+        i = i + 1;
+    }
+    i = 100;
+    while (i < 150) {
+        q.enqueue(i);
+        i = i + 1;
+    }
+    System.println(q.length);
+    System.println(q.peek().unwrap_or(0 - 1));
+    let sum = 0;
+    for (let x in q) {
+        sum = sum + x;
+    }
+    System.println(sum);
+}

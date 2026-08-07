@@ -106,24 +106,31 @@ public class Url {
     // Reconstructs the URL string from components.
     @override
     public fun to_string(): string {
-        let result = "";
+        let sb = StringBuilder();
         if (this.scheme.is_empty() == false) {
-            result = this.scheme + "://" + this.host;
+            sb.append(this.scheme);
+            sb.append("://");
+            sb.append(this.host);
         } else {
-            result = this.host;
+            sb.append(this.host);
         }
         switch (this.port) {
-            Some(p) => { result = result + ":" + p.to_string(); },
+            Some(p) => {
+                sb.append_char(':');
+                sb.append(p.to_string());
+            },
             None => { },
         }
-        result = result + this.path;
+        sb.append(this.path);
         if (this.query.is_empty() == false) {
-            result = result + "?" + this.query;
+            sb.append_char('?');
+            sb.append(this.query);
         }
         if (this.fragment.is_empty() == false) {
-            result = result + "#" + this.fragment;
+            sb.append_char('#');
+            sb.append(this.fragment);
         }
-        return result;
+        return sb.build();
     }
 
     // Returns a copy with `path` replaced.

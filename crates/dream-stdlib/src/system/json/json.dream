@@ -15,16 +15,20 @@ public class Json {
 
     // Compact stringify of a dynamic `JsonValue` tree.
     public static fun stringify(value: JsonValue): string {
-        return Json._json_stringify(value);
+        let sb = StringBuilder();
+        Json._json_stringify_into(sb, value);
+        return sb.build();
     }
 
     // Pretty-prints `value` with newlines and `indent` spaces per nesting level (e.g. 2 or 4).
     // Pass 0 to fall back to compact output.
     public static fun stringify_pretty(value: JsonValue, indent: int): string {
         if (indent <= 0) {
-            return Json._json_stringify(value);
+            return Json.stringify(value);
         }
-        return Json._json_stringify_pretty(value, indent, 0);
+        let sb = StringBuilder();
+        Json._json_stringify_pretty_into(sb, value, indent, 0);
+        return sb.build();
     }
 
     // Parses `text` into a dynamic `JsonValue` tree.
@@ -43,30 +47,34 @@ public class Json {
 
     // --- internal serialization helpers -----------------------------------------------------
 
-    // Wraps `s` in quotes, escaping the characters JSON requires.
-    static fun _json_escape(s: string): string {
+    // Appends a quoted, escaped JSON string to `sb`.
+    static fun _json_escape_into(sb: StringBuilder, s: string): void {
+        sb.append_char('"');
         let n = s.length;
-        let result = "\"";
         let i = 0;
         while (i < n) {
             let c = s.char_at(i);
             if (c == '"') {
-                result = result + "\\\"";
+                sb.append_char('\\');
+                sb.append_char('"');
             } else if (c == '\\') {
-                result = result + "\\\\";
+                sb.append_char('\\');
+                sb.append_char('\\');
             } else if (c == '\n') {
-                result = result + "\\n";
+                sb.append_char('\\');
+                sb.append_char('n');
             } else if (c == '\t') {
-                result = result + "\\t";
+                sb.append_char('\\');
+                sb.append_char('t');
             } else if (c == '\r') {
-                result = result + "\\r";
+                sb.append_char('\\');
+                sb.append_char('r');
             } else {
-                result = result + c;
+                sb.append_char(c);
             }
             i = i + 1;
         }
-        result = result + "\"";
-        return result;
+        sb.append_char('"');
     }
 
     // Formats a JSON number: integral values print without a decimal point, others fall back to the
@@ -79,107 +87,116 @@ public class Json {
         return n.to_string();
     }
 
-    // Recursively serializes a JsonValue to compact JSON text.
-    static fun _json_stringify(v: JsonValue): string {
+    // Recursively serializes a JsonValue into `sb` as compact JSON text.
+    static fun _json_stringify_into(sb: StringBuilder, v: JsonValue): void {
         let k = v.kind;
         if (k == 0) {
-            return "null";
+            sb.append("null");
+            return;
         }
         if (k == 1) {
             if (v.bool_val == true) {
-                return "true";
+                sb.append("true");
+            } else {
+                sb.append("false");
             }
-            return "false";
+            return;
         }
         if (k == 2) {
-            return Json._json_number(v.num_val);
+            sb.append(Json._json_number(v.num_val));
+            return;
         }
         if (k == 3) {
-            return Json._json_escape(v.str_val);
+            Json._json_escape_into(sb, v.str_val);
+            return;
         }
         if (k == 4) {
-            let result = "[";
+            sb.append_char('[');
             let i = 0;
             while (i < v.items.length) {
                 if (i > 0) {
-                    result = result + ",";
+                    sb.append_char(',');
                 }
-                result = result + Json._json_stringify(v.items.get(i).unwrap_or(JsonValue.none()));
+                Json._json_stringify_into(sb, v.items.get(i).unwrap_or(JsonValue.none()));
                 i = i + 1;
             }
-            result = result + "]";
-            return result;
+            sb.append_char(']');
+            return;
         }
         if (k == 5) {
-            let result = "{";
+            sb.append_char('{');
             let i = 0;
             while (i < v.obj_keys.length) {
                 if (i > 0) {
-                    result = result + ",";
+                    sb.append_char(',');
                 }
-                result = result + Json._json_escape(v.obj_keys.get(i).unwrap_or(""));
-                result = result + ":";
-                result = result + Json._json_stringify(v.obj_vals.get(i).unwrap_or(JsonValue.none()));
+                let key = v.obj_keys.get(i).unwrap_or("");
+                Json._json_escape_into(sb, key);
+                sb.append_char(':');
+                Json._json_stringify_into(sb, v.get(key).unwrap_or(JsonValue.none()));
                 i = i + 1;
             }
-            result = result + "}";
-            return result;
+            sb.append_char('}');
+            return;
         }
-        return "null";
+        sb.append("null");
     }
 
-    // A string of `n` spaces, used to indent pretty-printed output.
-    static fun _json_spaces(n: int): string {
-        let s = "";
+    // Appends `n` spaces to `sb`.
+    static fun _json_spaces_into(sb: StringBuilder, n: int): void {
         let i = 0;
         while (i < n) {
-            s = s + " ";
+            sb.append_char(' ');
             i = i + 1;
         }
-        return s;
     }
 
     // Recursively serializes a JsonValue with newlines and `indent` spaces of nesting per level.
-    // `depth` is the current nesting level (0 at the root). Scalars render exactly as in compact
-    // mode; empty arrays/objects stay on one line (`[]` / `{}`).
-    static fun _json_stringify_pretty(v: JsonValue, indent: int, depth: int): string {
+    static fun _json_stringify_pretty_into(sb: StringBuilder, v: JsonValue, indent: int, depth: int): void {
         let k = v.kind;
         if (k == 4) {
             if (v.items.length == 0) {
-                return "[]";
+                sb.append("[]");
+                return;
             }
-            let pad = Json._json_spaces(indent * (depth + 1));
-            let pad_end = Json._json_spaces(indent * depth);
-            let result = "[\n";
+            sb.append("[\n");
             let i = 0;
             while (i < v.items.length) {
                 if (i > 0) {
-                    result = result + ",\n";
+                    sb.append(",\n");
                 }
-                result = result + pad + Json._json_stringify_pretty(v.items.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
+                Json._json_spaces_into(sb, indent * (depth + 1));
+                Json._json_stringify_pretty_into(sb, v.items.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
                 i = i + 1;
             }
-            result = result + "\n" + pad_end + "]";
-            return result;
+            sb.append_char('\n');
+            Json._json_spaces_into(sb, indent * depth);
+            sb.append_char(']');
+            return;
         }
         if (k == 5) {
             if (v.obj_keys.length == 0) {
-                return "{}";
+                sb.append("{}");
+                return;
             }
-            let pad = Json._json_spaces(indent * (depth + 1));
-            let pad_end = Json._json_spaces(indent * depth);
-            let result = "{\n";
+            sb.append("{\n");
             let i = 0;
             while (i < v.obj_keys.length) {
                 if (i > 0) {
-                    result = result + ",\n";
+                    sb.append(",\n");
                 }
-                result = result + pad + Json._json_escape(v.obj_keys.get(i).unwrap_or("")) + ": " + Json._json_stringify_pretty(v.obj_vals.get(i).unwrap_or(JsonValue.none()), indent, depth + 1);
+                Json._json_spaces_into(sb, indent * (depth + 1));
+                let key = v.obj_keys.get(i).unwrap_or("");
+                Json._json_escape_into(sb, key);
+                sb.append(": ");
+                Json._json_stringify_pretty_into(sb, v.get(key).unwrap_or(JsonValue.none()), indent, depth + 1);
                 i = i + 1;
             }
-            result = result + "\n" + pad_end + "}";
-            return result;
+            sb.append_char('\n');
+            Json._json_spaces_into(sb, indent * depth);
+            sb.append_char('}');
+            return;
         }
-        return Json._json_stringify(v);
+        Json._json_stringify_into(sb, v);
     }
 }

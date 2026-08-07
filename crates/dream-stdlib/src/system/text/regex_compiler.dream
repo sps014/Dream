@@ -13,6 +13,17 @@ internal class RegexCompiler {
         this.dot_all = dot_all;
     }
 
+    static fun fold_ranges(ranges: List<char>): List<char> {
+        let out = List<char>();
+        let i = 0;
+        while (i < ranges.length) {
+            out.push(ranges.get(i).unwrap_or(' ').to_lower());
+            out.push(ranges.get(i + 1).unwrap_or(' ').to_lower());
+            i = i + 2;
+        }
+        return out;
+    }
+
     // How many instructions `node` needs, mirroring `compile.c`'s `count`.
     static fun count_instructions(node: RegexNode): int {
         if (node.kind == RegexNodeKind.Alt) {
@@ -97,14 +108,22 @@ internal class RegexCompiler {
             return;
         }
         if (node.kind == RegexNodeKind.Lit) {
+            let ch = node.ch;
+            if (this.ignore_case) {
+                ch = ch.to_lower();
+            }
             let ranges = List<char>();
-            ranges.push(node.ch);
-            ranges.push(node.ch);
+            ranges.push(ch);
+            ranges.push(ch);
             this.alloc_leaf(RegexInst.char_class(ranges, false, this.ignore_case));
             return;
         }
         if (node.kind == RegexNodeKind.Class) {
-            this.alloc_leaf(RegexInst.char_class(node.ranges, node.negate, this.ignore_case));
+            let ranges = node.ranges;
+            if (this.ignore_case) {
+                ranges = RegexCompiler.fold_ranges(node.ranges);
+            }
+            this.alloc_leaf(RegexInst.char_class(ranges, node.negate, this.ignore_case));
             return;
         }
         if (node.kind == RegexNodeKind.AnyChar) {

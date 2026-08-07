@@ -103,8 +103,10 @@ public class Encoding {
     public static fun base64_encode(bytes: byte[]): string {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let n = bytes.length;
-        let out = "";
+        let out_len = ((n + 2) / 3) * 4;
+        let out = string.alloc(out_len);
         let i = 0;
+        let oi = 0;
         while (i < n) {
             let b0 = (int)bytes[i];
             let b1 = 0;
@@ -117,18 +119,19 @@ public class Encoding {
                 b2 = (int)bytes[i + 2];
             }
             let triple = (b0 * 65536) + (b1 * 256) + b2;
-            out = out + alphabet.char_at((triple / 262144) % 64);
-            out = out + alphabet.char_at((triple / 4096) % 64);
+            string.set(out, oi, alphabet.char_at((triple / 262144) % 64));
+            string.set(out, oi + 1, alphabet.char_at((triple / 4096) % 64));
             if (remain > 1) {
-                out = out + alphabet.char_at((triple / 64) % 64);
+                string.set(out, oi + 2, alphabet.char_at((triple / 64) % 64));
             } else {
-                out = out + "=";
+                string.set(out, oi + 2, '=');
             }
             if (remain > 2) {
-                out = out + alphabet.char_at(triple % 64);
+                string.set(out, oi + 3, alphabet.char_at(triple % 64));
             } else {
-                out = out + "=";
+                string.set(out, oi + 3, '=');
             }
+            oi = oi + 4;
             i = i + 3;
         }
         return out;
@@ -136,23 +139,41 @@ public class Encoding {
 
     // Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
     public static fun base64_decode(text: string): Result<byte[], ParseError> {
-        let cleaned = "";
+        let n = text.length;
+        let cleaned_len = 0;
         let i = 0;
-        while (i < text.length) {
+        while (i < n) {
             let c = text.char_at(i);
             if (c != '=') {
                 if ((c != ' ') && (c != '\n') && (c != '\r') && (c != '\t')) {
-                    cleaned = cleaned + c;
+                    cleaned_len = cleaned_len + 1;
                 }
             }
             i = i + 1;
         }
-        let n = cleaned.length;
-        if ((n % 4) == 1) {
+        if ((cleaned_len % 4) == 1) {
             return Result.Err(ParseError.invalid("invalid base64 length"));
         }
-        while ((cleaned.length % 4) != 0) {
-            cleaned = cleaned + "A";
+        let padded_len = cleaned_len;
+        while ((padded_len % 4) != 0) {
+            padded_len = padded_len + 1;
+        }
+        let cleaned = string.alloc(padded_len);
+        let ci = 0;
+        i = 0;
+        while (i < n) {
+            let c = text.char_at(i);
+            if (c != '=') {
+                if ((c != ' ') && (c != '\n') && (c != '\r') && (c != '\t')) {
+                    string.set(cleaned, ci, c);
+                    ci = ci + 1;
+                }
+            }
+            i = i + 1;
+        }
+        while (ci < padded_len) {
+            string.set(cleaned, ci, 'A');
+            ci = ci + 1;
         }
         let pad = 0;
         if (text.ends_with("==")) {
@@ -160,14 +181,14 @@ public class Encoding {
         } else if (text.ends_with("=")) {
             pad = 1;
         }
-        let out_len = (cleaned.length / 4) * 3 - pad;
+        let out_len = (padded_len / 4) * 3 - pad;
         if (out_len < 0) {
             out_len = 0;
         }
         let out = Buffer.alloc<byte>(out_len);
         let oi = 0;
         i = 0;
-        while (i < cleaned.length) {
+        while (i < padded_len) {
             let c0 = b64_value(cleaned.char_at(i));
             let c1 = b64_value(cleaned.char_at(i + 1));
             let c2 = b64_value(cleaned.char_at(i + 2));

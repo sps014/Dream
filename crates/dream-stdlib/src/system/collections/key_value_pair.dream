@@ -1,7 +1,7 @@
 module system.collections;
 
-// One key/value entry.
-public class KeyValuePair<K, V> {
+// One key/value entry (value type — no heap allocation of the pair itself).
+public struct KeyValuePair<K, V> {
     public key: K;
     public value: V;
 

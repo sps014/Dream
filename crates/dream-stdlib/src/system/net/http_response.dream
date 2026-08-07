@@ -5,11 +5,13 @@ public class HttpResponse {
     data: char[];
     boundary: int;
     scanned: bool;
+    headers: HttpHeaders;
 
     public constructor(data: char[]) {
         this.data = data;
         this.boundary = 0 - 1;
         this.scanned = false;
+        this.headers = HttpHeaders();
     }
 
     fun scan(): void {
@@ -28,6 +30,23 @@ public class HttpResponse {
             if (found == false) {
                 this.boundary = n;
             }
+            this._parse_headers();
+        }
+    }
+
+    fun _parse_headers(): void {
+        let head = this.slice_text(0, this.boundary);
+        let lines = head.split('\n');
+        let i = 1;
+        while (i < lines.length) {
+            let line = lines[i];
+            let colon = line.index_of(':').unwrap_or(0 - 1);
+            if (colon >= 0) {
+                let key = line.substring(0, colon).trim();
+                let value = line.substring(colon + 1, line.length).trim();
+                this.headers.set(key, value);
+            }
+            i = i + 1;
         }
     }
 
@@ -37,9 +56,10 @@ public class HttpResponse {
             len = 0;
         }
         let result = string.alloc(len);
+        let src = Span<char>(this.data, start, len);
         let i = 0;
         while (i < len) {
-            string.set(result, i, this.data[start + i]);
+            string.set(result, i, src.get(i));
             i = i + 1;
         }
         return result;
@@ -81,21 +101,8 @@ public class HttpResponse {
 
     // The value of response header `name`.
     public fun header(name: string): string {
-        let lines = this.head_text().split('\n');
-        let want = name.to_lower();
-        let i = 1;
-        while (i < lines.length) {
-            let line = lines[i];
-            let colon = line.index_of(':').unwrap_or(0 - 1);
-            if (colon >= 0) {
-                let key = line.substring(0, colon).trim().to_lower();
-                if (key == want) {
-                    return line.substring(colon + 1, line.length).trim();
-                }
-            }
-            i = i + 1;
-        }
-        return "";
+        this.scan();
+        return this.headers.get(name).unwrap_or("");
     }
 
     // The response body as UTF-8 text.
@@ -114,9 +121,10 @@ public class HttpResponse {
         }
         let count = n - start;
         let out = Buffer.alloc<byte>(count);
+        let src = Span<char>(this.data, start, count);
         let i = 0;
         while (i < count) {
-            out[i] = (byte)this.data[start + i];
+            out[i] = (byte)src.get(i);
             i = i + 1;
         }
         return out;

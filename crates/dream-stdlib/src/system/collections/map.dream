@@ -246,6 +246,19 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // Gets an iterator for the map.
     @iterator
     public fun iterator(): MapIterator<K, V> {
-        return MapIterator<K, V>(this.keys(), this.values());
+        return MapIterator<K, V>(this);
+    }
+
+    // Slot helpers for `MapIterator` (same-module).
+    internal fun slot_occupied(i: int): bool {
+        return this.states[i] == hash_slot_occupied();
+    }
+
+    internal fun slot_key(i: int): K {
+        return this.keys[i];
+    }
+
+    internal fun slot_value(i: int): V {
+        return this.values[i];
     }
 }

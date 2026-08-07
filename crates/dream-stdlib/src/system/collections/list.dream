@@ -58,19 +58,17 @@ public class List<T> : IndexedCollection<T> {
         this.count = this.count + 1;
     }
 
-    // Appends every element of `items`, ensuring capacity once then copying.
+    // Appends every element of `items`, ensuring capacity once then copying via `Span`.
     public fun push_all(items: T[]): void {
-        let n = items.length;
+        let src = Span<T>.of(items);
+        let n = src.length;
         let need = this.count + n;
         while (need > this.items.length) {
             this.grow();
         }
-        let i = 0;
-        while (i < n) {
-            this.items[this.count] = items[i];
-            this.count = this.count + 1;
-            i = i + 1;
-        }
+        let dst = Span<T>(this.items, this.count, n);
+        dst.copy_from(src);
+        this.count = this.count + n;
     }
 
     // Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]`
@@ -114,14 +112,13 @@ public class List<T> : IndexedCollection<T> {
     // True if `value` is present (uses value equality, including string contents).
     public fun contains(value: T): bool {
         let i = 0;
-        let found = false;
         while (i < this.count) {
             if (this.items[i] == value) {
-                found = true;
+                return true;
             }
             i = i + 1;
         }
-        return found;
+        return false;
     }
 
     // Index of the first matching element (by value equality), or `None` if absent.
@@ -187,6 +184,11 @@ public class List<T> : IndexedCollection<T> {
     @iterator
     public fun iterator(): ListIterator<T> {
         return ListIterator<T>(this);
+    }
+
+    // Unchecked element access for `ListIterator` (same-module; index already validated).
+    internal fun at_unchecked(index: int): T {
+        return this.items[index];
     }
 
     // Sorts the list in place with the supplied comparator.

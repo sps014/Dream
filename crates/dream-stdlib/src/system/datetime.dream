@@ -1,7 +1,7 @@
 module system;
 
 // A calendar date and time of day.
-public class DateTime {
+public struct DateTime {
     @js("Dream", "dateNowMillis")
     static extern fun now_millis(): long;
 
@@ -84,17 +84,22 @@ public class DateTime {
 
     // The year.
     public fun year(): int {
-        return DateTime._civil_from_days(this._local_days()).year;
+        return this.decompose().year;
     }
 
     // The month.
     public fun month(): int {
-        return DateTime._civil_from_days(this._local_days()).month;
+        return this.decompose().month;
     }
 
     // The day.
     public fun day(): int {
-        return DateTime._civil_from_days(this._local_days()).day;
+        return this.decompose().day;
+    }
+
+    // Calendar date fields (year/month/day) computed once.
+    public fun decompose(): DateTimeYmd {
+        return DateTime._civil_from_days(this._local_days());
     }
 
     // The hour.
@@ -182,24 +187,52 @@ public class DateTime {
 
     // Formats as ISO-8601.
     public fun to_iso8601(): string {
-        let result = DateTime._pad(this.year(), 4) + "-" + DateTime._pad(this.month(), 2) + "-" + DateTime._pad(this.day(), 2)
-            + "T" + DateTime._pad(this.hour(), 2) + ":" + DateTime._pad(this.minute(), 2) + ":" + DateTime._pad(this.second(), 2)
-            + "." + DateTime._pad(this.millisecond(), 3);
+        let ymd = this.decompose();
+        let sb = StringBuilder(32);
+        sb.append(DateTime._pad(ymd.year, 4));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.month, 2));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.day, 2));
+        sb.append_char('T');
+        sb.append(DateTime._pad(this.hour(), 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.minute(), 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.second(), 2));
+        sb.append_char('.');
+        sb.append(DateTime._pad(this.millisecond(), 3));
         if (this._offset_minutes == 0) {
-            return result + "Z";
+            sb.append_char('Z');
+        } else {
+            sb.append(DateTime._offset_suffix(this._offset_minutes));
         }
-        return result + DateTime._offset_suffix(this._offset_minutes);
+        return sb.build();
     }
 
     // A human-readable formatting.
     @override
     public fun to_string(): string {
-        let result = DateTime._pad(this.year(), 4) + "-" + DateTime._pad(this.month(), 2) + "-" + DateTime._pad(this.day(), 2)
-            + " " + DateTime._pad(this.hour(), 2) + ":" + DateTime._pad(this.minute(), 2) + ":" + DateTime._pad(this.second(), 2);
+        let ymd = this.decompose();
+        let sb = StringBuilder(32);
+        sb.append(DateTime._pad(ymd.year, 4));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.month, 2));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.day, 2));
+        sb.append_char(' ');
+        sb.append(DateTime._pad(this.hour(), 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.minute(), 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.second(), 2));
         if (this._offset_minutes == 0) {
-            return result + " UTC";
+            sb.append(" UTC");
+        } else {
+            sb.append_char(' ');
+            sb.append(DateTime._offset_suffix(this._offset_minutes));
         }
-        return result + " " + DateTime._offset_suffix(this._offset_minutes);
+        return sb.build();
     }
 
     // Parses an ISO-8601 datetime.
@@ -358,10 +391,22 @@ public class DateTime {
 
     static fun _pad(n: int, width: int): string {
         let s = n.to_string();
-        while ((s.length < width) && (n >= 0)) {
-            s = "0" + s;
+        if (s.length >= width) {
+            return s;
         }
-        return s;
+        let out = string.alloc(width);
+        let zeros = width - s.length;
+        let i = 0;
+        while (i < zeros) {
+            string.set(out, i, '0');
+            i = i + 1;
+        }
+        let j = 0;
+        while (j < s.length) {
+            string.set(out, zeros + j, s.char_at(j));
+            j = j + 1;
+        }
+        return out;
     }
 
     static fun _offset_suffix(offset_minutes: int): string {

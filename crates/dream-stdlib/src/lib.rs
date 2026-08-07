@@ -221,6 +221,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
                 include_str!("system/collections/queue.dream"),
             ),
             (
+                "<std>/system/collections/queue_iterator.dream",
+                include_str!("system/collections/queue_iterator.dream"),
+            ),
+            (
                 "<std>/system/collections/stack.dream",
                 include_str!("system/collections/stack.dream"),
             ),
@@ -454,6 +458,10 @@ pub const STD_PACKAGES: &[StdPackage] = &[
             (
                 "<std>/system/net/http_headers.dream",
                 include_str!("system/net/http_headers.dream"),
+            ),
+            (
+                "<std>/system/net/http_headers_iterator.dream",
+                include_str!("system/net/http_headers_iterator.dream"),
             ),
             (
                 "<std>/system/net/url.dream",

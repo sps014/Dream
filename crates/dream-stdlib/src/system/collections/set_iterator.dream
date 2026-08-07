@@ -1,24 +1,26 @@
 module system.collections;
 
-// An iterator for traversing a `Set`.
+// An iterator for traversing a `Set` — walks occupied slots in place (no snapshot).
 public class SetIterator<T> : Iterator<T> {
-    elements: T[];
+    set: Set<T>;
     index: int;
 
-    // Iterates a dense snapshot of set elements from index 0.
-    public constructor(elements: T[]) {
-        this.elements = elements;
+    // Starts at slot 0 of `set`.
+    public constructor(set: Set<T>) {
+        this.set = set;
         this.index = 0;
     }
 
     // Returns the next element, or `None` if exhausted.
     @next
     public fun next(): Option<T> {
-        if (this.index >= this.elements.length) {
-            return Option.None;
+        while (this.index < this.set.capacity()) {
+            let i = this.index;
+            this.index = this.index + 1;
+            if (this.set.slot_occupied(i)) {
+                return Option.Some(this.set.slot_key(i));
+            }
         }
-        let val = this.elements[this.index];
-        this.index = this.index + 1;
-        return Option.Some(val);
+        return Option.None;
     }
 }

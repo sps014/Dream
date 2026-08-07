@@ -1,6 +1,6 @@
 module system;
 
-internal class DateTimeYmd {
+internal struct DateTimeYmd {
     public year: int;
     public month: int;
     public day: int;
@@ -11,4 +11,3 @@ internal class DateTimeYmd {
         this.day = day;
     }
 }
-

@@ -63,6 +63,28 @@ public ref struct Span<T> {
         return Span<T>(this.array, this.offset + start, count);
     }
 
+    // Copies every element of `src` into this span starting at index 0. Traps if `src` is longer
+    // than this span.
+    public fun copy_from(src: Span<T>): void {
+        if (src._length > this._length) {
+            System.panic("Span copy_from overflow");
+        }
+        let i = 0;
+        while (i < src._length) {
+            this.array[this.offset + i] = src.array[src.offset + i];
+            i = i + 1;
+        }
+    }
+
+    // Fills every element of this span with `value`.
+    public fun fill(value: T): void {
+        let i = 0;
+        while (i < this._length) {
+            this.array[this.offset + i] = value;
+            i = i + 1;
+        }
+    }
+
     // Copies every element of this span into a fresh, independently-owned array.
     public fun to_array(): T[] {
         let result = Buffer.alloc<T>(this._length);

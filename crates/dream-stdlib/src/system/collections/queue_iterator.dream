@@ -1,0 +1,24 @@
+module system.collections;
+
+// Cursor produced by `Queue.iterator()`.
+public class QueueIterator<T> : Iterator<T> {
+    queue: Queue<T>;
+    offset: int;
+
+    // Starts at the front of `queue`.
+    public constructor(queue: Queue<T>) {
+        this.queue = queue;
+        this.offset = 0;
+    }
+
+    // Returns the next element, or `None` if exhausted.
+    @next
+    public fun next(): Option<T> {
+        if (this.offset >= this.queue.length) {
+            return Option.None;
+        }
+        let value = this.queue.at_offset(this.offset);
+        this.offset = this.offset + 1;
+        return Option.Some(value);
+    }
+}

@@ -83,16 +83,15 @@ internal class RegexVM {
     }
 
     fun range_hit(ranges: List<char>, c: char, foldcase: bool): bool {
+        let probe = c;
+        if (foldcase) {
+            probe = c.to_lower();
+        }
         let i = 0;
         while (i < ranges.length) {
             let lo = ranges.get(i).unwrap_or(' ');
             let hi = ranges.get(i + 1).unwrap_or(' ');
-            if (foldcase) {
-                let cl = c.to_lower();
-                if ((cl >= lo.to_lower()) && (cl <= hi.to_lower())) {
-                    return true;
-                }
-            } else if ((c >= lo) && (c <= hi)) {
+            if ((probe >= lo) && (probe <= hi)) {
                 return true;
             }
             i = i + 2;

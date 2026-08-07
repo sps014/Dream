@@ -42,7 +42,7 @@ internal class JsonParser {
 
     public fun parse_string(): string {
         this.pos = this.pos + 1; // opening quote
-        let result = "";
+        let sb = StringBuilder();
         let going = true;
         while (going == true) {
             if (this.pos >= this.n) {
@@ -56,28 +56,28 @@ internal class JsonParser {
                     this.pos = this.pos + 1;
                     let e = this.src.char_at(this.pos);
                     if (e == 'n') {
-                        result = result + '\n';
+                        sb.append_char('\n');
                     } else if (e == 't') {
-                        result = result + '\t';
+                        sb.append_char('\t');
                     } else if (e == 'r') {
-                        result = result + '\r';
+                        sb.append_char('\r');
                     } else if (e == '"') {
-                        result = result + '"';
+                        sb.append_char('"');
                     } else if (e == '\\') {
-                        result = result + '\\';
+                        sb.append_char('\\');
                     } else if (e == '/') {
-                        result = result + '/';
+                        sb.append_char('/');
                     } else {
-                        result = result + e;
+                        sb.append_char(e);
                     }
                     this.pos = this.pos + 1;
                 } else {
-                    result = result + c;
+                    sb.append_char(c);
                     this.pos = this.pos + 1;
                 }
             }
         }
-        return result;
+        return sb.build();
     }
 
     public fun parse_number(): JsonValue {

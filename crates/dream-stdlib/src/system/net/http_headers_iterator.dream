@@ -1,0 +1,22 @@
+module system.net;
+
+// Cursor produced by `HttpHeaders.iterator()`.
+public class HttpHeadersIterator : Iterator<KeyValuePair<string, string>> {
+    headers: HttpHeaders;
+    idx: int;
+
+    public constructor(headers: HttpHeaders) {
+        this.headers = headers;
+        this.idx = 0;
+    }
+
+    @next
+    public fun next(): Option<KeyValuePair<string, string>> {
+        if (this.idx >= this.headers.length) {
+            return Option.None;
+        }
+        let i = this.idx;
+        this.idx = this.idx + 1;
+        return Option.Some(KeyValuePair<string, string>(this.headers.key_at(i), this.headers.value_at(i)));
+    }
+}

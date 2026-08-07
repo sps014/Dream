@@ -200,6 +200,15 @@ public class Set<T> : Collection<T> {
     // Gets an iterator for the set.
     @iterator
     public fun iterator(): SetIterator<T> {
-        return SetIterator<T>(this.to_array());
+        return SetIterator<T>(this);
+    }
+
+    // Slot helpers for `SetIterator` (same-module).
+    internal fun slot_occupied(i: int): bool {
+        return this.states[i] == hash_slot_occupied();
+    }
+
+    internal fun slot_key(i: int): T {
+        return this.keys[i];
     }
 }

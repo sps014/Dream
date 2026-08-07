@@ -19,13 +19,28 @@ public class Path {
 
     // Joins every segment in `parts` left-to-right via `join`.
     public static fun of(parts: string[]): string {
-        let result = "";
+        if (parts.length == 0) {
+            return "";
+        }
+        let total = 0;
         let i = 0;
         while (i < parts.length) {
-            result = Path.join(result, parts[i]);
+            total = total + parts[i].length + 1;
             i = i + 1;
         }
-        return result;
+        let sb = StringBuilder(total);
+        i = 0;
+        while (i < parts.length) {
+            if (sb.is_empty()) {
+                sb.append(parts[i]);
+            } else {
+                let joined = Path.join(sb.build(), parts[i]);
+                sb.clear();
+                sb.append(joined);
+            }
+            i = i + 1;
+        }
+        return sb.build();
     }
 
     // Final path component after the last `/` or `\`, or `None` for a trailing separator.
@@ -136,15 +151,16 @@ public class Path {
             }
             i = i + 1;
         }
-        let out = "";
+        let sb = StringBuilder();
         let j = 0;
         while (j < parts.length) {
             if (j > 0) {
-                out = out + sep;
+                sb.append(sep);
             }
-            out = out + parts.get(j).unwrap_or("");
+            sb.append(parts.get(j).unwrap_or(""));
             j = j + 1;
         }
+        let out = sb.build();
         if (absolute) {
             if (path.char_at(0) == '/') {
                 return "/" + out;

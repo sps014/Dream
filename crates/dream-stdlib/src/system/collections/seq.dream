@@ -1,23 +1,49 @@
 module system.collections;
 
-// Eager materializing query wrapper. Chain filter/map/take/skip, then read `.items` or use
-// Collection defaults via the list inside.
+// Query wrapper over a list range. `take`/`skip` adjust bounds without copying; `filter`/`map`
+// materialize. Call `.to_list()` for a dense list of the current view.
 
 public class Seq<T> {
     public items: List<T>;
+    start: int;
+    end: int;
 
-    // Wraps an already-materialized list.
+    // Wraps an already-materialized list (full range).
     public constructor(items: List<T>) {
         this.items = items;
+        this.start = 0;
+        this.end = items.length;
+    }
+
+    static fun from_range(items: List<T>, start: int, end: int): Seq<T> {
+        let s = Seq<T>(items);
+        s.start = start;
+        s.end = end;
+        return s;
+    }
+
+    fun view_len(): int {
+        let n = this.end - this.start;
+        if (n < 0) {
+            return 0;
+        }
+        return n;
     }
 
     // Keeps elements for which `pred` is true.
     public fun filter(pred: fun(T): bool): Seq<T> {
         let result = List<T>();
-        for (let x in this.items) {
-            if (pred(x)) {
-                result.push(x);
+        let i = this.start;
+        while (i < this.end) {
+            switch (this.items.get(i)) {
+                Some(v) => {
+                    if (pred(v)) {
+                        result.push(v);
+                    }
+                },
+                None => { },
             }
+            i = i + 1;
         }
         return Seq<T>(result);
     }
@@ -25,56 +51,72 @@ public class Seq<T> {
     // Maps each element through `f`.
     public fun map<U>(f: fun(T): U): Seq<U> {
         let result = List<U>();
-        for (let x in this.items) {
-            result.push(f(x));
+        let i = this.start;
+        while (i < this.end) {
+            switch (this.items.get(i)) {
+                Some(v) => { result.push(f(v)); },
+                None => { },
+            }
+            i = i + 1;
         }
         return Seq<U>(result);
     }
 
-    // Keeps at most the first `n` elements.
+    // Keeps at most the first `n` elements (view — no copy).
     public fun take(n: int): Seq<T> {
-        let result = List<T>();
-        let i = 0;
-        for (let x in this.items) {
-            if (i >= n) {
-                break;
-            }
-            result.push(x);
-            i = i + 1;
+        let take_n = n;
+        if (take_n < 0) {
+            take_n = 0;
         }
-        return Seq<T>(result);
+        let len = this.view_len();
+        if (take_n > len) {
+            take_n = len;
+        }
+        return Seq<T>.from_range(this.items, this.start, this.start + take_n);
     }
 
-    // Drops the first `n` elements.
+    // Drops the first `n` elements (view — no copy).
     public fun skip(n: int): Seq<T> {
-        let result = List<T>();
-        let i = 0;
-        for (let x in this.items) {
-            if (i >= n) {
-                result.push(x);
-            }
-            i = i + 1;
+        let skip_n = n;
+        if (skip_n < 0) {
+            skip_n = 0;
         }
-        return Seq<T>(result);
+        let new_start = this.start + skip_n;
+        if (new_start > this.end) {
+            new_start = this.end;
+        }
+        return Seq<T>.from_range(this.items, new_start, this.end);
     }
 
     // Removes duplicates while preserving first-seen order.
     public fun distinct(): Seq<T> {
-        return Seq<T>(this.items.distinct());
+        return Seq<T>(this.to_list().distinct());
     }
 
     // Returns a new sequence sorted by `cmp`.
     public fun order_by(cmp: fun(T, T): int): Seq<T> {
-        return Seq<T>(this.items.order_by(cmp));
+        return Seq<T>(this.to_list().order_by(cmp));
     }
 
     // Maps each element to a list and concatenates the results.
     public fun flat_map<U>(f: fun(T): List<U>): Seq<U> {
-        return Seq<U>(this.items.flat_map(f));
+        return Seq<U>(this.to_list().flat_map(f));
     }
 
-    // Materializes the current items as a `List`.
+    // Materializes the current view as a `List`.
     public fun to_list(): List<T> {
-        return this.items;
+        if ((this.start == 0) && (this.end == this.items.length)) {
+            return this.items;
+        }
+        let result = List<T>(this.view_len());
+        let i = this.start;
+        while (i < this.end) {
+            switch (this.items.get(i)) {
+                Some(v) => { result.push(v); },
+                None => { },
+            }
+            i = i + 1;
+        }
+        return result;
     }
 }

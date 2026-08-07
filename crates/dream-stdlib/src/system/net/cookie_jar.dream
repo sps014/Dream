@@ -4,19 +4,22 @@ module system.net;
 public class CookieJar {
     names: List<string>;
     values: List<string>;
+    index: Map<string, int>;
 
     // Creates an empty jar.
     public constructor() {
         this.names = List<string>();
         this.values = List<string>();
+        this.index = Map<string, int>();
     }
 
     // Stores or overwrites cookie `name`.
     public fun set(name: string, value: string): void {
-        let i = this._find(name);
-        if (i >= 0) {
-            this.values.set(i, value);
+        let existing = this.index.get(name);
+        if (existing.is_some()) {
+            this.values.set(existing.unwrap_or(0), value);
         } else {
+            this.index.set(name, this.names.length);
             this.names.push(name);
             this.values.push(value);
         }
@@ -24,17 +27,19 @@ public class CookieJar {
 
     // Value for `name`, or `None` when absent.
     public fun get(name: string): Option<string> {
-        let i = this._find(name);
-        if (i >= 0) {
-            return this.values.get(i);
+        let existing = this.index.get(name);
+        if (existing.is_some()) {
+            return this.values.get(existing.unwrap_or(0));
         }
-        return Option.None;
+        let none: Option<string> = Option.None;
+        return none;
     }
 
     // Removes every cookie.
     public fun clear(): void {
         this.names.clear();
         this.values.clear();
+        this.index.clear();
     }
 
     // Number of stored cookies.
@@ -44,16 +49,18 @@ public class CookieJar {
 
     // Builds a `Cookie` request header value (`name=value; …`).
     public fun to_header(): string {
-        let out = "";
+        let sb = StringBuilder();
         let i = 0;
         while (i < this.names.length) {
             if (i > 0) {
-                out = out + "; ";
+                sb.append("; ");
             }
-            out = out + this.names.get(i).unwrap_or("") + "=" + this.values.get(i).unwrap_or("");
+            sb.append(this.names.get(i).unwrap_or(""));
+            sb.append_char('=');
+            sb.append(this.values.get(i).unwrap_or(""));
             i = i + 1;
         }
-        return out;
+        return sb.build();
     }
 
     // Parses `Set-Cookie` lines from an HTTP response into this jar.
@@ -77,16 +84,5 @@ public class CookieJar {
             }
             i = i + 1;
         }
-    }
-
-    fun _find(name: string): int {
-        let i = 0;
-        while (i < this.names.length) {
-            if (this.names.get(i).unwrap_or("") == name) {
-                return i;
-            }
-            i = i + 1;
-        }
-        return 0 - 1;
     }
 }
