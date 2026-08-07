@@ -103,7 +103,7 @@ impl<'a> Analyzer<'a> {
             ExpressionNode::IsExpression(left, right_type, Some(name)) => {
                 out.push((name, right_type, left));
             }
-            ExpressionNode::Parenthesized(inner) => Self::collect_is_bindings(inner, out),
+            ExpressionNode::Parenthesized(_, inner) => Self::collect_is_bindings(inner, out),
             ExpressionNode::Binary(left, op, right)
                 if op.kind == TokenKind::AmpersandAmpersandToken =>
             {

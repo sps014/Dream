@@ -466,7 +466,7 @@ impl<'a> Analyzer<'a> {
                     "true",
                 )))
             }
-            ExpressionNode::Parenthesized(expr) => {
+            ExpressionNode::Parenthesized(_, expr) => {
                 Ok(self.analyze_expression(expr, parent_function, symbol_table, diagnostics)?)
             }
             ExpressionNode::Try(inner) => Ok(self.analyze_try_expression(

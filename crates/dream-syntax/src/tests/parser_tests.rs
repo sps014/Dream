@@ -512,7 +512,7 @@ fn test_parse_try_propagation_disambiguated_with_parens() {
     let StatementNode::Return(Some(ExpressionNode::Binary(left, _, _))) = &func.body[0] else {
         panic!("expected a return of a binary expression");
     };
-    let ExpressionNode::Parenthesized(inner) = &**left else {
+    let ExpressionNode::Parenthesized(_, inner) = &**left else {
         panic!("expected the left operand to be parenthesized");
     };
     assert!(matches!(**inner, ExpressionNode::Try(_)));
@@ -640,7 +640,7 @@ fn test_parse_lambda_disambiguated_from_cast_and_paren() {
     else {
         panic!("expected a `let` binding of a binary expression");
     };
-    assert!(matches!(**left, ExpressionNode::Parenthesized(_)));
+    assert!(matches!(**left, ExpressionNode::Parenthesized(_, _)));
 }
 
 #[test]

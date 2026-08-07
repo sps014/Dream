@@ -408,7 +408,7 @@ impl<'a> Analyzer<'a> {
                     value,
                 )
             }
-            ExpressionNode::Parenthesized(inner) => {
+            ExpressionNode::Parenthesized(_, inner) => {
                 self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics)
             }
             _ => {

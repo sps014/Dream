@@ -1130,6 +1130,32 @@ async fun main(): void {
 }
 
 #[test]
+fn parameter_inlay_hint_anchors_before_parenthesized_argument() {
+    use dream_lsp::index::{Index, InlayKind};
+    // `print((await f())[0])` must place the hint before `(`, not inside the parens
+    // (regression: `(value:await …)[0]`).
+    let src = r#"
+async fun fetch(): int[] { return [1]; }
+fun take(value: string): void { }
+async fun main(): void {
+    take((await fetch())[0] + ",");
+}
+"#;
+    let index = Index::build(None, src);
+    let hint = index
+        .inlay_hints
+        .iter()
+        .find(|h| h.kind == InlayKind::Parameter && h.label == "value:")
+        .expect("expected a `value:` parameter hint");
+    let after = &src[hint.offset..];
+    assert!(
+        after.starts_with('('),
+        "hint should be anchored at `(`, but source after offset is {:?}",
+        &after[..after.len().min(16)]
+    );
+}
+
+#[test]
 fn generic_type_inlay_hint_uses_angle_brackets() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "

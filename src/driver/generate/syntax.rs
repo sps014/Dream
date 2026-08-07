@@ -174,7 +174,7 @@ impl SyntaxTreeView {
             }
             ExpressionNode::Unary(_, x)
             | ExpressionNode::IncDec { target: x, .. }
-            | ExpressionNode::Parenthesized(x)
+            | ExpressionNode::Parenthesized(_, x)
             | ExpressionNode::Await(_, x)
             | ExpressionNode::Try(x)
             | ExpressionNode::Cast(_, x)
@@ -365,7 +365,7 @@ fn expr_source_approx(expr: &ExpressionNode<'_>) -> String {
                 expr_source_approx(r)
             )
         }
-        ExpressionNode::Parenthesized(inner) => format!("({})", expr_source_approx(inner)),
+        ExpressionNode::Parenthesized(_, inner) => format!("({})", expr_source_approx(inner)),
         _ => "/*expr*/".into(),
     }
 }

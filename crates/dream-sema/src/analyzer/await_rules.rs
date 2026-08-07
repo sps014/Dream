@@ -145,7 +145,7 @@ impl<'a> Analyzer<'a> {
             }
             ExpressionNode::Unary(_, e)
             | ExpressionNode::IncDec { target: e, .. }
-            | ExpressionNode::Parenthesized(e)
+            | ExpressionNode::Parenthesized(_, e)
             | ExpressionNode::Try(e)
             | ExpressionNode::Cast(_, e)
             | ExpressionNode::IsExpression(e, _, _) => {

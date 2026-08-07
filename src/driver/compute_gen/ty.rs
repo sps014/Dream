@@ -77,7 +77,7 @@ pub(super) fn is_bool_producing_binop(kind: TokenKind) -> bool {
 pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
     match expr {
         ExpressionNode::Cast(ty, _) | ExpressionNode::Literal(ty) => dream_ty_to_wgsl(ty),
-        ExpressionNode::Parenthesized(inner)
+        ExpressionNode::Parenthesized(_, inner)
         | ExpressionNode::NamedArg(_, inner)
         | ExpressionNode::RefArgument(inner)
         | ExpressionNode::IncDec { target: inner, .. } => infer_wgsl_ty(inner, ctx),

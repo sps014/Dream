@@ -214,7 +214,7 @@ impl Builder {
                         })
                     })
             }
-            ExpressionNode::Parenthesized(inner) => self.infer_type(inner, scope),
+            ExpressionNode::Parenthesized(_, inner) => self.infer_type(inner, scope),
             ExpressionNode::Await(_, inner) => {
                 // `await` unwraps `Future<T>` → `T`. Async call inference wraps declared returns
                 // as `Future<T>`, so bare `f()` and `await f()` stay distinct for member completion.
@@ -746,7 +746,7 @@ impl Builder {
             }
             ExpressionNode::Unary(_, e)
             | ExpressionNode::IncDec { target: e, .. }
-            | ExpressionNode::Parenthesized(e) => self.walk_expr(e, scope),
+            | ExpressionNode::Parenthesized(_, e) => self.walk_expr(e, scope),
             ExpressionNode::FunctionCall(name, _, args) => {
                 self.add_ref(name, SymKind::Function, scope);
                 // A name resolves to a free function if one exists; otherwise `Name(...)` is a

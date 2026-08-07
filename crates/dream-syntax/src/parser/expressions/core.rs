@@ -306,7 +306,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         //eat the open parenthesis
-        self.match_token(TokenKind::OpenParenthesisToken);
+        let open = self.match_token(TokenKind::OpenParenthesisToken);
         let first = self.parse_expression(0)?;
         if self.current_token().kind == TokenKind::CommaToken {
             let mut elems = vec![first];
@@ -332,7 +332,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         // Allow postfix access on a parenthesized expression, e.g. `(7).hash_code()`,
         // `("x" + y).len()`, or `(arr)[0]`. This is required for method calls on literals
         // whose bare form would mis-lex (`7.hash_code()` reads `7.` as a float).
-        let parenthesized = ExpressionNode::Parenthesized(self.arena.alloc(first));
+        let parenthesized = ExpressionNode::Parenthesized(open, self.arena.alloc(first));
         self.parse_postfix_chain(parenthesized)
     }
 

@@ -34,7 +34,7 @@ pub enum ExpressionNode<'a> {
         op: SyntaxToken,
     },
     Identifier(SyntaxToken),
-    Parenthesized(&'a ExpressionNode<'a>),
+    Parenthesized(SyntaxToken, &'a ExpressionNode<'a>),
     FunctionCall(SyntaxToken, Option<Vec<Type>>, Vec<ExpressionNode<'a>>),
     /// `expr(args)` — a call whose callee is an arbitrary expression (not only a bare identifier).
     /// Produced by the postfix `(…)` chain after any primary (e.g. `make()()`, `(f)(x)`).
@@ -184,8 +184,8 @@ impl<'a> ExpressionNode<'a> {
                 Some(op.position).or_else(|| target.position())
             }
             ExpressionNode::Call(callee, _, _) => callee.position(),
-            ExpressionNode::Parenthesized(inner)
-            | ExpressionNode::Try(inner)
+            ExpressionNode::Parenthesized(open, _) => Some(open.position),
+            ExpressionNode::Try(inner)
             | ExpressionNode::IsExpression(inner, _, _) => inner.position(),
             ExpressionNode::Await(await_tok, inner) => {
                 Some(await_tok.position).or_else(|| inner.position())
@@ -231,8 +231,9 @@ impl<'a> ExpressionNode<'a> {
                 ..
             } => target.start_position(),
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.start_position(),
-            ExpressionNode::Parenthesized(inner)
-            | ExpressionNode::Try(inner)
+            // Prefix `(` — start at the open paren, not the inner expr (`print((await f())[0])`).
+            ExpressionNode::Parenthesized(open, _) => Some(open.position),
+            ExpressionNode::Try(inner)
             | ExpressionNode::IsExpression(inner, _, _) => inner.start_position(),
             // Prefix `await` — start at the keyword, not the operand (`print(await f())` hints).
             ExpressionNode::Await(await_tok, _) => Some(await_tok.position),

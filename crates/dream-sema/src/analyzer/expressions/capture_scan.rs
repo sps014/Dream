@@ -179,7 +179,7 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
         }
         ExpressionNode::Unary(_, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::IncDec { target, .. } => walk_expr_for_ref_targets(target, out),
-        ExpressionNode::Parenthesized(e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::Parenthesized(_, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::FunctionCall(_, _, args) => {
             for a in args {
                 walk_expr_for_ref_targets(a, out);
@@ -357,7 +357,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
         }
         ExpressionNode::Unary(_, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::IncDec { target, .. } => walk_expr_for_lambdas(target, out),
-        ExpressionNode::Parenthesized(e) => walk_expr_for_lambdas(e, out),
+        ExpressionNode::Parenthesized(_, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::FunctionCall(_, _, args) => {
             for a in args {
                 walk_expr_for_lambdas(a, out);
@@ -628,7 +628,7 @@ fn collect_names_expr(
         }
         ExpressionNode::Unary(_, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::IncDec { target, .. } => collect_names_expr(target, scopes, referenced),
-        ExpressionNode::Parenthesized(e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::Parenthesized(_, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::FunctionCall(name, _, args) => {
             if !is_bound(scopes, &name.text) {
                 referenced.insert(name.text.clone());

@@ -25,7 +25,7 @@ impl<'a> Analyzer<'a> {
     pub(super) fn is_async_lambda_expr(expr: &ExpressionNode<'_>) -> bool {
         match expr {
             ExpressionNode::Lambda(l) => l.is_async,
-            ExpressionNode::Parenthesized(inner) => Self::is_async_lambda_expr(inner),
+            ExpressionNode::Parenthesized(_, inner) => Self::is_async_lambda_expr(inner),
             _ => false,
         }
     }

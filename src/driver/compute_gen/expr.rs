@@ -244,7 +244,7 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
         // forms in kernels are expanded in `emit_stmt` for declarations; nested uses fall back
         // to the place (side effect must be written as `i = i + 1` in kernels).
         ExpressionNode::IncDec { target, .. } => emit_expr(target, ctx),
-        ExpressionNode::Parenthesized(e) => format!("({})", emit_expr(e, ctx)),
+        ExpressionNode::Parenthesized(_, e) => format!("({})", emit_expr(e, ctx)),
         ExpressionNode::IndexAccess(arr, idx) => {
             let arr_s = emit_expr(arr, ctx);
             let idx_s = coerce_expr_to_wgsl_ty(idx, "i32", ctx);

@@ -131,9 +131,10 @@ fn rewrite_expr<'a>(
             target: arena.alloc(rewrite_expr(arena, target, by_site, diagnostics, changed)?),
             op: op.clone(),
         },
-        ExpressionNode::Parenthesized(x) => ExpressionNode::Parenthesized(arena.alloc(
-            rewrite_expr(arena, x, by_site, diagnostics, changed)?,
-        )),
+        ExpressionNode::Parenthesized(open, x) => ExpressionNode::Parenthesized(
+            open.clone(),
+            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
+        ),
         ExpressionNode::Await(await_tok, x) => {
             ExpressionNode::Await(
                 await_tok.clone(),
