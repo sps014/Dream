@@ -45,7 +45,7 @@ The repository is structured as a Rust-centric multi-component monorepo:
         *   `*.dream`: Standard collections (`list.dream`, `map.dream`) and primitive type extensions (`string.dream`, `int.dream`, `char.dream`, etc.).
 *   **`tooling/` (Developer Tooling):**
     *   `dream-lsp/`: A native binary implementing the Language Server Protocol (LSP).
-    *   `vscode/`: A TypeScript extension client for Visual Studio Code that bundles the `dream-lsp` server.
+    *   `vscode/`: A TypeScript extension client for Visual Studio Code; resolves `dream` / `dream-lsp` / `dreamer` from `DREAM_HOME` / `DREAMER_HOME` (or PATH), and does not ship those binaries in the `.vsix`.
 *   **`tests/` (Testing Suite):**
     *   `e2e_tests.rs`: Tests compilations, builds WASM, and runs it with wasmtime to assert outputs against `.expected` or expects failures via `.expected_error` for cases in `tests/cases/`.
 

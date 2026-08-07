@@ -171,7 +171,7 @@ npm run compile
 npx @vscode/vsce package   # produce .vsix
 ```
 
-For local development, point the extension at your Cargo build output instead of bundling binaries:
+For local development, point the extension at your Cargo build output (the extension does not ship binaries):
 
 ```bash
 source ./use-toolchain.sh          # builds release dream / dream-lsp / dreamer, sets DREAM_* + PATH

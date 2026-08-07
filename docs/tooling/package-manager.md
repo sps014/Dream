@@ -31,9 +31,9 @@ source ./use-toolchain.sh          # release (default)
 # source ./use-toolchain.sh --debug
 ```
 
-The VS Code extension mirrors these via settings `dream.home` and `dreamer.home` (preferred over
-bundling binaries into the `.vsix` while developing). Launch the editor from a shell that has
-sourced the script (or set the settings) so it sees the same paths.
+The VS Code extension mirrors these via settings `dream.home` and `dreamer.home`. The `.vsix`
+does not ship compiler binaries — launch the editor from a shell that has sourced
+`./use-toolchain.sh`, or set those settings explicitly.
 
 ## The manifest: `dream.toml`
 

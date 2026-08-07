@@ -67,12 +67,12 @@
         "dream.home": {
           "type": "string",
           "default": "",
-          "description": "Directory containing the `dream` and `dream-lsp` binaries (development). Overrides the DREAM_HOME environment variable when set. Prefer this over bundling binaries into the extension."
+          "description": "Directory containing the `dream` and `dream-lsp` binaries. Overrides DREAM_HOME when set. Required for Run/Debug/LSP unless those binaries are on PATH (e.g. after `source ./use-toolchain.sh`)."
         },
         "dreamer.home": {
           "type": "string",
           "default": "",
-          "description": "Directory containing the `dreamer` package-manager binary (development). Overrides the DREAMER_HOME environment variable when set."
+          "description": "Directory containing the `dreamer` package-manager binary. Overrides DREAMER_HOME when set."
         }
       }
     },
