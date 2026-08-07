@@ -71,7 +71,7 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
     .unwrap();
 
     let project_dir = tmp.path().join("myapp");
-    commands::init::run(&project_dir, Some("myapp".to_string())).unwrap();
+    commands::init::run(&project_dir, Some("myapp".to_string()), None).unwrap();
 
     {
         let mut workspace = dreamer::workspace::Workspace::discover(&project_dir).unwrap();
@@ -166,7 +166,7 @@ fn build_compiles_a_project_using_an_installed_dependency() {
     );
 
     let project_dir = tmp.path().join("myapp");
-    commands::init::run(&project_dir, Some("myapp".to_string())).unwrap();
+    commands::init::run(&project_dir, Some("myapp".to_string()), None).unwrap();
     {
         let mut workspace = dreamer::workspace::Workspace::discover(&project_dir).unwrap();
         workspace.manifest.registries.insert(
@@ -196,4 +196,45 @@ fn build_compiles_a_project_using_an_installed_dependency() {
 
     commands::build::run(&project_dir, false).unwrap();
     assert!(project_dir.join("src").join("main.wat").is_file());
+}
+
+#[test]
+fn init_runtime_scaffolds_web_and_node_hosts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project_dir = tmp.path().join("webapp");
+    commands::init::run(
+        &project_dir,
+        Some("webapp".to_string()),
+        Some("web,node".to_string()),
+    )
+    .unwrap();
+
+    let manifest = Manifest::load(&project_dir.join("dream.toml")).unwrap();
+    assert_eq!(manifest.package.targets, vec!["web", "node"]);
+    assert!(project_dir.join("index.html").is_file());
+    assert!(project_dir.join("run.mjs").is_file());
+
+    let gitignore = std::fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+    assert!(gitignore.contains("dream_packages/"));
+    assert!(gitignore.contains("*.runtime.js"));
+    assert!(gitignore.contains("*.wasm"));
+
+    let html = std::fs::read_to_string(project_dir.join("index.html")).unwrap();
+    assert!(html.contains("main.web.runtime.js"));
+    let mjs = std::fs::read_to_string(project_dir.join("run.mjs")).unwrap();
+    assert!(mjs.contains("main.node.runtime.js"));
+}
+
+#[test]
+fn init_runtime_web_only_skips_run_mjs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project_dir = tmp.path().join("browser-only");
+    commands::init::run(
+        &project_dir,
+        Some("browser_only".to_string()),
+        Some("web".to_string()),
+    )
+    .unwrap();
+    assert!(project_dir.join("index.html").is_file());
+    assert!(!project_dir.join("run.mjs").exists());
 }

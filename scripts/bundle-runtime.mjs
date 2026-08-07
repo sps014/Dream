@@ -6,10 +6,7 @@
  *   node scripts/bundle-runtime.mjs           # write runtime/dream.js
  *   node scripts/bundle-runtime.mjs --check   # exit 1 if dream.js is stale
  *
- * Also used by the compiler to assemble a selective *.runtime.js:
- *   import { bundleRuntime } from './bundle-runtime.mjs';
- *   bundleRuntime({ entry: '...', hosts: ['js','fs'], outPath: '...' })
- */
+ * Also used by the compiler to assemble selective *.(web|node).runtime.js hosts.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

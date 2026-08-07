@@ -58,8 +58,8 @@
           ],
           "enumDescriptions": [
             "Run with the native wasmtime host (dream run)",
-            "Emit a browser-targeted *.runtime.js (--runtime --web)",
-            "Emit a Node ≥ 18 *.runtime.js (--runtime --node)"
+            "Emit a browser-targeted *.web.runtime.js (--runtime --web)",
+            "Emit a Node ≥ 18 *.node.runtime.js (--runtime --node)"
           ],
           "default": "native",
           "description": "Execution/runtime target for Run and compile commands."

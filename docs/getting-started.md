@@ -53,12 +53,12 @@ That writes `.wat`, `.wasm`, and `.abi.json` next to your source.
 Use the shared host in [`runtime/dream.js`](https://github.com/sps014/Dream/blob/main/runtime/dream.js), or emit a smaller per-program host with `--runtime`:
 
 ```bash
-cargo run -- --runtime --web hello.dream    # hello.runtime.js for the browser
-cargo run -- --runtime --node hello.dream   # hello.runtime.js for Node ≥ 18
+cargo run -- --runtime --web hello.dream    # hello.web.runtime.js for the browser
+cargo run -- --runtime --node hello.dream   # hello.node.runtime.js for Node ≥ 18
 ```
 
 ```javascript
-import { run } from "./hello.runtime.js";  // or "./runtime/dream.js"
+import { run } from "./hello.web.runtime.js";  // or "./runtime/dream.js"
 await run("hello.wasm");
 ```
 

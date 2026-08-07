@@ -9,6 +9,121 @@ use std::path::{Path, PathBuf};
 
 pub const MANIFEST_FILE_NAME: &str = "dream.toml";
 
+/// Hosts a Dream project may declare in `[package].targets`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RunTarget {
+    Native,
+    Web,
+    Node,
+}
+
+impl RunTarget {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RunTarget::Native => "native",
+            RunTarget::Web => "web",
+            RunTarget::Node => "node",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        match s {
+            "native" => Ok(RunTarget::Native),
+            "web" => Ok(RunTarget::Web),
+            "node" => Ok(RunTarget::Node),
+            other => bail!(
+                "unknown target '{}': expected one of native, web, node",
+                other
+            ),
+        }
+    }
+}
+
+impl std::fmt::Display for RunTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Parse a comma-separated target list (`"native,web"`), validating and deduplicating while
+/// preserving first-seen order.
+pub fn parse_target_list(spec: &str) -> Result<Vec<RunTarget>> {
+    let mut out = Vec::new();
+    for part in spec.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let t = RunTarget::parse(part)?;
+        if !out.contains(&t) {
+            out.push(t);
+        }
+    }
+    if out.is_empty() {
+        bail!("target list must include at least one of native, web, node");
+    }
+    Ok(out)
+}
+
+/// Resolve which host `dreamer run` should execute.
+///
+/// - Empty/omitted `targets` → `native` (or the explicit `--target` escape hatch).
+/// - Exactly one listed target → that host (explicit must match if provided).
+/// - Multiple listed targets → `--target` is required and must be one of them.
+pub fn resolve_run_target(targets: &[String], explicit: Option<&str>) -> Result<RunTarget> {
+    let listed: Vec<RunTarget> = targets
+        .iter()
+        .map(|s| RunTarget::parse(s))
+        .collect::<Result<Vec<_>>>()?;
+
+    if let Some(sel) = explicit {
+        let chosen = RunTarget::parse(sel)?;
+        if listed.is_empty() {
+            return Ok(chosen);
+        }
+        if listed.len() == 1 {
+            if listed[0] != chosen {
+                bail!(
+                    "this project targets only '{}'; cannot run with --target {}",
+                    listed[0],
+                    chosen
+                );
+            }
+            return Ok(chosen);
+        }
+        if !listed.contains(&chosen) {
+            bail!(
+                "--target {} is not in package.targets ({})",
+                chosen,
+                listed
+                    .iter()
+                    .map(|t| t.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        return Ok(chosen);
+    }
+
+    match listed.len() {
+        0 => Ok(RunTarget::Native),
+        1 => Ok(listed[0]),
+        _ => bail!(
+            "package.targets lists multiple hosts ({}); pass --target <{}>",
+            listed
+                .iter()
+                .map(|t| t.as_str())
+                .collect::<Vec<_>>()
+                .join(", "),
+            listed
+                .iter()
+                .map(|t| t.as_str())
+                .collect::<Vec<_>>()
+                .join("|")
+        ),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
     pub package: PackageMeta,
@@ -41,6 +156,10 @@ pub struct PackageMeta {
     pub entry: String,
     #[serde(default)]
     pub license: Option<String>,
+    /// Optional host list (`native`, `web`, `node`). Empty means no preference — `dreamer run`
+    /// defaults to native wasmtime execution.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<String>,
 }
 
 /// A dependency requirement: either a bare semver requirement string (`"^1.2"`) or a detailed
@@ -179,6 +298,7 @@ impl Manifest {
                 description: None,
                 entry,
                 license: None,
+                targets: Vec::new(),
             },
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
@@ -204,6 +324,17 @@ impl Manifest {
                 self.package.name, self.package.version
             )
         })?;
+        let mut seen = Vec::new();
+        for t in &self.package.targets {
+            let parsed = RunTarget::parse(t)?;
+            if seen.contains(&parsed) {
+                bail!(
+                    "package.targets lists '{}' more than once",
+                    parsed.as_str()
+                );
+            }
+            seen.push(parsed);
+        }
         Ok(())
     }
 
@@ -313,6 +444,61 @@ mod tests {
             "src/main.dream".to_string(),
         );
         assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_package_targets() {
+        let mut manifest = Manifest::new(
+            "myapp".to_string(),
+            "0.1.0".to_string(),
+            "src/main.dream".to_string(),
+        );
+        manifest.package.targets = vec!["browser".to_string()];
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn round_trips_package_targets() {
+        let mut manifest = Manifest::new(
+            "myapp".to_string(),
+            "0.1.0".to_string(),
+            "src/main.dream".to_string(),
+        );
+        manifest.package.targets = vec!["native".into(), "web".into()];
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(MANIFEST_FILE_NAME);
+        manifest.save(&path).unwrap();
+        let loaded = Manifest::load(&path).unwrap();
+        assert_eq!(loaded.package.targets, vec!["native", "web"]);
+    }
+
+    #[test]
+    fn resolve_run_target_empty_defaults_to_native() {
+        assert_eq!(resolve_run_target(&[], None).unwrap(), RunTarget::Native);
+        assert_eq!(
+            resolve_run_target(&[], Some("web")).unwrap(),
+            RunTarget::Web
+        );
+    }
+
+    #[test]
+    fn resolve_run_target_single_auto_selects() {
+        assert_eq!(
+            resolve_run_target(&["node".into()], None).unwrap(),
+            RunTarget::Node
+        );
+        assert!(resolve_run_target(&["node".into()], Some("web")).is_err());
+    }
+
+    #[test]
+    fn resolve_run_target_multi_requires_explicit() {
+        let targets = vec!["native".into(), "web".into()];
+        assert!(resolve_run_target(&targets, None).is_err());
+        assert_eq!(
+            resolve_run_target(&targets, Some("web")).unwrap(),
+            RunTarget::Web
+        );
+        assert!(resolve_run_target(&targets, Some("node")).is_err());
     }
 
     #[test]

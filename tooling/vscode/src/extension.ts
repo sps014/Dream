@@ -192,7 +192,7 @@ function runProgramInTerminal(
         runTerminal.sendText(`${dreamCmd} ${flags}${quotePath(filePath)}`);
         const targetLabel = settings.runtimeTarget === 'web' ? 'browser' : 'Node';
         vscode.window.showInformationMessage(
-            `Dream: compiled with ${targetLabel} runtime.js (use the generated *.runtime.js host).`
+            `Dream: compiled with ${targetLabel} runtime (use the generated *.${settings.runtimeTarget}.runtime.js host).`
         );
     }
 }
@@ -523,13 +523,13 @@ async function pickRuntimeTarget(): Promise<void> {
             {
                 label: 'Web',
                 description: current === 'web' ? '(current)' : undefined,
-                detail: 'Emit browser *.runtime.js (--runtime --web)',
+                detail: 'Emit browser *.web.runtime.js (--runtime --web)',
                 value: 'web' as RuntimeTarget
             },
             {
                 label: 'Node',
                 description: current === 'node' ? '(current)' : undefined,
-                detail: 'Emit Node ≥ 18 *.runtime.js (--runtime --node)',
+                detail: 'Emit Node ≥ 18 *.node.runtime.js (--runtime --node)',
                 value: 'node' as RuntimeTarget
             }
         ],

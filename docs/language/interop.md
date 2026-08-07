@@ -53,17 +53,18 @@ import { run } from "./runtime/dream.js";
 await run("hello.wasm");   // loads hello.abi.json, binds externs, calls main
 ```
 
-Optionally emit a tree-shaken sibling `*.runtime.js` (only the host chunks that program needs) with
-`--runtime` plus a host flag. Without these flags, compile does **not** write a `.runtime.js` — use
-the full shared host instead.
+Optionally emit tree-shaken sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host chunks
+that program needs) with `--runtime` plus one or both host flags. Without these flags, compile does
+**not** write a selective runtime — use the full shared host instead.
 
 ```bash
-dream --runtime --web hello.dream    # browser (fetch, isNode=false)
-dream --runtime --node hello.dream   # Node ≥ 18 (fs/crypto preloads)
+dream --runtime --web hello.dream           # hello.web.runtime.js (fetch, isNode=false)
+dream --runtime --node hello.dream          # hello.node.runtime.js (fs/crypto preloads)
+dream --runtime --web --node hello.dream    # both siblings in one compile
 ```
 
 ```javascript
-import { run } from "./hello.runtime.js";
+import { run } from "./hello.web.runtime.js";
 await run("hello.wasm");
 ```
 

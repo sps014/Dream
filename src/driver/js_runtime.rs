@@ -1,6 +1,7 @@
-//! Selective JS runtime emission: assemble a tree-shaken `*.runtime.js` next to each `.wasm`
-//! from the modular sources under `runtime/src/`, including only the host chunks required by
-//! live WASM imports. Opt-in via CLI `--runtime --web` / `--runtime --node`.
+//! Selective JS runtime emission: assemble a tree-shaken `<stem>.web.runtime.js` /
+//! `<stem>.node.runtime.js` next to each `.wasm` from the modular sources under `runtime/src/`,
+//! including only the host chunks required by live WASM imports. Opt-in via CLI
+//! `--runtime --web` / `--runtime --node` (both hosts may be requested in one compile).
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -10,8 +11,8 @@ use tracing::info;
 
 use crate::driver::abi::LiveImport;
 
-/// Target host for a selective `*.runtime.js` (CLI `--web` / `--node`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Target host for a selective runtime (CLI `--web` / `--node`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsRuntimeTarget {
     /// Browser: `isNode = false`, no `node:*` preloads; `fetch` for bytes.
     Web,
@@ -25,6 +26,11 @@ impl JsRuntimeTarget {
             JsRuntimeTarget::Web => "web",
             JsRuntimeTarget::Node => "node",
         }
+    }
+
+    /// Sibling filename extension for this host (`web.runtime.js` / `node.runtime.js`).
+    pub fn runtime_extension(self) -> String {
+        format!("{}.runtime.js", self.as_str())
     }
 }
 
@@ -376,16 +382,18 @@ pub(crate) fn assemble_selective_runtime(
     Ok(out)
 }
 
-/// Writes `<wat_stem>.runtime.js` next to the compiled `.wat` / `.wasm`.
-pub(crate) fn emit_selective_runtime(
+/// Writes `<wat_stem>.{web,node}.runtime.js` next to the compiled `.wat` / `.wasm` for each target.
+pub(crate) fn emit_selective_runtimes(
     wat_path: &str,
     live_imports: &[LiveImport],
-    target: JsRuntimeTarget,
+    targets: &[JsRuntimeTarget],
 ) -> Result<(), Error> {
-    let path = Path::new(wat_path).with_extension("runtime.js");
-    let text = assemble_selective_runtime(live_imports, target)?;
-    fs::write(&path, text)?;
-    info!("created file: {}", path.display());
+    for &target in targets {
+        let path = Path::new(wat_path).with_extension(target.runtime_extension());
+        let text = assemble_selective_runtime(live_imports, target)?;
+        fs::write(&path, text)?;
+        info!("created file: {}", path.display());
+    }
     Ok(())
 }
 

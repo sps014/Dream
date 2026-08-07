@@ -23,6 +23,9 @@ enum Cmd {
         /// Directory to create the project in (created if missing). Defaults to the current directory.
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// Comma-separated hosts to declare in dream.toml and scaffold for (`native`, `web`, `node`).
+        #[arg(long, value_name = "TARGETS")]
+        runtime: Option<String>,
     },
     /// Add a dependency to dream.toml, then resolve and install it.
     Add {
@@ -59,10 +62,13 @@ enum Cmd {
         #[arg(long)]
         release: bool,
     },
-    /// Install dependencies, then compile and execute the project's entry point.
+    /// Install dependencies, then run the project on the resolved host from dream.toml.
     Run {
-        /// Extra arguments forwarded to the compiled program.
-        #[arg(trailing_var_arg = true)]
+        /// Host to run when package.targets lists more than one (`native`, `web`, or `node`).
+        #[arg(long, value_name = "HOST")]
+        target: Option<String>,
+        /// Extra arguments forwarded to the native program or `node run.mjs`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
     /// Package the current project and publish it to a registry.
@@ -88,7 +94,18 @@ fn main() -> ExitCode {
     };
 
     let result = match cli.command {
-        Cmd::Init { name, dir } => commands::init::run(&dir.unwrap_or(cwd), name),
+        Cmd::Init {
+            name,
+            dir,
+            runtime,
+        } => {
+            let dest = dir.unwrap_or(cwd);
+            if let Err(e) = std::fs::create_dir_all(&dest) {
+                eprintln!("error: could not create {}: {}", dest.display(), e);
+                return ExitCode::FAILURE;
+            }
+            commands::init::run(&dest, name, runtime)
+        }
         Cmd::Add {
             name,
             version,
@@ -103,7 +120,7 @@ fn main() -> ExitCode {
         Cmd::Install => commands::install::run(&cwd),
         Cmd::Update { name } => commands::update::run(&cwd, name),
         Cmd::Build { release } => commands::build::run(&cwd, release),
-        Cmd::Run { args } => commands::run::run(&cwd, &args),
+        Cmd::Run { target, args } => commands::run::run(&cwd, target, &args),
         Cmd::Publish { registry } => commands::publish::run(&cwd, registry),
         Cmd::Search { query } => commands::search::run(&cwd, &query),
         Cmd::Tree => commands::tree::run(&cwd),

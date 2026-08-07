@@ -6,4 +6,5 @@ pub mod lockfile;
 pub mod manifest;
 pub mod registry;
 pub mod resolver;
+pub mod serve;
 pub mod workspace;

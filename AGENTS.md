@@ -142,8 +142,8 @@ cargo run -- path/to/file.dream            # compile to .wat / .wasm / .abi.json
 cargo run -- -v run path/to/file.dream     # verbose
 
 # Opt-in tree-shaken JS host next to the .wasm (browser or Node)
-cargo run -- --runtime --web path/to/file.dream    # *.runtime.js for the browser
-cargo run -- --runtime --node path/to/file.dream   # *.runtime.js for Node ≥ 18
+cargo run -- --runtime --web path/to/file.dream    # *.web.runtime.js for the browser
+cargo run -- --runtime --node path/to/file.dream   # *.node.runtime.js for Node ≥ 18
 
 # Full shared JS runtime (edit runtime/src/, then regenerate)
 node scripts/bundle-runtime.mjs            # writes runtime/dream.js

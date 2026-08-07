@@ -323,7 +323,7 @@ fn run_all_e2e_cases_release() {
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
 /// independently-seeded `HashMap`s within this process) must yield byte-identical `.wat` and
-/// (with `--runtime`) `.runtime.js`. This guards the `IndexMap` conversion of the emission-driving
+/// (with `--runtime`) `*.web.runtime.js`. This guards the `IndexMap` conversion of the emission-driving
 /// tables against regressions that would reintroduce `HashMap`-iteration nondeterminism. Uses
 /// release mode so the check covers the production emit path (`strip_dead_functions`).
 #[test]
@@ -353,11 +353,11 @@ fn codegen_is_deterministic() {
             let out_str = out.to_str().unwrap().to_string();
             Compiler::new(Target::Wasm)
                 .with_release(true)
-                .with_runtime(Some(dream::driver::js_runtime::JsRuntimeTarget::Web))
+                .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
                 .compile(&src_str, &out_str)
                 .unwrap_or_else(|_| panic!("Compilation failed for {}", name));
             let wat = fs::read_to_string(&out).unwrap();
-            let rt_path = out.with_extension("runtime.js");
+            let rt_path = out.with_extension("web.runtime.js");
             let rt = fs::read_to_string(&rt_path).unwrap_or_else(|e| {
                 panic!("missing selective runtime for {}: {}", name, e)
             });
@@ -413,12 +413,12 @@ fn selective_runtime_omits_unused_host_chunks() {
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
     Compiler::new(Target::Wasm)
-        .with_runtime(Some(dream::driver::js_runtime::JsRuntimeTarget::Web))
+        .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
         .compile(&src_str, &out_str)
         .expect("arithmetic compile");
-    let rt = fs::read_to_string(out.with_extension("runtime.js")).expect("runtime.js");
+    let rt = fs::read_to_string(out.with_extension("web.runtime.js")).expect("web.runtime.js");
     let _ = fs::remove_file(&out);
-    let _ = fs::remove_file(out.with_extension("runtime.js"));
+    let _ = fs::remove_file(out.with_extension("web.runtime.js"));
     let _ = fs::remove_file(out.with_extension("wasm"));
     let _ = fs::remove_file(out.with_extension("abi.json"));
     assert!(!rt.contains("makeGpuHost"), "gpu chunk should be absent");

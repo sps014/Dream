@@ -40,9 +40,9 @@ pub struct Compiler {
     /// When `true`, skip the source-generator pass (`@json`, …). Used when compiling
     /// the generator harness itself so nested compiles cannot recurse into generator execution.
     skip_generators: bool,
-    /// When set (CLI `--runtime --web` / `--runtime --node`), emit a tree-shaken sibling
-    /// `*.runtime.js` for that host.
-    runtime: Option<JsRuntimeTarget>,
+    /// When non-empty (CLI `--runtime --web` / `--runtime --node`), emit a tree-shaken sibling
+    /// `*.{web,node}.runtime.js` for each listed host (both may be set in one compile).
+    runtimes: Vec<JsRuntimeTarget>,
     /// When `true` (default), write sibling `.abi.json` for JS/`dream.js` interop. Native
     /// `run` / `debug-adapter` set this to `false` — wasmtime does not read the ABI.
     emit_abi: bool,
@@ -56,7 +56,7 @@ impl Compiler {
             debug_info: false,
             optimize: None,
             skip_generators: false,
-            runtime: None,
+            runtimes: Vec::new(),
             emit_abi: true,
         }
     }
@@ -95,10 +95,26 @@ impl Compiler {
         self
     }
 
-    /// Builder: emit a selective `*.runtime.js` for the given JS host (`--runtime --web` /
-    /// `--runtime --node`). `None` skips runtime emission (default).
-    pub fn with_runtime(mut self, target: Option<JsRuntimeTarget>) -> Self {
-        self.runtime = target;
+    /// Builder: emit selective `*.{web,node}.runtime.js` hosts. Empty skips emission (default).
+    /// Duplicates are removed while preserving first-seen order (`web` before `node` if both).
+    pub fn with_runtimes(mut self, targets: Vec<JsRuntimeTarget>) -> Self {
+        let mut seen_web = false;
+        let mut seen_node = false;
+        let mut out = Vec::new();
+        for t in targets {
+            match t {
+                JsRuntimeTarget::Web if !seen_web => {
+                    seen_web = true;
+                    out.push(t);
+                }
+                JsRuntimeTarget::Node if !seen_node => {
+                    seen_node = true;
+                    out.push(t);
+                }
+                _ => {}
+            }
+        }
+        self.runtimes = out;
         self
     }
 
@@ -321,9 +337,13 @@ impl Compiler {
             self.emit_abi,
         )?;
 
-        // Opt-in tree-shaken JS host (`--runtime --web` / `--runtime --node`).
-        if let Some(rt) = self.runtime {
-            crate::driver::js_runtime::emit_selective_runtime(out_path, &live_imports, rt)?;
+        // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`).
+        if !self.runtimes.is_empty() {
+            crate::driver::js_runtime::emit_selective_runtimes(
+                out_path,
+                &live_imports,
+                &self.runtimes,
+            )?;
         }
 
         if let Some(level) = self.optimize {

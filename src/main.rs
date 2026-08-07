@@ -27,7 +27,8 @@ fn main() -> ExitCode {
     let mut file_name = None;
     let mut optimize: Option<OptLevel> = None;
     let mut want_runtime = false;
-    let mut runtime_target: Option<JsRuntimeTarget> = None;
+    let mut want_web = false;
+    let mut want_node = false;
 
     for arg in args.iter().skip(1) {
         if arg == "-v" || arg == "--verbose" {
@@ -55,9 +56,9 @@ fn main() -> ExitCode {
         } else if arg == "--runtime" {
             want_runtime = true;
         } else if arg == "--web" {
-            runtime_target = Some(JsRuntimeTarget::Web);
+            want_web = true;
         } else if arg == "--node" {
-            runtime_target = Some(JsRuntimeTarget::Node);
+            want_node = true;
         } else if arg == "-O" || arg == "--optimize" {
             // No level given: default to `-Os` (optimize for size), matching the "smaller binary"
             // intent most users reach for this flag with. Also overrides `--release`'s default.
@@ -92,12 +93,20 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    if want_runtime && runtime_target.is_none() {
-        error!("--runtime requires --web or --node");
+    let mut runtimes = Vec::new();
+    if want_web {
+        runtimes.push(JsRuntimeTarget::Web);
+    }
+    if want_node {
+        runtimes.push(JsRuntimeTarget::Node);
+    }
+
+    if want_runtime && runtimes.is_empty() {
+        error!("--runtime requires --web and/or --node");
         print_usage(&program);
         return ExitCode::FAILURE;
     }
-    if runtime_target.is_some() && !want_runtime {
+    if !runtimes.is_empty() && !want_runtime {
         error!("--web / --node require --runtime");
         print_usage(&program);
         return ExitCode::FAILURE;
@@ -138,7 +147,7 @@ fn main() -> ExitCode {
     let mut compiler = Compiler::new(Target::Wasm)
         .with_release(release)
         .with_debug_info(debug_info)
-        .with_runtime(runtime_target)
+        .with_runtimes(runtimes)
         .with_emit_abi(emit_abi);
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
@@ -198,10 +207,10 @@ fn print_usage(program: &str) {
         "  -O, --optimize[=LVL]  wasm-opt level (LVL: 0-4, s, z; default: s); overrides --release"
     );
     error!(
-        "  --runtime             Emit a tree-shaken sibling *.runtime.js (requires --web or --node)"
+        "  --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)"
     );
-    error!("  --web                 With --runtime: browser-targeted *.runtime.js");
-    error!("  --node                With --runtime: Node-targeted *.runtime.js");
+    error!("  --web                 With --runtime: browser-targeted *.web.runtime.js");
+    error!("  --node                With --runtime: Node-targeted *.node.runtime.js");
     error!("  -h, --help            Show this help message");
     error!("  run                   Execute the compiled module after a successful build");
     error!("  debug-adapter         Run the Debug Adapter Protocol server over stdio (implies -g)");
@@ -209,6 +218,10 @@ fn print_usage(program: &str) {
     error!(r"Example: {} --release run src/sample/test_arrays.dream", program);
     error!(r"Example: {} --runtime --web sample/interop/js.dream", program);
     error!(r"Example: {} --runtime --node sample/interop/js.dream", program);
+    error!(
+        r"Example: {} --runtime --web --node sample/interop/js.dream",
+        program
+    );
 }
 
 /// Derives the output `.wat` path that sits next to the given source file.

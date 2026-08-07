@@ -33,6 +33,7 @@ authors = ["Jane Doe <jane@example.com>"]
 description = "My Dream app"
 entry = "src/main.dream"        # compiler entry point, relative to this file
 license = "MIT"
+targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
 
 [dependencies]
 http-utils = "1.2"                                    # semver requirement, resolved from a registry
@@ -44,13 +45,17 @@ vendored   = { git = "https://github.com/user/vendored-dream", tag = "v1.0.0" }
 test-utils = "0.4"
 
 [scripts]
-start = "dream run src/main.dream"
+start = "dreamer run"
 
 [registries]
 default = "https://registry.dream-lang.org"    # overridable; also supports file:// for private/offline registries
 ```
 
 - `[package].entry` is the file `dreamer build`/`dreamer run` hand to the `dream` compiler.
+- `[package].targets` is an optional list of hosts this project supports: `native` (wasmtime via
+  `dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
+  Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
+  native. Combinations are allowed; see `dreamer run` below for how the host is chosen.
 - A dependency is either a bare semver requirement string, or a table with exactly one of
   `path`, `git`, or `version` (+ optional `registry`).
 - Package names follow the same shape as Cargo crate names (letters, digits, `-`, `_`, starting
@@ -139,22 +144,37 @@ registry version selection. Conflicting requirements produce a clear error namin
 
 | Command | Effect |
 |---|---|
-| `dreamer init [name]` | Scaffold `dream.toml` + `src/main.dream` in the current directory, and add `dream_packages/` to `.gitignore`. |
+| `dreamer init [name] [--runtime native,web,node] [--dir <path>]` | Scaffold `dream.toml` + `src/main.dream`, a richer `.gitignore`, and (when `--runtime` includes them) `index.html` / `run.mjs` linked to selective `*.web.runtime.js` / `*.node.runtime.js`. |
 | `dreamer add <name> [--version <req>] [--path <dir>] [--git <url> [--tag/--branch/--rev <ref>]] [--dev]` | Add (or update) a dependency in `dream.toml`, then resolve and install. |
 | `dreamer remove <name>` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release]` | Install, then compile `[package].entry` via the `dream` compiler (`--release` passes `-O`). |
-| `dreamer run [-- <args>]` | Install, then compile and execute `[package].entry`, forwarding `<args>` to the program. |
+| `dreamer build [--release]` | Install, then compile `[package].entry`. When `targets` includes `web` and/or `node`, forwards `--runtime --web` / `--node` so selective runtime siblings are emitted. |
+| `dreamer run [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). |
 | `dreamer publish [--registry <url>]` | Package the current project and publish it to a registry. |
 | `dreamer search <query>` | Search a registry for packages by name. |
 | `dreamer tree` | Print the resolved dependency tree from `dream.lock`. |
 
+### How `dreamer run` picks a host
+
+| `package.targets` | No `--target` | With `--target X` |
+|---|---|---|
+| empty / omitted | **native** (`dream run`) | any of `native` / `web` / `node` (ad-hoc escape hatch) |
+| exactly one entry | that host | must match that host |
+| two or more | error — require `--target` | `X` must be one of the listed targets |
+
+Per host:
+
+- **native** — `dream run <entry> [args…]` (wasmtime).
+- **node** — compile with `--runtime --node`, then `node run.mjs` from the project root.
+- **web** — compile with `--runtime --web`, then serve the project root and print
+  `http://127.0.0.1:<port>/index.html` (Ctrl-C to stop).
+
 ## Walkthrough
 
 ```bash
-# scaffold a new project
-dreamer init myapp && cd myapp
+# scaffold a new project (optional hosts)
+dreamer init myapp --runtime web,node && cd myapp
 
 # add a dependency from the default registry
 dreamer add json-tools --version "^0.3"
@@ -178,8 +198,9 @@ fun main(): void {
 ```
 
 ```bash
-# compile and run
-dreamer run
+# compile and run (multi-target projects need --target)
+dreamer run --target node
+dreamer run --target web
 
 # see what's actually installed
 dreamer tree
