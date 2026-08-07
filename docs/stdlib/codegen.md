@@ -6,10 +6,11 @@ Helpers for compile-time source generators.
 import system.codegen;
 ```
 
-HTML and other syntax DSLs are **not** part of this package — see
-[Source generators](../language/generators.md) and
-[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html)
-(Dream `HtmlCompiler` + harness; host only runs WASM / applies `replace`).
+Syntax DSLs are **not** part of this package — see
+[Source generators](../language/generators.md). Beginner sample:
+[`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote).
+Advanced (markup parser + harness):
+[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html).
 
 
 ## Status
@@ -84,6 +85,7 @@ Generators discover work via `@generator` functions / attributes. The compile ho
 | Feature | Where |
 |---------|--------|
 | `@json` derive | [JSON](json.md) — compiler builtin |
-| HTML sample | [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html) — Dream parser + harness |
+| Quote sample | [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote) — beginner syntax DSL |
+| HTML sample | [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html) — advanced Dream parser + harness |
 
 Full tutorial: [Source generators](../language/generators.md).

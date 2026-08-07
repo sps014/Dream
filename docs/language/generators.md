@@ -1,99 +1,197 @@
 # Source generators
 
-Dream has **no runtime reflection**. When you need derives, DSLs, or boilerplate that depends on
-types and attributes, write a **compile-time source generator**.
+Dream has **no runtime reflection**. When you need derives, DSLs, or boilerplate that
+depends on types and attributes, write a **compile-time source generator**.
 
 Generators inspect declarations and either:
 
 1. **Emit** new Dream source — for example `@json` adds `to_json` / `from_json`.
-2. **Replace** custom syntax — for example `html { … }` becomes ordinary Dream expressions.
+2. **Replace** custom syntax — for example `quote { … }` or `html { … }` become ordinary
+   Dream expressions.
 
-## Register a generator
+You can write a tiny generator (a few dozen lines) or a complex one (a full markup
+compiler). Start with `@json` or the
+[`quote`](https://github.com/sps014/Dream/tree/main/sample/generators/quote) sample;
+study [`html`](https://github.com/sps014/Dream/tree/main/sample/generators/html) when you
+need a real DSL.
+
+## Start here: `@json`
+
+Mark a type `@json` and the compiler generates `to_json` / `from_json`. You do not register
+a generator — `system.json` loads automatically when any type carries `@json`.
 
 ```dream
-import system.codegen;
+import system;
+import system.json;
 
-@generator
-public fun routes(): void {
-    // Discovery stub — name is the function name (`routes`).
-    // Declaration bodies are not executed yet; syntax-DSL samples ship a sibling `harness.dream`
-    // the host runs (same idea as the `@json` harness). Use CodeBuilder / GenHost in harnesses.
+@json
+class Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+fun main(): void {
+    let p = Point(1, 2);
+    let text = Json.serialize(p);
+    let back = Json.deserialize<Point>(text).unwrap_or(p);
+    System.println(back.x);
 }
 ```
 
-Pull it into a compilation with a normal import, or list it in `dream.toml` next to your entry
-file (search walks upward from the entry file's directory):
+See [JSON](../stdlib/json.md).
+
+## Your first custom generator: `quote`
+
+`quote { … }` turns the opaque text inside the braces into a Dream string literal at
+compile time. From the app side it looks like ordinary Dream:
+
+```dream
+import system;
+
+fun main() {
+    System.println(quote { Hello generators });
+}
+```
+
+```bash
+cargo run -- run sample/generators/quote/app.dream
+```
+
+Expected stdout: `Hello generators`
+
+Full sample: [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote).
+
+### Register it
+
+List the generator next to your entry file in `dream.toml` (search walks upward from the
+entry file's directory), or import a file that contains the `@generator` function:
 
 ```toml
 [[generators]]
-path = "gen/routes.dream"
+path = "gen.dream"
 ```
+
+```dream
+module gen;
+
+import system.codegen;
+
+@generator
+@syntax_block("quote")
+public fun quote(): void { }
+```
+
+The empty body is intentional: user `@generator` functions are **registered, not executed**.
+The host runs sibling `harness.dream` to expand sites.
 
 | Attribute | Where | Meaning |
 |-----------|--------|---------|
-| `@generator` | function | This function is a generator entry; name = function name |
+| `@generator` | function | Generator entry; name = function name |
 | `@syntax_block("intro")` | same function | Claims expression DSL `intro { … }` |
 
-### User-defined attributes
+### Generator author: harness
 
-Mark a bare top-level function `@attribute`. The function name is the attribute name (exact
-casing); its parameters are the `@name(...)` argument schema:
-
-```dream
-@attribute
-public fun route(path: string): void { }
-
-@route("/users")
-public fun list_users(): void { }
-```
-
-Generators query with `functions_with("route")` / `attribute_args("route")`.
-
-Trigger attributes such as `@json` must be known to the language. Generators query attributes by
-name on declaration symbols.
-
-## Syntax DSLs
-
-A **syntax DSL** is an expression `introducer { … }` that a generator rewrites into ordinary Dream
-before type-checking. Markup or other domain text lives in the braces; `{ expr }` splices are real
-Dream expressions.
+`harness.dream` next to `gen.dream` reads a snapshot JSON file, builds a Dream expression
+for each site, and prints `GenHost` OK lines `id\tdream_expr`:
 
 ```dream
-return html {
-    <div class="hero">
-        <h1>{title}</h1>
-    </div>
-};
+import system;
+import system.io;
+import system.collections;
+import system.json;
+import system.codegen;
+
+fun as_dream_string(s: string): string {
+    let escaped = s.replace("\\", "\\\\").replace("\"", "\\\"");
+    return "\"" + escaped + "\"";
+}
+
+async fun main(): void {
+    let path = System.env_or("DREAM_SYNTAX_GEN_SNAPSHOT", "");
+    // … read path, Json.parse …
+    // for each block: out_lines.push(id + "\t" + as_dream_string(body.trim()));
+    System.println(GenHost.ok_marker());
+    // … println each out line …
+}
 ```
 
-Rules:
+See the full harness in the [quote sample](https://github.com/sps014/Dream/tree/main/sample/generators/quote/harness.dream).
 
-- The introducer is a bare identifier (`html`, `svg`, …) — not a keyword.
+### How expand works
+
+1. Registration claims introducer `quote` (via `@syntax_block`).
+2. Host snapshots each `quote { }` site and runs sibling `harness.dream`.
+3. Harness prints `GenHost` OK lines `id\tdream_expr`.
+4. Host replaces those sites with the expressions before type-checking.
+
+Rules for any syntax DSL:
+
+- The introducer is a bare identifier (`quote`, `html`, …) — not a keyword.
 - Inside the braces, non-splice text is opaque to the Dream parser.
-- `{ … }` splices must be valid Dream expressions; they type-check after rewrite.
-- Every introducer must be claimed by a registered `@syntax_block("…")`. Unregistered sites fail
-  with “unexpanded syntax block”.
+- `{ … }` splices (when your DSL supports them) must be valid Dream expressions; they
+  type-check after rewrite.
+- Every introducer must be claimed by a registered `@syntax_block("…")`. Unregistered
+  sites fail with “unexpanded syntax block”.
 
-### HTML sample
+## Complex example: HTML
 
-HTML is **not** a language builtin. Expand is owned by
-[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html):
-Dream `HtmlCompiler` + `harness.dream`, registered via `@syntax_block("html")`. The host only
-snapshots sites and applies replace lines (no Rust markup parser).
+Same call-site shape as `quote`, but the sample adds a markup parser and runtime helpers.
+User-facing code:
+
+```dream
+import system;
+import html;
+
+fun page(title: string): string {
+    return html {
+        <div class="hero">
+            <h1>{title}</h1>
+            <p>Welcome</p>
+        </div>
+    };
+}
+
+fun main() {
+    System.println(page("Hello"));
+}
+```
 
 ```bash
 cargo run -- run sample/generators/html/app.dream
 ```
 
-Convention for your own introducer: register `@generator` + `@syntax_block("…")`, put a
-`harness.dream` next to the generator file, lower sites in Dream, print `GenHost` OK/ERR lines.
+HTML is **not** a language builtin. Expand is owned by
+[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html)
+(Dream `HtmlCompiler` + `harness.dream`, registered via `@syntax_block("html")`). The host
+only snapshots sites and applies replace lines — no Rust markup parser. Protocol is the
+same as `quote`; the harness is larger because it parses tags and `{expr}` splices.
 
-## `@json` derive
+## User-defined attributes
 
-Mark a type `@json` and the compiler generates `to_json` / `from_json`. You do not register a
-generator yourself — `system.json` is loaded automatically when any type carries `@json`.
+Use a custom attribute on your declarations (generators query them later):
 
-See [JSON](../stdlib/json.md).
+```dream
+@route("/users")
+public fun list_users(): void { }
+```
+
+Define the attribute schema with `@attribute` on a bare top-level function. The function
+name is the attribute name; its parameters are the `@name(...)` argument schema:
+
+```dream
+@attribute
+public fun route(path: string): void { }
+```
+
+Generators query with `functions_with("route")` / `attribute_args("route")`.
+
+Trigger attributes such as `@json` must be known to the language. Generators query
+attributes by name on declaration symbols.
 
 ## Emitting source with CodeBuilder
 
@@ -137,4 +235,6 @@ Useful queries on declarations (see [CodeBuilder](../stdlib/codegen.md)):
 ## See also
 
 - [CodeBuilder](../stdlib/codegen.md)
-- [Attributes](attributes.md) (if present) / language overview
+- [JSON](../stdlib/json.md) (`@json` derive)
+- Beginner sample: [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote)
+- Advanced sample: [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html)

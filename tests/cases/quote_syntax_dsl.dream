@@ -1,0 +1,6 @@
+import system;
+import support.quote.gen;
+
+fun main() {
+    System.println(quote { Hello generators });
+}

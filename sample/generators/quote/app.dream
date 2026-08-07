@@ -1,0 +1,7 @@
+import system;
+
+// Demo: `quote { … }` becomes a string literal at compile time.
+
+fun main() {
+    System.println(quote { Hello generators });
+}

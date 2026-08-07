@@ -1,0 +1,7 @@
+module gen;
+
+import system.codegen;
+
+@generator
+@syntax_block("quote")
+public fun quote(): void { }

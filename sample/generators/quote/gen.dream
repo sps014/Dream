@@ -1,0 +1,9 @@
+module gen;
+
+import system.codegen;
+
+// Registers the `quote { … }` syntax DSL. Expand lives in sibling `harness.dream`.
+
+@generator
+@syntax_block("quote")
+public fun quote(): void { }
