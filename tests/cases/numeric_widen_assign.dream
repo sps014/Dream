@@ -5,6 +5,14 @@ fun main(): void {
     x = 2;
     System.println(x);
 
+    let L: long = 1;
+    L = 2;
+    System.println((int)L);
+
+    let D: double = 1;
+    D = 2;
+    System.println((int)D);
+
     let arr = Buffer.alloc<float>(4);
     for (let i = 0; i < arr.length; i = i + 1) {
         arr[i] = i;

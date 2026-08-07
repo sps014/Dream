@@ -19,7 +19,7 @@ fn test_analyze_type_mismatch() {
     assert!(diagnostics
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("cannot convert from int to string")));
+        .any(|d| d.message.contains("cannot convert from string to int")));
 }
 
 #[test]
@@ -44,6 +44,18 @@ fn test_analyze_new_integer_narrowing_requires_cast() {
     let code = "fun main(): void { let x: int = 5L; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), true);
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("cannot convert from long to int")),
+        "expected long→int narrowing diagnostic, got {:?}",
+        diagnostics
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]

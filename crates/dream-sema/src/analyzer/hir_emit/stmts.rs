@@ -188,7 +188,7 @@ impl<'a> Analyzer<'a> {
     /// slot (`let o: object = 42`), so the backend boxes it rather than storing a raw scalar. All
     /// other conversions (reference→object, numeric widening) are left to the backend / call sites.
     fn coerce_to(&mut self, value: HExpr, target: TypeId) -> HExpr {
-        use dream_types::{PrimTy, TyKind};
+        use dream_types::TyKind;
         // Snapshot the kinds so the interner borrow does not outlive the branches below that need
         // `&mut self` (the `js` box/unbox helpers).
         let (target_k, val_k) = {
@@ -219,25 +219,11 @@ impl<'a> Analyzer<'a> {
         if matches!(val_k, TyKind::Js) && matches!(target_k, TyKind::Prim(_) | TyKind::Struct(..)) {
             return self.unbox_from_js(value, target);
         }
-        // Implicit numeric widening (e.g. `let w: long = 5;`, `let d: double = someLong;`). The two
-        // primitives have different WASM representations (i32/i64/f64), so an explicit conversion must
-        // be materialized; `emit_cast`/`numeric_conv` picks the right (un)signed extend/convert.
-        let is_num = |p: PrimTy| {
-            matches!(
-                p,
-                PrimTy::Int
-                    | PrimTy::UInt
-                    | PrimTy::Long
-                    | PrimTy::ULong
-                    | PrimTy::Byte
-                    | PrimTy::Float
-                    | PrimTy::Double
-            )
-        };
-        if let (TyKind::Prim(tp), TyKind::Prim(vp)) = (target_k, val_k) {
-            if tp != vp && is_num(tp) && is_num(vp) {
-                let target_prim = target;
-                return HExpr::new(target_prim, HExprKind::Cast(Box::new(value)));
+        // Implicit numeric widening only (e.g. `let w: long = 5;`). Narrowing / opposite-sign
+        // pairs are rejected by `compare_data_type`/`assignable`; do not silently cast them here.
+        if let (TyKind::Prim(tp), TyKind::Prim(vp)) = (&target_k, &val_k) {
+            if tp != vp && dream_types::numeric_widen(*vp, *tp) {
+                return HExpr::new(target, HExprKind::Cast(Box::new(value)));
             }
         }
         value

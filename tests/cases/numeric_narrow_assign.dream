@@ -1,0 +1,6 @@
+fun main(): void {
+    let a: int = 1.5;
+    let b: float = (double)1.0;
+    let c: uint = 1;
+    let d: int = 5L;
+}

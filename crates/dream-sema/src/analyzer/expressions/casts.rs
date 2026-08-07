@@ -138,8 +138,8 @@ impl<'a> Analyzer<'a> {
         diagnostics.report_error(
             format!(
                 "cannot convert from {} to {} at {}",
-                left.display_name(),
                 right.display_name(),
+                left.display_name(),
                 position.get_point_str()
             ),
             Some(*position),
