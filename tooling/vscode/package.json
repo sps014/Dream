@@ -86,13 +86,53 @@
             "properties": {
               "program": {
                 "type": "string",
-                "description": "Absolute path to the .dream source file to debug.",
+                "description": "Absolute path to the .dream source file to debug or run.",
                 "default": "${file}"
               },
               "stopOnEntry": {
                 "type": "boolean",
-                "description": "Pause at the first line of the program.",
+                "description": "Pause at the first line of the program (debug only).",
                 "default": false
+              },
+              "noDebug": {
+                "type": "boolean",
+                "description": "Run without debugging (Ctrl+F5 / Run profiles).",
+                "default": false
+              },
+              "buildMode": {
+                "type": "string",
+                "enum": [
+                  "debug",
+                  "release"
+                ],
+                "description": "Debug or Release profile. Maps to CLI --release when release. If omitted, uses workspace dream.buildMode.",
+                "default": "debug"
+              },
+              "optimizeLevel": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "0",
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "s",
+                  "z"
+                ],
+                "description": "Optional wasm-opt -O level override. If omitted, uses workspace dream.optimizeLevel.",
+                "default": "default"
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the session (optional)."
+              },
+              "env": {
+                "type": "object",
+                "description": "Environment variables for the session (optional).",
+                "additionalProperties": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -101,21 +141,83 @@
           {
             "type": "dream",
             "request": "launch",
-            "name": "Dream: Debug current file",
+            "name": "Dream: Debug (Debug)",
             "program": "${file}",
+            "buildMode": "debug",
             "stopOnEntry": false
+          },
+          {
+            "type": "dream",
+            "request": "launch",
+            "name": "Dream: Debug (Release)",
+            "program": "${file}",
+            "buildMode": "release",
+            "stopOnEntry": false
+          },
+          {
+            "type": "dream",
+            "request": "launch",
+            "name": "Dream: Run (Debug)",
+            "program": "${file}",
+            "buildMode": "debug",
+            "noDebug": true
+          },
+          {
+            "type": "dream",
+            "request": "launch",
+            "name": "Dream: Run (Release)",
+            "program": "${file}",
+            "buildMode": "release",
+            "noDebug": true
           }
         ],
         "configurationSnippets": [
           {
-            "label": "Dream: Debug current file",
-            "description": "Debug the active .dream file with the Dream debugger",
+            "label": "Dream: Debug (Debug)",
+            "description": "Debug the active .dream file (debug build)",
             "body": {
               "type": "dream",
               "request": "launch",
-              "name": "Dream: Debug current file",
+              "name": "Dream: Debug (Debug)",
               "program": "^\"\\${file}\"",
+              "buildMode": "debug",
               "stopOnEntry": false
+            }
+          },
+          {
+            "label": "Dream: Debug (Release)",
+            "description": "Debug the active .dream file with --release",
+            "body": {
+              "type": "dream",
+              "request": "launch",
+              "name": "Dream: Debug (Release)",
+              "program": "^\"\\${file}\"",
+              "buildMode": "release",
+              "stopOnEntry": false
+            }
+          },
+          {
+            "label": "Dream: Run (Debug)",
+            "description": "Run without debugging (debug build)",
+            "body": {
+              "type": "dream",
+              "request": "launch",
+              "name": "Dream: Run (Debug)",
+              "program": "^\"\\${file}\"",
+              "buildMode": "debug",
+              "noDebug": true
+            }
+          },
+          {
+            "label": "Dream: Run (Release)",
+            "description": "Run without debugging (--release)",
+            "body": {
+              "type": "dream",
+              "request": "launch",
+              "name": "Dream: Run (Release)",
+              "program": "^\"\\${file}\"",
+              "buildMode": "release",
+              "noDebug": true
             }
           }
         ]
@@ -210,6 +312,11 @@
           "command": "dream.runFile",
           "when": "resourceLangId == dream",
           "group": "navigation@1"
+        },
+        {
+          "command": "dream.debugFile",
+          "when": "resourceLangId == dream",
+          "group": "navigation@2"
         }
       ],
       "editor/context": [

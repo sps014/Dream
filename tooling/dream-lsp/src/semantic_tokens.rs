@@ -56,6 +56,7 @@ fn sym_kind_token_index(kind: SymKind) -> u32 {
         SymKind::Type => 9,
         SymKind::Keyword => 0,
         SymKind::Decorator => DECORATOR,
+        SymKind::Module => 9, // reuse type slot; modules are rare in semantic tokens
     }
 }
 

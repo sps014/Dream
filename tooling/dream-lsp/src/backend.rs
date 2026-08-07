@@ -519,39 +519,65 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let completions = idx.completions(file_path.as_deref(), &text, offset);
+        let import_replace = index::import_path_partial(&text, offset).map(|(start, _)| start);
 
         let items: Vec<CompletionItem> = {
             let mut items: Vec<CompletionItem> = completions
                 .into_iter()
-                .map(|(label, kind, detail, doc_comment)| CompletionItem {
-                    label,
-                    kind: Some(completion_kind(kind)),
-                    detail: Some(detail),
-                    documentation: doc_comment.map(|doc| {
-                        Documentation::MarkupContent(MarkupContent {
-                            kind: MarkupKind::Markdown,
-                            value: doc,
-                        })
-                    }),
-                    ..Default::default()
+                .map(|(label, kind, detail, doc_comment)| {
+                    let text_edit = if kind == index::SymKind::Module {
+                        if let Some(start) = import_replace {
+                            let start_pos = line_index.position(start);
+                            let end_pos = line_index.position(offset);
+                            Some(CompletionTextEdit::Edit(TextEdit {
+                                range: map_range(crate::position::Range {
+                                    start: start_pos,
+                                    end: end_pos,
+                                }),
+                                new_text: label.clone(),
+                            }))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    CompletionItem {
+                        label,
+                        kind: Some(completion_kind(kind)),
+                        detail: Some(detail),
+                        documentation: doc_comment.map(|doc| {
+                            Documentation::MarkupContent(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: doc,
+                            })
+                        }),
+                        text_edit,
+                        ..Default::default()
+                    }
                 })
                 .collect();
 
             // Offer not-yet-imported stdlib exports with an import edit on accept.
-            let existing: std::collections::HashSet<String> =
-                items.iter().map(|i| i.label.clone()).collect();
-            for (label, package, detail) in crate::code_actions::unloaded_stdlib_completions(&text) {
-                if existing.contains(&label) {
-                    continue;
+            // Skip when completing inside `import …` — package paths belong there, not types.
+            if import_replace.is_none() {
+                let existing: std::collections::HashSet<String> =
+                    items.iter().map(|i| i.label.clone()).collect();
+                for (label, package, detail) in
+                    crate::code_actions::unloaded_stdlib_completions(&text)
+                {
+                    if existing.contains(&label) {
+                        continue;
+                    }
+                    let additional = crate::code_actions::import_text_edits(&text, package);
+                    items.push(CompletionItem {
+                        label,
+                        kind: Some(CompletionItemKind::CLASS),
+                        detail: Some(detail),
+                        additional_text_edits: additional,
+                        ..Default::default()
+                    });
                 }
-                let additional = crate::code_actions::import_text_edits(&text, package);
-                items.push(CompletionItem {
-                    label,
-                    kind: Some(CompletionItemKind::CLASS),
-                    detail: Some(detail),
-                    additional_text_edits: additional,
-                    ..Default::default()
-                });
             }
             items
         };

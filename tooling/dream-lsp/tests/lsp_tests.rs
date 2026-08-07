@@ -1179,6 +1179,84 @@ fn completion_additional_edits_for_list() {
 }
 
 #[test]
+fn import_path_completions_at_import() {
+    use dream_lsp::index::SymKind;
+
+    let harness = TestHarness::new("import |\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps
+            .iter()
+            .any(|(n, k, d, _)| n == "system.collections"
+                && *k == SymKind::Module
+                && d == "stdlib package"),
+        "expected system.collections among import completions, got {:?}",
+        comps
+            .iter()
+            .map(|(n, _, d, _)| format!("{n}/{d}"))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        comps.iter().any(|(n, ..)| n == "system"),
+        "expected root package `system`"
+    );
+    assert!(
+        !comps
+            .iter()
+            .any(|(n, ..)| n == "system.core" || n == "system.primitives"),
+        "bootstrap packages must not be suggested"
+    );
+}
+
+#[test]
+fn import_path_completions_system_dot() {
+    let harness = TestHarness::new("import system.|\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps.iter().any(|(n, ..)| n == "system.collections"),
+        "expected system.collections after `import system.`"
+    );
+    assert!(
+        comps.iter().all(|(n, ..)| n.starts_with("system.")),
+        "after `import system.` every candidate should be under system.*"
+    );
+}
+
+#[test]
+fn import_path_skips_already_imported() {
+    let harness = TestHarness::new("import system.collections;\nimport |\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        !comps.iter().any(|(n, ..)| n == "system.collections"),
+        "already-imported package should be omitted"
+    );
+}
+
+#[test]
+fn system_dot_in_body_is_class_members_not_packages() {
+    // `System.` in an expression is the class, not the `system.*` package tree.
+    let harness = TestHarness::new(
+        "import system;\nfun main(): void {\n    System.|\n}\n",
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        !comps
+            .iter()
+            .any(|(n, _, d, _)| d == "stdlib package" || n == "system.collections"),
+        "package paths must not appear on System. member completion: {:?}",
+        comps
+            .iter()
+            .map(|(n, _, d, _)| format!("{n}/{d}"))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        comps.iter().any(|(n, ..)| n == "println" || n == "print"),
+        "expected System class members, got {:?}",
+        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn semantic_tokens_distinguish_class_struct_enum_interface() {
     use dream_lsp::semantic_tokens::{compute, TOKEN_TYPES};
     use tower_lsp::lsp_types::SemanticTokenType;
@@ -1253,10 +1331,6 @@ fun main(): void {
     assert!(
         struct_occurrences.contains(&struct_idx),
         "expected at least one STRUCT token for MyStruct, got {struct_occurrences:?}"
-    );
-    assert!(
-        struct_occurrences.iter().any(|&k| k == struct_idx),
-        "MyStruct type ref should be STRUCT"
     );
     // Decl + type annotation (constructor call may be FUNCTION).
     assert!(

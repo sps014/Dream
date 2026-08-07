@@ -37,6 +37,7 @@ pub fn completion_kind(kind: SymKind) -> CompletionItemKind {
         SymKind::Type => CompletionItemKind::CLASS,
         SymKind::Keyword => CompletionItemKind::KEYWORD,
         SymKind::Decorator => CompletionItemKind::KEYWORD,
+        SymKind::Module => CompletionItemKind::MODULE,
     }
 }
 
@@ -55,5 +56,6 @@ pub fn symbol_kind(kind: SymKind) -> SymbolKind {
         SymKind::Type => SymbolKind::CLASS,
         SymKind::Keyword => SymbolKind::KEY,
         SymKind::Decorator => SymbolKind::KEY,
+        SymKind::Module => SymbolKind::MODULE,
     }
 }

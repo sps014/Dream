@@ -17,6 +17,7 @@ mod model;
 mod queries;
 
 pub use model::*;
+pub(crate) use queries::import_path_partial;
 
 use builder::Builder;
 

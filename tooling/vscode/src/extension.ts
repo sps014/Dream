@@ -141,8 +141,60 @@ function buildDreamCliArgs(settings: DreamBuildSettings = readBuildSettings()): 
     return args;
 }
 
+/** Resolves buildMode/optimize from a launch config, falling back to workspace settings. */
+function profileFromLaunchConfig(config: vscode.DebugConfiguration): {
+    buildMode: BuildMode;
+    optimizeLevel: OptimizeLevel;
+} {
+    const settings = readBuildSettings();
+    const buildMode = (config.buildMode as BuildMode | undefined) || settings.buildMode;
+    const optimizeLevel =
+        (config.optimizeLevel as OptimizeLevel | undefined) || settings.optimizeLevel;
+    return { buildMode, optimizeLevel };
+}
+
+/** CLI flags for native run / debug-adapter (no --runtime). */
+function nativeCliFlagsFromProfile(config: vscode.DebugConfiguration): string[] {
+    const { buildMode, optimizeLevel } = profileFromLaunchConfig(config);
+    return buildDreamCliArgs({
+        buildMode,
+        optimizeLevel,
+        runtimeTarget: 'native'
+    });
+}
+
 function formatCliArgs(args: string[]): string {
     return args.length === 0 ? '' : `${args.join(' ')} `;
+}
+
+/** Runs `dream [flags] run <file>` (or compile-only for web/node) in the Dream terminal. */
+function runProgramInTerminal(
+    context: vscode.ExtensionContext,
+    filePath: string,
+    settings: DreamBuildSettings
+): void {
+    const dreamCmd = resolveDreamCliCommand(context);
+    if (!dreamCmd) {
+        return;
+    }
+    const flagArgs = buildDreamCliArgs(settings);
+
+    if (!runTerminal || runTerminal.exitStatus !== undefined) {
+        runTerminal = vscode.window.createTerminal('Dream');
+    }
+    runTerminal.show();
+
+    if (settings.runtimeTarget === 'native') {
+        const flags = formatCliArgs(flagArgs);
+        runTerminal.sendText(`${dreamCmd} ${flags}run ${quotePath(filePath)}`);
+    } else {
+        const flags = formatCliArgs(flagArgs);
+        runTerminal.sendText(`${dreamCmd} ${flags}${quotePath(filePath)}`);
+        const targetLabel = settings.runtimeTarget === 'web' ? 'browser' : 'Node';
+        vscode.window.showInformationMessage(
+            `Dream: compiled with ${targetLabel} runtime.js (use the generated *.runtime.js host).`
+        );
+    }
 }
 
 function registerRunFileCommand(context: vscode.ExtensionContext): void {
@@ -155,33 +207,7 @@ function registerRunFileCommand(context: vscode.ExtensionContext): void {
             }
 
             await saveActiveDreamFile(editor);
-
-            const dreamCmd = resolveDreamCliCommand(context);
-            if (!dreamCmd) {
-                return;
-            }
-            const filePath = editor.document.uri.fsPath;
-            const settings = readBuildSettings();
-            const flagArgs = buildDreamCliArgs(settings);
-
-            if (!runTerminal || runTerminal.exitStatus !== undefined) {
-                runTerminal = vscode.window.createTerminal('Dream');
-            }
-            runTerminal.show();
-
-            if (settings.runtimeTarget === 'native') {
-                // `dream [--release] [-O…] run <file>`
-                const flags = formatCliArgs(flagArgs);
-                runTerminal.sendText(`${dreamCmd} ${flags}run ${quotePath(filePath)}`);
-            } else {
-                // Web/Node: compile with runtime emit (no wasmtime run).
-                const flags = formatCliArgs(flagArgs);
-                runTerminal.sendText(`${dreamCmd} ${flags}${quotePath(filePath)}`);
-                const targetLabel = settings.runtimeTarget === 'web' ? 'browser' : 'Node';
-                vscode.window.showInformationMessage(
-                    `Dream: compiled with ${targetLabel} runtime.js (use the generated *.runtime.js host).`
-                );
-            }
+            runProgramInTerminal(context, editor.document.uri.fsPath, readBuildSettings());
         })
     );
 }
@@ -197,16 +223,25 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
 
             await saveActiveDreamFile(editor);
 
+            const settings = readBuildSettings();
+            if (settings.runtimeTarget !== 'native') {
+                vscode.window.showWarningMessage(
+                    'Dream: debugging requires the native runtime target (status bar).'
+                );
+                return;
+            }
+
             const filePath = editor.document.uri.fsPath;
-            // Launch a `dream` debug session; the debug adapter factory below spawns the CLI's
-            // `debug-adapter` subcommand and speaks DAP over stdio.
+            const modeLabel = settings.buildMode === 'release' ? 'Release' : 'Debug';
             await vscode.debug.startDebugging(
                 vscode.workspace.getWorkspaceFolder(editor.document.uri),
                 {
                     type: 'dream',
                     request: 'launch',
-                    name: 'Dream: Debug current file',
+                    name: `Dream: Debug (${modeLabel})`,
                     program: filePath,
+                    buildMode: settings.buildMode,
+                    optimizeLevel: settings.optimizeLevel,
                     stopOnEntry: false
                 }
             );
@@ -231,21 +266,55 @@ function resolveDreamBinaryPath(context: vscode.ExtensionContext): string | null
 function registerDebugAdapter(context: vscode.ExtensionContext): void {
     const provider: vscode.DebugConfigurationProvider = {
         resolveDebugConfiguration(_folder, config) {
+            const settings = readBuildSettings();
+
             // Zero-config: if launched with no configuration, debug the active .dream file.
             if (!config.type && !config.request && !config.name) {
                 const editor = vscode.window.activeTextEditor;
                 if (editor && editor.document.languageId === 'dream') {
                     config.type = 'dream';
                     config.request = 'launch';
-                    config.name = 'Dream: Debug current file';
+                    config.name =
+                        settings.buildMode === 'release'
+                            ? 'Dream: Debug (Release)'
+                            : 'Dream: Debug (Debug)';
                     config.program = editor.document.uri.fsPath;
+                    config.buildMode = settings.buildMode;
+                    config.optimizeLevel = settings.optimizeLevel;
                     config.stopOnEntry = false;
                 }
             }
+
             if (!config.program) {
                 vscode.window.showErrorMessage('Dream: no "program" set for the debug session.');
                 return undefined;
             }
+
+            if (!config.buildMode) {
+                config.buildMode = settings.buildMode;
+            }
+            if (!config.optimizeLevel) {
+                config.optimizeLevel = settings.optimizeLevel;
+            }
+
+            // Run Without Debugging / Ctrl+F5 / Run profiles: terminal, not DAP.
+            if (config.noDebug) {
+                const runtimeTarget = settings.runtimeTarget;
+                runProgramInTerminal(context, config.program as string, {
+                    buildMode: (config.buildMode as BuildMode) || settings.buildMode,
+                    optimizeLevel:
+                        (config.optimizeLevel as OptimizeLevel) || settings.optimizeLevel,
+                    runtimeTarget
+                });
+                return undefined;
+            }
+
+            if (settings.runtimeTarget !== 'native') {
+                vscode.window.showWarningMessage(
+                    'Dream: DAP debugging uses the native wasmtime host; switch runtime target to Native or use a Run profile for web/node.'
+                );
+            }
+
             return config;
         }
     };
@@ -261,7 +330,19 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
                 return undefined;
             }
             const program = session.configuration.program as string;
-            return new vscode.DebugAdapterExecutable(binPath, ['debug-adapter', program]);
+            const flags = nativeCliFlagsFromProfile(session.configuration);
+            const args = [...flags, 'debug-adapter', program];
+            const options: vscode.DebugAdapterExecutableOptions = {};
+            if (typeof session.configuration.cwd === 'string' && session.configuration.cwd) {
+                options.cwd = session.configuration.cwd;
+            }
+            if (
+                session.configuration.env &&
+                typeof session.configuration.env === 'object'
+            ) {
+                options.env = session.configuration.env as { [key: string]: string };
+            }
+            return new vscode.DebugAdapterExecutable(binPath, args, options);
         }
     };
     context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('dream', factory));

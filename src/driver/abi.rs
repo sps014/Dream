@@ -10,15 +10,17 @@ use dream_syntax::nodes::ProgramNode;
 /// One live host import after MIR pruning: `(module, field)` as emitted on the WASM import.
 pub type LiveImport = (String, String);
 
-/// Emits a binary `.wasm` next to the `.wat`, plus an `.abi.json` describing the module's
+/// Emits a binary `.wasm` next to the `.wat`, and optionally an `.abi.json` describing the module's
 /// **live** extern imports (for JS interop marshaling) and exported functions. When `kernels` is
-/// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI.
+/// non-empty, also writes a sibling `.wgsl` file and embeds a `"gpu"` section in the ABI (when ABI
+/// is requested). Native `run` / `debug-adapter` skip ABI — wasmtime does not use it.
 pub(crate) fn emit_wasm_and_abi(
     wat_path: &str,
     wat_text: &str,
     program: &ProgramNode,
     kernels: &[GpuKernelInfo],
     live_imports: &[LiveImport],
+    emit_abi: bool,
 ) -> Result<(), Error> {
     let base = Path::new(wat_path);
 
@@ -39,9 +41,11 @@ pub(crate) fn emit_wasm_and_abi(
         info!("created file: {}", wgsl_path.display());
     }
 
-    let abi_path = base.with_extension("abi.json");
-    fs::write(&abi_path, build_abi_json(program, kernels, live_imports))?;
-    info!("created file: {}", abi_path.display());
+    if emit_abi {
+        let abi_path = base.with_extension("abi.json");
+        fs::write(&abi_path, build_abi_json(program, kernels, live_imports))?;
+        info!("created file: {}", abi_path.display());
+    }
     Ok(())
 }
 

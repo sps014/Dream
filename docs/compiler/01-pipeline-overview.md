@@ -22,7 +22,7 @@ flowchart TD
     opt --> emit["mir::emit\nMIR → WAT (via relooper)"]
 
     emit --> wat["WAT text (.wat)"]
-    wat --> abi["driver::abi::emit_wasm_and_abi\nwat→wasm + .abi.json"]
+    wat --> abi["driver::abi::emit_wasm_and_abi\nwat→wasm [+ .abi.json for JS]"]
 ```
 
 Generate phase: `run_generators` runs after parse (before analysis). `@compute` WGSL validation runs after analysis (before MIR). Both report `CompileError::Generator` when diagnostics are present.

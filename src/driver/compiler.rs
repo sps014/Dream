@@ -43,6 +43,9 @@ pub struct Compiler {
     /// When set (CLI `--runtime --web` / `--runtime --node`), emit a tree-shaken sibling
     /// `*.runtime.js` for that host.
     runtime: Option<JsRuntimeTarget>,
+    /// When `true` (default), write sibling `.abi.json` for JS/`dream.js` interop. Native
+    /// `run` / `debug-adapter` set this to `false` — wasmtime does not read the ABI.
+    emit_abi: bool,
 }
 
 impl Compiler {
@@ -54,6 +57,7 @@ impl Compiler {
             optimize: None,
             skip_generators: false,
             runtime: None,
+            emit_abi: true,
         }
     }
 
@@ -95,6 +99,13 @@ impl Compiler {
     /// `--runtime --node`). `None` skips runtime emission (default).
     pub fn with_runtime(mut self, target: Option<JsRuntimeTarget>) -> Self {
         self.runtime = target;
+        self
+    }
+
+    /// Builder: write `.abi.json` next to the module (needed for browser/Node + `dream.js`).
+    /// Disable for native `run` / `debug-adapter` where wasmtime links hosts in Rust.
+    pub fn with_emit_abi(mut self, on: bool) -> Self {
+        self.emit_abi = on;
         self
     }
 
@@ -298,10 +309,17 @@ impl Compiler {
             info!("created debug map: {}", map_path);
         }
 
-        // Also emit a binary `.wasm` (what browsers/Node load) and an `.abi.json` sidecar
-        // describing live extern imports and exports so the JS runtime can auto-marshal values.
-        // `@compute` kernels become a sibling `.wgsl` + `"gpu"` ABI section.
-        emit_wasm_and_abi(out_path, &text, ast.get_root(), &kernels, &live_imports)?;
+        // Also emit a binary `.wasm` (what browsers/Node load) and, when requested, an `.abi.json`
+        // sidecar describing live extern imports and exports so the JS runtime can auto-marshal
+        // values. `@compute` kernels become a sibling `.wgsl` (+ `"gpu"` ABI section when ABI is on).
+        emit_wasm_and_abi(
+            out_path,
+            &text,
+            ast.get_root(),
+            &kernels,
+            &live_imports,
+            self.emit_abi,
+        )?;
 
         // Opt-in tree-shaken JS host (`--runtime --web` / `--runtime --node`).
         if let Some(rt) = self.runtime {

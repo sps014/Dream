@@ -66,14 +66,14 @@ pub fn already_imports(text: &str, package: &str) -> bool {
     text.lines().any(|l| l.trim() == needle)
 }
 
-/// Packages already imported via plain `import system…;`.
+/// Packages already imported via plain `import path;`.
 pub fn imported_packages(text: &str) -> std::collections::HashSet<String> {
     let mut set = std::collections::HashSet::new();
     for line in text.lines() {
         let t = line.trim();
         if let Some(rest) = t.strip_prefix("import ") {
             if let Some(path) = rest.strip_suffix(';') {
-                if path.starts_with("system") && !path.contains(" as ") {
+                if !path.contains(" as ") {
                     set.insert(path.trim().to_string());
                 }
             }

@@ -25,6 +25,8 @@ pub enum SymKind {
     Keyword,
     /// An `@attribute` name (`@json`, `@get_indexer`, …).
     Decorator,
+    /// An importable package or module path (`system.collections`, local `.dream`).
+    Module,
 }
 
 #[derive(Debug, Clone)]

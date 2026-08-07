@@ -2,7 +2,9 @@
 //! completion, and the scope/name-resolution helpers they share.
 
 use super::{is_ident_byte, keywords, Decl, Index, Located, Ref, SymKind, GLOBAL};
+use crate::code_actions::imported_packages;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
+use dream_stdlib::{BOOTSTRAP_PACKAGES, STD_PACKAGES};
 
 /// Walks upward from `start_dir` looking for a `dream_packages/` directory (installed by the
 /// `dreamer` package manager), stopping without a match at the first `dream.toml` project root
@@ -22,6 +24,140 @@ fn find_dream_packages_dir(start_dir: &std::path::Path) -> Option<std::path::Pat
         dir = d.parent().map(std::path::Path::to_path_buf);
     }
     None
+}
+
+/// If `offset` is inside an unquoted `import <path>` statement, returns
+/// `(path_start_byte, partial_path)` where `partial_path` is the text from the path start to
+/// the cursor (e.g. `""`, `system`, `system.`). Outside import context returns `None` so
+/// `System.` member completion is unaffected.
+pub(crate) fn import_path_partial(text: &str, offset: usize) -> Option<(usize, String)> {
+    let bytes = text.as_bytes();
+    let offset = offset.min(bytes.len());
+
+    // Walk back over the partial dotted path.
+    let mut path_start = offset;
+    while path_start > 0 {
+        let b = bytes[path_start - 1];
+        if is_ident_byte(b) || b == b'.' {
+            path_start -= 1;
+        } else {
+            break;
+        }
+    }
+
+    // Skip whitespace between `import` and the path.
+    let mut j = path_start;
+    while j > 0 && (bytes[j - 1] == b' ' || bytes[j - 1] == b'\t') {
+        j -= 1;
+    }
+
+    if j < 6 {
+        return None;
+    }
+    if &text[j - 6..j] != "import" {
+        return None;
+    }
+    // Word boundary before `import`.
+    if j > 6 {
+        let before = bytes[j - 7];
+        if is_ident_byte(before) {
+            return None;
+        }
+    }
+    // Must be on the same line as `import` (no newline between import and cursor).
+    if text[j..offset].contains('\n') {
+        return None;
+    }
+
+    Some((path_start, text[path_start..offset].to_string()))
+}
+
+fn push_module_completion(
+    out: &mut Vec<(String, SymKind, String, Option<String>)>,
+    name: String,
+    detail: &str,
+    imported: &std::collections::HashSet<String>,
+) {
+    if imported.contains(&name) {
+        return;
+    }
+    if out.iter().any(|(n, ..)| n == &name) {
+        return;
+    }
+    out.push((
+        name,
+        SymKind::Module,
+        detail.to_string(),
+        None,
+    ));
+}
+
+/// Package / local-module completions for an unquoted `import` path prefix.
+fn import_path_completions(
+    file_path: Option<&str>,
+    text: &str,
+    partial: &str,
+) -> Vec<(String, SymKind, String, Option<String>)> {
+    let imported = imported_packages(text);
+    let mut out = Vec::new();
+
+    for pkg in STD_PACKAGES {
+        if BOOTSTRAP_PACKAGES.contains(&pkg.name) {
+            continue;
+        }
+        if pkg.name.starts_with(partial) {
+            push_module_completion(&mut out, pkg.name.to_string(), "stdlib package", &imported);
+        }
+    }
+
+    if let Some(path_str) = file_path {
+        let parent_dir = std::path::Path::new(path_str)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(""));
+
+        // Local `.dream` files / directories as dotted relative modules.
+        if let Ok(entries) = std::fs::read_dir(parent_dir) {
+            for entry in entries.flatten() {
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                let name = entry.file_name().to_string_lossy().to_string();
+                if file_type.is_dir() {
+                    if name.starts_with('.') || name == "dream_packages" {
+                        continue;
+                    }
+                    if name.starts_with(partial) || format!("{}.", name).starts_with(partial) {
+                        push_module_completion(&mut out, name, "directory", &imported);
+                    }
+                } else if let Some(stem) = name.strip_suffix(".dream") {
+                    if stem.starts_with(partial) {
+                        push_module_completion(
+                            &mut out,
+                            stem.to_string(),
+                            "module",
+                            &imported,
+                        );
+                    }
+                }
+            }
+        }
+
+        if let Some(packages_dir) = find_dream_packages_dir(parent_dir) {
+            if let Ok(entries) = std::fs::read_dir(&packages_dir) {
+                for entry in entries.flatten() {
+                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if name.starts_with(partial) {
+                            push_module_completion(&mut out, name, "package", &imported);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
 }
 
 impl Index {
@@ -371,82 +507,11 @@ impl Index {
         let scope = self.enclosing_scope(offset);
         let bytes = text.as_bytes();
 
-        // Check for import path completion
-        let mut i = offset;
-        while i > 0 && bytes[i - 1] != b'"' && bytes[i - 1] != b'\n' {
-            i -= 1;
-        }
-        if i > 0 && bytes[i - 1] == b'"' {
-            let mut j = i - 1;
-            while j > 0 && (bytes[j - 1] == b' ' || bytes[j - 1] == b'\t') {
-                j -= 1;
-            }
-            if j >= 6 && &text[j - 6..j] == "import" {
-                let mut out = Vec::new();
-                if let Some(path_str) = file_path {
-                    let parent_dir = std::path::Path::new(path_str)
-                        .parent()
-                        .unwrap_or_else(|| std::path::Path::new(""));
-                    let current_dir = if offset > i {
-                        parent_dir.join(&text[i..offset])
-                    } else {
-                        parent_dir.to_path_buf()
-                    };
-
-                    let search_dir = if current_dir.is_dir() {
-                        current_dir.clone()
-                    } else {
-                        current_dir
-                            .parent()
-                            .unwrap_or_else(|| std::path::Path::new(""))
-                            .to_path_buf()
-                    };
-
-                    if let Ok(entries) = std::fs::read_dir(&search_dir) {
-                        for entry in entries.flatten() {
-                            if let Ok(file_type) = entry.file_type() {
-                                let name = entry.file_name().to_string_lossy().to_string();
-                                if file_type.is_dir() {
-                                    out.push((
-                                        name,
-                                        SymKind::Variable,
-                                        "directory".to_string(),
-                                        None,
-                                    ));
-                                } else if name.ends_with(".dream") {
-                                    out.push((name, SymKind::Variable, "module".to_string(), None));
-                                }
-                            }
-                        }
-                    }
-
-                    // Nothing typed yet (or what's typed so far still looks like a bare package
-                    // name, not a relative path): also offer every `dreamer`-installed dependency
-                    // under the nearest `dream_packages/` directory, so `import <name>` suggests
-                    // installed packages the same way it suggests local files/directories, not
-                    // just literal relative filesystem paths into `dream_packages/`.
-                    if offset == i || !text[i..offset].contains('/') {
-                        if let Some(packages_dir) = find_dream_packages_dir(parent_dir) {
-                            if let Ok(entries) = std::fs::read_dir(&packages_dir) {
-                                for entry in entries.flatten() {
-                                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                                        let name = entry.file_name().to_string_lossy().to_string();
-                                        if !out.iter().any(|(n, ..)| n == &name) {
-                                            out.push((
-                                                name,
-                                                SymKind::Variable,
-                                                "package".to_string(),
-                                                None,
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                return out;
-            }
+        // Unquoted `import system…` package paths — must run before member `.` so
+        // `import system.` is not treated as a variable member access. Expression
+        // `System.` still falls through to member_completions below.
+        if let Some((_path_start, partial)) = import_path_partial(text, offset) {
+            return import_path_completions(file_path, text, &partial);
         }
 
         // Detect `receiver.<partial>` by scanning back over an identifier and a dot.

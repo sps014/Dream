@@ -6,7 +6,9 @@ use super::registration::RegisteredGenerator;
 use super::syntax::SyntaxNodeId;
 use dream_diagnostics::DiagnosticBag;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(feature = "native")]
+use std::path::PathBuf;
 
 #[cfg(feature = "native")]
 use std::io::Write;
