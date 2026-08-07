@@ -262,6 +262,69 @@ function findDreamProjectRoot(startFile: string): string | null {
     return fs.existsSync(manifest) ? folder.uri.fsPath : null;
 }
 
+/** Read `package.targets` from dream.toml (`native` / `web` / `node`). Empty = no preference. */
+function readManifestTargets(projectRoot: string): RuntimeTarget[] {
+    const manifestPath = path.join(projectRoot, 'dream.toml');
+    let text: string;
+    try {
+        text = fs.readFileSync(manifestPath, 'utf8');
+    } catch {
+        return [];
+    }
+    const match = text.match(/^\s*targets\s*=\s*\[([^\]]*)\]/m);
+    if (!match) {
+        return [];
+    }
+    const out: RuntimeTarget[] = [];
+    for (const m of match[1].matchAll(/["'](native|web|node)["']/g)) {
+        const t = m[1] as RuntimeTarget;
+        if (!out.includes(t)) {
+            out.push(t);
+        }
+    }
+    return out;
+}
+
+/**
+ * Pick the host for `dreamer run` from dream.toml:
+ * - empty targets → omit `--target` (dreamer defaults to native)
+ * - single target → omit `--target` (dreamer auto-selects)
+ * - multiple → QuickPick; returns undefined if cancelled
+ */
+async function pickDreamerRunTarget(
+    projectRoot: string
+): Promise<{ targetArg: string; host: RuntimeTarget } | undefined> {
+    const targets = readManifestTargets(projectRoot);
+
+    if (targets.length === 0) {
+        return { targetArg: '', host: 'native' };
+    }
+    if (targets.length === 1) {
+        return { targetArg: '', host: targets[0] };
+    }
+
+    const labels: Record<RuntimeTarget, string> = {
+        native: 'Native (wasmtime)',
+        web: 'Web (browser)',
+        node: 'Node'
+    };
+    const picked = await vscode.window.showQuickPick(
+        targets.map((value) => ({
+            label: labels[value],
+            description: value,
+            value
+        })),
+        {
+            title: 'Dream: Run target',
+            placeHolder: 'Select a platform from package.targets in dream.toml'
+        }
+    );
+    if (!picked) {
+        return undefined;
+    }
+    return { targetArg: ` --target ${picked.value}`, host: picked.value };
+}
+
 function ensureDreamTerminal(cwd?: string): vscode.Terminal {
     if (!runTerminal || runTerminal.exitStatus !== undefined) {
         runTerminal = vscode.window.createTerminal({
@@ -274,10 +337,13 @@ function ensureDreamTerminal(cwd?: string): vscode.Terminal {
 }
 
 /**
- * Run via `dreamer` when a `dream.toml` is found above the file; otherwise `dream run` /
- * compile-only for the open file (same as a standalone `.dream` outside a package project).
+ * Run via `dreamer` when the workspace root has `dream.toml`; otherwise `dream run` /
+ * compile-only for the open file. Debug stays native (DAP / wasmtime) elsewhere.
  */
-function runProgramInTerminal(filePath: string, settings: DreamBuildSettings): void {
+async function runProgramInTerminal(
+    filePath: string,
+    settings: DreamBuildSettings
+): Promise<void> {
     const projectRoot = findDreamProjectRoot(filePath);
 
     if (projectRoot) {
@@ -288,11 +354,14 @@ function runProgramInTerminal(filePath: string, settings: DreamBuildSettings): v
             );
             return;
         }
+        const picked = await pickDreamerRunTarget(projectRoot);
+        if (!picked) {
+            return;
+        }
         const terminal = ensureDreamTerminal(projectRoot);
-        // Always pass --target so multi-target manifests and the status-bar host stay aligned.
-        const cmd = `${quotePath(dreamer.path)} run --target ${settings.runtimeTarget}`;
+        const cmd = `${quotePath(dreamer.path)} run${picked.targetArg}`;
         terminal.sendText(`cd ${quotePath(projectRoot)} && ${cmd}`);
-        if (settings.runtimeTarget === 'web') {
+        if (picked.host === 'web') {
             vscode.window.showInformationMessage(
                 'Dream: dreamer is serving the web target (see terminal for the local URL).'
             );
@@ -329,7 +398,7 @@ function registerRunFileCommand(context: vscode.ExtensionContext): void {
                     vscode.window.showWarningMessage('Open a .dream file to run it.');
                     return;
                 }
-                runProgramInTerminal(filePath, readBuildSettings());
+                await runProgramInTerminal(filePath, readBuildSettings());
             }
         )
     );
@@ -347,12 +416,7 @@ function registerDebugFileCommand(context: vscode.ExtensionContext): void {
                 }
 
                 const settings = readBuildSettings();
-                if (settings.runtimeTarget !== 'native') {
-                    vscode.window.showWarningMessage(
-                        'Dream: debugging requires the native runtime target (status bar).'
-                    );
-                    return;
-                }
+                // DAP debugging is always native wasmtime (ignores dream.toml targets / status bar).
 
                 const uri = vscode.Uri.file(filePath);
                 const modeLabel = settings.buildMode === 'release' ? 'Release' : 'Debug';
@@ -448,22 +512,18 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
 
             // Run Without Debugging / Ctrl+F5 / Run profiles: terminal, not DAP.
             if (config.noDebug) {
-                const runtimeTarget = settings.runtimeTarget;
-                runProgramInTerminal(config.program as string, {
+                // Fire-and-forget: resolveDebugConfiguration cannot be async in older APIs;
+                // the QuickPick still runs correctly on the promise.
+                void runProgramInTerminal(config.program as string, {
                     buildMode: (config.buildMode as BuildMode) || settings.buildMode,
                     optimizeLevel:
                         (config.optimizeLevel as OptimizeLevel) || settings.optimizeLevel,
-                    runtimeTarget
+                    runtimeTarget: settings.runtimeTarget
                 });
                 return undefined;
             }
 
-            if (settings.runtimeTarget !== 'native') {
-                vscode.window.showWarningMessage(
-                    'Dream: DAP debugging uses the native wasmtime host; switch runtime target to Native or use a Run profile for web/node.'
-                );
-            }
-
+            // DAP / Debug is always native wasmtime — ignore package.targets / status-bar host.
             return config;
         }
     };
