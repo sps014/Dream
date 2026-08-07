@@ -3,6 +3,17 @@
 WebGPU compute and present from Dream. Auto-imported when any `@compute` kernel is present
 (same pattern as `@json` → `system.json`). You can also `import system.gpu;`.
 
+Samples (user-facing code in each README / file):
+
+| Sample | Role |
+|--------|------|
+| [`saxpy.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/saxpy.dream) | Beginner — one `@compute` + readback |
+| [`gpu_ext.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/gpu_ext.dream) | Pass / indirect / `@readonly` |
+| [`life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life) | Complex — Game of Life + texture paint |
+| [`fluid/`](https://github.com/sps014/Dream/tree/main/sample/fluid) | Interactive stable fluids |
+
+Full language tutorial: [Compute shaders](../language/compute.md).
+
 ## Device
 
 | API | Role |

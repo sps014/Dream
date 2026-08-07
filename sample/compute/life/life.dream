@@ -1,0 +1,212 @@
+// Conway's Game of Life — `@compute` step + paint kernels, CPU path for `dream run`,
+// GPU + canvas path in the browser (ComputePass ping-pong).
+//
+// Build: cargo run -- sample/compute/life/life.dream
+// Browser: serve repo root, open life.html
+
+import system;
+import system.gpu;
+
+@compute(8, 8)
+fun life_step(@readonly cur: GpuBuffer<float>, next: GpuBuffer<float>, n: int): void {
+    let x = global_id.x;
+    let y = global_id.y;
+    if (x >= n || y >= n) { return; }
+    let i = y * n + x;
+    let neighbors = 0;
+    let dy = 0 - 1;
+    while (dy <= 1) {
+        let dx = 0 - 1;
+        while (dx <= 1) {
+            if (!(dx == 0 && dy == 0)) {
+                let nx = (x + dx + n) % n;
+                let ny = (y + dy + n) % n;
+                if (cur[ny * n + nx] > 0.5) {
+                    neighbors = neighbors + 1;
+                }
+            }
+            dx = dx + 1;
+        }
+        dy = dy + 1;
+    }
+    let alive = cur[i] > 0.5;
+    if (alive) {
+        next[i] = (neighbors == 2 || neighbors == 3) ? 1.0 : 0.0;
+    } else {
+        next[i] = (neighbors == 3) ? 1.0 : 0.0;
+    }
+}
+
+@compute(8, 8)
+fun life_paint(@readonly cells: GpuBuffer<float>, tex: GpuTexture, n: int): void {
+    let x = global_id.x;
+    let y = global_id.y;
+    if (x >= n || y >= n) { return; }
+    let v = cells[y * n + x];
+    let on = v > 0.5;
+    let r: float = on ? 0.15 : 0.02;
+    let g: float = on ? 0.95 : 0.05;
+    let b: float = on ? 0.45 : 0.08;
+    Gpu.texture_store(tex, x, y, r, g, b, 1.0);
+}
+
+fun seed_glider(cells: float[], n: int, ox: int, oy: int): void {
+    // Classic glider (relative cells).
+    let pattern_x = [1, 2, 0, 1, 2];
+    let pattern_y = [0, 1, 2, 2, 2];
+    for (let k = 0; k < 5; k = k + 1) {
+        let x = (ox + pattern_x[k]) % n;
+        let y = (oy + pattern_y[k]) % n;
+        cells[y * n + x] = 1.0;
+    }
+}
+
+fun seed_blinker(cells: float[], n: int, ox: int, oy: int): void {
+    for (let dx = 0; dx < 3; dx = dx + 1) {
+        let x = (ox + dx) % n;
+        let y = oy % n;
+        cells[y * n + x] = 1.0;
+    }
+}
+
+fun count_alive(cells: float[], n: int): int {
+    let live = 0;
+    let cells_n = n * n;
+    for (let i = 0; i < cells_n; i = i + 1) {
+        if (cells[i] > 0.5) {
+            live = live + 1;
+        }
+    }
+    return live;
+}
+
+fun life_step_cpu(cur: float[], next: float[], n: int): void {
+    for (let y = 0; y < n; y = y + 1) {
+        for (let x = 0; x < n; x = x + 1) {
+            let neighbors = 0;
+            for (let dy = 0 - 1; dy <= 1; dy = dy + 1) {
+                for (let dx = 0 - 1; dx <= 1; dx = dx + 1) {
+                    if (dx == 0 && dy == 0) { continue; }
+                    let nx = (x + dx + n) % n;
+                    let ny = (y + dy + n) % n;
+                    if (cur[ny * n + nx] > 0.5) {
+                        neighbors = neighbors + 1;
+                    }
+                }
+            }
+            let i = y * n + x;
+            let alive = cur[i] > 0.5;
+            if (alive) {
+                next[i] = (neighbors == 2 || neighbors == 3) ? 1.0 : 0.0;
+            } else {
+                next[i] = (neighbors == 3) ? 1.0 : 0.0;
+            }
+        }
+    }
+}
+
+fun print_grid(cells: float[], n: int): void {
+    for (let y = 0; y < n; y = y + 1) {
+        let row = "";
+        for (let x = 0; x < n; x = x + 1) {
+            row = row + ((cells[y * n + x] > 0.5) ? "#" : ".");
+        }
+        System.println(row);
+    }
+}
+
+fun run_cpu_demo(): void {
+    let n = 16;
+    let cells_n = n * n;
+    let cur = Buffer.alloc<float>(cells_n);
+    let next = Buffer.alloc<float>(cells_n);
+    seed_glider(cur, n, 2, 2);
+    seed_blinker(cur, n, 10, 8);
+
+    System.println("life cpu demo (16x16, 8 steps)");
+    System.println("gen 0 alive=" + count_alive(cur, n).to_string());
+    print_grid(cur, n);
+
+    for (let gen = 1; gen <= 8; gen = gen + 1) {
+        life_step_cpu(cur, next, n);
+        for (let i = 0; i < cells_n; i = i + 1) {
+            cur[i] = next[i];
+        }
+        System.println("gen " + gen.to_string() + " alive=" + count_alive(cur, n).to_string());
+    }
+    print_grid(cur, n);
+}
+
+async fun run_browser(n: int): void {
+    let cells_n = n * n;
+    let host = Buffer.alloc<float>(cells_n);
+    seed_glider(host, n, n / 4, n / 4);
+    seed_glider(host, n, (3 * n) / 4, n / 3);
+    seed_blinker(host, n, n / 2, n / 2);
+
+    let front = GpuBuffer<float>.from(host);
+    let back = GpuBuffer<float>.alloc(cells_n);
+    let tex = GpuTexture.rgba8(n, n);
+
+    let surface_r = GpuSurface.from_canvas("life");
+    if (surface_r.is_err()) {
+        System.println("GpuSurface.from_canvas failed");
+        return;
+    }
+    let surface = surface_r.unwrap_or(GpuSurface());
+    surface.configure(n, n);
+
+    System.println("life gpu — gliders + blinker");
+    let frame = 0;
+    while (true) {
+        let pass = ComputePass.begin();
+        pass.dispatch("life_step", [front, back], n, n, 1);
+        let ids = [back.id];
+        let tex_ids = [tex.id];
+        pass.dispatch_resources(
+            "life_paint",
+            ids,
+            tex_ids,
+            Buffer.alloc<int>(0),
+            n,
+            n,
+            1,
+            Buffer.alloc<byte>(0)
+        );
+        let sub = await pass.submit();
+        if (sub.is_err()) {
+            System.println("ComputePass.submit failed");
+            return;
+        }
+
+        // Ping-pong: back becomes the new front for the next step.
+        let tmp = front;
+        front = back;
+        back = tmp;
+
+        let bl = await GpuRenderPass.blit(surface, tex);
+        if (bl.is_err()) { return; }
+        let _p = await surface.present();
+        frame = frame + 1;
+        await Gpu.frame();
+    }
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("WebGPU unavailable — running CPU demo");
+        run_cpu_demo();
+        return;
+    }
+
+    let surface_r = GpuSurface.from_canvas("life");
+    if (surface_r.is_err()) {
+        // Native / headless: kernels still compile to WGSL; run a CPU demo for stdout.
+        System.println("no canvas — running CPU demo (kernels emitted for browser)");
+        run_cpu_demo();
+        return;
+    }
+
+    await run_browser(128);
+}

@@ -1,8 +1,28 @@
 # Dream fluid (WebGPU)
 
 Jos Stam–style 2D stable fluids written as Dream `@compute` kernels and dispatched through
-`system.gpu`. The browser host in [`runtime/dream.js`](../../runtime/dream.js) loads the sibling
-`.wgsl` + `.abi.json` and runs them on WebGPU.
+`system.gpu`. For a smaller multi-kernel GPU demo, see
+[`sample/compute/life/`](../compute/life/) (Game of Life). The browser host in
+[`runtime/dream.js`](../../runtime/dream.js) loads the sibling `.wgsl` + `.abi.json` and runs
+them on WebGPU.
+
+## User-facing kernels
+
+```dream
+@compute(8, 8)
+fun advect(
+    src: GpuBuffer<float>,
+    dst: GpuBuffer<float>,
+    vx: GpuBuffer<float>,
+    vy: GpuBuffer<float>,
+    n: int
+): void {
+    let x = global_id.x;
+    let y = global_id.y;
+    if (x >= n || y >= n) { return; }
+    // … bilinear sample …
+}
+```
 
 ## Build
 

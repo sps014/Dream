@@ -1,14 +1,36 @@
-// Minimal @compute smoke sample (compile + print).
+// Minimal @compute sample: SAXPY (out = 2*x + y), then readback.
+import system;
 import system.gpu;
 
 @compute(64)
-fun saxpy(a: float, x: GpuBuffer<float>, y: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
+fun saxpy(x: GpuBuffer<float>, y: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id.x;
     if (i < n) {
-        out[i] = a * x[i] + y[i];
+        out[i] = 2.0 * x[i] + y[i];
     }
 }
 
-fun main(): void {
-    System.println("compute ok");
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    let x = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
+    let y = GpuBuffer<float>.from([10.0, 20.0, 30.0, 40.0]);
+    let out = GpuBuffer<float>.alloc(4);
+    let r = await Compute.run_1d("saxpy", [x, y, out], 4);
+    if (r.is_err()) {
+        System.println("dispatch failed");
+        return;
+    }
+
+    // Native host stages buffers but does not run WGSL — expect zeros after a no-op dispatch.
+    // Browser WebGPU fills `out` with 12, 24, 36, 48.
+    let vals = await out.read();
+    System.println((int)vals[0]);
+    System.println((int)vals[1]);
+    System.println((int)vals[2]);
+    System.println((int)vals[3]);
 }
