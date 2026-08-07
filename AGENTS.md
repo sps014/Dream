@@ -174,12 +174,13 @@ npx @vscode/vsce package   # produce .vsix
 For local development, point the extension at your Cargo build output (the extension does not ship binaries):
 
 ```bash
-source ./use-toolchain.sh          # builds release dream / dream-lsp / dreamer, sets DREAM_* + PATH
-# source ./use-toolchain.sh --debug
-code .                             # launch VS Code from this shell so it inherits the env
+source ./use-toolchain.sh          # builds release dream / dream-lsp / dreamer
+                                   # exports DREAM_* in this shell AND writes ~/.dream/toolchain.env
+# Reload the Cursor/VS Code window — GUI apps do not inherit terminal exports; the env file is
+# how the IDE sees the toolchain after sourcing the script.
 ```
 
-Or set VS Code settings `dream.home` / `dreamer.home` to `<repo>/target/release` (or `target/debug`).
+You can still set VS Code settings `dream.home` / `dreamer.home` explicitly if you prefer.
 
 ### Pre-commit / "done" gate — all three must pass
 ```bash

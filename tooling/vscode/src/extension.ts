@@ -33,19 +33,68 @@ function binaryInHome(home: string, name: string): string | null {
 }
 
 /**
- * Resolve toolchain binaries (`dream`, `dream-lsp`, `dreamer`) from the environment only —
- * no compiler is shipped inside the extension.
+ * User-level toolchain file written by `source ./use-toolchain.sh`.
+ * GUI editors (Cursor/VS Code) do not inherit terminal exports, so this is how the
+ * script reaches the IDE without launching it from that shell.
+ */
+function readUserToolchainFile(): { dreamHome?: string; dreamerHome?: string; dreamBin?: string } {
+    const homeDir = process.env.HOME || process.env.USERPROFILE;
+    if (!homeDir) {
+        return {};
+    }
+    const filePath = path.join(homeDir, '.dream', 'toolchain.env');
+    if (!fs.existsSync(filePath)) {
+        return {};
+    }
+    try {
+        const out: { dreamHome?: string; dreamerHome?: string; dreamBin?: string } = {};
+        for (const line of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) {
+                continue;
+            }
+            const eq = trimmed.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            const key = trimmed.slice(0, eq).trim();
+            let value = trimmed.slice(eq + 1).trim();
+            if (
+                (value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'"))
+            ) {
+                value = value.slice(1, -1);
+            }
+            if (key === 'DREAM_HOME') {
+                out.dreamHome = value;
+            } else if (key === 'DREAMER_HOME') {
+                out.dreamerHome = value;
+            } else if (key === 'DREAM_BIN') {
+                out.dreamBin = value;
+            }
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * Resolve toolchain binaries (`dream`, `dream-lsp`, `dreamer`).
+ * No compiler is shipped inside the extension.
  *
- * Order: `dream.home` / `DREAM_HOME` (or `dreamer.home` / `DREAMER_HOME`) → `DREAM_BIN`
- * (compiler only) → `PATH`.
+ * Order: VS Code setting → process env → `~/.dream/toolchain.env` (from use-toolchain.sh) → PATH.
  */
 function resolveToolBinary(
     name: 'dream' | 'dream-lsp' | 'dreamer'
 ): { path: string; source: string } | null {
+    const fileEnv = readUserToolchainFile();
+
     if (name === 'dream' || name === 'dream-lsp') {
         const home =
             vscode.workspace.getConfiguration('dream').get<string>('home')?.trim() ||
-            process.env.DREAM_HOME?.trim();
+            process.env.DREAM_HOME?.trim() ||
+            fileEnv.dreamHome?.trim();
         if (home) {
             const hit = binaryInHome(home, name);
             if (hit) {
@@ -53,7 +102,8 @@ function resolveToolBinary(
             }
         }
         if (name === 'dream') {
-            const dreamBin = process.env.DREAM_BIN?.trim();
+            const dreamBin =
+                process.env.DREAM_BIN?.trim() || fileEnv.dreamBin?.trim();
             if (dreamBin && fs.existsSync(dreamBin)) {
                 return { path: dreamBin, source: 'DREAM_BIN' };
             }
@@ -61,7 +111,9 @@ function resolveToolBinary(
     } else {
         const home =
             vscode.workspace.getConfiguration('dreamer').get<string>('home')?.trim() ||
-            process.env.DREAMER_HOME?.trim();
+            process.env.DREAMER_HOME?.trim() ||
+            fileEnv.dreamerHome?.trim() ||
+            fileEnv.dreamHome?.trim();
         if (home) {
             const hit = binaryInHome(home, 'dreamer');
             if (hit) {
@@ -97,7 +149,8 @@ function findOnPath(name: string): string | null {
 }
 
 const TOOLCHAIN_HINT =
-    'Set dream.home / DREAM_HOME (and dreamer.home / DREAMER_HOME) via `source ./use-toolchain.sh`, or put the binaries on PATH.';
+    'Run `source ./use-toolchain.sh` in the Dream repo (writes ~/.dream/toolchain.env for the IDE), ' +
+    'or set dream.home / dreamer.home, or put the binaries on PATH.';
 
 /** Resolves a shell-quoted command for invoking the `dream` compiler CLI. */
 function resolveDreamCliCommand(): string | null {
@@ -663,10 +716,12 @@ export async function activate(context: vscode.ExtensionContext) {
         );
     }
 
-    // Resolve dream-lsp from dream.home / DREAM_HOME / PATH; otherwise `cargo run` from the monorepo.
+    // Resolve dream-lsp from dream.home / DREAM_HOME / PATH.
+    // Cargo fallback only when developing the extension inside the Dream monorepo (manifest exists).
     const lspResolved = resolveToolBinary('dream-lsp');
+    const monorepoManifest = path.join(__dirname, '..', '..', 'dream-lsp', 'Cargo.toml');
 
-    let serverOptions: ServerOptions;
+    let serverOptions: ServerOptions | undefined;
 
     if (lspResolved) {
         outputChannel.appendLine(`Using dream-lsp from ${lspResolved.source}: ${lspResolved.path}`);
@@ -675,28 +730,39 @@ export async function activate(context: vscode.ExtensionContext) {
             args: [],
             options: { env: process.env }
         };
-    } else {
-        outputChannel.appendLine('No dream-lsp via DREAM_HOME/PATH. Falling back to cargo...');
-
+    } else if (fs.existsSync(monorepoManifest)) {
+        outputChannel.appendLine(
+            `No dream-lsp via DREAM_HOME/PATH; using monorepo cargo fallback: ${monorepoManifest}`
+        );
         const isCargoAvailable = await new Promise<boolean>((resolve) => {
             exec('cargo --version', (error) => resolve(!error));
         });
-
         if (!isCargoAvailable) {
-            const msg =
-                `Dream LSP failed to start: ${TOOLCHAIN_HINT} Or ensure cargo is available for the monorepo fallback.`;
+            const msg = `Dream LSP failed to start: cargo not on PATH. ${TOOLCHAIN_HINT}`;
             vscode.window.showErrorMessage(msg);
             outputChannel.appendLine(msg);
             outputChannel.show();
             return;
         }
-
-        const manifestPath = path.join(__dirname, '..', '..', 'dream-lsp', 'Cargo.toml');
         serverOptions = {
             command: 'cargo',
-            args: ['run', '-q', '--manifest-path', manifestPath],
+            args: ['run', '-q', '--manifest-path', monorepoManifest],
             options: { env: process.env }
         };
+    } else {
+        const msg =
+            `Dream LSP failed to start: dream-lsp not found. ${TOOLCHAIN_HINT}`;
+        vscode.window.showErrorMessage(msg);
+        outputChannel.appendLine(msg);
+        outputChannel.appendLine(
+            `Checked DREAM_HOME=${process.env.DREAM_HOME ?? '(unset)'} dream.home=${
+                vscode.workspace.getConfiguration('dream').get<string>('home') || '(unset)'
+            } ~/.dream/toolchain.env DREAM_HOME=${
+                readUserToolchainFile().dreamHome ?? '(unset)'
+            }`
+        );
+        outputChannel.show();
+        return;
     }
 
     const clientOptions: LanguageClientOptions = {

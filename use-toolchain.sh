@@ -6,9 +6,9 @@
 #   source ./use-toolchain.sh --debug      # target/debug instead
 #   source ./use-toolchain.sh --skip-build # only export paths
 #
-# Then launch editors from this shell so they inherit the env:
-#   code .
-# Or set VS Code settings dream.home / dreamer.home to the printed directory.
+# Then reload the Cursor/VS Code window (or restart the Dream extension).
+# The script also writes ~/.dream/toolchain.env so the IDE picks up paths without
+# inheriting this shell's environment (GUI apps do not see `export` from a terminal).
 
 # Resolve this script's path when sourced from bash or zsh.
 if [ -n "${ZSH_VERSION:-}" ]; then
@@ -45,7 +45,8 @@ Usage: source ./use-toolchain.sh [--release|--debug] [--skip-build]
   --debug        Use target/debug
   --skip-build   Do not run cargo; only export paths
 
-Exports DREAM_HOME, DREAMER_HOME, DREAM_BIN, and prepends that directory to PATH.
+Exports DREAM_HOME, DREAMER_HOME, DREAM_BIN, prepends that directory to PATH,
+and writes ~/.dream/toolchain.env for Cursor/VS Code (GUI apps do not inherit shell exports).
 EOF
       unset _dream_script _dream_root _dream_sourced _dream_profile _dream_skip_build _arg
       if [ "$_dream_sourced" -eq 1 ] 2>/dev/null; then
@@ -111,17 +112,34 @@ case ":${PATH}:" in
   *) export PATH="${_dream_home}:${PATH}" ;;
 esac
 
+# Persist for GUI editors (Cursor/VS Code do not inherit this shell's exports).
+_dream_user_dir="${HOME:-}/.dream"
+_dream_env_file="${_dream_user_dir}/toolchain.env"
+if [ -n "${HOME:-}" ]; then
+  mkdir -p "$_dream_user_dir"
+  cat > "$_dream_env_file" <<EOF
+# Written by use-toolchain.sh — read by the VS Code/Cursor Dream extension and dreamer.
+DREAM_HOME=${DREAM_HOME}
+DREAMER_HOME=${DREAMER_HOME}
+DREAM_BIN=${DREAM_BIN}
+EOF
+  echo "Wrote ${_dream_env_file} (picked up by the IDE without relaunching from this shell)"
+fi
+
 echo "DREAM_HOME=${DREAM_HOME}"
 echo "DREAMER_HOME=${DREAMER_HOME}"
 echo "DREAM_BIN=${DREAM_BIN}"
 echo "PATH starts with ${_dream_home}"
 echo "Ready: dream=$(command -v dream)  dreamer=$(command -v dreamer)  dream-lsp=$(command -v dream-lsp)"
+echo "Reload the Dream extension / Cursor window if the LSP was already running."
 
 if [ "$_dream_sourced" -eq 0 ]; then
   echo >&2
-  echo "warning: script was executed, not sourced — exports only applied to this subprocess." >&2
+  echo "warning: script was executed, not sourced — shell exports only applied to this subprocess." >&2
+  echo "(${_dream_env_file} was still written for the IDE.)" >&2
   echo "run:  source ./use-toolchain.sh" >&2
 fi
 
 unset _dream_script _dream_root _dream_sourced _dream_profile _dream_skip_build _arg
 unset _dream_home _dream_ext _dream_bin _dreamer_bin _dream_lsp_bin _need
+unset _dream_user_dir _dream_env_file

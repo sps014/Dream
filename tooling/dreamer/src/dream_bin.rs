@@ -2,35 +2,78 @@
 //!
 //! Resolution order (first hit wins):
 //! 1. `DREAM_BIN` — exact path to the `dream` binary
-//! 2. `DREAM_HOME` — directory containing `dream` / `dream.exe` (dev checkout `target/debug`)
-//! 3. `dream` on `PATH`
-//! 4. Sibling of this `dreamer` executable (same Cargo `target/{debug,release}/`)
-//! 5. Walk upward from cwd for `target/debug/dream` then `target/release/dream`
+//! 2. `DREAM_HOME` — directory containing `dream` / `dream.exe`
+//! 3. `~/.dream/toolchain.env` written by `use-toolchain.sh` (for tools run outside that shell)
+//! 4. `dream` on `PATH`
+//! 5. Sibling of this `dreamer` executable (same Cargo `target/{debug,release}/`)
+//! 6. Walk upward from cwd for `target/debug/dream` then `target/release/dream`
 
 use anyhow::{bail, Result};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+fn read_toolchain_env_file() -> BTreeMap<String, String> {
+    let Some(home) = dirs::home_dir() else {
+        return BTreeMap::new();
+    };
+    let path = home.join(".dream").join("toolchain.env");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return BTreeMap::new();
+    };
+    let mut out = BTreeMap::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let mut value = value.trim().to_string();
+        if (value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\''))
+        {
+            value = value[1..value.len() - 1].to_string();
+        }
+        out.insert(key.trim().to_string(), value);
+    }
+    out
+}
+
+fn env_or_toolchain(key: &str, file: &BTreeMap<String, String>) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| file.get(key).cloned())
+}
+
 pub fn locate() -> Result<PathBuf> {
-    if let Ok(custom) = std::env::var("DREAM_BIN") {
-        let path = PathBuf::from(custom);
+    let file = read_toolchain_env_file();
+
+    if let Some(custom) = env_or_toolchain("DREAM_BIN", &file) {
+        let path = PathBuf::from(&custom);
         if path.is_file() {
             return Ok(path);
         }
-        bail!(
-            "DREAM_BIN is set to '{}' but that path is not a file",
-            path.display()
-        );
+        if std::env::var_os("DREAM_BIN").is_some() {
+            bail!(
+                "DREAM_BIN is set to '{}' but that path is not a file",
+                path.display()
+            );
+        }
     }
 
-    if let Ok(home) = std::env::var("DREAM_HOME") {
-        let home = PathBuf::from(home);
+    if let Some(home) = env_or_toolchain("DREAM_HOME", &file) {
+        let home = PathBuf::from(&home);
         if let Some(path) = binary_in_dir(&home, "dream") {
             return Ok(path);
         }
-        bail!(
-            "DREAM_HOME is set to '{}' but no `dream` binary was found there",
-            home.display()
-        );
+        if std::env::var_os("DREAM_HOME").is_some() {
+            bail!(
+                "DREAM_HOME is set to '{}' but no `dream` binary was found there",
+                home.display()
+            );
+        }
     }
 
     if let Some(on_path) = find_on_path("dream") {
@@ -74,25 +117,31 @@ pub fn locate() -> Result<PathBuf> {
 
     bail!(
         "could not find the `dream` compiler executable; install it on PATH, set DREAM_HOME \
-         (directory containing `dream`) or DREAM_BIN (exact path), or run `cargo build` from \
-         the Dream repo"
+         (directory containing `dream`) or DREAM_BIN (exact path), run `source ./use-toolchain.sh` \
+         (writes ~/.dream/toolchain.env), or `cargo build` from the Dream repo"
     )
 }
 
 /// Locates the `dreamer` package-manager binary (for tooling that shells out to it).
 ///
-/// Resolution order: `DREAMER_HOME` → `PATH` → sibling of `current_exe` → cwd walk for
-/// `target/{debug,release}/dreamer`.
+/// Resolution order: `DREAMER_HOME` → `~/.dream/toolchain.env` → `PATH` → sibling of
+/// `current_exe` → cwd walk for `target/{debug,release}/dreamer`.
 pub fn locate_dreamer() -> Result<PathBuf> {
-    if let Ok(home) = std::env::var("DREAMER_HOME") {
-        let home = PathBuf::from(home);
+    let file = read_toolchain_env_file();
+
+    if let Some(home) = env_or_toolchain("DREAMER_HOME", &file)
+        .or_else(|| env_or_toolchain("DREAM_HOME", &file))
+    {
+        let home = PathBuf::from(&home);
         if let Some(path) = binary_in_dir(&home, "dreamer") {
             return Ok(path);
         }
-        bail!(
-            "DREAMER_HOME is set to '{}' but no `dreamer` binary was found there",
-            home.display()
-        );
+        if std::env::var_os("DREAMER_HOME").is_some() {
+            bail!(
+                "DREAMER_HOME is set to '{}' but no `dreamer` binary was found there",
+                home.display()
+            );
+        }
     }
 
     if let Some(on_path) = find_on_path("dreamer") {
@@ -125,7 +174,8 @@ pub fn locate_dreamer() -> Result<PathBuf> {
 
     bail!(
         "could not find the `dreamer` executable; install it on PATH, set DREAMER_HOME \
-         (directory containing `dreamer`), or run `cargo build -p dreamer` from the Dream repo"
+         (directory containing `dreamer`), run `source ./use-toolchain.sh`, or \
+         `cargo build -p dreamer` from the Dream repo"
     )
 }
 
