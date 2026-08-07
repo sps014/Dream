@@ -162,7 +162,35 @@
           }
         },
         {
-          "match": "\\b(class|enum|extend)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "match": "\\b(class)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "storage.type.dream" },
+            "2": { "name": "entity.name.type.class.dream" }
+          }
+        },
+        {
+          "match": "\\b((?:ref\\s+)?struct)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "storage.type.dream" },
+            "2": { "name": "entity.name.type.struct.dream" }
+          }
+        },
+        {
+          "match": "\\b(enum)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "storage.type.dream" },
+            "2": { "name": "entity.name.type.enum.dream" }
+          }
+        },
+        {
+          "match": "\\b(interface)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "storage.type.dream" },
+            "2": { "name": "entity.name.type.interface.dream" }
+          }
+        },
+        {
+          "match": "\\b(extend)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
           "captures": {
             "1": { "name": "storage.type.dream" },
             "2": { "name": "entity.name.type.class.dream" }

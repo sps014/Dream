@@ -26,7 +26,9 @@ pub fn map_range(range: Range) -> LspRange {
 pub fn completion_kind(kind: SymKind) -> CompletionItemKind {
     match kind {
         SymKind::Function => CompletionItemKind::FUNCTION,
+        SymKind::Class => CompletionItemKind::CLASS,
         SymKind::Struct => CompletionItemKind::STRUCT,
+        SymKind::Interface => CompletionItemKind::INTERFACE,
         SymKind::Enum => CompletionItemKind::ENUM,
         SymKind::EnumMember => CompletionItemKind::ENUM_MEMBER,
         SymKind::Field => CompletionItemKind::FIELD,
@@ -42,7 +44,9 @@ pub fn completion_kind(kind: SymKind) -> CompletionItemKind {
 pub fn symbol_kind(kind: SymKind) -> SymbolKind {
     match kind {
         SymKind::Function => SymbolKind::FUNCTION,
+        SymKind::Class => SymbolKind::CLASS,
         SymKind::Struct => SymbolKind::STRUCT,
+        SymKind::Interface => SymbolKind::INTERFACE,
         SymKind::Enum => SymbolKind::ENUM,
         SymKind::EnumMember => SymbolKind::ENUM_MEMBER,
         SymKind::Field => SymbolKind::FIELD,

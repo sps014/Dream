@@ -78,9 +78,10 @@ impl Builder {
             ExpressionNode::FunctionCall(name, generic_args, _) => {
                 self.resolve(&name.text, scope, name.position.start)
                     .and_then(|d| {
-                        if d.kind == SymKind::Struct {
-                            // It's a constructor call (e.g. `Test("John", 20)`), so the type is the struct
-                            // name itself, rendered with angle brackets when generic (`Box<int>`).
+                        if matches!(d.kind, SymKind::Class | SymKind::Struct) {
+                            // It's a constructor call (e.g. `Test("John", 20)`), so the type is the
+                            // class/struct name itself, rendered with angle brackets when generic
+                            // (`Box<int>`).
                             match generic_args {
                                 Some(args) => {
                                     let args_str = args
@@ -175,7 +176,12 @@ impl Builder {
                 && d.scope == GLOBAL
                 && matches!(
                     d.kind,
-                    SymKind::Function | SymKind::Struct | SymKind::Enum | SymKind::Variable
+                    SymKind::Function
+                        | SymKind::Class
+                        | SymKind::Struct
+                        | SymKind::Interface
+                        | SymKind::Enum
+                        | SymKind::Variable
                 )
         })
     }
@@ -189,8 +195,20 @@ impl Builder {
                 .insert(func.name.text.clone(), param_names(func));
         }
         for st in &program.structs {
-            let detail = format!("class {}", st.name.text);
-            self.push_decl(&st.name, SymKind::Struct, detail, GLOBAL, None);
+            let (kind, keyword) = if st.is_value {
+                (
+                    SymKind::Struct,
+                    if st.is_ref_struct {
+                        "ref struct"
+                    } else {
+                        "struct"
+                    },
+                )
+            } else {
+                (SymKind::Class, "class")
+            };
+            let detail = format!("{} {}", keyword, st.name.text);
+            self.push_decl(&st.name, kind, detail, GLOBAL, None);
             for field in &st.fields {
                 let field_ty = field.field_type.display_name();
                 let detail = format!("{}.{}: {}", st.name.text, field.name.text, field_ty);
@@ -265,7 +283,7 @@ impl Builder {
                 })
                 .unwrap_or_default();
             let detail = format!("interface {}{}", iface.name.text, generics);
-            self.push_decl(&iface.name, SymKind::Struct, detail, GLOBAL, None);
+            self.push_decl(&iface.name, SymKind::Interface, detail, GLOBAL, None);
             for method in &iface.methods {
                 let detail = format!("{}.{}", iface.name.text, signature(method));
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
@@ -444,10 +462,7 @@ impl Builder {
                 self.walk_expr(expr, scope);
             }
             StatementNode::TupleDeclaration {
-                names,
-                ty,
-                init,
-                ..
+                names, ty, init, ..
             } => {
                 if let Some(t) = ty {
                     self.add_type_ref(t, scope);
@@ -613,9 +628,7 @@ impl Builder {
             }
             ExpressionNode::Unary(_, e)
             | ExpressionNode::IncDec { target: e, .. }
-            | ExpressionNode::Parenthesized(e) => {
-                self.walk_expr(e, scope)
-            }
+            | ExpressionNode::Parenthesized(e) => self.walk_expr(e, scope),
             ExpressionNode::FunctionCall(name, _, args) => {
                 self.add_ref(name, SymKind::Function, scope);
                 // A name resolves to a free function if one exists; otherwise `Name(...)` is a
@@ -744,7 +757,7 @@ impl Builder {
             }
             PatternNode::Variant(qualifier, variant, subs) => {
                 if let Some(q) = qualifier {
-                    self.add_ref(q, SymKind::Type, scope);
+                    self.add_ref(q, self.type_name_kind(&q.text), scope);
                 }
                 self.add_ref(variant, SymKind::EnumMember, scope);
                 for sub in subs {
@@ -761,8 +774,25 @@ impl Builder {
 
     fn add_type_ref(&mut self, ty: &Type, scope: usize) {
         if let Type::Struct(token, _) = base_struct(ty) {
-            self.add_ref(token, SymKind::Type, scope);
+            self.add_ref(token, self.type_name_kind(&token.text), scope);
         }
+    }
+
+    /// Concrete kind for a named type reference, falling back to [`SymKind::Type`] when unknown
+    /// (builtins, unresolved names, generics not yet declared in this pass).
+    fn type_name_kind(&self, name: &str) -> SymKind {
+        self.decls
+            .iter()
+            .find(|d| {
+                d.scope == GLOBAL
+                    && d.name == name
+                    && matches!(
+                        d.kind,
+                        SymKind::Class | SymKind::Struct | SymKind::Interface | SymKind::Enum
+                    )
+            })
+            .map(|d| d.kind)
+            .unwrap_or(SymKind::Type)
     }
 
     fn is_enum(&self, name: &str) -> bool {

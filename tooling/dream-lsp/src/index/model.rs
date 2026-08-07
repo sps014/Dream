@@ -9,7 +9,12 @@ pub(crate) const GLOBAL: usize = usize::MAX;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SymKind {
     Function,
+    /// A reference-counted `class` type.
+    Class,
+    /// A value-type `struct` (including `ref struct`).
     Struct,
+    /// An `interface` type.
+    Interface,
     Enum,
     EnumMember,
     Field,

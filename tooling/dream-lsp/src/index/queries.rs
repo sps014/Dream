@@ -67,7 +67,12 @@ impl Index {
                 && d.scope == GLOBAL
                 && matches!(
                     d.kind,
-                    SymKind::Function | SymKind::Struct | SymKind::Enum | SymKind::Variable
+                    SymKind::Function
+                        | SymKind::Class
+                        | SymKind::Struct
+                        | SymKind::Interface
+                        | SymKind::Enum
+                        | SymKind::Variable
                 )
         })
     }
@@ -325,7 +330,7 @@ impl Index {
             }
         } else {
             if let Some(decl) = self.resolve(name, scope, recv_start) {
-                if decl.kind == SymKind::Struct {
+                if matches!(decl.kind, SymKind::Class | SymKind::Struct) {
                     if let Some(ctor_decl) = self.decls.iter().find(|d| {
                         d.name == CONSTRUCTOR_NAME
                             && d.kind == SymKind::Method
@@ -474,7 +479,11 @@ impl Index {
         }
         for d in &self.decls {
             match d.kind {
-                SymKind::Function | SymKind::Struct | SymKind::Enum => {
+                SymKind::Function
+                | SymKind::Class
+                | SymKind::Struct
+                | SymKind::Interface
+                | SymKind::Enum => {
                     out.push((
                         d.name.clone(),
                         d.kind,
@@ -529,12 +538,13 @@ impl Index {
             return self.members_of_struct(base);
         }
 
-        // A bare struct name used as a receiver (e.g. static method access `Point.`).
-        if self
-            .decls
-            .iter()
-            .any(|d| d.kind == SymKind::Struct && d.name == receiver)
-        {
+        // A bare class/struct/interface name used as a receiver (e.g. static method access `Point.`).
+        if self.decls.iter().any(|d| {
+            matches!(
+                d.kind,
+                SymKind::Class | SymKind::Struct | SymKind::Interface
+            ) && d.name == receiver
+        }) {
             return self.members_of_struct(receiver);
         }
 

@@ -13,6 +13,16 @@ let runTerminal: vscode.Terminal | undefined;
 let watPanel: vscode.WebviewPanel | undefined;
 let compilerOutputChannel: vscode.OutputChannel;
 
+type BuildMode = 'debug' | 'release';
+type OptimizeLevel = 'default' | '0' | '1' | '2' | '3' | '4' | 's' | 'z';
+type RuntimeTarget = 'native' | 'web' | 'node';
+
+interface DreamBuildSettings {
+    buildMode: BuildMode;
+    optimizeLevel: OptimizeLevel;
+    runtimeTarget: RuntimeTarget;
+}
+
 /**
  * Resolves the bundled platform-specific binary for `namePrefix` (e.g. `dream`, `dream-lsp`)
  * inside `binDir`: prefers `<namePrefix>-<platform>-<arch>[.exe]`, falling back to the generic
@@ -91,6 +101,50 @@ async function saveActiveDreamFile(editor: vscode.TextEditor): Promise<void> {
     }
 }
 
+function dreamConfig(): vscode.WorkspaceConfiguration {
+    return vscode.workspace.getConfiguration('dream');
+}
+
+function readBuildSettings(): DreamBuildSettings {
+    const cfg = dreamConfig();
+    return {
+        buildMode: (cfg.get<string>('buildMode') as BuildMode) || 'debug',
+        optimizeLevel: (cfg.get<string>('optimizeLevel') as OptimizeLevel) || 'default',
+        runtimeTarget: (cfg.get<string>('runtimeTarget') as RuntimeTarget) || 'native'
+    };
+}
+
+async function updateBuildSetting(
+    key: 'buildMode' | 'optimizeLevel' | 'runtimeTarget',
+    value: string
+): Promise<void> {
+    await dreamConfig().update(key, value, vscode.ConfigurationTarget.Workspace);
+}
+
+/**
+ * Builds CLI flag args from the current Dream settings (before the subcommand / file path).
+ * Example: `['--release', '-Os', '--runtime', '--web']`.
+ */
+function buildDreamCliArgs(settings: DreamBuildSettings = readBuildSettings()): string[] {
+    const args: string[] = [];
+    if (settings.buildMode === 'release') {
+        args.push('--release');
+    }
+    if (settings.optimizeLevel !== 'default') {
+        args.push(`-O${settings.optimizeLevel}`);
+    }
+    if (settings.runtimeTarget === 'web') {
+        args.push('--runtime', '--web');
+    } else if (settings.runtimeTarget === 'node') {
+        args.push('--runtime', '--node');
+    }
+    return args;
+}
+
+function formatCliArgs(args: string[]): string {
+    return args.length === 0 ? '' : `${args.join(' ')} `;
+}
+
 function registerRunFileCommand(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('dream.runFile', async () => {
@@ -107,12 +161,27 @@ function registerRunFileCommand(context: vscode.ExtensionContext): void {
                 return;
             }
             const filePath = editor.document.uri.fsPath;
+            const settings = readBuildSettings();
+            const flagArgs = buildDreamCliArgs(settings);
 
             if (!runTerminal || runTerminal.exitStatus !== undefined) {
                 runTerminal = vscode.window.createTerminal('Dream');
             }
             runTerminal.show();
-            runTerminal.sendText(`${dreamCmd} run ${quotePath(filePath)}`);
+
+            if (settings.runtimeTarget === 'native') {
+                // `dream [--release] [-O…] run <file>`
+                const flags = formatCliArgs(flagArgs);
+                runTerminal.sendText(`${dreamCmd} ${flags}run ${quotePath(filePath)}`);
+            } else {
+                // Web/Node: compile with runtime emit (no wasmtime run).
+                const flags = formatCliArgs(flagArgs);
+                runTerminal.sendText(`${dreamCmd} ${flags}${quotePath(filePath)}`);
+                const targetLabel = settings.runtimeTarget === 'web' ? 'browser' : 'Node';
+                vscode.window.showInformationMessage(
+                    `Dream: compiled with ${targetLabel} runtime.js (use the generated *.runtime.js host).`
+                );
+            }
         })
     );
 }
@@ -198,10 +267,9 @@ function registerDebugAdapter(context: vscode.ExtensionContext): void {
     context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('dream', factory));
 }
 
-function registerShowWatCommand(context: vscode.ExtensionContext, isRelease: boolean): void {
-    const commandName = isRelease ? 'dream.showWatRelease' : 'dream.showWat';
+function registerShowWatCommand(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
-        vscode.commands.registerCommand(commandName, async () => {
+        vscode.commands.registerCommand('dream.showWat', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor || editor.document.languageId !== 'dream') {
                 vscode.window.showWarningMessage('Open a .dream file to view its generated WAT.');
@@ -217,10 +285,15 @@ function registerShowWatCommand(context: vscode.ExtensionContext, isRelease: boo
             const filePath = editor.document.uri.fsPath;
             const watPath = watPathFor(filePath);
             const fileLabel = path.basename(filePath);
+            // Runtime target does not affect WAT text; compile with build/opt only.
+            const compileFlags = formatCliArgs(
+                buildDreamCliArgs({
+                    ...readBuildSettings(),
+                    runtimeTarget: 'native'
+                })
+            );
 
-            const command = isRelease
-                ? `${dreamCmd} --release ${quotePath(filePath)}`
-                : `${dreamCmd} ${quotePath(filePath)}`;
+            const command = `${dreamCmd} ${compileFlags}${quotePath(filePath)}`;
             exec(command, { cwd: path.dirname(filePath) }, (error, stdout, stderr) => {
                 if (error) {
                     const details = [stderr, stdout].filter(Boolean).join('\n');
@@ -296,6 +369,166 @@ function showWatPanel(fileLabel: string, watContent: string): void {
 </html>`;
 }
 
+async function pickBuildMode(): Promise<void> {
+    const current = readBuildSettings().buildMode;
+    const picked = await vscode.window.showQuickPick(
+        [
+            {
+                label: 'Debug',
+                description: current === 'debug' ? '(current)' : undefined,
+                detail: 'Instrumented allocator; no wasm-opt by default',
+                value: 'debug' as BuildMode
+            },
+            {
+                label: 'Release',
+                description: current === 'release' ? '(current)' : undefined,
+                detail: 'Trimmed allocator + wasm-opt (default -Os)',
+                value: 'release' as BuildMode
+            }
+        ],
+        { title: 'Dream: Build Mode', placeHolder: 'Select build mode' }
+    );
+    if (picked) {
+        await updateBuildSetting('buildMode', picked.value);
+    }
+}
+
+async function pickOptimizeLevel(): Promise<void> {
+    const current = readBuildSettings().optimizeLevel;
+    const items: Array<{
+        label: string;
+        description?: string;
+        detail: string;
+        value: OptimizeLevel;
+    }> = [
+        {
+            label: 'Default',
+            description: current === 'default' ? '(current)' : undefined,
+            detail: 'Mode default (none in Debug; -Os in Release)',
+            value: 'default'
+        },
+        { label: 'O0', detail: 'wasm-opt -O0', value: '0' },
+        { label: 'O1', detail: 'wasm-opt -O1', value: '1' },
+        { label: 'O2', detail: 'wasm-opt -O2', value: '2' },
+        { label: 'O3', detail: 'wasm-opt -O3', value: '3' },
+        { label: 'O4', detail: 'wasm-opt -O4', value: '4' },
+        { label: 'Os', detail: 'wasm-opt -Os (size)', value: 's' },
+        { label: 'Oz', detail: 'wasm-opt -Oz (aggressive size)', value: 'z' }
+    ];
+    for (const item of items) {
+        if (item.value === current && item.value !== 'default') {
+            item.description = '(current)';
+        }
+    }
+    const picked = await vscode.window.showQuickPick(items, {
+        title: 'Dream: Optimize Level',
+        placeHolder: 'Select wasm-opt level'
+    });
+    if (picked) {
+        await updateBuildSetting('optimizeLevel', picked.value);
+    }
+}
+
+async function pickRuntimeTarget(): Promise<void> {
+    const current = readBuildSettings().runtimeTarget;
+    const picked = await vscode.window.showQuickPick(
+        [
+            {
+                label: 'Native',
+                description: current === 'native' ? '(current)' : undefined,
+                detail: 'Run with wasmtime (dream run)',
+                value: 'native' as RuntimeTarget
+            },
+            {
+                label: 'Web',
+                description: current === 'web' ? '(current)' : undefined,
+                detail: 'Emit browser *.runtime.js (--runtime --web)',
+                value: 'web' as RuntimeTarget
+            },
+            {
+                label: 'Node',
+                description: current === 'node' ? '(current)' : undefined,
+                detail: 'Emit Node ≥ 18 *.runtime.js (--runtime --node)',
+                value: 'node' as RuntimeTarget
+            }
+        ],
+        { title: 'Dream: Runtime Target', placeHolder: 'Select runtime target' }
+    );
+    if (picked) {
+        await updateBuildSetting('runtimeTarget', picked.value);
+    }
+}
+
+function registerBuildModeCommands(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('dream.setBuildMode', () => pickBuildMode()),
+        vscode.commands.registerCommand('dream.setOptimizeLevel', () => pickOptimizeLevel()),
+        vscode.commands.registerCommand('dream.setRuntimeTarget', () => pickRuntimeTarget())
+    );
+}
+
+function optimizeStatusLabel(level: OptimizeLevel): string {
+    if (level === 'default') {
+        return 'Opt: Default';
+    }
+    return `Opt: O${level}`;
+}
+
+function registerStatusBar(context: vscode.ExtensionContext): void {
+    const buildItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    buildItem.command = 'dream.setBuildMode';
+    buildItem.tooltip = 'Dream build mode (Debug / Release)';
+
+    const optItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+    optItem.command = 'dream.setOptimizeLevel';
+    optItem.tooltip = 'Dream wasm-opt level';
+
+    const targetItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
+    targetItem.command = 'dream.setRuntimeTarget';
+    targetItem.tooltip = 'Dream runtime target (Native / Web / Node)';
+
+    context.subscriptions.push(buildItem, optItem, targetItem);
+
+    const refresh = () => {
+        const editor = vscode.window.activeTextEditor;
+        const isDream = editor?.document.languageId === 'dream';
+        if (!isDream) {
+            buildItem.hide();
+            optItem.hide();
+            targetItem.hide();
+            return;
+        }
+        const settings = readBuildSettings();
+        buildItem.text =
+            settings.buildMode === 'release' ? '$(rocket) Dream: Release' : '$(bug) Dream: Debug';
+        optItem.text = `$(dashboard) ${optimizeStatusLabel(settings.optimizeLevel)}`;
+        const targetLabel =
+            settings.runtimeTarget === 'native'
+                ? 'Native'
+                : settings.runtimeTarget === 'web'
+                    ? 'Web'
+                    : 'Node';
+        targetItem.text = `$(globe) Target: ${targetLabel}`;
+        buildItem.show();
+        optItem.show();
+        targetItem.show();
+    };
+
+    refresh();
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(() => refresh()),
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (
+                e.affectsConfiguration('dream.buildMode') ||
+                e.affectsConfiguration('dream.optimizeLevel') ||
+                e.affectsConfiguration('dream.runtimeTarget')
+            ) {
+                refresh();
+            }
+        })
+    );
+}
+
 export async function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Dream Language Server');
     outputChannel.appendLine('Activating Dream extension...');
@@ -306,8 +539,9 @@ export async function activate(context: vscode.ExtensionContext) {
     registerRunFileCommand(context);
     registerDebugFileCommand(context);
     registerDebugAdapter(context);
-    registerShowWatCommand(context, false);
-    registerShowWatCommand(context, true);
+    registerShowWatCommand(context);
+    registerBuildModeCommands(context);
+    registerStatusBar(context);
 
     // Check for a bundled platform-specific binary (e.g. dream-lsp-darwin-arm64).
     const binPath = resolveBundledBinary(path.join(__dirname, '..', 'bin'), 'dream-lsp');
@@ -323,13 +557,14 @@ export async function activate(context: vscode.ExtensionContext) {
         };
     } else {
         outputChannel.appendLine('Bundled binary not found. Falling back to cargo...');
-        
+
         const isCargoAvailable = await new Promise<boolean>((resolve) => {
             exec('cargo --version', (error) => resolve(!error));
         });
 
         if (!isCargoAvailable) {
-            const msg = 'Dream LSP failed to start: "cargo" is not available in your PATH, and no bundled binary was found.';
+            const msg =
+                'Dream LSP failed to start: "cargo" is not available in your PATH, and no bundled binary was found.';
             vscode.window.showErrorMessage(msg);
             outputChannel.appendLine(msg);
             outputChannel.show();
@@ -364,7 +599,9 @@ export async function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine('Client started successfully.');
     } catch (err) {
         outputChannel.appendLine(`Failed to start client: ${err}`);
-        vscode.window.showErrorMessage(`Dream LSP failed to start. Check the 'Dream Language Server' output channel for details.`);
+        vscode.window.showErrorMessage(
+            `Dream LSP failed to start. Check the 'Dream Language Server' output channel for details.`
+        );
         outputChannel.show();
     }
 }

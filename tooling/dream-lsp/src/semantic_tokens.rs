@@ -14,7 +14,7 @@ use crate::tokens::{lex_category, LexCategory};
 
 /// The ordered semantic-token legend advertised in the server capabilities. A token's
 /// `token_type` is an index into this slice.
-pub const TOKEN_TYPES: [SemanticTokenType; 15] = [
+pub const TOKEN_TYPES: [SemanticTokenType; 17] = [
     SemanticTokenType::KEYWORD,     // 0
     SemanticTokenType::VARIABLE,    // 1
     SemanticTokenType::PROPERTY,    // 2
@@ -30,17 +30,23 @@ pub const TOKEN_TYPES: [SemanticTokenType; 15] = [
     SemanticTokenType::NUMBER,      // 12
     SemanticTokenType::COMMENT,     // 13
     SemanticTokenType::DECORATOR,   // 14 — `@json`, `@get_indexer`, …
+    SemanticTokenType::STRUCT,      // 15
+    SemanticTokenType::INTERFACE,   // 16
 ];
 
 const COMMENT: u32 = 13;
 const DECORATOR: u32 = 14;
 const OPERATOR: u32 = 10;
+const STRUCT: u32 = 15;
+const INTERFACE: u32 = 16;
 
 /// Index of a symbol kind into [`TOKEN_TYPES`].
 fn sym_kind_token_index(kind: SymKind) -> u32 {
     match kind {
         SymKind::Function => 3,
-        SymKind::Struct => 5,
+        SymKind::Class => 5,
+        SymKind::Struct => STRUCT,
+        SymKind::Interface => INTERFACE,
         SymKind::Enum => 6,
         SymKind::EnumMember => 7,
         SymKind::Field => 2,

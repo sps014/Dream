@@ -12,6 +12,60 @@
     "onLanguage:dream"
   ],
   "contributes": {
+    "configuration": {
+      "title": "Dream",
+      "properties": {
+        "dream.buildMode": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "release"
+          ],
+          "default": "debug",
+          "description": "Compile/run build mode. Release enables trimmed allocator + wasm-opt (default -Os unless optimize level overrides)."
+        },
+        "dream.optimizeLevel": {
+          "type": "string",
+          "enum": [
+            "default",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "s",
+            "z"
+          ],
+          "enumDescriptions": [
+            "Use the mode default (none in Debug; -Os in Release)",
+            "wasm-opt -O0",
+            "wasm-opt -O1",
+            "wasm-opt -O2",
+            "wasm-opt -O3",
+            "wasm-opt -O4",
+            "wasm-opt -Os (size)",
+            "wasm-opt -Oz (aggressive size)"
+          ],
+          "default": "default",
+          "description": "wasm-opt optimization level passed as -O<level>. Default leaves the level to the build mode."
+        },
+        "dream.runtimeTarget": {
+          "type": "string",
+          "enum": [
+            "native",
+            "web",
+            "node"
+          ],
+          "enumDescriptions": [
+            "Run with the native wasmtime host (dream run)",
+            "Emit a browser-targeted *.runtime.js (--runtime --web)",
+            "Emit a Node ≥ 18 *.runtime.js (--runtime --node)"
+          ],
+          "default": "native",
+          "description": "Execution/runtime target for Run and compile commands."
+        }
+      }
+    },
     "breakpoints": [
       {
         "language": "dream"
@@ -93,26 +147,61 @@
         "path": "./syntaxes/dream.tmLanguage.json"
       }
     ],
+    "semanticTokenScopes": [
+      {
+        "language": "dream",
+        "scopes": {
+          "class": [
+            "entity.name.type.class.dream"
+          ],
+          "struct": [
+            "entity.name.type.struct.dream"
+          ],
+          "enum": [
+            "entity.name.type.enum.dream"
+          ],
+          "enumMember": [
+            "variable.other.enummember.dream"
+          ],
+          "interface": [
+            "entity.name.type.interface.dream"
+          ]
+        }
+      }
+    ],
     "commands": [
       {
         "command": "dream.runFile",
-        "title": "Dream: Run File",
+        "title": "Run File",
+        "category": "Dream",
         "icon": "$(play)"
       },
       {
         "command": "dream.debugFile",
-        "title": "Dream: Debug File",
+        "title": "Debug File",
+        "category": "Dream",
         "icon": "$(debug-alt)"
       },
       {
         "command": "dream.showWat",
-        "title": "Dream: Show Generated WAT (Debug)",
+        "title": "Show Generated WAT",
+        "category": "Dream",
         "icon": "$(output)"
       },
       {
-        "command": "dream.showWatRelease",
-        "title": "Dream: Show Generated WAT (Release)",
-        "icon": "$(output)"
+        "command": "dream.setBuildMode",
+        "title": "Set Build Mode…",
+        "category": "Dream"
+      },
+      {
+        "command": "dream.setOptimizeLevel",
+        "title": "Set Optimize Level…",
+        "category": "Dream"
+      },
+      {
+        "command": "dream.setRuntimeTarget",
+        "title": "Set Runtime Target…",
+        "category": "Dream"
       }
     ],
     "menus": {
@@ -121,21 +210,51 @@
           "command": "dream.runFile",
           "when": "resourceLangId == dream",
           "group": "navigation@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "dream.runFile",
+          "when": "resourceLangId == dream",
+          "group": "dream@1"
         },
         {
           "command": "dream.debugFile",
           "when": "resourceLangId == dream",
-          "group": "navigation@2"
+          "group": "dream@2"
         },
         {
           "command": "dream.showWat",
           "when": "resourceLangId == dream",
-          "group": "navigation@3"
+          "group": "dream@3"
         },
         {
-          "command": "dream.showWatRelease",
+          "command": "dream.setBuildMode",
           "when": "resourceLangId == dream",
-          "group": "navigation@4"
+          "group": "dream@4"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "dream.runFile",
+          "when": "editorLangId == dream"
+        },
+        {
+          "command": "dream.debugFile",
+          "when": "editorLangId == dream"
+        },
+        {
+          "command": "dream.showWat",
+          "when": "editorLangId == dream"
+        },
+        {
+          "command": "dream.setBuildMode"
+        },
+        {
+          "command": "dream.setOptimizeLevel"
+        },
+        {
+          "command": "dream.setRuntimeTarget"
         }
       ]
     }

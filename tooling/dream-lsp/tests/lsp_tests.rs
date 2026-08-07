@@ -1115,7 +1115,7 @@ fun main(): void {
 
 #[test]
 fn auto_import_code_action_for_http_client() {
-    use dream_lsp::code_actions::{auto_import_actions, already_imports};
+    use dream_lsp::code_actions::{already_imports, auto_import_actions};
     use tower_lsp::lsp_types::Url;
 
     let src = r#"
@@ -1155,7 +1155,10 @@ fn bootstrap_symbol_has_no_auto_import() {
     let src = "fun main(): void { let o = Option.None; }\n";
     let uri = Url::parse("file:///tmp/main.dream").unwrap();
     let actions = auto_import_actions(&uri, src, "Option");
-    assert!(actions.is_empty(), "Option is bootstrap — no import quick fix");
+    assert!(
+        actions.is_empty(),
+        "Option is bootstrap — no import quick fix"
+    );
 }
 
 #[test]
@@ -1165,10 +1168,132 @@ fn completion_additional_edits_for_list() {
     let src = "fun main(): void {\n    \n}\n";
     let comps = unloaded_stdlib_completions(src);
     assert!(
-        comps.iter().any(|(n, pkg, _)| n == "List" && *pkg == "system.collections"),
+        comps
+            .iter()
+            .any(|(n, pkg, _)| n == "List" && *pkg == "system.collections"),
         "expected List -> system.collections among unloaded completions"
     );
     let edits = import_text_edits(src, "system.collections").expect("edits");
     assert_eq!(edits.len(), 1);
     assert!(edits[0].new_text.contains("import system.collections;"));
+}
+
+#[test]
+fn semantic_tokens_distinguish_class_struct_enum_interface() {
+    use dream_lsp::semantic_tokens::{compute, TOKEN_TYPES};
+    use tower_lsp::lsp_types::SemanticTokenType;
+
+    let src = "\
+class MyClass { public x: int; }
+struct MyStruct { public y: int; }
+enum MyEnum { A, B }
+interface MyIface { fun f(): void; }
+fun main(): void {
+    let a: MyClass = MyClass(1);
+    let b: MyStruct = MyStruct(2);
+    let c: MyEnum = MyEnum.A;
+}
+";
+    let tokens = compute(None, src);
+
+    // Decode absolute (line, char) positions from LSP delta encoding.
+    let mut line = 0u32;
+    let mut character = 0u32;
+    let mut by_name: Vec<(String, u32)> = Vec::new();
+    for t in &tokens {
+        if t.delta_line > 0 {
+            line += t.delta_line;
+            character = t.delta_start;
+        } else {
+            character += t.delta_start;
+        }
+        let start = line_char_to_offset(src, line, character);
+        let end = start + t.length as usize;
+        if end <= src.len() {
+            by_name.push((src[start..end].to_string(), t.token_type));
+        }
+    }
+
+    let class_idx = token_type_index(&TOKEN_TYPES, &SemanticTokenType::CLASS);
+    let struct_idx = token_type_index(&TOKEN_TYPES, &SemanticTokenType::STRUCT);
+    let enum_idx = token_type_index(&TOKEN_TYPES, &SemanticTokenType::ENUM);
+    let iface_idx = token_type_index(&TOKEN_TYPES, &SemanticTokenType::INTERFACE);
+
+    let kind_of = |name: &str| {
+        by_name
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, k)| *k)
+            .unwrap_or_else(|| panic!("missing semantic token for `{name}`"))
+    };
+
+    assert_eq!(kind_of("MyClass"), class_idx, "class decl should be CLASS");
+    assert_eq!(
+        kind_of("MyStruct"),
+        struct_idx,
+        "struct decl should be STRUCT"
+    );
+    assert_eq!(kind_of("MyEnum"), enum_idx, "enum decl should be ENUM");
+    assert_eq!(
+        kind_of("MyIface"),
+        iface_idx,
+        "interface decl should be INTERFACE"
+    );
+
+    assert_ne!(class_idx, struct_idx);
+    assert_ne!(class_idx, enum_idx);
+    assert_ne!(struct_idx, enum_idx);
+
+    // Type-position `MyStruct` (in `let b: MyStruct`) must stay STRUCT, not generic `type`.
+    let struct_occurrences: Vec<u32> = by_name
+        .iter()
+        .filter(|(n, _)| *n == "MyStruct")
+        .map(|(_, k)| *k)
+        .collect();
+    assert!(
+        struct_occurrences.contains(&struct_idx),
+        "expected at least one STRUCT token for MyStruct, got {struct_occurrences:?}"
+    );
+    assert!(
+        struct_occurrences.iter().any(|&k| k == struct_idx),
+        "MyStruct type ref should be STRUCT"
+    );
+    // Decl + type annotation (constructor call may be FUNCTION).
+    assert!(
+        struct_occurrences
+            .iter()
+            .filter(|&&k| k == struct_idx)
+            .count()
+            >= 2,
+        "expected decl + type-position STRUCT for MyStruct, got {struct_occurrences:?}"
+    );
+}
+
+fn token_type_index(
+    legend: &[tower_lsp::lsp_types::SemanticTokenType],
+    want: &tower_lsp::lsp_types::SemanticTokenType,
+) -> u32 {
+    legend
+        .iter()
+        .position(|t| t == want)
+        .expect("token type missing from legend") as u32
+}
+
+fn line_char_to_offset(src: &str, line: u32, character: u32) -> usize {
+    let mut cur_line = 0u32;
+    let mut offset = 0usize;
+    for (i, ch) in src.char_indices() {
+        if cur_line == line {
+            // `character` is UTF-16 code units in LSP; Dream sources here are ASCII.
+            return i + character as usize;
+        }
+        if ch == '\n' {
+            cur_line += 1;
+            offset = i + 1;
+        }
+    }
+    if cur_line == line {
+        return offset + character as usize;
+    }
+    src.len()
 }
