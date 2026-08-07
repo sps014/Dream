@@ -1,8 +1,8 @@
 # Dream
 
-A fast, statically typed language that compiles straight to WebAssembly. Clean C-like syntax, automatic memory management via ARC (no GC pauses, no manual frees), zero-cost generics, and a batteries-included standard library — all in a compiler written in Rust.
+A fast, statically typed language that compiles straight to WebAssembly. Syntax closer to Rust and TypeScript, automatic memory management via ARC (no GC pauses), zero-cost generics, and a batteries-included standard library — compiler written in Rust.
 
-**[Read the docs →](https://sps014.github.io/Dream/)** &nbsp;·&nbsp; [Getting Started](https://sps014.github.io/Dream/getting-started/) &nbsp;·&nbsp; [Language Reference](https://sps014.github.io/Dream/language/variables/) &nbsp;·&nbsp; [Compiler Internals](https://sps014.github.io/Dream/compiler/)
+**[Read the docs →](https://sps014.github.io/Dream/)** &nbsp;·&nbsp; [Getting Started](https://sps014.github.io/Dream/getting-started/) &nbsp;·&nbsp; [Language](https://sps014.github.io/Dream/language/variables/) &nbsp;·&nbsp; [JS interop](https://sps014.github.io/Dream/language/interop/) &nbsp;·&nbsp; [Compiler](https://sps014.github.io/Dream/compiler/)
 
 ## A taste
 
@@ -42,16 +42,20 @@ fun main() {
 
 Stdlib APIs live under `system.*` packages — `import system;` for console I/O, `import system.collections;` for `List`/`Map`/`Set`, and so on. Bootstrap types like `Option` and `Result` need no import. See [Imports](https://sps014.github.io/Dream/language/imports/).
 
-## Features
+## Language features
 
-- **Statically typed** — errors caught at compile time, with type inference so you rarely annotate.
-- **WebAssembly native** — compiles to `.wat`/`.wasm` that runs in browsers, Node.js, and standalone WASM runtimes.
-- **Automatic memory (ARC)** — deterministic reference counting frees values the instant they're unused. No GC, no `free`.
-- **Zero-cost generics** — monomorphized to concrete types, no runtime overhead.
-- **Rich type system** — classes, value structs, interfaces, enums, discriminated unions, `Option`/`Result`.
-- **`async`/`await`** — a cooperative scheduler that runs entirely inside the WASM module, plus `WebWorker` for real multi-core parallelism.
-- **Seamless JS interop** — call JavaScript with the `js` type and `extern`, pass callbacks in both directions.
-- **Batteries included** — import what you need: `system.collections`, `system.text`, `system.json`, `system.io`, `system.net`, `system` (console, dates, …). The editor offers auto-import quick fixes.
+| Area | What you get |
+|------|----------------|
+| **Types** | Inference, classes, value structs, interfaces, enums, discriminated unions, `Option`/`Result` |
+| **Generics** | Zero-cost monomorphization to concrete WASM |
+| **Memory** | Deterministic ARC — no GC pauses, no manual `free` |
+| **Concurrency** | `async`/`await` with an in-module cooperative scheduler; `WebWorker` for real parallelism |
+| **JS interop** | Dynamic `js` type, `extern fun`, callbacks both ways, optional tree-shaken `*.runtime.js` |
+| **GPU** | `@compute` kernels → WGSL + `system.gpu` (WebGPU) |
+| **Metaprogramming** | `@json` and source generators |
+| **Stdlib** | Collections, strings/regex, JSON, files, HTTP, logging, crypto, GPU |
+
+Also: WASM-native output (`.wat` / `.wasm` + `.abi.json`), editor support (VS Code / LSP), and a Rust-hosted `dream run` path via wasmtime.
 
 ## Build
 
@@ -74,7 +78,7 @@ cargo run -- --runtime --web path/to/your/file.dream
 cargo run -- --runtime --node path/to/your/file.dream
 ```
 
-JS interop: [docs](https://sps014.github.io/Dream/language/interop/) · local guide in [`docs/language/interop.md`](docs/language/interop.md).
+JS interop: [docs](https://sps014.github.io/Dream/language/interop/) · [`docs/language/interop.md`](docs/language/interop.md).
 
 ## Test
 

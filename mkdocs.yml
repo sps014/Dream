@@ -114,7 +114,8 @@ nav:
     - I/O:
       - File I/O: stdlib/file.md
       - HTTP: stdlib/http.md
-    - GPU: stdlib/gpu.md
+    - GPU & compute:
+      - system.gpu: stdlib/gpu.md
     - Serialization:
       - JSON: stdlib/json.md
     - Security:

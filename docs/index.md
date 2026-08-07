@@ -7,8 +7,8 @@ hide:
 <div class="dream-hero">
   <h1 class="dream-gradient-text">Dream</h1>
   <p class="dream-hero-subtitle">
-    A fast, statically typed language that compiles to WebAssembly — TS/Rust-like syntax,
-    automatic memory management, and a batteries-included standard library.
+    A statically typed language that compiles to WebAssembly — Rust- and TypeScript-flavored
+    syntax, ARC memory, zero-cost generics, and first-class JS interop.
   </p>
   <div class="dream-hero-actions">
     <a href="getting-started/" class="md-button md-button--primary">Get Started</a>
@@ -20,19 +20,37 @@ hide:
 
 ```dream
 import system;
-
-fun greet(name: string): string {
-    return "Hello, " + name;
-}
+import system.collections;
 
 fun main() {
-    System.println(greet("world"));
+    let xs = List<int>();
+    xs.push(1);
+    System.println(xs.len());
 }
 ```
 
 </div>
 
+## Language at a glance
+
+<div class="dream-feature-strip" markdown>
+
+- **Static types** with inference
+- **ARC** memory (no GC pauses)
+- **Generics** monomorphized to WASM
+- **Classes / structs / interfaces**
+- **Enums & unions** with `switch`
+- **`async` / `await`** in-module
+- **`WebWorker`** parallelism
+- **`js` + `extern`** interop
+- **`@compute`** → WebGPU
+- **Stdlib** collections, JSON, I/O, GPU, crypto
+
+</div>
+
 ## Start here
+
+<div class="dream-compact-cards" markdown>
 
 <div class="grid cards" markdown>
 
@@ -40,7 +58,7 @@ fun main() {
 
     ---
 
-    Install the compiler, write your first program, and run it.
+    Install, write `hello.dream`, run it.
 
     [:octicons-arrow-right-24: Install & run](getting-started.md)
 
@@ -48,7 +66,7 @@ fun main() {
 
     ---
 
-    Syntax, types, async, memory, interop, and source generators.
+    Syntax, types, async, memory, interop.
 
     [:octicons-arrow-right-24: Variables](language/variables.md)
 
@@ -56,7 +74,7 @@ fun main() {
 
     ---
 
-    Collections, JSON, files, HTTP, crypto, and more.
+    Collections, JSON, files, HTTP, GPU, crypto.
 
     [:octicons-arrow-right-24: Built-ins](stdlib/builtins.md)
 
@@ -64,13 +82,17 @@ fun main() {
 
     ---
 
-    Publish and consume libraries with `dreamer`.
+    Packages with `dreamer`.
 
     [:octicons-arrow-right-24: Package manager](tooling/package-manager.md)
 
 </div>
 
+</div>
+
 ## Language
+
+<div class="dream-compact-cards" markdown>
 
 <div class="grid cards" markdown>
 
@@ -94,17 +116,17 @@ fun main() {
 
     ---
 
-    [Imports & modules](language/imports.md) · [Language rules](language/invariants.md)
+    [Imports](language/imports.md) · [Language rules](language/invariants.md)
 
 -   :material-puzzle: **Features**
 
     ---
 
     [Generics](language/generics.md) · [Interfaces](language/interfaces.md) ·
-    [Async/await](language/async.md) · [WebWorkers](language/webworkers.md) ·
-    [Memory](language/memory.md)
+    [Async](language/async.md) · [WebWorkers](language/webworkers.md) ·
+    [Compute](language/compute.md) · [Memory](language/memory.md)
 
--   :material-javascript: **Interop**
+-   :material-language-javascript: **JS interop**
 
     ---
 
@@ -115,14 +137,15 @@ fun main() {
 
     ---
 
-    Compile-time derives and custom syntax DSLs.
+    [Source generators](language/generators.md) · [CodeBuilder](stdlib/codegen.md)
 
-    [:octicons-arrow-right-24: Source generators](language/generators.md) ·
-    [CodeBuilder](stdlib/codegen.md)
+</div>
 
 </div>
 
 ## Standard library
+
+<div class="dream-compact-cards" markdown>
 
 <div class="grid cards" markdown>
 
@@ -131,9 +154,9 @@ fun main() {
     ---
 
     [Built-ins](stdlib/builtins.md) · [Option & Result](stdlib/option-result.md) ·
-    [Lock & Semaphore](stdlib/sync.md)
+    [Sync](stdlib/sync.md)
 
--   :material-format-text: **Text & data**
+-   :material-format-text: **Text**
 
     ---
 
@@ -144,9 +167,7 @@ fun main() {
 
     ---
 
-    `List`, `Map`, `Set`, `Queue`, `Stack`.
-
-    [:octicons-arrow-right-24: Collections](stdlib/collections.md)
+    [List / Map / Set](stdlib/collections.md)
 
 -   :material-cog: **System**
 
@@ -159,27 +180,33 @@ fun main() {
 
     ---
 
-    [File I/O](stdlib/file.md) · [HTTP](stdlib/http.md)
+    [File](stdlib/file.md) · [HTTP](stdlib/http.md)
 
--   :material-code-json: **Serialization**
-
-    ---
-
-    JSON parse/stringify and `@json` auto-derive.
-
-    [:octicons-arrow-right-24: JSON](stdlib/json.md)
-
--   :material-shield-key: **Security**
+-   :material-gpu: **GPU**
 
     ---
 
-    Digests, HMAC, and secure random bytes.
+    [system.gpu](stdlib/gpu.md) · [Compute](language/compute.md)
 
-    [:octicons-arrow-right-24: Crypto](stdlib/crypto.md)
+-   :material-code-json: **JSON**
+
+    ---
+
+    [JSON & `@json`](stdlib/json.md)
+
+-   :material-shield-key: **Crypto**
+
+    ---
+
+    [Digests & CSPRNG](stdlib/crypto.md)
+
+</div>
 
 </div>
 
 ## For contributors
+
+<div class="dream-compact-cards" markdown>
 
 <div class="grid cards" markdown>
 
@@ -187,8 +214,10 @@ fun main() {
 
     ---
 
-    Compiler handbook: pipeline, IRs, passes, and design notes.
+    Pipeline, IRs, passes, design notes.
 
     [:octicons-arrow-right-24: Handbook](compiler/README.md)
+
+</div>
 
 </div>

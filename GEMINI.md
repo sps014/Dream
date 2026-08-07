@@ -8,7 +8,7 @@ This document serves as the foundational instruction manual and architectural gu
 
 ## 1. Project Overview
 
-**Dream** is a statically typed programming language that compiles to WebAssembly. Key features of the language include a simple C-like syntax, automatic memory management (automatic reference counting/garbage collection via a built-in object runtime and free lists), generic classes/functions, asynchronous programming via `async`/`await`, and standard collections (`List<T>` and `Map<K, V>`).
+**Dream** is a statically typed programming language that compiles to WebAssembly. Key features of the language include syntax closer to Rust and TypeScript, automatic memory management (automatic reference counting/garbage collection via a built-in object runtime and free lists), generic classes/functions, asynchronous programming via `async`/`await`, and standard collections (`List<T>` and `Map<K, V>`).
 
 The repository is structured as a Rust-centric multi-component monorepo:
 1. **`dream` (Root Crate):** The core compiler written in Rust. It compiles `.dream` source files to WebAssembly Text (`.wat`), assembles them to WASM binaries (`.wasm`), generates ABI sidecars (`.abi.json`), and provides a native runner powered by `wasmtime`.

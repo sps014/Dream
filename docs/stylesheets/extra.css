@@ -50,7 +50,7 @@
 /* Hero */
 .dream-hero {
   position: relative;
-  padding: 8rem 1rem 6rem;
+  padding: 5.5rem 1rem 3.5rem;
   text-align: center;
   max-width: 900px;
   margin: 0 auto;
@@ -104,11 +104,11 @@
 }
 
 .dream-hero-subtitle {
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   color: #94a3b8;
-  max-width: 700px;
-  margin: 0 auto 3rem;
-  line-height: 1.6;
+  max-width: 640px;
+  margin: 0 auto 2rem;
+  line-height: 1.55;
   font-weight: 400;
 }
 
@@ -198,7 +198,37 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
-/* Grid cards */
+/* Feature strip on the docs home page */
+.dream-feature-strip ul {
+  list-style: none !important;
+  margin: 0 0 2rem !important;
+  padding: 0 !important;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.65rem;
+}
+
+.dream-feature-strip ul > li {
+  margin: 0 !important;
+  padding: 0.35rem 0.75rem !important;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  line-height: 1.35;
+}
+
+.dream-feature-strip ul > li::marker {
+  content: none;
+}
+
+.dream-feature-strip strong {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+/* Default grid cards */
 .md-typeset .grid.cards > ul {
   grid-gap: 1.5rem;
   margin-top: 2rem;
@@ -270,6 +300,39 @@
   line-height: 1.6;
 }
 
+/* Compact home-page cards — after defaults so !important wins */
+.md-typeset .dream-compact-cards .grid.cards > ul {
+  grid-gap: 0.75rem !important;
+  margin-top: 0.75rem !important;
+}
+
+.md-typeset .dream-compact-cards .grid.cards > ul > li {
+  padding: 0.85rem 1rem !important;
+  border-radius: 10px !important;
+}
+
+.md-typeset .dream-compact-cards .grid.cards > ul > li:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.45) !important;
+}
+
+.md-typeset .dream-compact-cards .grid.cards > ul > li p:first-child {
+  font-size: 1rem !important;
+  margin-bottom: 0.35rem !important;
+  gap: 0.45rem !important;
+}
+
+.md-typeset .dream-compact-cards .grid.cards > ul > li p:first-child .twemoji {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.md-typeset .dream-compact-cards .grid.cards > ul > li p {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin: 0.15rem 0;
+}
+
 /* Announcement bar */
 .md-banner {
   background: linear-gradient(135deg, #6366f1, #ec4899) !important;
@@ -280,7 +343,7 @@
 /* Code showcase */
 .dream-code-showcase {
   max-width: 850px;
-  margin: -1rem auto 4rem;
+  margin: -0.5rem auto 2.5rem;
   background: rgba(15, 17, 26, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

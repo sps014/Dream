@@ -100,4 +100,5 @@ A few things to notice:
 - [Types & Data](language/types.md) — the full type landscape.
 - [Classes & Structs](language/classes-structs.md) — define your own types with methods.
 - [Collections](stdlib/collections.md) — `List<T>`, `Map<K, V>`, and `Set<T>` (`import system.collections;`).
+- [GPU](stdlib/gpu.md) — WebGPU via `import system.gpu;` (see also [Compute shaders](language/compute.md)).
 - [Imports](language/imports.md) — file imports and `system.*` packages.

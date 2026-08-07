@@ -16,6 +16,7 @@ import system.io;              // File, FileStream, Path, IoError
 import system.encoding;        // Encoding (UTF-8 / hex / Base64)
 import system.logging;         // Logger, LogLevel, handlers
 import system.crypto;          // Sha256, HmacSha256, SecureRandom
+import system.gpu;             // Gpu, GpuBuffer, @compute dispatch (also auto-imported with @compute)
 ```
 
 Always available without an import (bootstrap): `Option`, `Result`, `Error`, `ParseError`, `Buffer`, `Bytes`, `Span`, `Pointer`, `Promise`, `WebWorker`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, `bool.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).

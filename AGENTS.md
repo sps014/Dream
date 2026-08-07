@@ -14,7 +14,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 
 ## What Dream is
 
-A statically typed language that compiles to WebAssembly (`.wat` → `.wasm` + `.abi.json` sidecar). C-like syntax, automatic memory management via ARC (deterministic reference counting, no GC pauses), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
+A statically typed language that compiles to WebAssembly (`.wat` → `.wasm` + `.abi.json` sidecar). Syntax closer to Rust and TypeScript, automatic memory management via ARC (deterministic reference counting, no GC pauses), zero-cost monomorphized generics, classes/structs/interfaces/enums/discriminated unions, `Option`/`Result`, `async`/`await` with an in-module cooperative scheduler, `WebWorker` for real parallelism, JS interop (`js` type, `extern`), and a batteries-included stdlib (`List`, `Map`, `Set`, strings, JSON via `@json`, files, HTTP, regex, dates).
 
 Rust edition 2018 (root crate) / 2021 (`dream-lsp`). Workspace resolver `"2"` so the wasm32 analyzer-only build doesn't drag in `wasmtime`.
 
