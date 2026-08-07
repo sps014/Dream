@@ -133,6 +133,33 @@ pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
 /// `Bytes.fromWire<T>(s)` — the inverse of [`ATTR_WIRE_ENCODE`].
 pub const ATTR_WIRE_DECODE: &str = "wire_decode";
 
+/// Every `@intrinsic("…")` key the compiler recognizes, in stable order for IDE completion.
+pub const ATTR_KEYS: &[&str] = &[
+    ATTR_PRINT,
+    ATTR_PRINTLN,
+    ATTR_PROMISE_ALL,
+    ATTR_PROMISE_ANY,
+    ATTR_PROMISE_RACE,
+    ATTR_JSON_SERIALIZE,
+    ATTR_JSON_DESERIALIZE,
+    ATTR_JSON_FROM_VALUE,
+    ATTR_ARRAY_NEW,
+    ATTR_SLEEP,
+    ATTR_STRING_ALLOC,
+    ATTR_STRING_SET,
+    ATTR_DEBUG_FREE_LIST,
+    ATTR_DEBUG_HEAP_PTR,
+    ATTR_DEBUG_LIVE_OBJECTS,
+    ATTR_DEBUG_TOTAL_ALLOCATIONS,
+    ATTR_DEBUG_REF_COUNT,
+    ATTR_TO_BYTES,
+    ATTR_FROM_BYTES,
+    ATTR_ARRAY_REALLOC,
+    ATTR_FORCE_FREE,
+    ATTR_WIRE_ENCODE,
+    ATTR_WIRE_DECODE,
+];
+
 /// The operation a `@intrinsic("…")`-tagged static method lowers to. Derived once from the
 /// attribute key via [`IntrinsicOp::from_key`], so every layer dispatches off the same enum
 /// rather than re-matching raw strings.

@@ -62,7 +62,7 @@ pub enum AttributeTarget {
 }
 
 impl AttributeTarget {
-    fn display_name(self) -> &'static str {
+    pub fn display_name(self) -> &'static str {
         match self {
             AttributeTarget::Function => "a top-level function",
             AttributeTarget::Method => "an instance method",
@@ -117,12 +117,53 @@ pub enum ArgShape {
 }
 
 /// One attribute's full contract: its name, the declaration kinds it may appear on, its argument
-/// shape, and whether it may be repeated on the same declaration.
+/// shape, whether it may be repeated on the same declaration, and a short doc string for IDE
+/// hover/completion.
 pub struct AttributeSpec {
     pub name: &'static str,
     pub targets: &'static [AttributeTarget],
     pub args: ArgShape,
     pub repeatable: bool,
+    /// Markdown-friendly one-liner (or short paragraph) shown in LSP hover/completion docs.
+    pub doc: &'static str,
+}
+
+impl ArgShape {
+    /// Human-readable parameter labels for signature help (empty for [`ArgShape::None`]).
+    pub fn param_labels(self) -> Vec<&'static str> {
+        match self {
+            ArgShape::None => Vec::new(),
+            ArgShape::Args { kinds, min, max } => {
+                let n = max.max(min).max(kinds.len());
+                (0..n)
+                    .map(|i| match kinds[i.min(kinds.len() - 1)] {
+                        ArgKind::String => "string",
+                        ArgKind::Int => "int",
+                        ArgKind::Float => "float",
+                        ArgKind::Double => "double",
+                        ArgKind::Bool => "bool",
+                        ArgKind::Enum => "Enum.Member",
+                    })
+                    .collect()
+            }
+        }
+    }
+
+    /// Signature label like `@intrinsic(string)` or `@js(string, string)`.
+    pub fn signature_label(self, name: &str) -> String {
+        match self {
+            ArgShape::None => format!("@{name}"),
+            ArgShape::Args { .. } => {
+                let params = self.param_labels().join(", ");
+                format!("@{name}({params})")
+            }
+        }
+    }
+}
+
+/// Looks up a builtin attribute by name.
+pub fn find_spec(name: &str) -> Option<&'static AttributeSpec> {
+    ATTRIBUTES.iter().find(|s| s.name == name)
 }
 
 /// Every attribute name the compiler recognizes. Adding a new attribute means adding one entry
@@ -132,8 +173,13 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
     AttributeSpec {
         name: "intrinsic",
         targets: &[AttributeTarget::ExternFunction],
-        args: ArgShape::Args { kinds: &[ArgKind::String], min: 1, max: 1 },
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
         repeatable: false,
+        doc: "Marks an extern function/method as a compiler intrinsic. The string argument is the intrinsic key (e.g. `\"print\"`).",
     },
     AttributeSpec {
         name: "json",
@@ -144,54 +190,78 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         ],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Enables JSON serialize/deserialize derive for a class, struct, or discriminated union.",
     },
     AttributeSpec {
         name: "property_name",
         targets: &[AttributeTarget::Field],
-        args: ArgShape::Args { kinds: &[ArgKind::String], min: 1, max: 1 },
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
         repeatable: false,
+        doc: "Overrides the JSON property name for a field (used with `@json`).",
     },
     AttributeSpec {
         name: "json_ignore",
         targets: &[AttributeTarget::Field],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Excludes a field from JSON serialize/deserialize (used with `@json`).",
     },
     AttributeSpec {
         name: "override",
         targets: &[AttributeTarget::Method],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Marks an instance method as overriding an object-protocol hook (`to_string` / `hash_code`).",
     },
     AttributeSpec {
         name: "js",
         targets: &[AttributeTarget::ExternFunction],
-        args: ArgShape::Args { kinds: &[ArgKind::String, ArgKind::String], min: 2, max: 2 },
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String, ArgKind::String],
+            min: 2,
+            max: 2,
+        },
         repeatable: false,
+        doc: "Binds an extern function to a JavaScript host import: `@js(\"module\", \"export\")`.",
     },
     AttributeSpec {
         name: "allow_cycle",
         targets: &[AttributeTarget::Struct],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Allows a class to participate in a reference cycle (ARC will not free it automatically).",
     },
     AttributeSpec {
         name: "operator",
         targets: &[AttributeTarget::Method],
-        args: ArgShape::Args { kinds: &[ArgKind::String], min: 1, max: 1 },
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
+        repeatable: false,
         // Not repeatable *on one method* (`@operator("+") @operator("-")` on the same method makes
         // no sense — a method implements exactly one operator). A struct declaring many distinct
         // `@operator`-tagged *methods* is fine: `validate_attributes` runs once per method, so this
         // only rejects stacking the same attribute twice on a single declaration.
         // `validate_and_register_operator` (`declarations::operator_overloads`) separately enforces
         // that no two methods on the same type claim the same operator symbol/arity.
-        repeatable: false,
+        doc: "Overloads an operator for a type. The string is the operator symbol (e.g. `\"+\"`, `\"==\"`, `\"-\"`).",
     },
     AttributeSpec {
         name: "cast",
         targets: &[AttributeTarget::Method],
-        args: ArgShape::Args { kinds: &[ArgKind::String], min: 1, max: 1 },
+        args: ArgShape::Args {
+            kinds: &[ArgKind::String],
+            min: 1,
+            max: 1,
+        },
         repeatable: false,
+        doc: "Registers a conversion method as an implicit or explicit cast: `@cast(\"implicit\")` or `@cast(\"explicit\")`.",
     },
     AttributeSpec {
         name: "unsafe",
@@ -207,6 +277,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         ],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` contexts.",
     },
     AttributeSpec {
         name: "shared",
@@ -217,6 +288,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         targets: &[AttributeTarget::Struct],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Makes a class shareable across threads (`Shared<T>`-style lock word on the instance).",
     },
     AttributeSpec {
         name: "stack",
@@ -227,6 +299,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         targets: &[AttributeTarget::Union],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Requires a discriminated union to be a value (stack) union for every monomorphization.",
     },
     // Indexer / enumerator protocol hooks (mirrors `@operator`: the attribute marks the role;
     // the method name is free). Shape/arity are checked in
@@ -236,24 +309,28 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Marks a method as the get-indexer (`obj[i]`) protocol hook.",
     },
     AttributeSpec {
         name: "set_indexer",
         targets: &[AttributeTarget::Method],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Marks a method as the set-indexer (`obj[i] = v`) protocol hook.",
     },
     AttributeSpec {
         name: "iterator",
         targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Marks a method as the `for-each` iterator factory protocol hook.",
     },
     AttributeSpec {
         name: "next",
         targets: &[AttributeTarget::Method, AttributeTarget::InterfaceMethod],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Marks a method as the iterator `next` protocol hook.",
     },
     // Source-generator framework (`system.codegen` / `driver/generate`).
     AttributeSpec {
@@ -265,6 +342,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         ],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Marks a function as a source generator entry point (`system.codegen`).",
     },
     AttributeSpec {
         name: "syntax_block",
@@ -279,6 +357,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
             max: 1,
         },
         repeatable: true,
+        doc: "Associates a generator with a syntax-block kind (string name).",
     },
     // User-defined attribute: `@attribute` on a bare top-level function; the function name is the
     // attribute name (exact casing), and its parameters are the `@name(...)` arg schema.
@@ -287,6 +366,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         targets: &[AttributeTarget::Function],
         args: ArgShape::None,
         repeatable: false,
+        doc: "Declares a user-defined attribute. The function name becomes the `@name` attribute.",
     },
     // WebGPU compute kernels: body is emitted as WGSL, not WASM. Optional 1–3 int args are the
     // workgroup size (X[, Y[, Z]]); bare `@compute` defaults to (64, 1, 1).
@@ -299,6 +379,7 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
             max: 3,
         },
         repeatable: false,
+        doc: "Marks a function as a WebGPU compute kernel. Optional ints are workgroup size X[, Y[, Z]] (default 64, 1, 1).",
     },
     // Storage-buffer access mode for `@compute` params: WGSL `var<storage, read>` instead of
     // `read_write`. Only meaningful on `GpuBuffer<T>` kernel parameters.
@@ -307,16 +388,13 @@ pub const ATTRIBUTES: &[AttributeSpec] = &[
         targets: &[AttributeTarget::Parameter],
         args: ArgShape::None,
         repeatable: false,
+        doc: "On a `@compute` `GpuBuffer` parameter: storage access is read-only (WGSL `read`).",
     },
 ];
 
 /// True when a parameter carries `@readonly` (compute storage → WGSL `read`).
 pub fn has_readonly_attr(attributes: &[AttributeNode]) -> bool {
     attributes.iter().any(|a| a.name.text == "readonly")
-}
-
-fn find_spec(name: &str) -> Option<&'static AttributeSpec> {
-    ATTRIBUTES.iter().find(|s| s.name == name)
 }
 
 fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {

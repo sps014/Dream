@@ -201,6 +201,7 @@ impl LanguageServer for Backend {
                         ".".to_string(),
                         "\"".to_string(),
                         "/".to_string(),
+                        "@".to_string(),
                     ]),
                     ..Default::default()
                 }),
@@ -520,6 +521,8 @@ impl LanguageServer for Backend {
         };
         let completions = idx.completions(file_path.as_deref(), &text, offset);
         let import_replace = index::import_path_partial(&text, offset).map(|(start, _)| start);
+        let in_attr_name = index::attribute_name_partial(&text, offset).is_some();
+        let in_attr_args = index::attribute_arg_context(&text, offset).is_some();
 
         let items: Vec<CompletionItem> = {
             let mut items: Vec<CompletionItem> = completions
@@ -542,6 +545,26 @@ impl LanguageServer for Backend {
                     } else {
                         None
                     };
+                    let (insert_text, insert_text_format) =
+                        if kind == index::SymKind::Decorator && in_attr_name {
+                            if let Some(spec) = dream_abi::attributes::find_spec(&label) {
+                                match spec.args {
+                                    dream_abi::attributes::ArgShape::Args { min, .. }
+                                        if min > 0 =>
+                                    {
+                                        (
+                                            Some(format!("{label}($0)")),
+                                            Some(InsertTextFormat::SNIPPET),
+                                        )
+                                    }
+                                    _ => (None, None),
+                                }
+                            } else {
+                                (None, None)
+                            }
+                        } else {
+                            (None, None)
+                        };
                     CompletionItem {
                         label,
                         kind: Some(completion_kind(kind)),
@@ -553,14 +576,22 @@ impl LanguageServer for Backend {
                             })
                         }),
                         text_edit,
+                        insert_text,
+                        insert_text_format,
                         ..Default::default()
                     }
                 })
                 .collect();
 
             // Offer not-yet-imported stdlib exports with an import edit on accept.
-            // Skip when completing inside `import …` — package paths belong there, not types.
-            if import_replace.is_none() {
+            // Skip inside `import …` (package paths), after `.` (member access — `System.`
+            // must not mix in `List` / `Gpu` from unloaded packages), and in `@…` attribute
+            // name/arg context.
+            if import_replace.is_none()
+                && !index::is_member_completion_context(&text, offset)
+                && !in_attr_name
+                && !in_attr_args
+            {
                 let existing: std::collections::HashSet<String> =
                     items.iter().map(|i| i.label.clone()).collect();
                 for (label, package, detail) in

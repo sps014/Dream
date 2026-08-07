@@ -268,6 +268,12 @@ impl Builder {
                     );
                 }
             }
+            for method in &en.methods {
+                let detail = format!("{}.{}", en.name.text, signature(method));
+                self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);
+                self.method_params
+                    .insert(method.name.text.clone(), param_names(method));
+            }
         }
         for iface in &program.interfaces {
             let generics = iface
@@ -354,6 +360,10 @@ impl Builder {
                     self.walk_attributes(&field.attributes, GLOBAL);
                 }
             }
+            for method in &en.methods {
+                self.walk_attributes(&method.attributes, GLOBAL);
+                self.walk_method(method, &en.name.text);
+            }
         }
         for iface in &program.interfaces {
             self.walk_attributes(&iface.attributes, GLOBAL);
@@ -394,6 +404,7 @@ impl Builder {
 
     fn walk_struct(&mut self, st: &StructDeclarationNode) {
         for method in &st.methods {
+            self.walk_attributes(&method.attributes, GLOBAL);
             self.walk_method(method, &st.name.text);
         }
     }

@@ -116,6 +116,66 @@ fun main(): void {
 }
 
 #[test]
+fn option_local_member_completions() {
+    let harness = TestHarness::new(
+        "fun main(): void {\n    let o: Option<int> = Option.None;\n    o.|\n}\n",
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"is_some") && names.contains(&"map") && names.contains(&"unwrap_or"),
+        "expected Option instance methods on o., got {names:?}"
+    );
+    assert!(
+        !names.contains(&"Some") && !names.contains(&"None"),
+        "variants belong on Option., not on an Option local"
+    );
+}
+
+#[test]
+fn result_inferred_from_gpu_try_init_member_completions() {
+    let harness = TestHarness::new(
+        "import system.gpu;\nfun main(): void {\n    let a = await Gpu.try_init();\n    a.|\n}\n",
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"is_ok") && names.contains(&"unwrap_or") && names.contains(&"and_then"),
+        "expected Result instance methods on a. after Gpu.try_init, got {names:?}"
+    );
+}
+
+#[test]
+fn enum_method_doc_comment_in_completion() {
+    let harness = TestHarness::new(
+        r#"
+enum Box {
+    Empty,
+    // Returns true when Empty.
+    public fun is_empty(): bool { return true; }
+}
+fun main(): void {
+    let b: Box = Box.Empty;
+    b.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let is_empty = comps
+        .iter()
+        .find(|(n, ..)| n == "is_empty")
+        .expect("expected is_empty method");
+    assert!(
+        is_empty
+            .3
+            .as_ref()
+            .is_some_and(|d| d.contains("Returns true when Empty")),
+        "expected enum method doc in completion documentation, got {:?}",
+        is_empty.3
+    );
+}
+
+#[test]
 fn signature_help_on_function() {
     let src = "
 fun add(a: int, b: int): int { return a + b; }
@@ -1252,6 +1312,171 @@ fn system_dot_in_body_is_class_members_not_packages() {
     assert!(
         comps.iter().any(|(n, ..)| n == "println" || n == "print"),
         "expected System class members, got {:?}",
+        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn member_context_skips_unloaded_stdlib_types() {
+    use dream_lsp::code_actions::unloaded_stdlib_completions;
+    use dream_lsp::index::is_member_completion_context;
+
+    // Only `system` is imported — List/DateTime would normally be offered as unloaded
+    // completions, but never after a member-access `.`.
+    let harness = TestHarness::new(
+        "import system;\nfun main(): void {\n    System.|\n}\n",
+    );
+    assert!(
+        is_member_completion_context(&harness.src, harness.offset),
+        "cursor after System. is member context"
+    );
+    let unloaded = unloaded_stdlib_completions(&harness.src);
+    assert!(
+        unloaded.iter().any(|(n, ..)| n == "List"),
+        "sanity: List is among unloaded stdlib symbols when collections is not imported"
+    );
+    // Backend merges unloaded only when !is_member_completion_context — index alone
+    // already excludes them from member_completions.
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        !comps.iter().any(|(n, ..)| n == "List" || n == "DateTime" || n == "Gpu"),
+        "member completion must not include unloaded package types: {:?}",
+        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn attribute_name_completions_after_at() {
+    use dream_lsp::index::SymKind;
+
+    let harness = TestHarness::new("@|\nclass Foo {}\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps
+            .iter()
+            .any(|(n, k, _, doc)| n == "json"
+                && *k == SymKind::Decorator
+                && doc.as_ref().is_some_and(|d| d.contains("JSON"))),
+        "expected @json with docs, got {:?}",
+        comps
+            .iter()
+            .map(|(n, _, _, d)| format!("{n}/{:?}", d.as_ref().map(|s| &s[..s.len().min(40)])))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        comps.iter().any(|(n, ..)| n == "intrinsic"),
+        "expected @intrinsic among attribute names"
+    );
+}
+
+#[test]
+fn attribute_name_completions_partial() {
+    let harness = TestHarness::new("@js|\nstatic extern fun f(): void;\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps.iter().any(|(n, ..)| n == "json" || n == "json_ignore" || n == "js"),
+        "expected js* attributes for @js, got {:?}",
+        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
+    );
+    assert!(
+        !comps.iter().any(|(n, ..)| n == "intrinsic"),
+        "intrinsic must not match partial `js`"
+    );
+}
+
+#[test]
+fn hover_on_attribute_shows_docs() {
+    // Cursor on the `json` attribute name.
+    let harness = TestHarness::new(
+        "@js|on\nclass Foo { public x: int; }\n",
+    );
+    let hover = harness
+        .index()
+        .hover(harness.offset)
+        .expect("expected hover on @json");
+    assert!(
+        hover.contents.contains("@json") && hover.contents.contains("JSON"),
+        "expected attribute docs, got {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn hover_on_intrinsic_attribute() {
+    let harness = TestHarness::new(
+        r#"
+class System {
+    @intr|insic("print")
+    static extern fun print(): void;
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(harness.offset)
+        .expect("expected hover on @intrinsic");
+    assert!(
+        hover.contents.contains("@intrinsic") && hover.contents.contains("intrinsic"),
+        "expected @intrinsic hover docs, got {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn signature_help_inside_js_attribute() {
+    let harness = TestHarness::new(
+        r#"
+@js("Dream", |)
+static extern fun f(): void;
+"#,
+    );
+    let sig = harness
+        .index()
+        .signature_help(&harness.src, harness.offset)
+        .expect("expected signature help for @js");
+    assert!(
+        sig.detail.contains("@js") && sig.detail.contains("string"),
+        "expected @js signature, got {}",
+        sig.detail
+    );
+    assert!(
+        sig.doc_comment
+            .as_ref()
+            .is_some_and(|d| d.contains("JavaScript")),
+        "expected @js doc on signature help"
+    );
+}
+
+#[test]
+fn intrinsic_arg_completions_inside_string() {
+    let harness = TestHarness::new(
+        r#"
+@intrinsic("|")
+static extern fun print(): void;
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps.iter().any(|(n, ..)| n == "print" || n == "println"),
+        "expected intrinsic keys inside @intrinsic(\"\"), got {:?}",
+        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn operator_arg_completions() {
+    let harness = TestHarness::new(
+        r#"
+class Vec {
+    @operator("|")
+    public fun add(other: Vec): Vec { return other; }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps.iter().any(|(n, ..)| n == "+" || n == "=="),
+        "expected operator symbols, got {:?}",
         comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
     );
 }

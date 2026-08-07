@@ -1,9 +1,14 @@
 //! Read-only queries over the built [`Index`]: hover, go-to-definition, signature help,
 //! completion, and the scope/name-resolution helpers they share.
 
+use super::attr_ide::{
+    attribute_arg_completions, attribute_arg_context, attribute_hover, attribute_name_completions,
+    attribute_name_partial, attribute_signature,
+};
 use super::{is_ident_byte, keywords, Decl, Index, Located, Ref, SymKind, GLOBAL};
 use crate::code_actions::imported_packages;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
+use dream_abi::attributes::find_spec;
 use dream_stdlib::{BOOTSTRAP_PACKAGES, STD_PACKAGES};
 
 /// Walks upward from `start_dir` looking for a `dream_packages/` directory (installed by the
@@ -24,6 +29,22 @@ fn find_dream_packages_dir(start_dir: &std::path::Path) -> Option<std::path::Pat
         dir = d.parent().map(std::path::Path::to_path_buf);
     }
     None
+}
+
+/// True when `offset` is in a `receiver.` / `receiver.partial` member-access position.
+/// Used by the LSP backend to avoid merging unloaded stdlib type completions into
+/// member lists (`System.` must not offer `List` / `Gpu` / …).
+pub fn is_member_completion_context(text: &str, offset: usize) -> bool {
+    if import_path_partial(text, offset).is_some() {
+        return false;
+    }
+    let bytes = text.as_bytes();
+    let offset = offset.min(bytes.len());
+    let mut i = offset;
+    while i > 0 && is_ident_byte(bytes[i - 1]) {
+        i -= 1;
+    }
+    i > 0 && bytes[i - 1] == b'.'
 }
 
 /// If `offset` is inside an unquoted `import <path>` statement, returns
@@ -274,6 +295,14 @@ impl Index {
             (decl.start, decl.end, decl)
         } else {
             let reference = self.ref_at(offset)?;
+            if reference.kind == SymKind::Decorator {
+                let spec = find_spec(&reference.name)?;
+                return Some(Located {
+                    start: reference.start,
+                    end: reference.end,
+                    contents: attribute_hover(spec),
+                });
+            }
             let receiver = reference.receiver.as_deref();
             let d = match reference.kind {
                 SymKind::EnumMember => self.resolve_enum_member(receiver, &reference.name),
@@ -400,6 +429,20 @@ impl Index {
     }
 
     pub fn signature_help(&self, text: &str, offset: usize) -> Option<Decl> {
+        if let Some((spec, _active)) = attribute_signature(text, offset) {
+            return Some(Decl {
+                name: spec.name.to_string(),
+                kind: SymKind::Decorator,
+                detail: spec.args.signature_label(spec.name),
+                doc_comment: Some(spec.doc.to_string()),
+                start: 0,
+                end: 0,
+                scope: GLOBAL,
+                ty: None,
+                is_main: true,
+            });
+        }
+
         let bytes = text.as_bytes();
         let mut i = offset;
         let mut paren_count = 0;
@@ -512,6 +555,23 @@ impl Index {
         // `System.` still falls through to member_completions below.
         if let Some((_path_start, partial)) = import_path_partial(text, offset) {
             return import_path_completions(file_path, text, &partial);
+        }
+
+        // `@name` / `@partial` attribute-name completion (before any `.` / keyword dump).
+        if let Some((_name_start, partial)) = attribute_name_partial(text, offset) {
+            return attribute_name_completions(&partial)
+                .into_iter()
+                .map(|(label, _insert, detail, doc)| (label, SymKind::Decorator, detail, doc))
+                .collect();
+        }
+
+        // Inside `@name(...)` — closed-world arg suggestions when the registry knows them.
+        // Always stay in attribute-arg mode (never dump keywords / globals into the arg list).
+        if let Some(ctx) = attribute_arg_context(text, offset) {
+            return attribute_arg_completions(&ctx)
+                .into_iter()
+                .map(|(label, _insert, detail, doc)| (label, SymKind::Decorator, detail, doc))
+                .collect();
         }
 
         // Detect `receiver.<partial>` by scanning back over an identifier and a dot.

@@ -12,12 +12,17 @@ use dream::syntax::lexer::Lexer;
 use dream::syntax::parser::Parser;
 use std::collections::HashMap;
 
+mod attr_ide;
 mod builder;
 mod model;
 mod queries;
 
 pub use model::*;
+pub use queries::is_member_completion_context;
 pub(crate) use queries::import_path_partial;
+pub use attr_ide::{
+    attribute_arg_context, attribute_name_partial, attribute_signature, AttrArgContext,
+};
 
 use builder::Builder;
 
