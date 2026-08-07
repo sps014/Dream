@@ -172,7 +172,7 @@ let sorted = xs.order_by((a: int, b: int): int => a.compare(b));
 
 #### `seq(): Seq<T>`
 
-Wraps the collection in a lazy chaining facade over an eager `List` snapshot. Prefer `seq()` when chaining several transforms before materializing with `to_list()`.
+Wraps an eager `List` snapshot so you can chain transforms and call `to_list()` once at the end. Prefer `seq()` when applying several query steps without allocating an intermediate named list for each step.
 
 ```dream
 let out = xs.seq()
