@@ -6,7 +6,7 @@ A fast, statically typed language that compiles straight to WebAssembly. Syntax 
 
 ## A taste
 
-```dream
+```kotlin
 import system;
 import system.collections;
 
