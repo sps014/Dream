@@ -2,17 +2,13 @@
 
 **Package:** `system.core` (bootstrap — no import required)
 
-Two built-in generic unions handle absence and failure safely, without null. They are ordinary [discriminated unions](../language/enums-unions.md), so you take them apart with a pattern-matching `switch`. Console snippets below also need `import system;`.
+Two built-in generic unions handle absence and failure without null. Take them apart with `switch`. Console snippets need `import system;`.
 
 ## `Option<T>`
-
-`Option<T>` represents a value that may be absent:
 
 ```dream
 enum Option<T> { Some(value: T), None }
 ```
-
-Prefer it when absence is a meaningful part of the flow — a lookup that might find nothing — because it forces the caller to handle both cases. There is no nullable `T?` / `null` spelling; `Option<T>` / `None` is the only absence model.
 
 ```dream
 let some = Option.Some(42);
@@ -24,26 +20,66 @@ let val = switch (some) {
 };
 ```
 
-Helpers:
+#### `is_some(): bool`
 
-- `.is_some()` / `.is_none()` — which variant it is.
-- `.unwrap_or(fallback)` — the contained value, or `fallback`.
-- `.map(f)` / `.and_then(f)` / `.or(fallback)` — transform or chain without nested `switch`.
+Returns whether the option holds a value. Use for guards before unwrapping or chaining.
+
+```dream
+System.println(some.is_some());  // true
+```
+
+#### `is_none(): bool`
+
+Returns whether the option is empty. Equivalent to `!is_some()` but reads clearly in negative checks.
+
+```dream
+System.println(none.is_none());  // true
+```
+
+#### `unwrap_or(fallback: T): T`
+
+Returns the inner value or `fallback` when `None`. The safe alternative to a panicking unwrap — always supply a default or use `switch`.
 
 ```dream
 System.println(some.unwrap_or(0));   // 42
+System.println(none.unwrap_or(0));   // 0
+```
+
+#### `map<U>(f: fun(T): U): Option<U>`
+
+Transforms the inner value if present; propagates `None` otherwise. Use to project without nested `switch` blocks.
+
+```dream
 System.println(some.map((x: int): int => x + 1).unwrap_or(0));  // 43
+System.println(none.map((x: int): int => x + 1).is_none());     // true
+```
+
+#### `and_then<U>(f: fun(T): Option<U>): Option<U>`
+
+Chains a fallible step that itself returns `Option`. Prefer over nested `map` + `flatten` when the next step may fail.
+
+```dream
+fun half(n: int): Option<int> {
+    if (n % 2 != 0) return Option.None;
+    return Option.Some(n / 2);
+}
+System.println(Option.Some(4).and_then(half).unwrap_or(0));  // 2
+```
+
+#### `or(fallback: Option<T>): Option<T>`
+
+Returns `this` if `Some`, otherwise `fallback`. Use to supply a secondary source when the primary is absent.
+
+```dream
+System.println(none.or(Option.Some(7)).unwrap_or(0));  // 7
+System.println(some.or(Option.Some(7)).unwrap_or(0));  // 42
 ```
 
 ## `Result<T, E>`
 
-`Result<T, E>` is the outcome of an operation that can fail — either a success (`Ok`) or an error (`Err`):
-
 ```dream
 enum Result<T, E> { Ok(value: T), Err(error: E) }
 ```
-
-Returning a `Result` makes failure an explicit part of the signature:
 
 ```dream
 fun safe_div(a: int, b: int): Result<int, string> {
@@ -57,22 +93,65 @@ switch (safe_div(10, 2)) {
 }
 ```
 
-Helpers:
+#### `is_ok(): bool`
 
-- `.is_ok()` / `.is_err()` — which variant it is.
-- `.unwrap_or(fallback)` — the success value, or `fallback`.
-- `.map(f)` / `.map_err(f)` — transform the success or error payload.
-- `.and_then(f)` — chains into another `Result` when `Ok`, otherwise preserves the error.
+Returns whether the result is success. Quick branch before unwrapping or logging errors.
+
+```dream
+System.println(safe_div(10, 2).is_ok());  // true
+```
+
+#### `is_err(): bool`
+
+Returns whether the result is failure. Pair with `is_ok` — pick whichever reads better at the call site.
+
+```dream
+System.println(safe_div(10, 0).is_err());  // true
+```
+
+#### `unwrap_or(fallback: T): T`
+
+Returns the success value or `fallback` on `Err`. Discards the error — use `switch` or `map_err` when you need the failure detail.
+
+```dream
+System.println(safe_div(10, 2).unwrap_or(-1));  // 5
+System.println(safe_div(10, 0).unwrap_or(-1));  // -1
+```
+
+#### `map<U>(f: fun(T): U): Result<U, E>`
+
+Transforms the success payload while preserving the error type. Use to adapt values without re-matching `Ok`/`Err`.
+
+```dream
+let r = safe_div(10, 2).map((n: int): int => n * 2);
+System.println(r.unwrap_or(0));  // 10
+```
+
+#### `map_err<F>(f: fun(E): F): Result<T, F>`
+
+Transforms the error payload while preserving success. Use to normalize error types at API boundaries.
+
+```dream
+let r = safe_div(10, 0).map_err((e: string): int => e.length);
+```
+
+#### `and_then<U>(f: fun(T): Result<U, E>): Result<U, E>`
+
+Chains a fallible step that returns `Result` with the same error type. The `Result` analogue of `Option.and_then`.
+
+```dream
+fun double_ok(n: int): Result<int, string> {
+    return Result.Ok(n * 2);
+}
+System.println(safe_div(10, 2).and_then(double_ok).unwrap_or(0));  // 10
+```
 
 !!! note
-    There are no panicking `unwrap()` methods, by design. Always supply a fallback or use `switch` to handle the empty/error case explicitly.
+    There are no panicking `unwrap()` methods. Always supply a fallback or use `switch`.
 
 ## `?` — try-propagation
 
-Writing a `switch` (or a chain of `is_ok()`/`unwrap_or()` calls) at every fallible call site gets
-noisy fast. The postfix `?` operator is sugar for exactly that pattern: `expr?` either yields the
-success payload, or immediately `return`s the failure/absence variant from the *enclosing
-function*.
+`expr?` yields the success payload, or immediately `return`s the failure/absence from the enclosing function.
 
 ```dream
 fun half(n: int): Result<int, string> {
@@ -82,25 +161,13 @@ fun half(n: int): Result<int, string> {
     return Result.Ok(n / 2);
 }
 
-// Without `?`:
-fun quarter_verbose(n: int): Result<int, string> {
-    return switch (half(n)) {
-        Err(e) => Result.Err(e),
-        Ok(h)  => switch (half(h)) {
-            Err(e) => Result.Err(e),
-            Ok(q)  => Result.Ok(q),
-        },
-    };
-}
-
-// With `?`:
 fun quarter(n: int): Result<int, string> {
     let h = half(n)?;
     return Result.Ok(half(h)?);
 }
 ```
 
-The same operator works on `Option<T>`, propagating `None`:
+Works on `Option<T>` too (propagates `None`):
 
 ```dream
 fun first_positive(xs: int[]): Option<int> {
@@ -113,33 +180,54 @@ fun first_positive(xs: int[]): Option<int> {
 }
 
 fun describe_first_positive(xs: int[]): Option<string> {
-    let v = first_positive(xs)?;   // returns `Option.None` immediately if there isn't one
+    let v = first_positive(xs)?;
     return Option.Some("first positive: " + v.to_string());
 }
 ```
 
 Rules:
 
-- `expr?` requires `expr` to be a `Result<T, E>` or `Option<T>`.
-- The enclosing function must itself return a matching wrapper: `Result<_, E>` with the *same* `E`
-  for a `Result<T, E>?`, or `Option<_>` for an `Option<T>?`. Using `?` in a function with an
-  incompatible (or missing) return type is a compile error, since there is nowhere for the
-  propagated failure to go.
-- Postfix `?` is preferred over ternary unless a matching `:` follows at the same nesting depth, so
-  `half(n)? + 1` and `if (half(n)? > 0)` are try-propagation. Write `cond ? a : b` when you mean the
-  ternary; parentheses around `(expr?)` are never required for ordinary postfix use.
-
+- `expr?` requires `Result<T, E>` or `Option<T>`.
+- The enclosing function must return a matching wrapper (`Result<_, E>` with the same `E`, or `Option<_>`).
+- Prefer postfix `?` over ternary unless a matching `:` follows; write `cond ? a : b` for ternary.
 
 ## `Error`
 
-Stdlib fallible APIs use `Result<T, E>` where `E` implements the `Error` interface:
+Stdlib fallible APIs use `Result<T, E>` where `E` implements:
 
 ```dream
 public interface Error {
     fun message(): string;
-    fun code(): string;   // stable machine code: "ENOENT", "EPARSE", "HTTP_404", …
+    fun code(): string;   // "ENOENT", "EPARSE", "HTTP_404", …
 }
 ```
 
-Concrete types: `ParseError` (bootstrap), `IoError` (`system.io`), `HttpError` (`system.net`), `ArgError` (`system`). Prefer `e.message()` / `e.code()` at call sites.
+### `ParseError` (bootstrap)
 
+```dream
+let e = ParseError.invalid("bad number");
+System.println(e.message());
+System.println(e.code());
+```
+
+### `ArgError` (`system`)
+
+```dream
+import system;
+switch (System.set_env("", "x")) {
+    Ok(_) => {},
+    Err(e) => System.println(e.message()),
+}
+```
+
+### `IoError` (`system.io`)
+
+Factories: `IoError.not_found(path)`, `permission_denied(path)`, `other(path, msg)`, `exists(path)`.
+
+```dream
+import system.io;
+let e = IoError.not_found("missing.txt");
+System.println(e.code());  // ENOENT
+```
+
+Concrete types also: `HttpError` (`system.net`). Prefer `e.message()` / `e.code()` at call sites.

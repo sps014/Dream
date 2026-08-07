@@ -2,9 +2,7 @@
 
 **Package:** `system.text` — `import system.text;`
 
-`Regex` matches patterns with a pure-Dream engine (no host `RegExp`). Construct one with a pattern and flags, then `test`, `replace`, or `match`. Calls are synchronous — no `await` — and behave the same on native, Node, and the browser.
-
-## Usage
+Pure-Dream regex engine (no host `RegExp`). Synchronous on every host.
 
 ```dream
 import system;
@@ -12,68 +10,70 @@ import system.text;
 
 fun main(): void {
     let digits = Regex("\\d+", "g");
-
-    if (digits.test("abc123")) {
-        System.println("has digits");
-    }
-
-    let cleaned = digits.replace("a1b2c3", "#");   // a#b#c#
-    System.println(cleaned);
-
-    let parts = digits.match("a1b2c3");            // ["1", "2", "3"]
-    System.println(parts.length);                  // 3
+    System.println(digits.test("abc123"));           // true
+    System.println(digits.replace("a1b2c3", "#"));   // a#b#c#
+    System.println(digits.match("a1b2c3").length);   // 3
 }
 ```
 
 ## Flags
 
-Flags are passed as a string, mirroring JavaScript:
-
 | Flag | Meaning |
 | --- | --- |
-| `g` | global — `replace` affects every match, and `match` returns all matches |
+| `g` | global — `replace` all matches; `match` returns every match |
 | `i` | case-insensitive |
-| `m` | multi-line (`^`/`$` match at line boundaries) |
+| `m` | multi-line (`^`/`$` at line boundaries) |
 | `s` | dot-all (`.` matches newlines) |
 
-## Capture groups
+## Methods
 
-Without the `g` flag, `match` returns the full match followed by each capture group (a group that
-didn't participate — e.g. inside an alternative that wasn't taken — is `""`):
+#### `Regex(pattern: string, flags: string)`
+
+Compiles a pattern with optional flag letters (`g`, `i`, `m`, `s`). Compile once and reuse — compilation is not free.
 
 ```dream
-fun main(): void {
-    let date = Regex("(\\d{4})-(\\d{2})", "i");
-    let caps = date.match("2026-06");   // ["2026-06", "2026", "06"]
-    System.println(caps[1]);            // 2026
-}
+let re = Regex("\\w+", "gi");
 ```
 
-## API reference
+#### `test(input: string): bool`
 
-| Method | Description |
-| --- | --- |
-| `Regex(pattern, flags)` | construct from a pattern and a flags string |
-| `test(input): bool` | true if `input` contains a match |
-| `replace(input, replacement): string` | replace matches (`g` for all; `$1`.."$9" and `$&` group refs supported, `$$` for a literal `$`) |
-| `match(input): string[]` | every match with `g`, else the full match + capture groups |
+Returns whether the pattern matches anywhere in `input`. Fast yes/no check — use before `match` when you only need presence.
+
+```dream
+System.println(Regex("\\d+", "").test("abc123"));  // true
+```
+
+#### `replace(input: string, replacement: string): string`
+
+Returns `input` with matches replaced by `replacement`. With `g`, replaces every match; supports `$1`..`$9`, `$&`, and `$$` in the replacement string.
+
+```dream
+System.println(Regex("(\\d+)", "g").replace("a1b2", "[$1]"));  // a[1]b[2]
+```
+
+#### `match(input: string): string[]`
+
+Returns match results as a string array. With `g`: every full match; without `g`: full match plus capture groups (`""` for non-participating groups).
+
+```dream
+let all = Regex("\\d+", "g").match("a1b2c3");       // ["1", "2", "3"]
+let caps = Regex("(\\d{4})-(\\d{2})", "").match("2026-06");
+System.println(caps[1]);  // 2026
+```
 
 ## Supported syntax
 
 | Feature | Syntax |
 | --- | --- |
-| Literals, any character | `a`, `.` (respects the `s` flag) |
-| Anchors | `^`, `$` (respect the `m` flag), `\b`, `\B` |
-| Quantifiers | `*`, `+`, `?`, `{m}`, `{m,}`, `{m,n}`, and their lazy forms (`*?`, `+?`, `??`, `{m,n}?`) |
+| Literals, any character | `a`, `.` (respects `s`) |
+| Anchors | `^`, `$` (respect `m`), `\b`, `\B` |
+| Quantifiers | `*`, `+`, `?`, `{m}`, `{m,}`, `{m,n}`, lazy forms |
 | Alternation | `a\|b` |
-| Groups | `(...)` (capturing), `(?:...)` (non-capturing) |
+| Groups | `(...)`, `(?:...)` |
 | Character classes | `[abc]`, `[^abc]`, `[a-z]` |
-| Shorthand classes | `\d`, `\D`, `\w`, `\W`, `\s`, `\S` |
-| Escapes | `\n`, `\t`, `\r`, and `\` before any metacharacter (`\.`, `\\`, `\(`, ...) |
+| Shorthands | `\d`, `\D`, `\w`, `\W`, `\s`, `\S` |
+| Escapes | `\n`, `\t`, `\r`, `\` before metacharacters |
 
-**Not supported:** lookaround (`(?=...)`, `(?!...)`, …), backreferences (`\1`), named groups
-(`(?<name>...)`), and Unicode property classes (`\p{...}`). A pattern that uses one of these
-constructs won't crash; it just won't carry that construct's special meaning (e.g. `(?=...)`
-parses as a best-effort non-capturing group, `\1` as a literal `1`).
+**Not supported:** lookaround, backreferences (`\1`), named groups, `\p{...}`. Unsupported constructs parse best-effort without their special meaning.
 
-A runnable example lives in [`sample/interop/regex.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/regex.dream).
+A runnable example: [`sample/interop/regex.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/regex.dream).

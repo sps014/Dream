@@ -2,20 +2,15 @@
 
 **Package:** `system.core` (bootstrap — no import required)
 
-Standalone synchronization primitives for coordinating [`WebWorker`](../language/webworkers.md) threads over shared state. Both are `@shared class` themselves, so they can be captured directly by a `WebWorker` body like any other shared object — see [Sharing state safely](../language/webworkers.md#sharing-state-safely).
+Standalone synchronization primitives for coordinating [`WebWorker`](../language/webworkers.md) threads over shared state. Both are `@shared class` themselves, so they can be captured directly by a `WebWorker` body like any other shared object — see [Sharing state safely](../language/webworkers.md#sharing-state-safely). Console snippets also need `import system;`.
 
 Prefer the built-in `lock (obj) { ... }` statement directly on an `@shared class` instance when you can — it needs no separate `Lock` object and cannot be left unreleased. Reach for a standalone `Lock`/`Semaphore` when the critical section doesn't map to a single block (e.g. it spans a `WebWorker` closure boundary) or you need semaphore-style counting rather than mutual exclusion.
 
 ## `Lock`
 
-A reentrant mutual-exclusion lock, equivalent to `lock (obj) { ... }` bracketed manually:
+A reentrant mutual-exclusion lock, equivalent to `lock (obj) { ... }` bracketed manually.
 
-```dream
-public class Lock {
-    public fun acquire(): void;   // blocks until available, then takes it
-    public fun release(): void;   // releases one level
-}
-```
+#### `acquire(): void` / `release(): void`
 
 - **Reentrant**: the same thread may call `acquire()` again before releasing — it must call `release()` the same number of times to fully release it. A different thread blocks until the holder releases every level.
 - **Blocking**: `acquire()` busy-waits (parks the OS thread on a WASM atomic wait, not a spin loop) until the lock is free.
@@ -51,16 +46,9 @@ async fun main(): void {
 
 ## `Semaphore`
 
-A classic counting semaphore. `initial` permits are available up front; unlike `Lock`, a semaphore has no notion of ownership — any thread may `release()`, and the same thread may hold more than one permit at once:
+A classic counting semaphore. `initial` permits are available up front; unlike `Lock`, a semaphore has no notion of ownership — any thread may `release()`, and the same thread may hold more than one permit at once.
 
-```dream
-public class Semaphore {
-    public constructor(initial: int);
-
-    public fun acquire(): void;   // blocks until a permit is available, then takes one
-    public fun release(): void;   // returns one permit
-}
-```
+#### `Semaphore(initial: int)` / `acquire(): void` / `release(): void`
 
 Use it to cap concurrency — e.g. limiting how many workers touch a resource (a connection pool, a fixed-size buffer) at once:
 
@@ -77,6 +65,35 @@ async fun main(): void {
     await w3.send("");
 }
 ```
+
+## `CancellationSource` / `CancellationToken`
+
+Cooperative cancellation for long-running work (e.g. [`HttpClient.with_cancellation`](http.md)).
+
+#### `CancellationSource()` / `cancel()` / `is_cancelled()` / `token()`
+
+Creates a cancellation source, signals cancellation to all linked tokens, and exposes a shareable `CancellationToken`. One source can fan out to many consumers (HTTP client, worker loops, etc.).
+
+```dream
+let src = CancellationSource();
+let token = src.token();
+System.println(token.is_cancelled());  // false
+src.cancel();
+System.println(token.is_cancelled());  // true
+System.println(src.is_cancelled());    // true
+```
+
+#### `CancellationToken.is_cancelled(): bool`
+
+Polls whether cancellation was requested on this token. Check periodically in long loops — cancellation is cooperative, not preemptive.
+
+```dream
+if (token.is_cancelled()) {
+    return;
+}
+```
+
+`CancelledError` implements [`Error`](option-result.md) when a cancelled operation surfaces as `Err`.
 
 ## Notes and limits
 

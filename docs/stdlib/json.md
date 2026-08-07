@@ -130,43 +130,87 @@ user.set("tags", tags);
 | `JsonValue.array()` | an empty array |
 | `JsonValue.dict()` | an empty object |
 
-| Accessor | Returns |
-| --- | --- |
-| `as_bool()` / `as_int()` / `as_double()` / `as_string()` | the scalar value |
-| `get(key): Option<JsonValue>` | object member by key (`None` if absent) |
-| `at(index): Option<JsonValue>` | array element by index (`None` if out of range) |
-| `key_at(index): Option<string>` | object key at insertion index |
-| `set(key, v)` / `push(v)` | mutate an object / array |
-| `size(): int` | array length |
-| `is_null(): bool` | true for `null` |
+### Accessors (with examples)
 
-`get`, `at`, and `key_at` return an `Option` rather than a sentinel, so a miss is explicit. Read with `unwrap_or(JsonValue.none())` or `switch`.
+#### `as_bool()` / `as_int()` / `as_double()` / `as_string(): Option<_>`
 
-## `Json.parse` and `Json.stringify`
+Narrows a `JsonValue` to a typed scalar, returning `None` on kind mismatch. Prefer over manual `kind_of` checks when reading known JSON shapes.
 
 ```dream
-let text = Json.stringify(user);     // {"name":"Ada","age":36,"tags":["dev"]}
+System.println(JsonValue.boolean(true).as_bool().unwrap_or(false));
+System.println(JsonValue.from_int(7).as_int().unwrap_or(0));
+System.println(JsonValue.from_string("hi").as_string().unwrap_or(""));
+```
 
-switch (Json.parse(text)) {
-    Ok(v) => {
-        let none = JsonValue.none();
-        System.println(v.get("name").unwrap_or(none).as_string().unwrap_or(""));  // Ada
-        System.println(v.get("age").unwrap_or(none).as_int().unwrap_or(0));        // 36
-    },
+#### `is_null()` / `is_array()` / `is_object()` / `kind_of(): int`
+
+Tests the JSON kind without extracting a payload. Use `kind_of` when switching on multiple kinds in one place.
+
+```dream
+System.println(JsonValue.none().is_null());     // true
+System.println(JsonValue.array().is_array());    // true
+System.println(JsonValue.dict().is_object());    // true
+```
+
+#### `get(key)` / `has(key)` / `set(key, v)` / `keys()` / `key_at(index)`
+
+Object accessors: lookup, membership, mutation, and enumeration. `get` returns `None` for missing keys — distinct from JSON `null` values.
+
+```dream
+let user = JsonValue.dict();
+user.set("name", JsonValue.from_string("Ada"));
+System.println(user.has("name"));                         // true
+System.println(user.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or(""));
+System.println(user.keys().length);                       // 1
+System.println(user.key_at(0).unwrap_or(""));
+```
+
+#### `at(index)` / `push(v)` / `.length`
+
+Array accessors: indexed read, append, and length. Bounds-safe `at` returns `Option` — same pattern as object `get`.
+
+```dream
+let tags = JsonValue.array();
+tags.push(JsonValue.from_string("dev"));
+System.println(tags.length);  // 1
+System.println(tags.at(0).unwrap_or(JsonValue.none()).as_string().unwrap_or(""));
+```
+
+`get`, `at`, and `key_at` return an `Option` so a miss is explicit.
+
+## `Json.parse` / `Json.stringify` / `Json.stringify_pretty`
+
+#### `Json.parse(text): Result<JsonValue, ParseError>`
+
+Parses a JSON text document into a `JsonValue` tree. Use for untyped or dynamic JSON; prefer `@json` + `deserialize` for known schemas.
+
+```dream
+switch (Json.parse("{\"name\":\"Ada\"}")) {
+    Ok(v) => System.println(v.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("")),
     Err(e) => System.println(e.message()),
 }
 ```
 
-`Json.parse` returns `Result<JsonValue, ParseError>`. It is a recursive-descent parser. A JSON `null` reads back as a `JsonValue` whose `is_null()` is `true`; a missing object key yields `None` from `get`, so a miss is distinguishable from a present `null`.
+#### `Json.stringify(value): string`
 
-`Json.stringify_pretty(value, indent)` formats with newlines and `indent` spaces per level; an `indent` of `0` matches compact `Json.stringify`:
+Serializes a `JsonValue` to compact JSON text. Pair with the static constructors when building JSON by hand.
 
 ```dream
-System.println(Json.stringify_pretty(v, 2));
-// {
-//   "name": "Ada",
-//   "tags": [
-//     "dev"
-//   ]
-// }
+let text = Json.stringify(user);  // {"name":"Ada",...}
 ```
+
+#### `Json.stringify_pretty(value, indent): string`
+
+Pretty-prints with the given indent width (`0` matches compact `stringify`). Use for debug output and human-edited config files.
+
+```dream
+System.println(Json.stringify_pretty(user, 2));
+```
+
+A JSON `null` reads back with `is_null() == true`; a missing object key yields `None` from `get`.
+
+## `@json` helpers
+
+#### `Json.serialize<T>(x): string` / `Json.deserialize<T>(text)` / `Json.from_value<T>(value)`
+
+Covered in the auto-derive section above — each has a full example there.

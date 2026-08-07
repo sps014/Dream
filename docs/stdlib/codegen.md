@@ -32,6 +32,19 @@ When a Dream harness runs (as `@json` does), print `GenHost.err_marker()` then t
 Accumulates Dream source for `emit_extend` / `emit_file` bodies. Construct with `CodeBuilder()`
 (4 spaces per indent level) or `CodeBuilder.with_spaces(n)` for `n` spaces per level.
 
+#### `CodeBuilder()` / `CodeBuilder.with_spaces(n)`
+
+Creates an empty builder with default or custom indent width. Use `with_spaces` when generated code must match a project's style guide.
+
+```dream
+let b = CodeBuilder();
+let tight = CodeBuilder.with_spaces(2);
+```
+
+#### `indent()` / `dedent()` / `line(text)` / `append(text)` / `to_string()`
+
+Builds source line by line: `line` adds a newline and applies indent at line start; `append` adds inline text without re-indenting mid-line.
+
 ```dream
 let b = CodeBuilder();
 b.line("public fun to_json(): JsonValue {");
@@ -43,25 +56,40 @@ b.append("// trailing comment");
 let src = b.to_string();
 ```
 
-| Method | Role |
-|--------|------|
-| `CodeBuilder()` | Empty builder, 4 spaces per indent level |
-| `CodeBuilder.with_spaces(n)` | Empty builder, `n` spaces per level (`<= 0` → no indent) |
-| `indent()` | Increase indent level by one |
-| `dedent()` | Decrease indent level by one (floored at 0) |
-| `line(text)` | Write indent (if at line start) + text + newline |
-| `append(text)` | Write indent (if at line start) + text (no extra newline) |
-| `to_string()` | Materialize the buffer |
-
-Indent is applied only at the start of a line (after `line`, or initially). Mid-line `append`
-does not re-prefix.
+Indent is applied only at the start of a line. Mid-line `append` does not re-prefix.
 
 ## `GenHost`
 
-| Method | Role |
-|--------|------|
-| `ok_marker()` / `err_marker()` / `loc_marker()` | Stdout protocol lines for harnesses |
-| `format_loc(type, field)` | `type\tfield` span hint after `loc_marker` |
+#### `ok_marker()` / `err_marker()` / `loc_marker()` / `format_loc(type, field)`
+
+Returns the stdout marker strings the compile host expects from generator harnesses. Print `err_marker()` + message on failure; optionally `loc_marker()` + `format_loc` to point at a type field.
+
+```dream
+System.println(GenHost.ok_marker());
+System.println(GenHost.err_marker());
+System.println(GenHost.loc_marker());
+System.println(GenHost.format_loc("User", "name"));
+```
+
+## `GenResult` (`system.json`)
+
+Outcome of a generator expand step.
+
+#### `GenResult.success(source)` / `failure(error)` / `failure_at(error, type, field)`
+
+Constructs the outcome object a harness returns: success with generated source, plain failure, or failure tied to a type/field for span attachment.
+
+```dream
+import system.json;
+
+let ok = GenResult.success("extend User { }");
+let bad = GenResult.failure("unsupported field");
+let at = GenResult.failure_at("bad type", "User", "age");
+System.println(ok.ok);
+System.println(bad.error);
+```
+
+Fields: `ok`, `source`, `error`, `error_type`, `error_field`.
 
 ## Generator host API (Rust)
 
@@ -85,7 +113,7 @@ Generators discover work via `@generator` functions / attributes. The compile ho
 | Feature | Where |
 |---------|--------|
 | `@json` derive | [JSON](json.md) — compiler builtin |
-| Quote sample | [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote) — beginner syntax DSL |
-| HTML sample | [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html) — advanced Dream parser + harness |
+| Quote sample | [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote) |
+| HTML sample | [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html) |
 
 Full tutorial: [Source generators](../language/generators.md).

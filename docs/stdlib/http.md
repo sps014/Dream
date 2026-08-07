@@ -1,10 +1,14 @@
 # HTTP
 
-**Package:** `system.net` — `import system.net;` (typically also `import system;` for console output)
+**Package:** `system.net` — `import system.net;` (typically also `import system;`)
 
-`HttpClient` and `HttpResponse` are a small, instantiable HTTP client. Like [`File`](file.md), the capability is a pair of [`extern async fun`](../language/async.md) imports implemented once per host, so the same `.dream` runs unchanged everywhere. Each call performs the whole request and hands back the entire response — status, headers, and raw body — that you `await`.
+`HttpClient` / `HttpResponse` wrap host `fetch` / native HTTP. Each call awaits the full response. Fallible ops return `Result<_, HttpError>`.
 
-Fallible ops return `Result<_, HttpError>` (`message()` / `code()` such as `HTTP_0`, `HTTP_404`). Typed headers use `HttpHeaders`. `Url.parse` returns `Result<Url, ParseError>`.
+```dream
+import system;
+import system.net;
+import system.json;
+```
 
 ## Platform notes
 
@@ -14,155 +18,268 @@ Fallible ops return `Result<_, HttpError>` (`message()` / `code()` such as `HTTP
 | Node.js | Global `fetch` (Node 18+) |
 | Browser | Page `fetch` |
 
-The API is identical across all three; only the transport differs. Unlike the dynamic [`js`](../language/js-type.md) type, there is nothing to release — the body bytes are in hand once the future resolves.
+## `HttpClient`
 
-## Creating a client
+#### `HttpClient(base_url: string)`
 
-Construct with a base URL (`""` for none) and, optionally, default headers applied to every request. `set_header` returns the client, so calls chain:
+Creates a client with an optional base URL. Pass `""` when every request uses a full URL; otherwise relative paths join onto the base.
 
 ```dream
-import system;
-import system.net;
-import system.json;
+let api = HttpClient("https://api.example.com");
+```
 
+#### `set_header(name, value): HttpClient`
+
+Adds a default header and returns `this` for chaining. Use for auth tokens or `Accept` shared across many requests.
+
+```dream
 let api = HttpClient("https://api.example.com")
     .set_header("Authorization", "Bearer secret")
     .set_header("Accept", "application/json");
 ```
 
-## Fetching text
+#### `with_timeout(ms: int): HttpClient` / `.timeout_ms`
 
-`text(path)` resolves to the body directly. Relative paths join onto the base URL:
+Sets a per-request timeout in milliseconds (`0` = none). Read `.timeout_ms` to inspect the current limit.
 
 ```dream
-import system;
-import system.net;
-import system.json;
+api = api.with_timeout(5000);
+System.println(api.timeout_ms);
+```
 
-async fun main(): void {
-    let api = HttpClient("https://api.example.com");
-    switch (await api.text("/users/42")) {
-        Ok(body) => {
-            switch (Json.parse(body)) {
-                Ok(user) => System.println(user.get("name").unwrap_or(JsonValue.none()).as_string().unwrap_or("")),
-                Err(e) => System.println(e.message()),
-            }
-        },
-        Err(e) => System.println(e.code()),
-    }
+#### `with_cookie_jar(jar: CookieJar)`
+
+Attaches a cookie jar for automatic cookie storage and replay. Use for session-based APIs that set `Set-Cookie`.
+
+```dream
+let jar = CookieJar();
+api = api.with_cookie_jar(jar);
+```
+
+#### `with_cancellation(token: CancellationToken)`
+
+Links outbound requests to a cancellation token. Prefer when user abort or timeout should stop in-flight fetches cooperatively.
+
+```dream
+let src = CancellationSource();
+api = api.with_cancellation(src.token());
+```
+
+#### `await text(path): Result<string, HttpError>`
+
+Issues a GET and returns the response body as text. Shortcut when you only need the body string, not status or headers.
+
+```dream
+switch (await api.text("/users/42")) {
+    Ok(body) => System.println(body),
+    Err(e) => System.println(e.code()),
 }
 ```
 
-## Richer responses
+#### `await get(path): Result<HttpResponse, HttpError>`
 
-`get(path)` resolves to an `HttpResponse` exposing status, headers, and body. Reads are synchronous — the bytes arrive with the response:
+Issues a GET and returns the full response object. Use when you need status codes, headers, or multiple body formats.
 
 ```dream
-async fun main(): void {
-    let api = HttpClient("https://api.example.com");
-    switch (await api.get("/data")) {
-        Ok(res) => {
-            if (res.ok()) {                          // 2xx
-                System.println(res.status());        // 200
-                System.println(res.header("content-type"));
-                switch (res.json()) {
-                    Ok(data) => System.println(data.length),
-                    Err(e) => System.println(e.message()),
-                }
-            }
-        },
-        Err(e) => System.println(e.message()),
-    }
+switch (await api.get("/data")) {
+    Ok(res) => {
+        if (res.ok()) {
+            System.println(res.status());
+            System.println(res.header("content-type"));
+        }
+    },
+    Err(e) => System.println(e.message()),
 }
 ```
 
-## HTTP methods
+#### `await post` / `put` / `patch` `(path, body): Result<HttpResponse, HttpError>`
 
-`get`/`delete`/`head` take a path; `post`/`put`/`patch` also take a body; `request` gives full control including per-call `HttpHeaders` (merged over the client's defaults):
+Sends a request with a string body and returns the response. Pick the verb that matches the API semantics (create / replace / partial update).
 
 ```dream
-async fun main(): void {
-    let api = HttpClient("https://api.example.com");
-    let headers = HttpHeaders();
-    headers.set("Content-Type", "application/json");
-
-    let created = await api.post("/users", "{\"name\":\"Grace\"}");
-    switch (created) {
-        Ok(res) => System.println(res.status()),
-        Err(e) => System.println(e.message()),
-    }
-
-    let res = await api.request("PUT", "/users/1", "{\"name\":\"Ada\"}", headers);
+switch (await api.post("/users", "{\"name\":\"Grace\"}")) {
+    Ok(res) => System.println(res.status()),
+    Err(e) => System.println(e.message()),
 }
 ```
 
-## Binary bodies
+#### `await delete` / `head` `(path): Result<HttpResponse, HttpError>`
 
-For non-text data, the response body is byte-exact via `bytes()`, and `request_bytes`/`post_bytes`/`put_bytes` send a raw `byte[]` — both directions avoid any UTF-8 round-trip:
+`delete` removes a resource; `head` fetches headers only (no body). Use `head` for cheap existence or metadata checks.
 
 ```dream
-async fun main(): void {
-    let http = HttpClient("");
+await api.delete("/users/1");
+await api.head("/health");
+```
 
-    switch (await http.get("https://example.com/logo.png")) {
-        Ok(img) => {
-            await File.write_bytes("logo.png", img.bytes());
-        },
-        Err(e) => System.println(e.message()),
-    }
+#### `await request(method, path, body, headers): Result<HttpResponse, HttpError>`
+
+Fully custom request with explicit method, body, and per-call headers. Use when the convenience verbs are not enough (e.g. uncommon methods).
+
+```dream
+let headers = HttpHeaders();
+headers.set("Content-Type", "application/json");
+await api.request("PUT", "/users/1", "{\"name\":\"Ada\"}", headers);
+```
+
+#### `await request_bytes` / `post_bytes` / `put_bytes`
+
+Same as the string variants but with a `byte[]` body. Use for uploads/downloads of binary content (images, protobuf, etc.).
+
+```dream
+let http = HttpClient("");
+switch (await http.get("https://example.com/logo.png")) {
+    Ok(img) => { await File.write_bytes("logo.png", img.bytes()); },
+    Err(e) => System.println(e.message()),
 }
 ```
 
-## API reference
+#### `await post_multipart(path, form): Result<HttpResponse, HttpError>`
 
-### HttpClient
+POSTs a `MultipartForm` (fields and file parts). Use for browser-style file uploads and form submissions with attachments.
 
-| Member | Description |
-| --- | --- |
-| `HttpClient(base_url)` | construct; `base_url` is prepended to relative paths (`""` for none) |
-| `with_timeout(ms): HttpClient` | request timeout in milliseconds (`0` = none) |
-| `with_cookie_jar(jar): HttpClient` | attach a `CookieJar` for Cookie / Set-Cookie |
-| `set_header(name, value): HttpClient` | add/overwrite a default header (chainable) |
-| `text(path): Future<Result<string, HttpError>>` | GET and return the body as text |
-| `get(path): Future<Result<HttpResponse, HttpError>>` | GET and return an `HttpResponse` |
-| `post/put/patch(path, body): Future<Result<HttpResponse, HttpError>>` | send a text `body` with the given verb |
-| `delete/head(path): Future<Result<HttpResponse, HttpError>>` | DELETE / HEAD request |
-| `request(method, path, body, headers): Future<Result<HttpResponse, HttpError>>` | arbitrary verb; `headers` is `HttpHeaders` |
-| `request_bytes(method, path, body, headers): Future<Result<HttpResponse, HttpError>>` | arbitrary verb with a binary `byte[]` body |
-| `post_bytes/put_bytes(path, body): Future<Result<HttpResponse, HttpError>>` | POST / PUT a raw `byte[]` body |
-| `post_multipart(path, form): Future<Result<HttpResponse, HttpError>>` | POST a `MultipartForm` |
+```dream
+let form = MultipartForm();
+form.add_field("name", "Ada");
+form.add_file("avatar", "a.png", "image/png", Buffer.alloc<byte>(0));
+await api.post_multipart("/upload", form);
+```
 
-### CookieJar / MultipartForm
+## `HttpResponse`
 
-`CookieJar.set`/`get`/`clear`/`to_header`/`store_from_response`. `MultipartForm.add_field`/`add_file`/`build()` → `MultipartBuilt` with headers + body.
+#### `status(): int` / `ok(): bool`
 
-### HttpHeaders
+Returns the numeric HTTP status and whether it is 2xx. Check `ok()` before assuming a successful payload.
 
-| Member | Description |
-| --- | --- |
-| `HttpHeaders()` | empty map |
-| `set` / `get` / `contains` / `remove` | case-insensitive name match |
-| `to_wire` / `from_wire` | JSON object string for the host bridge |
+```dream
+System.println(res.status());  // 200
+System.println(res.ok());      // true for 2xx
+```
 
-### HttpError
+#### `header(name): string`
 
-Implements [`Error`](option-result.md): `message()`, `code()`, plus `status` (0 for transport). Factories: `HttpError.transport(msg)`, `HttpError.status(code, msg)`.
+Returns a response header value (case-insensitive lookup). Empty string when absent — do not confuse with a legitimate empty header value.
 
-### HttpResponse
+```dream
+System.println(res.header("content-type"));
+```
 
-A view over the raw response bytes. All reads are synchronous.
+#### `text(): string` / `bytes(): byte[]`
 
-| Member | Description |
-| --- | --- |
-| `status(): int` | HTTP status code (`0` on a transport error) |
-| `ok(): bool` | true for a 2xx status |
-| `header(name): string` | value of response header `name` (case-insensitive), or "" |
-| `text(): string` | body as UTF-8 text |
-| `bytes(): byte[]` | body as raw bytes (binary-safe) |
-| `json(): Result<JsonValue, ParseError>` | body parsed as [JSON](json.md) |
+Materializes the body as UTF-8 text or raw bytes. Call only once — the body is buffered in memory after the await completes.
 
-### Url
+```dream
+System.println(res.text());
+let raw = res.bytes();
+```
 
-`Url.parse(text): Result<Url, ParseError>` splits scheme/host/port/path/query/fragment. `to_string()`, `with_path`, and `join` rebuild or resolve relative paths.
+#### `json(): Result<JsonValue, ParseError>`
 
-A runnable example lives in [`sample/interop/http.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/http.dream).
+Parses the body as JSON into a `JsonValue`. Prefer `Json.deserialize<T>` when you have a `@json` type and know the schema.
+
+```dream
+switch (res.json()) {
+    Ok(data) => System.println(data.length),
+    Err(e) => System.println(e.message()),
+}
+```
+
+## `HttpHeaders`
+
+#### `HttpHeaders()` / `set` / `get` / `contains` / `remove` / `.length`
+
+Mutable header bag with case-insensitive `contains` / `get`. Build per-request headers or inspect a collected set.
+
+```dream
+let h = HttpHeaders();
+h.set("Accept", "application/json");
+System.println(h.contains("accept"));  // true (case-insensitive)
+System.println(h.get("Accept").unwrap_or(""));
+h.remove("Accept");
+System.println(h.length);
+```
+
+#### `to_wire(): string` / `HttpHeaders.from_wire(text): HttpHeaders`
+
+Serializes headers to a JSON object string for the host bridge and parses them back. Used internally — rarely needed in application code.
+
+```dream
+let wire = h.to_wire();
+let back = HttpHeaders.from_wire(wire);
+```
+
+Iterate: `for (let pair in h) { … }` yields `KeyValuePair<string, string>`.
+
+## `CookieJar`
+
+#### `CookieJar()` / `set` / `get` / `clear` / `.length` / `to_header` / `store_from_response`
+
+In-memory cookie store with manual `set`/`get` and automatic capture from responses. `to_header` builds a `Cookie` request header; `store_from_response` ingests `Set-Cookie`.
+
+```dream
+let jar = CookieJar();
+jar.set("sid", "abc");
+System.println(jar.get("sid").unwrap_or(""));
+System.println(jar.to_header());
+jar.store_from_response(res);
+jar.clear();
+```
+
+## `MultipartForm` / `MultipartBuilt`
+
+#### `add_field` / `add_file` / `build(): MultipartBuilt`
+
+Accumulates text fields and file parts, then `build()` produces wire-ready headers and body for `post_multipart`.
+
+```dream
+let form = MultipartForm();
+form.add_field("title", "hi");
+let built = form.build();  // MultipartBuilt(headers, body)
+```
+
+## `HttpError`
+
+Implements [`Error`](option-result.md). Field `status` is `0` for transport errors.
+
+```dream
+let e = HttpError.transport("offline");
+System.println(e.code());
+let s = HttpError.status(404, "missing");
+```
+
+## `Url`
+
+Fields: `scheme`, `host`, `port`, `path`, `query`, `fragment`.
+
+#### `Url.parse(text): Result<Url, ParseError>`
+
+Parses a URL string into structured parts. Use before modifying paths or joining relative links.
+
+```dream
+switch (Url.parse("https://example.com:443/a?x=1#frag")) {
+    Ok(u) => {
+        System.println(u.host);
+        System.println(u.to_string());
+    },
+    Err(e) => System.println(e.message()),
+}
+```
+
+#### `to_string(): string` / `with_path(path): Url` / `join(relative): Result<Url, ParseError>`
+
+Re-serializes the URL, swaps the path, or resolves a relative reference against a base. `join` follows standard relative-URL rules.
+
+```dream
+switch (Url.parse("https://example.com/a")) {
+    Ok(u) => {
+        System.println(u.with_path("/b").to_string());
+        switch (u.join("c")) {
+            Ok(j) => System.println(j.to_string()),
+            Err(e) => System.println(e.message()),
+        }
+    },
+    Err(e) => System.println(e.message()),
+}
+```
+
+A runnable example: [`sample/interop/http.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/http.dream).
