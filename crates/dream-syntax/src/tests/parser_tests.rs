@@ -1048,7 +1048,7 @@ fn test_parse_async_function_and_await() {
     assert!(matches!(&func.body[0], StatementNode::AwaitStmt(_)));
     assert!(matches!(
         &func.body[1],
-        StatementNode::Declaration(_, _, ExpressionNode::Await(_), _)
+        StatementNode::Declaration(_, _, ExpressionNode::Await(_, _), _)
     ));
 }
 

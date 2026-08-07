@@ -209,7 +209,7 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(t, out);
             walk_expr_for_ref_targets(e, out);
         }
-        ExpressionNode::Await(e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::Await(_, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::Switch(subj, arms) => {
             walk_expr_for_ref_targets(subj, out);
             for arm in arms {
@@ -387,7 +387,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_lambdas(t, out);
             walk_expr_for_lambdas(e, out);
         }
-        ExpressionNode::Await(e) => walk_expr_for_lambdas(e, out),
+        ExpressionNode::Await(_, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::Switch(subj, arms) => {
             walk_expr_for_lambdas(subj, out);
             for arm in arms {
@@ -663,7 +663,7 @@ fn collect_names_expr(
             collect_names_expr(t, scopes, referenced);
             collect_names_expr(e, scopes, referenced);
         }
-        ExpressionNode::Await(e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::Await(_, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::Switch(subj, arms) => {
             collect_names_expr(subj, scopes, referenced);
             for arm in arms {

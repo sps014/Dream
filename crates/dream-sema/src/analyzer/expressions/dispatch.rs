@@ -546,7 +546,7 @@ impl<'a> Analyzer<'a> {
                 // `analyze_method_call` records the `MethodCall`/`Call` (or clears `last`) itself.
                 Ok(t)
             }
-            ExpressionNode::Await(inner) => {
+            ExpressionNode::Await(_, inner) => {
                 let fut =
                     self.analyze_expression(inner, parent_function, symbol_table, diagnostics)?;
                 let inner_hir = self.hir_take();

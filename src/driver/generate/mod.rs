@@ -78,7 +78,7 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
             ExpressionNode::Unary(_, x)
             | ExpressionNode::IncDec { target: x, .. }
             | ExpressionNode::Parenthesized(x)
-            | ExpressionNode::Await(x)
+            | ExpressionNode::Await(_, x)
             | ExpressionNode::Try(x)
             | ExpressionNode::Cast(_, x)
             | ExpressionNode::IsExpression(x, _, _)

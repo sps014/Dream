@@ -406,6 +406,107 @@ async fun main(): void {
 }
 
 #[test]
+fn compute_kernel_completes_global_id() {
+    let harness = TestHarness::new(
+        r#"
+@compute(64)
+fun k(out: GpuBuffer<float>, n: int): void {
+    global_|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps.iter().any(|(n, ..)| n == "global_id"),
+        "expected global_id among completions in @compute body, got {:?}",
+        comps.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn compute_kernel_completes_global_id_xyz() {
+    let harness = TestHarness::new(
+        r#"
+@compute(64)
+fun k(out: GpuBuffer<float>, n: int): void {
+    global_id.|
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"x") && names.contains(&"y") && names.contains(&"z"),
+        "expected GpuId3 fields x/y/z on global_id., got {names:?}"
+    );
+}
+
+#[test]
+fn compute_kernel_hover_global_id() {
+    let harness = TestHarness::new(
+        r#"
+@compute(64)
+fun k(out: GpuBuffer<float>, n: int): void {
+    let i = global_|id.x;
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on global_id");
+    assert!(
+        hover.contents.contains("GpuId3") || hover.contents.contains("global_id"),
+        "expected GpuId3/global_id hover, got {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn gpubuffer_alloc_infers_concrete_element_type() {
+    let harness = TestHarness::new(
+        r#"
+import system.gpu;
+async fun main(): void {
+    let buffer = GpuBuffer<float>.alloc(4);
+    buffe|r;
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on buffer");
+    assert!(
+        hover.contents.contains("GpuBuffer<float>"),
+        "expected GpuBuffer<float> after GpuBuffer<float>.alloc, got {}",
+        hover.contents
+    );
+}
+
+#[test]
+fn gpubuffer_read_at_hover_substitutes_element_type() {
+    let harness = TestHarness::new(
+        r#"
+import system.gpu;
+async fun main(): void {
+    let buffer = GpuBuffer<float>.alloc(4);
+    buffer.read_|at(0, 1);
+}
+"#,
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on read_at");
+    assert!(
+        hover.contents.contains("float[]") && !hover.contents.contains(": T[]"),
+        "expected read_at return float[], got {}",
+        hover.contents
+    );
+}
+
+#[test]
 fn bare_async_call_inlay_shows_future() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "
@@ -999,6 +1100,32 @@ fun main(): void {
         after.starts_with("b.v"),
         "hint should be anchored at the start of `b.v`, but source after offset is {:?}",
         &after[..after.len().min(8)]
+    );
+}
+
+#[test]
+fn parameter_inlay_hint_anchors_before_await_argument() {
+    use dream_lsp::index::{Index, InlayKind};
+    // `print(await f())` must place the hint before `await`, not after it
+    // (regression: `await value: f()`).
+    let src = "
+async fun fetch(): int { return 1; }
+fun take(value: int): void { }
+async fun main(): void {
+    take(await fetch());
+}
+";
+    let index = Index::build(None, src);
+    let hint = index
+        .inlay_hints
+        .iter()
+        .find(|h| h.kind == InlayKind::Parameter && h.label == "value:")
+        .expect("expected a `value:` parameter hint");
+    let after = &src[hint.offset..];
+    assert!(
+        after.starts_with("await"),
+        "hint should be anchored at `await`, but source after offset is {:?}",
+        &after[..after.len().min(12)]
     );
 }
 

@@ -6,8 +6,8 @@ use super::attr_ide::{
     attribute_name_partial, attribute_signature,
 };
 use super::{
-    is_ident_byte, keywords, substitute_method_type_args, type_base, Decl, Index, Located, Ref,
-    SymKind, GLOBAL,
+    is_ident_byte, keywords, substitute_method_type_args, substitute_type_param_t, type_base, Decl,
+    Index, Located, Ref, SymKind, GLOBAL,
 };
 use super::detail_is_static_method;
 use crate::code_actions::imported_packages;
@@ -309,9 +309,8 @@ impl Index {
     }
 
     pub(crate) fn substitute_generic(detail: &str, receiver_ty: &str) -> String {
-        // `receiver_ty` is the human-readable type (e.g. `List<int>`); pull the generic argument
-        // out of the angle brackets. Types are never `_`-mangled at this layer, so there is no
-        // ambiguity with struct names that happen to contain underscores.
+        // `receiver_ty` is the human-readable type (e.g. `List<int>` / `GpuBuffer<float>`);
+        // pull the generic argument out of the angle brackets.
         let mut generic_arg = None;
         if let Some(start) = receiver_ty.find('<') {
             if let Some(end) = receiver_ty.rfind('>') {
@@ -323,14 +322,33 @@ impl Index {
             return detail.to_string();
         };
 
-        // This is a naive substitution (replaces whole words).
-        detail
-            .replace("<T>", &format!("<{}>", generic_arg))
-            .replace(": T", &format!(": {}", generic_arg))
-            .replace(" T,", &format!(" {},", generic_arg))
-            .replace(" T)", &format!(" {})", generic_arg))
-            .replace(" T>", &format!(" {}>", generic_arg))
-            .replace(" T ", &format!(" {} ", generic_arg))
+        substitute_type_param_t(detail, generic_arg)
+    }
+
+    /// Applies call-site / receiver type arguments to a method detail that still mentions `T`
+    /// (e.g. `GpuBuffer.alloc<float>` → `GpuBuffer<float>`, `read_at(): T[]` → `float[]`).
+    pub(crate) fn apply_type_args_to_detail(
+        detail: &str,
+        receiver_ty: Option<&str>,
+        call_type_args: &[String],
+    ) -> String {
+        let mut out = detail.to_string();
+        // Prefer an already-concrete receiver (`GpuBuffer<float>`).
+        if let Some(recv) = receiver_ty {
+            if recv.contains('<') {
+                out = Self::substitute_generic(&out, recv);
+            } else if !call_type_args.is_empty() {
+                // Bare `GpuBuffer.alloc<float>(…)`: synthesize `GpuBuffer<float>`.
+                let synthetic = format!("{}<{}>", type_base(recv), call_type_args.join(", "));
+                out = Self::substitute_generic(&out, &synthetic);
+            }
+        } else if call_type_args.len() == 1 {
+            out = substitute_type_param_t(&out, &call_type_args[0]);
+        }
+        if !call_type_args.is_empty() {
+            out = substitute_method_type_args(&out, call_type_args);
+        }
+        out
     }
 
     pub fn hover(&self, text: &str, offset: usize) -> Option<Located> {
@@ -364,15 +382,22 @@ impl Index {
             (reference.start, reference.end, d)
         };
 
-        let mut detail = decl.detail.clone();
-        if let Some(receiver_ty) = &receiver_ty_opt {
-            detail = Self::substitute_generic(&detail, receiver_ty);
-        }
-        if decl.kind == SymKind::Method {
-            if let Some(args) = method_type_args_at(text, end) {
-                detail = substitute_method_type_args(&detail, &args);
+        let mut type_args = if decl.kind == SymKind::Method {
+            method_type_args_at(text, end).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        // `GpuBuffer<float>.alloc` puts class args before the `.`, not after the method name.
+        if type_args.is_empty() && decl.kind == SymKind::Method {
+            if let Some(args) = type_args_before_member_dot(text, start) {
+                type_args = args;
             }
         }
+        let detail = Self::apply_type_args_to_detail(
+            &decl.detail,
+            receiver_ty_opt.as_deref(),
+            &type_args,
+        );
 
         let mut contents = format!("```dream\n{}\n```", detail);
         if let Some(doc) = &decl.doc_comment {
@@ -558,12 +583,17 @@ impl Index {
 
             if let Some(decl) = self.resolve_member(receiver_ty_opt.as_deref(), name) {
                 let mut d = decl.clone();
-                if let Some(receiver_ty) = &receiver_ty_opt {
-                    d.detail = Self::substitute_generic(&d.detail, receiver_ty);
+                let mut type_args = method_type_args_at(text, recv_end).unwrap_or_default();
+                if type_args.is_empty() {
+                    if let Some(args) = type_args_before_member_dot(text, recv_start) {
+                        type_args = args;
+                    }
                 }
-                if let Some(args) = method_type_args_at(text, recv_end) {
-                    d.detail = substitute_method_type_args(&d.detail, &args);
-                }
+                d.detail = Self::apply_type_args_to_detail(
+                    &d.detail,
+                    receiver_ty_opt.as_deref(),
+                    &type_args,
+                );
                 return Some(d);
             }
         } else {
@@ -840,6 +870,52 @@ fn method_type_args_at(text: &str, name_end: usize) -> Option<Vec<String>> {
             _ => {}
         }
         j += 1;
+    }
+    None
+}
+
+/// Class type args in `GpuBuffer<float>.alloc` — the `<…>` sits before the `.`, not after the method.
+fn type_args_before_member_dot(text: &str, member_start: usize) -> Option<Vec<String>> {
+    let bytes = text.as_bytes();
+    let mut i = member_start.min(bytes.len());
+    while i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t') {
+        i -= 1;
+    }
+    if i == 0 || bytes[i - 1] != b'.' {
+        return None;
+    }
+    i -= 1;
+    while i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t') {
+        i -= 1;
+    }
+    if i == 0 || bytes[i - 1] != b'>' {
+        return None;
+    }
+    let gt = i - 1;
+    let mut depth = 1i32;
+    let mut j = gt;
+    while j > 0 {
+        j -= 1;
+        match bytes[j] {
+            b'>' => depth += 1,
+            b'<' => {
+                depth -= 1;
+                if depth == 0 {
+                    let inner = text[j + 1..gt].trim();
+                    if inner.is_empty() {
+                        return Some(Vec::new());
+                    }
+                    return Some(
+                        inner
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect(),
+                    );
+                }
+            }
+            _ => {}
+        }
     }
     None
 }

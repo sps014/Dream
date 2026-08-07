@@ -13,7 +13,7 @@ use dream::syntax::nodes::{
 use dream::syntax::token::syntax_token::SyntaxToken;
 
 use super::{
-    base_struct, fn_value_type, method_detail, param_names, signature, substitute_method_type_args,
+    base_struct, fn_value_type, method_detail, param_names, signature,
     type_base, Decl, Index, InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
 };
 
@@ -199,15 +199,15 @@ impl Builder {
                 let receiver_ty_opt = self.receiver_type_of(recv, scope);
                 self.resolve_member_decl(receiver_ty_opt.as_deref(), &method.text)
                     .and_then(|d| {
-                        let mut detail = d.detail.clone();
-                        if let Some(receiver_ty) = &receiver_ty_opt {
-                            detail = Index::substitute_generic(&detail, receiver_ty);
-                        }
-                        if let Some(args) = generic_args {
-                            let type_args: Vec<String> =
-                                args.iter().map(|a| a.display_name()).collect();
-                            detail = substitute_method_type_args(&detail, &type_args);
-                        }
+                        let type_args: Vec<String> = generic_args
+                            .as_ref()
+                            .map(|args| args.iter().map(|a| a.display_name()).collect())
+                            .unwrap_or_default();
+                        let detail = Index::apply_type_args_to_detail(
+                            &d.detail,
+                            receiver_ty_opt.as_deref(),
+                            &type_args,
+                        );
                         detail.rfind(':').map(|colon_idx| {
                             let ret_ty = detail[colon_idx + 1..].trim().to_string();
                             Self::async_call_type(&d.detail, ret_ty)
@@ -215,7 +215,7 @@ impl Builder {
                     })
             }
             ExpressionNode::Parenthesized(inner) => self.infer_type(inner, scope),
-            ExpressionNode::Await(inner) => {
+            ExpressionNode::Await(_, inner) => {
                 // `await` unwraps `Future<T>` → `T`. Async call inference wraps declared returns
                 // as `Future<T>`, so bare `f()` and `await f()` stay distinct for member completion.
                 let inner_ty = self.infer_type(inner, scope)?;
@@ -527,6 +527,30 @@ impl Builder {
         if let Some(rt) = &func.return_type {
             self.add_type_ref(rt, scope);
         }
+        // Mirror the analyzer: `@compute` kernels get WGSL builtins as locals typed `GpuId3`
+        // (`global_id.x`, …). Declared here so completion/hover work inside the kernel body.
+        if dream_abi::attributes::has_compute_attr(&func.attributes) {
+            for name in ["global_id", "local_id", "workgroup_id", "num_workgroups"] {
+                self.decls.push(Decl {
+                    name: name.to_string(),
+                    kind: SymKind::Variable,
+                    detail: format!("(compute builtin) {}: GpuId3", name),
+                    doc_comment: Some(match name {
+                        "global_id" => "Global invocation id (WGSL `@builtin(global_invocation_id)`)."
+                            .to_string(),
+                        "local_id" => "Local invocation id within the workgroup.".to_string(),
+                        "workgroup_id" => "Workgroup id within the dispatch.".to_string(),
+                        "num_workgroups" => "Dispatch size in workgroups.".to_string(),
+                        _ => unreachable!(),
+                    }),
+                    start: func.name.position.start,
+                    end: func.name.position.end,
+                    scope,
+                    ty: Some("GpuId3".to_string()),
+                    is_main: self.is_main,
+                });
+            }
+        }
         for stmt in func.body {
             self.walk_stmt(stmt, scope);
         }
@@ -800,7 +824,7 @@ impl Builder {
                     self.walk_expr(v, scope);
                 }
             }
-            ExpressionNode::Await(e) => self.walk_expr(e, scope),
+            ExpressionNode::Await(_, e) => self.walk_expr(e, scope),
             ExpressionNode::Switch(subject, arms) => {
                 self.walk_expr(subject, scope);
                 for arm in arms {

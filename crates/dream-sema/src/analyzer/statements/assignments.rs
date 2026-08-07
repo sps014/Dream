@@ -102,7 +102,8 @@ impl<'a> Analyzer<'a> {
         let value_hir = self.hir_take();
         self.compare_data_type(&inner_type, &right_type, &empty_span(), diagnostics)?;
 
-        self.hir_assign_index(array_hir, index_hir, value_hir);
+        let target = self.type_ctx.lower(&inner_type);
+        self.hir_assign_index(array_hir, index_hir, value_hir, Some(target));
         Ok(())
     }
 
@@ -215,7 +216,8 @@ impl<'a> Analyzer<'a> {
             let value = self.hir_take();
             self.current_expected_type = saved;
             self.compare_data_type(&elem_ty, &right_type, &member.position, diagnostics)?;
-            self.hir_assign_field(obj_hir, idx, value);
+            let target = self.type_ctx.lower(&elem_ty);
+            self.hir_assign_field(obj_hir, idx, value, Some(target));
             return Ok(());
         }
 
@@ -252,7 +254,10 @@ impl<'a> Analyzer<'a> {
                 self.compare_data_type(&field_type, &right_type, &member.position, diagnostics)?;
 
                 match self.struct_field_index(&struct_name, &member.text) {
-                    Some(index) => self.hir_assign_field(obj_hir, index, value_hir),
+                    Some(index) => {
+                        let target = self.type_ctx.lower(&field_type);
+                        self.hir_assign_field(obj_hir, index, value_hir, Some(target));
+                    }
                     None => self.hir_fail(),
                 }
                 Ok(())
@@ -386,17 +391,19 @@ impl<'a> Analyzer<'a> {
                 let arr_hir = self.hir_take();
                 let _ = self.analyze_expression(idx, parent_function, symbol_table, diagnostics);
                 let idx_hir = self.hir_take();
-                self.hir_assign_index(arr_hir, idx_hir, new_val.clone());
+                let slot = self.type_ctx.lower(&target_ty);
+                self.hir_assign_index(arr_hir, idx_hir, new_val.clone(), Some(slot));
             }
             ExpressionNode::MemberAccess(obj, member) => {
                 let obj_type = self
                     .analyze_expression(obj, parent_function, symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
                 let obj_hir = self.hir_take();
+                let slot = self.type_ctx.lower(&target_ty);
                 if let Type::Tuple(elems) = &obj_type {
                     if let Ok(idx) = member.text.parse::<usize>() {
                         if idx < elems.len() {
-                            self.hir_assign_field(obj_hir, idx, new_val.clone());
+                            self.hir_assign_field(obj_hir, idx, new_val.clone(), Some(slot));
                         } else {
                             self.hir_fail();
                         }
@@ -407,7 +414,9 @@ impl<'a> Analyzer<'a> {
                     self.resolve_member_field(&obj_type, member, parent_function, diagnostics)
                 {
                     match self.struct_field_index(&struct_name, &member.text) {
-                        Some(index) => self.hir_assign_field(obj_hir, index, new_val.clone()),
+                        Some(index) => {
+                            self.hir_assign_field(obj_hir, index, new_val.clone(), Some(slot))
+                        }
                         None => self.hir_fail(),
                     }
                 } else {

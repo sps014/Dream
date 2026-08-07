@@ -1,0 +1,110 @@
+// GpuBuffer element types: float (typed `run_1d`), plus int / value-struct via `run_resources`.
+import system;
+import system.gpu;
+
+struct Vec2 {
+    public x: float;
+    public y: float;
+}
+
+@compute(64)
+fun double_float(@readonly a: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
+    if (global_id.x < n) {
+        out[global_id.x] = a[global_id.x] * 2.0;
+    }
+}
+
+@compute(64)
+fun double_int(@readonly a: GpuBuffer<int>, out: GpuBuffer<int>, n: int): void {
+    if (global_id.x < n) {
+        out[global_id.x] = a[global_id.x] * 2;
+    }
+}
+
+@compute(64)
+fun double_vec2(@readonly a: GpuBuffer<Vec2>, out: GpuBuffer<Vec2>, n: int): void {
+    if (global_id.x < n) {
+        let v = a[global_id.x];
+        let o = Vec2();
+        o.x = v.x * 2.0;
+        o.y = v.y * 2.0;
+        out[global_id.x] = o;
+    }
+}
+
+fun make_vec2(x: float, y: float): Vec2 {
+    let v = Vec2();
+    v.x = x;
+    v.y = y;
+    return v;
+}
+
+async fun main(): void {
+    let init = await Gpu.try_init();
+    if (init.is_err()) {
+        System.println("gpu unavailable");
+        return;
+    }
+
+    // Float: `Compute.run_1d` takes `GpuBuffer<float>[]`.
+    let fa = GpuBuffer<float>.from([1.0, 2.0, 3.0, 4.0]);
+    let fout = GpuBuffer<float>.alloc(4);
+    let fr = await Compute.run_1d("double_float", [fa, fout], 4);
+    if (fr.is_err()) {
+        System.println("float dispatch failed");
+        return;
+    }
+    // Native host stages buffers but does not run WGSL — round-trip `fa` proves write/read.
+    let fvals = await fa.read();
+    System.println((int)fvals[0]);
+    System.println((int)fvals[3]);
+
+    // Int (non-float): use resource ids.
+    let ia = GpuBuffer<int>.from([10, 20, 30, 40]);
+    let iout = GpuBuffer<int>.alloc(4);
+    let ir = await Compute.run_resources(
+        "double_int",
+        [ia.id, iout.id],
+        Buffer.alloc<int>(0),
+        Buffer.alloc<int>(0),
+        4,
+        1,
+        1,
+        Buffer.alloc<byte>(0)
+    );
+    if (ir.is_err()) {
+        System.println("int dispatch failed");
+        return;
+    }
+    let ivals = await ia.read();
+    System.println(ivals[0]);
+    System.println(ivals[3]);
+
+    // Value struct: same `run_resources` path as int.
+    let va = GpuBuffer<Vec2>.from([
+        make_vec2(1.0, 10.0),
+        make_vec2(2.0, 20.0),
+        make_vec2(3.0, 30.0),
+        make_vec2(4.0, 40.0),
+    ]);
+    let vout = GpuBuffer<Vec2>.alloc(4);
+    let vr = await Compute.run_resources(
+        "double_vec2",
+        [va.id, vout.id],
+        Buffer.alloc<int>(0),
+        Buffer.alloc<int>(0),
+        4,
+        1,
+        1,
+        Buffer.alloc<byte>(0)
+    );
+    if (vr.is_err()) {
+        System.println("vec2 dispatch failed");
+        return;
+    }
+    let vvals = await va.read();
+    System.println((int)vvals[0].x);
+    System.println((int)vvals[0].y);
+    System.println((int)vvals[3].x);
+    System.println((int)vvals[3].y);
+}

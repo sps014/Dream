@@ -1,0 +1,14 @@
+import system;
+
+fun main(): void {
+    let x: float = 0.0;
+    x = 2;
+    System.println(x);
+
+    let arr = Buffer.alloc<float>(4);
+    for (let i = 0; i < arr.length; i = i + 1) {
+        arr[i] = i;
+    }
+    System.println(arr[0]);
+    System.println(arr[3]);
+}

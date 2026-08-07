@@ -299,7 +299,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let expr = self.parse_expression(0)?;
                 self.match_token(TokenKind::SemicolonToken);
                 match expr {
-                    ExpressionNode::Await(inner) => Ok(StatementNode::AwaitStmt(inner.clone())),
+                    ExpressionNode::Await(_, inner) => Ok(StatementNode::AwaitStmt(inner.clone())),
                     other => Ok(StatementNode::AwaitStmt(other)),
                 }
             }

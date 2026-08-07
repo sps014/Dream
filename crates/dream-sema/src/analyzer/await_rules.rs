@@ -135,7 +135,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         match expr {
-            ExpressionNode::Await(inner) => {
+            ExpressionNode::Await(_, inner) => {
                 diagnostics.report_error(message.to_string(), inner.position());
                 self.scan_expr_await(inner, message, diagnostics);
             }

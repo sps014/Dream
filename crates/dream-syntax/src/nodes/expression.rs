@@ -63,8 +63,9 @@ pub enum ExpressionNode<'a> {
         &'a ExpressionNode<'a>,
     ),
     /// `await <future-expr>`: suspends the enclosing `async` function until the awaited
-    /// `Future<T>` resolves, then yields its `T`. The inner expression produces the future.
-    Await(&'a ExpressionNode<'a>),
+    /// `Future<T>` resolves, then yields its `T`. The `SyntaxToken` is the `await` keyword (needed
+    /// for the true start offset — e.g. parameter-name inlay hints before `await …` arguments).
+    Await(SyntaxToken, &'a ExpressionNode<'a>),
     /// `switch (subject) { pattern [if guard] => body, ... }` in its pattern-matching form. Used
     /// both as an expression (every arm yields a value of a common type) and, when wrapped in an
     /// `ExpressionStatement`, as a statement (arms may be blocks yielding `void`). The first field
@@ -184,9 +185,11 @@ impl<'a> ExpressionNode<'a> {
             }
             ExpressionNode::Call(callee, _, _) => callee.position(),
             ExpressionNode::Parenthesized(inner)
-            | ExpressionNode::Await(inner)
             | ExpressionNode::Try(inner)
             | ExpressionNode::IsExpression(inner, _, _) => inner.position(),
+            ExpressionNode::Await(await_tok, inner) => {
+                Some(await_tok.position).or_else(|| inner.position())
+            }
             ExpressionNode::Switch(subject, _) => subject.position(),
             ExpressionNode::Ternary(cond, _, _) => cond.position(),
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.position(),
@@ -229,9 +232,10 @@ impl<'a> ExpressionNode<'a> {
             } => target.start_position(),
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.start_position(),
             ExpressionNode::Parenthesized(inner)
-            | ExpressionNode::Await(inner)
             | ExpressionNode::Try(inner)
             | ExpressionNode::IsExpression(inner, _, _) => inner.start_position(),
+            // Prefix `await` — start at the keyword, not the operand (`print(await f())` hints).
+            ExpressionNode::Await(await_tok, _) => Some(await_tok.position),
             ExpressionNode::Switch(subject, _) => subject.start_position(),
             ExpressionNode::Ternary(cond, _, _) => cond.start_position(),
             ExpressionNode::ArrayLiteral(elements) => {

@@ -10,6 +10,10 @@ Progressive `@compute` / `system.gpu` examples. Language guide:
 | [`life/`](life/) | Complex — Gray–Scott reaction–diffusion |
 | [`../fluid/`](../fluid/) | Larger demo — interactive stable fluids |
 
+Golden coverage for mixed `GpuBuffer` element types (`float` via `run_1d`, `int` / `Vec2`
+via `run_resources`) lives in
+[`tests/cases/compute_struct_buffer.dream`](../../tests/cases/compute_struct_buffer.dream).
+
 ```bash
 cargo run -- run sample/compute/saxpy.dream
 cargo run -- run sample/compute/life/life.dream

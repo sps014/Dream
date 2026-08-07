@@ -42,45 +42,63 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Appends a field assignment `obj.field = value;` (`field` is the resolved offset-order index).
+    /// When `target` is set (the field's declared type), `value` is coerced the same way as a typed
+    /// `let` — notably numeric widening (`obj.f = 1` into a `float` field).
     pub(in crate::analyzer) fn hir_assign_field(
         &mut self,
         obj: Option<HExpr>,
         field: usize,
         value: Option<HExpr>,
+        target: Option<TypeId>,
     ) {
         if !self.active() {
             return;
         }
         match (obj, value) {
-            (Some(obj), Some(value)) => self.push_stmt(HStmt::Assign {
-                place: HPlace::Field {
-                    obj: Box::new(obj),
-                    field,
-                },
-                value,
-            }),
+            (Some(obj), Some(value)) => {
+                let value = match target {
+                    Some(t) => self.coerce_to(value, t),
+                    None => value,
+                };
+                self.push_stmt(HStmt::Assign {
+                    place: HPlace::Field {
+                        obj: Box::new(obj),
+                        field,
+                    },
+                    value,
+                });
+            }
             _ => self.hir.ok = false,
         }
     }
 
     /// Appends an indexed assignment `array[index] = value;`.
+    /// When `target` is set (the element type), `value` is coerced like a typed `let` — notably
+    /// numeric widening (`arr[i] = 1` into a `float[]`).
     pub(in crate::analyzer) fn hir_assign_index(
         &mut self,
         array: Option<HExpr>,
         index: Option<HExpr>,
         value: Option<HExpr>,
+        target: Option<TypeId>,
     ) {
         if !self.active() {
             return;
         }
         match (array, index, value) {
-            (Some(array), Some(index), Some(value)) => self.push_stmt(HStmt::Assign {
-                place: HPlace::Index {
-                    array: Box::new(array),
-                    index: Box::new(index),
-                },
-                value,
-            }),
+            (Some(array), Some(index), Some(value)) => {
+                let value = match target {
+                    Some(t) => self.coerce_to(value, t),
+                    None => value,
+                };
+                self.push_stmt(HStmt::Assign {
+                    place: HPlace::Index {
+                        array: Box::new(array),
+                        index: Box::new(index),
+                    },
+                    value,
+                });
+            }
             _ => self.hir.ok = false,
         }
     }
@@ -231,6 +249,9 @@ impl<'a> Analyzer<'a> {
     /// A captured local (`self.hir.boxed`, see `hir_declare_local`) writes through its `CaptureCell<T>`
     /// box's `.value` field instead of the plain slot, so the write is visible to every closure
     /// (and the enclosing function itself) sharing that same cell.
+    ///
+    /// Values are coerced to the slot's declared type (numeric widening, `object`/`js` boxing) so
+    /// `x = 1` into a `float` local matches `let x: float = 1`.
     pub(in crate::analyzer) fn hir_assign_local(
         &mut self,
         name: &str,
@@ -244,7 +265,8 @@ impl<'a> Analyzer<'a> {
             return;
         };
         if let Some(&cell_local) = self.hir.locals.get(name).map(|(l, _)| l) {
-            if self.hir.boxed.contains_key(name) {
+            if let Some(&elem_ty) = self.hir.boxed.get(name) {
+                let value = self.coerce_to(value, elem_ty);
                 let cell_tid = self.hir.locals.get(name).map(|(_, t)| *t).unwrap();
                 let obj = HExpr::new(cell_tid, HExprKind::Var(Binding::Local(cell_local)));
                 self.push_stmt(HStmt::Assign {
@@ -256,11 +278,14 @@ impl<'a> Analyzer<'a> {
                 });
                 return;
             }
+            let ty = self.hir.locals.get(name).map(|(_, t)| *t).unwrap();
+            let value = self.coerce_to(value, ty);
             self.push_stmt(HStmt::Assign {
                 place: HPlace::Local(cell_local),
                 value,
             });
-        } else if let Some(&(global, _)) = self.hir.globals.get(name) {
+        } else if let Some(&(global, ty)) = self.hir.globals.get(name) {
+            let value = self.coerce_to(value, ty);
             self.push_stmt(HStmt::Assign {
                 place: HPlace::Global(global),
                 value,

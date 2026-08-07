@@ -243,6 +243,7 @@ pub(crate) fn substitute_method_type_args(detail: &str, type_args: &[String]) ->
         }
         // Same word-ish replacements used for receiver `T`, generalized to any param name.
         out = out
+            .replace(&format!("{param}[]"), &format!("{arg}[]"))
             .replace(&format!("<{param}>"), &format!("<{arg}>"))
             .replace(&format!(": {param}"), &format!(": {arg}"))
             .replace(&format!(" {param},"), &format!(" {arg},"))
@@ -261,6 +262,20 @@ pub(crate) fn substitute_method_type_args(detail: &str, type_args: &[String]) ->
         }
     }
     out
+}
+
+/// Word-ish replacement of the type parameter `T` in a signature detail string.
+pub(crate) fn substitute_type_param_t(detail: &str, arg: &str) -> String {
+    detail
+        .replace("T[]", &format!("{arg}[]"))
+        .replace("<T>", &format!("<{arg}>"))
+        .replace(": T", &format!(": {arg}"))
+        .replace(" T,", &format!(" {arg},"))
+        .replace(" T)", &format!(" {arg})"))
+        .replace(" T>", &format!(" {arg}>"))
+        .replace(" T ", &format!(" {arg} "))
+        .replace("(T)", &format!("({arg})"))
+        .replace("(T,", &format!("({arg},"))
 }
 
 pub(crate) fn is_ident_byte(b: u8) -> bool {
