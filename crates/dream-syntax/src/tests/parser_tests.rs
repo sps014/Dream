@@ -57,7 +57,7 @@ fn test_parse_array_declaration_and_assignment() {
     if let StatementNode::Declaration(
         id,
         type_annotation,
-        ExpressionNode::ArrayLiteral(elements),
+        ExpressionNode::ArrayLiteral(_, elements),
         _,
     ) = &func.body[0]
     {
@@ -318,7 +318,7 @@ fn test_parse_switch_expression_with_patterns() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
         panic!("expected a return of a switch expression");
     };
     assert_eq!(arms.len(), 3);
@@ -336,7 +336,7 @@ fn test_parse_switch_arm_guard() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
         panic!("expected a return of a switch expression");
     };
     assert!(arms[0].guard.is_some(), "first arm should have a guard");
@@ -351,7 +351,7 @@ fn test_parse_switch_range_pattern() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
         panic!("expected a return of a switch expression");
     };
     use crate::nodes::PatternNode;
@@ -371,7 +371,7 @@ fn test_parse_switch_or_pattern() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Return(Some(ExpressionNode::Switch(_subject, arms))) = &func.body[0] else {
+    let StatementNode::Return(Some(ExpressionNode::Switch(_, _subject, arms))) = &func.body[0] else {
         panic!("expected a return of a switch expression");
     };
     use crate::nodes::PatternNode;
@@ -634,7 +634,7 @@ fn test_parse_lambda_disambiguated_from_cast_and_paren() {
     let func = &program.functions[0];
     assert!(matches!(
         &func.body[0],
-        StatementNode::Declaration(_, _, ExpressionNode::Cast(_, _), _)
+        StatementNode::Declaration(_, _, ExpressionNode::Cast(_, _, _), _)
     ));
     let StatementNode::Declaration(_, _, ExpressionNode::Binary(left, _, _), _) = &func.body[1]
     else {
@@ -654,7 +654,7 @@ fn test_parse_switch_statement_pattern_arms() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::ExpressionStatement(ExpressionNode::Switch(_subject, arms)) = &func.body[0]
+    let StatementNode::ExpressionStatement(ExpressionNode::Switch(_, _subject, arms)) = &func.body[0]
     else {
         panic!("expected a statement-position switch expression");
     };
@@ -1503,7 +1503,7 @@ fn test_parse_cast_with_generic_type_argument() {
 
     assert_eq!(diagnostics.has_errors(), false);
     match only_decl_expr(&program) {
-        ExpressionNode::Cast(Type::Struct(name, Some(args)), _) => {
+        ExpressionNode::Cast(_, Type::Struct(name, Some(args)), _) => {
             assert_eq!(name.text, "Container");
             assert_eq!(args.len(), 1);
             assert!(matches!(args[0], Type::Integer(_)));
@@ -1520,7 +1520,7 @@ fn test_parse_cast_with_nested_generic_type_argument() {
 
     assert_eq!(diagnostics.has_errors(), false);
     match only_decl_expr(&program) {
-        ExpressionNode::Cast(Type::Struct(name, Some(args)), _) => {
+        ExpressionNode::Cast(_, Type::Struct(name, Some(args)), _) => {
             assert_eq!(name.text, "Pair");
             assert_eq!(args.len(), 2);
         }

@@ -12,13 +12,13 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Parses the shared `switch (subject) {` header, returning the subject. Both the
     /// pattern-matching form ([`parse_switch_expr`]) and the C-style `case`/`default` form
     /// ([`parse_switch`](Self::parse_switch)) start here, then branch on the body.
-    pub(crate) fn parse_switch_header(&mut self) -> Result<ExpressionNode<'a>, Error> {
-        self.match_token(TokenKind::SwitchToken);
+    pub(crate) fn parse_switch_header(&mut self) -> Result<(SyntaxToken, ExpressionNode<'a>), Error> {
+        let switch_tok = self.match_token(TokenKind::SwitchToken);
         self.match_token(TokenKind::OpenParenthesisToken);
         let subject = self.parse_expression(0)?;
         self.match_token(TokenKind::CloseParenthesisToken);
         self.match_token(TokenKind::CurlyOpenBracketToken);
-        Ok(subject)
+        Ok((switch_tok, subject))
     }
 
     /// Parses the pattern-matching arms `pattern [if guard] => body, ...` up to and including the
@@ -57,9 +57,13 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// pattern-matching form). The C-style `case`/`default` form is a statement and is parsed by
     /// [`parse_switch`](Self::parse_switch).
     pub(crate) fn parse_switch_expr(&mut self) -> Result<ExpressionNode<'a>, Error> {
-        let subject = self.parse_switch_header()?;
+        let (switch_tok, subject) = self.parse_switch_header()?;
         let arms = self.parse_switch_arms()?;
-        Ok(ExpressionNode::Switch(self.arena.alloc(subject), arms))
+        Ok(ExpressionNode::Switch(
+            switch_tok,
+            self.arena.alloc(subject),
+            arms,
+        ))
     }
 
     /// Parses a match pattern, including a top-level or-pattern (`pat | pat | ...`): one or more

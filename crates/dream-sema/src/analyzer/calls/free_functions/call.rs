@@ -190,7 +190,7 @@ impl<'a> Analyzer<'a> {
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();
             self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
-            if let ExpressionNode::RefArgument(inner) = param {
+            if let ExpressionNode::RefArgument(_, inner) = param {
                 arg_is_ref.push(true);
                 self.current_expected_type = saved_expected;
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
@@ -520,7 +520,7 @@ impl<'a> Analyzer<'a> {
         let mut params_types = Vec::with_capacity(params.len());
         let mut arg_is_ref = Vec::with_capacity(params.len());
         for param in params.iter() {
-            if let ExpressionNode::RefArgument(inner) = param {
+            if let ExpressionNode::RefArgument(_, inner) = param {
                 arg_is_ref.push(true);
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {

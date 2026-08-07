@@ -76,10 +76,10 @@ pub(super) fn is_bool_producing_binop(kind: TokenKind) -> bool {
 /// Best-effort WGSL type for unannotated `let` bindings (casts/literals/float ops).
 pub(super) fn infer_wgsl_ty(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String {
     match expr {
-        ExpressionNode::Cast(ty, _) | ExpressionNode::Literal(ty) => dream_ty_to_wgsl(ty),
+        ExpressionNode::Cast(_, ty, _) | ExpressionNode::Literal(ty) => dream_ty_to_wgsl(ty),
         ExpressionNode::Parenthesized(_, inner)
         | ExpressionNode::NamedArg(_, inner)
-        | ExpressionNode::RefArgument(inner)
+        | ExpressionNode::RefArgument(_, inner)
         | ExpressionNode::IncDec { target: inner, .. } => infer_wgsl_ty(inner, ctx),
         ExpressionNode::Unary(op, inner) => {
             if op.kind == TokenKind::BangToken {

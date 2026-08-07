@@ -9,20 +9,23 @@ use dream_text::text_span::TextSpan;
 #[derive(Debug, Clone)]
 pub enum ExpressionNode<'a> {
     Literal(Type),
-    ArrayLiteral(Vec<ExpressionNode<'a>>),
+    /// `[e1, e2, …]` — the `SyntaxToken` is the opening `[` (true start for inlay hints).
+    ArrayLiteral(SyntaxToken, Vec<ExpressionNode<'a>>),
     /// `(e1, e2, …)` — a positional tuple literal (arity ≥ 2). Distinguised from
-    /// [`Parenthesized`] by a comma after the first element.
-    TupleLiteral(Vec<ExpressionNode<'a>>),
+    /// [`Parenthesized`] by a comma after the first element. The `SyntaxToken` is the opening `(`.
+    TupleLiteral(SyntaxToken, Vec<ExpressionNode<'a>>),
     /// `{e1, e2, ...}` — a Set literal. Parsed whenever `{` opens a primary expression (never
     /// ambiguous with a statement block, since blocks never appear in expression position) and a
     /// `:` does not follow the first element (see `MapLiteral`). Always requires an expected
     /// `Set<T>` target type at analysis time (there is no bare-element type to fall back on, the
     /// way `T[]` is the default for `ArrayLiteral`); an empty `{}` is represented here too and
     /// reinterpreted as an empty map by the analyzer when the expected type is `Map<K, V>`.
-    SetLiteral(Vec<ExpressionNode<'a>>),
+    /// The `SyntaxToken` is the opening `{`.
+    SetLiteral(SyntaxToken, Vec<ExpressionNode<'a>>),
     /// `{k1: v1, k2: v2, ...}` — a Map literal, disambiguated from `SetLiteral` by a `:` after the
     /// first element. Always requires an expected `Map<K, V>` target type at analysis time.
-    MapLiteral(Vec<(ExpressionNode<'a>, ExpressionNode<'a>)>),
+    /// The `SyntaxToken` is the opening `{`.
+    MapLiteral(SyntaxToken, Vec<(ExpressionNode<'a>, ExpressionNode<'a>)>),
     Binary(&'a ExpressionNode<'a>, SyntaxToken, &'a ExpressionNode<'a>),
     Unary(SyntaxToken, &'a ExpressionNode<'a>),
     /// `++x` / `--x` / `x++` / `x--`. Sema (and `@compute` emission) desugar to assign ±1;
@@ -44,7 +47,8 @@ pub enum ExpressionNode<'a> {
         Vec<ExpressionNode<'a>>,
     ),
     IndexAccess(&'a ExpressionNode<'a>, &'a ExpressionNode<'a>),
-    Cast(Type, &'a ExpressionNode<'a>),
+    /// `(T)expr` — the `SyntaxToken` is the opening `(` of the cast.
+    Cast(SyntaxToken, Type, &'a ExpressionNode<'a>),
     MemberAccess(&'a ExpressionNode<'a>, SyntaxToken),
     /// `expr is Type` — a runtime type check. The optional trailing `SyntaxToken` is an
     /// `is`-with-binding name (`expr is Type name`): when present, the analyzer introduces a new
@@ -68,9 +72,10 @@ pub enum ExpressionNode<'a> {
     Await(SyntaxToken, &'a ExpressionNode<'a>),
     /// `switch (subject) { pattern [if guard] => body, ... }` in its pattern-matching form. Used
     /// both as an expression (every arm yields a value of a common type) and, when wrapped in an
-    /// `ExpressionStatement`, as a statement (arms may be blocks yielding `void`). The first field
-    /// is the subject. (The C-style `switch` with `case`/`default` is `StatementNode::Switch`.)
-    Switch(&'a ExpressionNode<'a>, Vec<SwitchArm<'a>>),
+    /// `ExpressionStatement`, as a statement (arms may be blocks yielding `void`). The first
+    /// `SyntaxToken` is the `switch` keyword; the expression is the subject. (The C-style `switch`
+    /// with `case`/`default` is `StatementNode::Switch`.)
+    Switch(SyntaxToken, &'a ExpressionNode<'a>, Vec<SwitchArm<'a>>),
     /// `expr?` — early-return propagation on a `Result<T, E>` or `Option<T>` operand. Desugars
     /// during semantic analysis to a pattern-matching `switch` that binds the success payload and
     /// early-`return`s the failure/absence variant, so no dedicated HIR/MIR node exists for it.
@@ -85,12 +90,12 @@ pub enum ExpressionNode<'a> {
     /// error (reported, not a panic), never a valid standalone expression.
     NamedArg(SyntaxToken, &'a ExpressionNode<'a>),
     /// `ref place` — a pass-by-reference call argument (`f(ref x)`), produced only inside a call's
-    /// argument list by the shared call-argument parser. v1 only accepts a local variable or
-    /// parameter identifier as the place; member access and index access (`ref obj.field`,
-    /// `ref arr[i]`) are rejected by the analyzer. A `RefArgument` supplied to a non-`ref`
-    /// parameter slot (or a plain argument supplied to a `ref` slot) is also rejected. Never a
-    /// valid standalone expression.
-    RefArgument(&'a ExpressionNode<'a>),
+    /// argument list by the shared call-argument parser. The leading `SyntaxToken` is `ref`.
+    /// v1 only accepts a local variable or parameter identifier as the place; member access and
+    /// index access (`ref obj.field`, `ref arr[i]`) are rejected by the analyzer. A `RefArgument`
+    /// supplied to a non-`ref` parameter slot (or a plain argument supplied to a `ref` slot) is
+    /// also rejected. Never a valid standalone expression.
+    RefArgument(SyntaxToken, &'a ExpressionNode<'a>),
     /// `name { ... }` — a custom syntax-DSL block (e.g. `html { <div>{title}</div> }`). Parsed when
     /// an identifier is followed by `{` in expression position. The generate pipeline replaces these
     /// with ordinary Dream expressions before semantic analysis; reaching the analyzer unexpanded is
@@ -126,6 +131,9 @@ pub struct LambdaNode<'a> {
     /// Span of the lambda's opening `(`, used when no inner token is available for diagnostics
     /// (e.g. a zero-parameter lambda `() => 0`).
     pub open_paren_position: TextSpan,
+    /// Span of a leading `async` keyword when present (`async (…) => …`); used as the true start
+    /// offset for parameter-name inlay hints.
+    pub async_keyword: Option<TextSpan>,
     /// True when the literal was written `async (params) => …`.
     pub is_async: bool,
     /// Own type parameters when written `<T>(…) => …`; `None` for a non-generic lambda.
@@ -184,25 +192,24 @@ impl<'a> ExpressionNode<'a> {
                 Some(op.position).or_else(|| target.position())
             }
             ExpressionNode::Call(callee, _, _) => callee.position(),
-            ExpressionNode::Parenthesized(open, _) => Some(open.position),
-            ExpressionNode::Try(inner)
-            | ExpressionNode::IsExpression(inner, _, _) => inner.position(),
+            ExpressionNode::Parenthesized(open, _)
+            | ExpressionNode::ArrayLiteral(open, _)
+            | ExpressionNode::TupleLiteral(open, _)
+            | ExpressionNode::SetLiteral(open, _)
+            | ExpressionNode::MapLiteral(open, _)
+            | ExpressionNode::Cast(open, _, _)
+            | ExpressionNode::Switch(open, _, _)
+            | ExpressionNode::RefArgument(open, _) => Some(open.position),
+            ExpressionNode::Try(inner) | ExpressionNode::IsExpression(inner, _, _) => {
+                inner.position()
+            }
             ExpressionNode::Await(await_tok, inner) => {
                 Some(await_tok.position).or_else(|| inner.position())
             }
-            ExpressionNode::Switch(subject, _) => subject.position(),
             ExpressionNode::Ternary(cond, _, _) => cond.position(),
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.position(),
-            ExpressionNode::Cast(target_type, expr) => {
-                target_type.get_span().or_else(|| expr.position())
-            }
-            ExpressionNode::ArrayLiteral(elements) => elements.first().and_then(|e| e.position()),
-            ExpressionNode::TupleLiteral(elements) => elements.first().and_then(|e| e.position()),
-            ExpressionNode::SetLiteral(elements) => elements.first().and_then(|e| e.position()),
-            ExpressionNode::MapLiteral(entries) => entries.first().and_then(|(k, _)| k.position()),
-            ExpressionNode::Lambda(l) => Some(l.open_paren_position),
+            ExpressionNode::Lambda(l) => Some(l.start_span()),
             ExpressionNode::NamedArg(name, _) => Some(name.position),
-            ExpressionNode::RefArgument(inner) => inner.position(),
             ExpressionNode::SyntaxBlock(block) => Some(block.name.position),
         }
     }
@@ -231,23 +238,30 @@ impl<'a> ExpressionNode<'a> {
                 ..
             } => target.start_position(),
             ExpressionNode::IndexAccess(array_expr, _) => array_expr.start_position(),
-            // Prefix `(` — start at the open paren, not the inner expr (`print((await f())[0])`).
-            ExpressionNode::Parenthesized(open, _) => Some(open.position),
-            ExpressionNode::Try(inner)
-            | ExpressionNode::IsExpression(inner, _, _) => inner.start_position(),
-            // Prefix `await` — start at the keyword, not the operand (`print(await f())` hints).
-            ExpressionNode::Await(await_tok, _) => Some(await_tok.position),
-            ExpressionNode::Switch(subject, _) => subject.start_position(),
+            ExpressionNode::Parenthesized(open, _)
+            | ExpressionNode::ArrayLiteral(open, _)
+            | ExpressionNode::TupleLiteral(open, _)
+            | ExpressionNode::SetLiteral(open, _)
+            | ExpressionNode::MapLiteral(open, _)
+            | ExpressionNode::Cast(open, _, _)
+            | ExpressionNode::Switch(open, _, _)
+            | ExpressionNode::RefArgument(open, _)
+            | ExpressionNode::Await(open, _) => Some(open.position),
+            ExpressionNode::Try(inner) | ExpressionNode::IsExpression(inner, _, _) => {
+                inner.start_position()
+            }
             ExpressionNode::Ternary(cond, _, _) => cond.start_position(),
-            ExpressionNode::ArrayLiteral(elements) => {
-                elements.first().and_then(|e| e.start_position())
-            }
-            ExpressionNode::TupleLiteral(elements) => {
-                elements.first().and_then(|e| e.start_position())
-            }
-            // Token-led forms (identifier, call name, unary operator, cast type, literal, lambda)
+            ExpressionNode::Lambda(l) => Some(l.start_span()),
+            // Token-led forms (identifier, call name, unary operator, literal, named arg, …)
             // already start at the token/span `position` returns.
             _ => self.position(),
         }
+    }
+}
+
+impl LambdaNode<'_> {
+    /// Leftmost span of the lambda literal (`async` when present, otherwise the opening `(`).
+    pub fn start_span(&self) -> TextSpan {
+        self.async_keyword.unwrap_or(self.open_paren_position)
     }
 }

@@ -273,7 +273,7 @@ impl<'a> Analyzer<'a> {
             }
             StatementNode::ExpressionStatement(expr) => {
                 // A statement-position pattern `switch` allows block arms and yields no value.
-                if let dream_syntax::nodes::ExpressionNode::Switch(subject, arms) = expr {
+                if let dream_syntax::nodes::ExpressionNode::Switch(_, subject, arms) = expr {
                     // `analyze_pattern_switch` emits the `Switch` itself (or fails the function) in
                     // statement position; no separate expression-statement is needed.
                     let _ = self.analyze_pattern_switch(

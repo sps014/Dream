@@ -293,11 +293,11 @@ pub(super) fn emit_expr(expr: &ExpressionNode<'_>, ctx: &EmitCtx<'_>) -> String 
                 emit_expr(c, ctx)
             )
         },
-        ExpressionNode::Cast(ty, e) => {
+        ExpressionNode::Cast(_, ty, e) => {
             let wty = dream_ty_to_wgsl(ty);
             format!("{}({})", wty, coerce_expr_to_wgsl_ty(e, &wty, ctx))
         }
-        ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(inner) => {
+        ExpressionNode::NamedArg(_, inner) | ExpressionNode::RefArgument(_, inner) => {
             emit_expr(inner, ctx)
         }
         _ => "0".into(),

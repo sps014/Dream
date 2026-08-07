@@ -89,7 +89,7 @@ impl<'a> Analyzer<'a> {
         // List<int> = [];`). With a valid annotation the literal is handled on the normal path
         // below (the annotation is published as the expected type, which the array-literal
         // analysis uses to allocate a zero-length array, or lower to `List<T>.from_array([])`).
-        if let ExpressionNode::ArrayLiteral(elements) = right {
+        if let ExpressionNode::ArrayLiteral(_, elements) = right {
             if elements.is_empty()
                 && !type_annotation.as_ref().is_some_and(|t| {
                     t.is_array() || Self::collection_generic_arg(t, "List").is_some()
@@ -190,7 +190,7 @@ impl<'a> Analyzer<'a> {
         }
 
         // Fast path: `let (a, b) = (e0, e1);` — bind directly without a temp.
-        if let ExpressionNode::TupleLiteral(elems) = right {
+        if let ExpressionNode::TupleLiteral(_, elems) = right {
             if elems.len() == names.len() {
                 let expected_elems: Option<Vec<Type>> = match type_annotation {
                     Some(Type::Tuple(ts)) => Some(ts.clone()),

@@ -1156,6 +1156,52 @@ async fun main(): void {
 }
 
 #[test]
+fn parameter_inlay_hint_anchors_before_prefix_forms() {
+    use dream_lsp::index::{Index, InlayKind};
+    // Leading tokens of prefix forms must not be skipped (`[value:1]`, `(float)…`, `ref x`, …).
+    let cases: &[(&str, &str)] = &[
+        (
+            "fun take(value: int[]): void { }\nfun main(): void { take([1, 2]); }\n",
+            "[",
+        ),
+        (
+            "fun take(value: (int, int)): void { }\nfun main(): void { take((1, 2)); }\n",
+            "(",
+        ),
+        (
+            "fun take(value: float): void { }\nfun main(): void { take((float)1); }\n",
+            "(",
+        ),
+        (
+            "fun take(ref value: int): void { }\nfun main(): void { let x = 1; take(ref x); }\n",
+            "ref",
+        ),
+        (
+            "fun take(value: fun(): int): void { }\nfun main(): void { take(async () => 1); }\n",
+            "async",
+        ),
+        (
+            "fun take(value: int): void { }\nfun main(): void { take(switch (1) { n => n, }); }\n",
+            "switch",
+        ),
+    ];
+    for (src, expected_prefix) in cases {
+        let index = Index::build(None, src);
+        let hint = index
+            .inlay_hints
+            .iter()
+            .find(|h| h.kind == InlayKind::Parameter && h.label == "value:")
+            .unwrap_or_else(|| panic!("expected value: hint in:\n{src}"));
+        let after = &src[hint.offset..];
+        assert!(
+            after.starts_with(expected_prefix),
+            "expected hint at `{expected_prefix}` in:\n{src}\ngot {:?}",
+            &after[..after.len().min(16)]
+        );
+    }
+}
+
+#[test]
 fn generic_type_inlay_hint_uses_angle_brackets() {
     use dream_lsp::index::{Index, InlayKind};
     let src = "

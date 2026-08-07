@@ -115,7 +115,7 @@ impl Builder {
     fn infer_type_internal(&self, expr: &ExpressionNode, scope: usize) -> Option<String> {
         match expr {
             ExpressionNode::Literal(t) => Some(t.display_name()),
-            ExpressionNode::Cast(ty, _) => Some(ty.display_name()),
+            ExpressionNode::Cast(_, ty, _) => Some(ty.display_name()),
             ExpressionNode::IsExpression(_, _, _) => Some("bool".to_string()),
             ExpressionNode::Binary(left, op, right) => match op.kind {
                 dream::syntax::token::token_kind::TokenKind::EqualEqualToken
@@ -774,7 +774,7 @@ impl Builder {
                 self.walk_expr(arr, scope);
                 self.walk_expr(idx, scope);
             }
-            ExpressionNode::Cast(ty, e) => {
+            ExpressionNode::Cast(_, ty, e) => {
                 self.add_type_ref(ty, scope);
                 self.walk_expr(e, scope);
             }
@@ -811,21 +811,21 @@ impl Builder {
                 self.walk_expr(t, scope);
                 self.walk_expr(e, scope);
             }
-            ExpressionNode::ArrayLiteral(elems)
-            | ExpressionNode::SetLiteral(elems)
-            | ExpressionNode::TupleLiteral(elems) => {
+            ExpressionNode::ArrayLiteral(_, elems)
+            | ExpressionNode::SetLiteral(_, elems)
+            | ExpressionNode::TupleLiteral(_, elems) => {
                 for elem in elems {
                     self.walk_expr(elem, scope);
                 }
             }
-            ExpressionNode::MapLiteral(entries) => {
+            ExpressionNode::MapLiteral(_, entries) => {
                 for (k, v) in entries {
                     self.walk_expr(k, scope);
                     self.walk_expr(v, scope);
                 }
             }
             ExpressionNode::Await(_, e) => self.walk_expr(e, scope),
-            ExpressionNode::Switch(subject, arms) => {
+            ExpressionNode::Switch(_, subject, arms) => {
                 self.walk_expr(subject, scope);
                 for arm in arms {
                     self.walk_pattern(&arm.pattern, scope);
@@ -853,7 +853,7 @@ impl Builder {
                 }
             }
             ExpressionNode::NamedArg(_, e) => self.walk_expr(e, scope),
-            ExpressionNode::RefArgument(e) => self.walk_expr(e, scope),
+            ExpressionNode::RefArgument(_, e) => self.walk_expr(e, scope),
             ExpressionNode::SyntaxBlock(block) => {
                 for part in &block.parts {
                     if let SyntaxBlockPart::Splice(e) = part {

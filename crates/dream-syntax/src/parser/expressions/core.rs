@@ -94,34 +94,34 @@ impl<'a, 'b> Parser<'a, 'b> {
             if self.peek_token(1).kind == TokenKind::OpenParenthesisToken
                 && self.is_lambda_start_at(1)
             {
-                self.match_token(TokenKind::AsyncToken);
-                return self.parse_lambda(true);
+                let async_kw = self.match_token(TokenKind::AsyncToken);
+                return self.parse_lambda(Some(async_kw));
             }
             if self.peek_token(1).kind == TokenKind::SmallerThanToken
                 && self.is_generic_lambda_start_at(1)
             {
-                self.match_token(TokenKind::AsyncToken);
-                return self.parse_lambda(true);
+                let async_kw = self.match_token(TokenKind::AsyncToken);
+                return self.parse_lambda(Some(async_kw));
             }
         }
         // `<T>(params) => …` generic arrow-lambda
         if self.current_token().kind == TokenKind::SmallerThanToken
             && self.is_generic_lambda_start_at(0)
         {
-            return self.parse_lambda(false);
+            return self.parse_lambda(None);
         }
         //parse parenthesized expressions, casts, or arrow-lambdas
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             if self.is_lambda_start_at(0) {
-                return self.parse_lambda(false);
+                return self.parse_lambda(None);
             }
             return self.parse_paren_or_cast();
         } else if self.current_token().kind == TokenKind::OpenBracketToken {
             // Array literal
-            self.match_token(TokenKind::OpenBracketToken);
+            let open = self.match_token(TokenKind::OpenBracketToken);
             let elements =
                 self.parse_delimited_list(TokenKind::CloseBracketToken, |p| p.parse_expression(0))?;
-            return Ok(ExpressionNode::ArrayLiteral(elements));
+            return Ok(ExpressionNode::ArrayLiteral(open, elements));
         } else if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
             return self.parse_set_or_map_literal();
         } else if self.current_token().kind == TokenKind::BooleanToken {
@@ -295,11 +295,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
 
         if is_cast {
-            self.match_token(TokenKind::OpenParenthesisToken);
+            let open = self.match_token(TokenKind::OpenParenthesisToken);
             let cast_type = self.parse_type()?;
             self.match_token(TokenKind::CloseParenthesisToken);
             let expression = self.parse_primary_expression()?;
             return Ok(ExpressionNode::Cast(
+                open,
                 cast_type,
                 self.arena.alloc(expression),
             ));
@@ -324,7 +325,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     elems.first().and_then(|e| e.position()),
                 );
             }
-            let tuple = ExpressionNode::TupleLiteral(elems);
+            let tuple = ExpressionNode::TupleLiteral(open, elems);
             return self.parse_postfix_chain(tuple);
         }
         //eat the close parenthesis
@@ -448,9 +449,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         // A pass-by-reference argument: `ref place`. The place shape (identifier/member/index) is
         // validated by the analyzer, not here — parsing accepts any unary-level expression.
         if self.current_token().kind == TokenKind::RefToken {
-            self.match_token(TokenKind::RefToken);
+            let ref_tok = self.match_token(TokenKind::RefToken);
             let value = self.parse_expression(0)?;
-            return Ok(ExpressionNode::RefArgument(self.arena.alloc(value)));
+            return Ok(ExpressionNode::RefArgument(
+                ref_tok,
+                self.arena.alloc(value),
+            ));
         }
         self.parse_expression(0)
     }

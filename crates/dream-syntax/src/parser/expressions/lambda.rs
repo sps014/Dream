@@ -3,6 +3,7 @@ use crate::nodes::{
     ExpressionNode, LambdaBody, LambdaNode, ParameterNode,
     Type,
 };
+use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
 
@@ -48,9 +49,12 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     /// Parses an arrow-lambda literal `(params) => expr` / `(params) => { stmts }`, optionally
-    /// preceded by `<TypeParams>`. `is_async` is true when the caller already consumed a leading
+    /// preceded by `<TypeParams>`. `async_kw` is `Some` when the caller already consumed a leading
     /// `async`.
-    pub(crate) fn parse_lambda(&mut self, is_async: bool) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_lambda(
+        &mut self,
+        async_kw: Option<SyntaxToken>,
+    ) -> Result<ExpressionNode<'a>, Error> {
         let (generic_parameters, generic_constraints) = self.take_generic_params();
         let open_paren_position = self.current_token().position;
         let parameters = self.parse_lambda_parameters()?;
@@ -63,7 +67,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
         Ok(ExpressionNode::Lambda(self.arena.alloc(LambdaNode {
             open_paren_position,
-            is_async,
+            async_keyword: async_kw.as_ref().map(|t| t.position),
+            is_async: async_kw.is_some(),
             generic_parameters,
             generic_constraints,
             parameters,

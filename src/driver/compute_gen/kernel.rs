@@ -419,9 +419,9 @@ fn walk_expr_atomics(expr: &ExpressionNode<'_>, out: &mut IndexSet<String>) {
         }
         ExpressionNode::Unary(_, e)
         | ExpressionNode::Parenthesized(_, e)
-        | ExpressionNode::Cast(_, e)
+        | ExpressionNode::Cast(_, _, e)
         | ExpressionNode::NamedArg(_, e)
-        | ExpressionNode::RefArgument(e)
+        | ExpressionNode::RefArgument(_, e)
         | ExpressionNode::Await(_, e)
         | ExpressionNode::Try(e)
         | ExpressionNode::IncDec { target: e, .. } => walk_expr_atomics(e, out),

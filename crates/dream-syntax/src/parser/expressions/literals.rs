@@ -21,10 +21,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// surrounding expected type says so (mirroring how an empty array literal `[]` infers its
     /// element type from context).
     pub(crate) fn parse_set_or_map_literal(&mut self) -> Result<ExpressionNode<'a>, Error> {
-        self.match_token(TokenKind::CurlyOpenBracketToken);
+        let open = self.match_token(TokenKind::CurlyOpenBracketToken);
         if self.current_token().kind == TokenKind::CurlyCloseBracketToken {
             self.match_token(TokenKind::CurlyCloseBracketToken);
-            return Ok(ExpressionNode::SetLiteral(vec![]));
+            return Ok(ExpressionNode::SetLiteral(open, vec![]));
         }
 
         let first = self.parse_expression(0)?;
@@ -44,7 +44,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 self.match_token(TokenKind::CurlyCloseBracketToken);
             }
-            Ok(ExpressionNode::MapLiteral(entries))
+            Ok(ExpressionNode::MapLiteral(open, entries))
         } else {
             let mut elements = vec![first];
             if self.current_token().kind == TokenKind::CommaToken {
@@ -56,7 +56,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 self.match_token(TokenKind::CurlyCloseBracketToken);
             }
-            Ok(ExpressionNode::SetLiteral(elements))
+            Ok(ExpressionNode::SetLiteral(open, elements))
         }
     }
 

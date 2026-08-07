@@ -23,7 +23,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_literal(&ty);
                 Ok(ty)
             }
-            ExpressionNode::ArrayLiteral(elements) => {
+            ExpressionNode::ArrayLiteral(open, elements) => {
                 // `[e1, e2, ...]` lowers to `List<T>.from_array([e1, e2, ...])` (one bulk call, no
                 // per-element codegen) whenever the surrounding context expects a `List<T>`; the
                 // `T[]` array form below is otherwise completely unaffected.
@@ -40,7 +40,7 @@ impl<'a> Analyzer<'a> {
                         "List",
                         vec![elem_ty],
                         "from_array",
-                        vec![ExpressionNode::ArrayLiteral(elements.clone())],
+                        vec![ExpressionNode::ArrayLiteral(open.clone(), elements.clone())],
                         &ctx,
                         diagnostics,
                     );
@@ -93,7 +93,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_array_lit(elem_hirs, &array_type);
                 Ok(array_type)
             }
-            ExpressionNode::TupleLiteral(elements) => {
+            ExpressionNode::TupleLiteral(_, elements) => {
                 if elements.len() < 2 {
                     self.hir_fail();
                     diagnostics.report_error(
@@ -130,7 +130,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_tuple_lit(elem_hirs, &tuple_ty);
                 Ok(tuple_ty)
             }
-            ExpressionNode::SetLiteral(elements) => {
+            ExpressionNode::SetLiteral(open, elements) => {
                 // A Set literal always requires an expected `Set<T>` target type (unlike `[...]`,
                 // there is no bare-element fallback type to infer). An empty `{}` is ambiguous with
                 // an empty map, so it is reinterpreted as one here when the context calls for it.
@@ -140,7 +140,7 @@ impl<'a> Analyzer<'a> {
                             && Self::collection_generic_arg2(&t, "Map").is_some() =>
                     {
                         self.analyze_expression(
-                            &ExpressionNode::MapLiteral(vec![]),
+                            &ExpressionNode::MapLiteral(open.clone(), vec![]),
                             parent_function,
                             symbol_table,
                             diagnostics,
@@ -163,11 +163,12 @@ impl<'a> Analyzer<'a> {
                             parent_function,
                             symbol_table,
                         };
+                        let bracket = synthetic_token(TokenKind::OpenBracketToken, "[");
                         self.lower_collection_literal_call(
                             "Set",
                             vec![elem_ty],
                             "from_array",
-                            vec![ExpressionNode::ArrayLiteral(elements.clone())],
+                            vec![ExpressionNode::ArrayLiteral(bracket, elements.clone())],
                             &ctx,
                             diagnostics,
                         )
@@ -183,7 +184,7 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             }
-            ExpressionNode::MapLiteral(entries) => {
+            ExpressionNode::MapLiteral(_, entries) => {
                 // A Map literal always requires an expected `Map<K, V>` target type, for the same
                 // reason as `SetLiteral` above.
                 let Some((key_ty, val_ty)) = self
@@ -204,13 +205,14 @@ impl<'a> Analyzer<'a> {
                     parent_function,
                     symbol_table,
                 };
+                let bracket = synthetic_token(TokenKind::OpenBracketToken, "[");
                 self.lower_collection_literal_call(
                     "Map",
                     vec![key_ty, val_ty],
                     "from_arrays",
                     vec![
-                        ExpressionNode::ArrayLiteral(keys),
-                        ExpressionNode::ArrayLiteral(values),
+                        ExpressionNode::ArrayLiteral(bracket.clone(), keys),
+                        ExpressionNode::ArrayLiteral(bracket, values),
                     ],
                     &ctx,
                     diagnostics,
@@ -502,7 +504,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_ternary(cond_hir, then_hir, else_hir, &then_type);
                 Ok(then_type)
             }
-            ExpressionNode::Switch(subject, arms) => {
+            ExpressionNode::Switch(_, subject, arms) => {
                 // `analyze_pattern_switch` desugars the value-position switch and records its result temp read.
                 let t = self.analyze_pattern_switch(
                     subject,
@@ -525,7 +527,7 @@ impl<'a> Analyzer<'a> {
                 )?;
                 Ok(t)
             }
-            ExpressionNode::Cast(target_type, expr) => {
+            ExpressionNode::Cast(_, target_type, expr) => {
                 // `analyze_cast` records the cast's HIR itself.
                 let t = self.analyze_cast(
                     target_type,
@@ -595,7 +597,7 @@ impl<'a> Analyzer<'a> {
             // any argument reaches general expression analysis. Reaching this arm means one
             // appeared somewhere else (e.g. `let y = ref x;`) — report it, don't silently analyze
             // the inner place as if `ref` weren't there.
-            ExpressionNode::RefArgument(inner) => {
+            ExpressionNode::RefArgument(_, inner) => {
                 self.hir_none();
                 Err(report(
                     diagnostics,

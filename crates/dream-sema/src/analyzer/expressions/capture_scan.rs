@@ -154,20 +154,20 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
 fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
     match expr {
         ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
-        ExpressionNode::RefArgument(inner) => {
+        ExpressionNode::RefArgument(_, inner) => {
             if let ExpressionNode::Identifier(tok) = inner {
                 out.insert(tok.text.clone());
             }
             walk_expr_for_ref_targets(inner, out);
         }
-        ExpressionNode::ArrayLiteral(es)
-        | ExpressionNode::SetLiteral(es)
-        | ExpressionNode::TupleLiteral(es) => {
+        ExpressionNode::ArrayLiteral(_, es)
+        | ExpressionNode::SetLiteral(_, es)
+        | ExpressionNode::TupleLiteral(_, es) => {
             for e in es {
                 walk_expr_for_ref_targets(e, out);
             }
         }
-        ExpressionNode::MapLiteral(entries) => {
+        ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
                 walk_expr_for_ref_targets(k, out);
                 walk_expr_for_ref_targets(v, out);
@@ -195,7 +195,7 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(a, out);
             walk_expr_for_ref_targets(i, out);
         }
-        ExpressionNode::Cast(_, e) => walk_expr_for_ref_targets(e, out),
+        ExpressionNode::Cast(_, _, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::MemberAccess(e, _) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::IsExpression(e, _, _) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::MethodCall(recv, _, _, args) => {
@@ -210,7 +210,7 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(e, out);
         }
         ExpressionNode::Await(_, e) => walk_expr_for_ref_targets(e, out),
-        ExpressionNode::Switch(subj, arms) => {
+        ExpressionNode::Switch(_, subj, arms) => {
             walk_expr_for_ref_targets(subj, out);
             for arm in arms {
                 if let Some(g) = &arm.guard {
@@ -338,14 +338,14 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
 fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
     match expr {
         ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
-        ExpressionNode::ArrayLiteral(es)
-        | ExpressionNode::SetLiteral(es)
-        | ExpressionNode::TupleLiteral(es) => {
+        ExpressionNode::ArrayLiteral(_, es)
+        | ExpressionNode::SetLiteral(_, es)
+        | ExpressionNode::TupleLiteral(_, es) => {
             for e in es {
                 walk_expr_for_lambdas(e, out);
             }
         }
-        ExpressionNode::MapLiteral(entries) => {
+        ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
                 walk_expr_for_lambdas(k, out);
                 walk_expr_for_lambdas(v, out);
@@ -373,7 +373,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_lambdas(a, out);
             walk_expr_for_lambdas(i, out);
         }
-        ExpressionNode::Cast(_, e) => walk_expr_for_lambdas(e, out),
+        ExpressionNode::Cast(_, _, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::MemberAccess(e, _) => walk_expr_for_lambdas(e, out),
         ExpressionNode::IsExpression(e, _, _) => walk_expr_for_lambdas(e, out),
         ExpressionNode::MethodCall(recv, _, _, args) => {
@@ -388,7 +388,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_lambdas(e, out);
         }
         ExpressionNode::Await(_, e) => walk_expr_for_lambdas(e, out),
-        ExpressionNode::Switch(subj, arms) => {
+        ExpressionNode::Switch(_, subj, arms) => {
             walk_expr_for_lambdas(subj, out);
             for arm in arms {
                 if let Some(g) = &arm.guard {
@@ -403,7 +403,7 @@ fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
         ExpressionNode::Try(e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::Lambda(l) => out.extend(lambda_free_names(l)),
         ExpressionNode::NamedArg(_, e) => walk_expr_for_lambdas(e, out),
-        ExpressionNode::RefArgument(e) => walk_expr_for_lambdas(e, out),
+        ExpressionNode::RefArgument(_, e) => walk_expr_for_lambdas(e, out),
         ExpressionNode::SyntaxBlock(block) => {
             for part in &block.parts {
                 if let dream_syntax::nodes::SyntaxBlockPart::Splice(e) = part {
@@ -609,14 +609,14 @@ fn collect_names_expr(
                 referenced.insert(tok.text.clone());
             }
         }
-        ExpressionNode::ArrayLiteral(es)
-        | ExpressionNode::SetLiteral(es)
-        | ExpressionNode::TupleLiteral(es) => {
+        ExpressionNode::ArrayLiteral(_, es)
+        | ExpressionNode::SetLiteral(_, es)
+        | ExpressionNode::TupleLiteral(_, es) => {
             for e in es {
                 collect_names_expr(e, scopes, referenced);
             }
         }
-        ExpressionNode::MapLiteral(entries) => {
+        ExpressionNode::MapLiteral(_, entries) => {
             for (k, v) in entries {
                 collect_names_expr(k, scopes, referenced);
                 collect_names_expr(v, scopes, referenced);
@@ -647,7 +647,7 @@ fn collect_names_expr(
             collect_names_expr(a, scopes, referenced);
             collect_names_expr(i, scopes, referenced);
         }
-        ExpressionNode::Cast(_, e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::Cast(_, _, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::MemberAccess(e, _) => collect_names_expr(e, scopes, referenced),
         // `is`-with-binding is scoped by the statement layer (`if`/`while`); here the binding is
         // only recorded when analyzing those statements' branches, so ignore it on the expression.
@@ -664,7 +664,7 @@ fn collect_names_expr(
             collect_names_expr(e, scopes, referenced);
         }
         ExpressionNode::Await(_, e) => collect_names_expr(e, scopes, referenced),
-        ExpressionNode::Switch(subj, arms) => {
+        ExpressionNode::Switch(_, subj, arms) => {
             collect_names_expr(subj, scopes, referenced);
             for arm in arms {
                 push_scope(scopes);
@@ -689,7 +689,7 @@ fn collect_names_expr(
             }
         }
         ExpressionNode::NamedArg(_, e) => collect_names_expr(e, scopes, referenced),
-        ExpressionNode::RefArgument(e) => collect_names_expr(e, scopes, referenced),
+        ExpressionNode::RefArgument(_, e) => collect_names_expr(e, scopes, referenced),
         ExpressionNode::SyntaxBlock(block) => {
             for part in &block.parts {
                 if let dream_syntax::nodes::SyntaxBlockPart::Splice(e) = part {

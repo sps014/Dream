@@ -177,10 +177,10 @@ impl SyntaxTreeView {
             | ExpressionNode::Parenthesized(_, x)
             | ExpressionNode::Await(_, x)
             | ExpressionNode::Try(x)
-            | ExpressionNode::Cast(_, x)
+            | ExpressionNode::Cast(_, _, x)
             | ExpressionNode::IsExpression(x, _, _)
             | ExpressionNode::MemberAccess(x, _)
-            | ExpressionNode::RefArgument(x)
+            | ExpressionNode::RefArgument(_, x)
             | ExpressionNode::NamedArg(_, x) => self.walk_expr(x, parent),
             ExpressionNode::Call(c, _, args) | ExpressionNode::MethodCall(c, _, _, args) => {
                 self.walk_expr(c, parent);
@@ -189,20 +189,20 @@ impl SyntaxTreeView {
                 }
             }
             ExpressionNode::FunctionCall(_, _, args)
-            | ExpressionNode::ArrayLiteral(args)
-            | ExpressionNode::TupleLiteral(args)
-            | ExpressionNode::SetLiteral(args) => {
+            | ExpressionNode::ArrayLiteral(_, args)
+            | ExpressionNode::TupleLiteral(_, args)
+            | ExpressionNode::SetLiteral(_, args) => {
                 for a in args {
                     self.walk_expr(a, parent);
                 }
             }
-            ExpressionNode::MapLiteral(entries) => {
+            ExpressionNode::MapLiteral(_, entries) => {
                 for (k, v) in entries {
                     self.walk_expr(k, parent);
                     self.walk_expr(v, parent);
                 }
             }
-            ExpressionNode::Switch(subj, arms) => {
+            ExpressionNode::Switch(_, subj, arms) => {
                 self.walk_expr(subj, parent);
                 for arm in arms {
                     if let Some(g) = &arm.guard {

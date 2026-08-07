@@ -6,6 +6,7 @@ use dream_hir::{HExpr, HPlace};
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
+use dream_syntax::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -167,7 +168,10 @@ impl<'a> Analyzer<'a> {
             }
             let mut result: Vec<ExpressionNode<'a>> =
                 slots.into_iter().map(|s| s.unwrap()).collect();
-            result.push(ExpressionNode::ArrayLiteral(variadic_tail));
+            result.push(ExpressionNode::ArrayLiteral(
+                synthetic_token(TokenKind::OpenBracketToken, "["),
+                variadic_tail,
+            ));
             return Ok(result);
         }
 
@@ -451,7 +455,10 @@ impl<'a> Analyzer<'a> {
         }
         let mut result: Vec<ExpressionNode<'a>> = raw_args[..total_params - 1].to_vec();
         let tail: Vec<ExpressionNode<'a>> = raw_args[total_params - 1..].to_vec();
-        result.push(ExpressionNode::ArrayLiteral(tail));
+        result.push(ExpressionNode::ArrayLiteral(
+            synthetic_token(TokenKind::OpenBracketToken, "["),
+            tail,
+        ));
         result
     }
     /// True while analyzing a function/method declared in the embedded stdlib prelude (its
@@ -538,7 +545,7 @@ impl<'a> Analyzer<'a> {
         for (i, param) in params.iter().enumerate() {
             let saved_expected = self.current_expected_type.take();
             self.current_expected_type = expected_params.and_then(|ps| ps.get(i).cloned());
-            if let ExpressionNode::RefArgument(inner) = param {
+            if let ExpressionNode::RefArgument(_, inner) = param {
                 arg_is_ref.push(true);
                 self.current_expected_type = saved_expected;
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {

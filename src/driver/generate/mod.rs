@@ -80,10 +80,10 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
             | ExpressionNode::Parenthesized(_, x)
             | ExpressionNode::Await(_, x)
             | ExpressionNode::Try(x)
-            | ExpressionNode::Cast(_, x)
+            | ExpressionNode::Cast(_, _, x)
             | ExpressionNode::IsExpression(x, _, _)
             | ExpressionNode::MemberAccess(x, _)
-            | ExpressionNode::RefArgument(x)
+            | ExpressionNode::RefArgument(_, x)
             | ExpressionNode::NamedArg(_, x) => walk_expr(x, diagnostics),
             ExpressionNode::Call(c, _, args) | ExpressionNode::MethodCall(c, _, _, args) => {
                 walk_expr(c, diagnostics);
@@ -92,20 +92,20 @@ fn report_unexpanded_syntax_blocks(acc: &ProgramAccumulator<'_>, diagnostics: &m
                 }
             }
             ExpressionNode::FunctionCall(_, _, args)
-            | ExpressionNode::ArrayLiteral(args)
-            | ExpressionNode::TupleLiteral(args)
-            | ExpressionNode::SetLiteral(args) => {
+            | ExpressionNode::ArrayLiteral(_, args)
+            | ExpressionNode::TupleLiteral(_, args)
+            | ExpressionNode::SetLiteral(_, args) => {
                 for a in args {
                     walk_expr(a, diagnostics);
                 }
             }
-            ExpressionNode::MapLiteral(entries) => {
+            ExpressionNode::MapLiteral(_, entries) => {
                 for (k, v) in entries {
                     walk_expr(k, diagnostics);
                     walk_expr(v, diagnostics);
                 }
             }
-            ExpressionNode::Switch(subj, arms) => {
+            ExpressionNode::Switch(_, subj, arms) => {
                 walk_expr(subj, diagnostics);
                 for arm in arms {
                     if let Some(g) = &arm.guard {

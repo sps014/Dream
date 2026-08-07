@@ -147,7 +147,7 @@ impl<'a> Analyzer<'a> {
             | ExpressionNode::IncDec { target: e, .. }
             | ExpressionNode::Parenthesized(_, e)
             | ExpressionNode::Try(e)
-            | ExpressionNode::Cast(_, e)
+            | ExpressionNode::Cast(_, _, e)
             | ExpressionNode::IsExpression(e, _, _) => {
                 self.scan_expr_await(e, message, diagnostics)
             }
@@ -168,7 +168,7 @@ impl<'a> Analyzer<'a> {
                     self.scan_expr_await(a, message, diagnostics);
                 }
             }
-            ExpressionNode::ArrayLiteral(elems) => {
+            ExpressionNode::ArrayLiteral(_, elems) => {
                 for e in elems {
                     self.scan_expr_await(e, message, diagnostics);
                 }

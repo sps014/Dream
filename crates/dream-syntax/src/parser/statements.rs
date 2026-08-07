@@ -596,7 +596,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// pattern-matching form `switch (expr) { pattern [if guard] => body, ... }`, which is parsed as
     /// an [`ExpressionNode::Switch`] and wrapped in an `ExpressionStatement` (no trailing `;`).
     pub(super) fn parse_switch(&mut self) -> Result<StatementNode<'a>, Error> {
-        let subject = self.parse_switch_header()?;
+        let (switch_tok, subject) = self.parse_switch_header()?;
 
         // Pattern form: the body starts with a pattern/`=>` arm rather than `case`/`default`.
         if !matches!(
@@ -604,7 +604,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::CaseToken | TokenKind::DefaultToken | TokenKind::CurlyCloseBracketToken
         ) {
             let arms = self.parse_switch_arms()?;
-            let expr = ExpressionNode::Switch(self.arena.alloc(subject), arms);
+            let expr = ExpressionNode::Switch(switch_tok, self.arena.alloc(subject), arms);
             return Ok(StatementNode::ExpressionStatement(expr));
         }
 

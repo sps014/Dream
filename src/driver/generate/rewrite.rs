@@ -144,7 +144,8 @@ fn rewrite_expr<'a>(
         ExpressionNode::Try(x) => {
             ExpressionNode::Try(arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?))
         }
-        ExpressionNode::Cast(ty, x) => ExpressionNode::Cast(
+        ExpressionNode::Cast(open, ty, x) => ExpressionNode::Cast(
+            open.clone(),
             ty.clone(),
             arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
         ),
@@ -161,9 +162,10 @@ fn rewrite_expr<'a>(
             arena.alloc(rewrite_expr(arena, r, by_site, diagnostics, changed)?),
             m.clone(),
         ),
-        ExpressionNode::RefArgument(x) => ExpressionNode::RefArgument(arena.alloc(
-            rewrite_expr(arena, x, by_site, diagnostics, changed)?,
-        )),
+        ExpressionNode::RefArgument(ref_tok, x) => ExpressionNode::RefArgument(
+            ref_tok.clone(),
+            arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
+        ),
         ExpressionNode::NamedArg(n, x) => ExpressionNode::NamedArg(
             n.clone(),
             arena.alloc(rewrite_expr(arena, x, by_site, diagnostics, changed)?),
@@ -198,28 +200,28 @@ fn rewrite_expr<'a>(
             }
             ExpressionNode::FunctionCall(name.clone(), gens.clone(), nargs)
         }
-        ExpressionNode::ArrayLiteral(args) => {
+        ExpressionNode::ArrayLiteral(open, args) => {
             let mut nargs = Vec::new();
             for a in args {
                 nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed)?);
             }
-            ExpressionNode::ArrayLiteral(nargs)
+            ExpressionNode::ArrayLiteral(open.clone(), nargs)
         }
-        ExpressionNode::TupleLiteral(args) => {
+        ExpressionNode::TupleLiteral(open, args) => {
             let mut nargs = Vec::new();
             for a in args {
                 nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed)?);
             }
-            ExpressionNode::TupleLiteral(nargs)
+            ExpressionNode::TupleLiteral(open.clone(), nargs)
         }
-        ExpressionNode::SetLiteral(args) => {
+        ExpressionNode::SetLiteral(open, args) => {
             let mut nargs = Vec::new();
             for a in args {
                 nargs.push(rewrite_expr(arena, a, by_site, diagnostics, changed)?);
             }
-            ExpressionNode::SetLiteral(nargs)
+            ExpressionNode::SetLiteral(open.clone(), nargs)
         }
-        ExpressionNode::MapLiteral(entries) => {
+        ExpressionNode::MapLiteral(open, entries) => {
             let mut nentries = Vec::new();
             for (k, v) in entries {
                 nentries.push((
@@ -227,9 +229,9 @@ fn rewrite_expr<'a>(
                     rewrite_expr(arena, v, by_site, diagnostics, changed)?,
                 ));
             }
-            ExpressionNode::MapLiteral(nentries)
+            ExpressionNode::MapLiteral(open.clone(), nentries)
         }
-        ExpressionNode::Switch(subj, arms) => {
+        ExpressionNode::Switch(switch_tok, subj, arms) => {
             let nsubj = arena.alloc(rewrite_expr(arena, subj, by_site, diagnostics, changed)?);
             let mut narms = Vec::new();
             for arm in arms {
@@ -252,7 +254,7 @@ fn rewrite_expr<'a>(
                     body,
                 });
             }
-            ExpressionNode::Switch(nsubj, narms)
+            ExpressionNode::Switch(switch_tok.clone(), nsubj, narms)
         }
         ExpressionNode::Lambda(l) => {
             let body = match &l.body {
