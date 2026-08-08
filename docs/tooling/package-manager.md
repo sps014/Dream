@@ -50,7 +50,7 @@ authors = ["Jane Doe <jane@example.com>"]
 description = "My Dream app"
 entry = "src/main.dream"        # required for bin; forbidden for lib
 license = "MIT"
-keywords = ["http", "json"]         # optional; used by dreamer search / catalog.json
+keywords = ["http", "json"]         # optional; used by dreamer search / the registry site
 targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
 
 [dependencies]
@@ -189,15 +189,10 @@ tarballs under `dl/` (separate trees). Max package tarball size is **10 MiB**.
 `--token` with `contents:write`). Point `[registries] default` at any other `file://` or
 `http(s)://` location implementing the protocol above for private/offline use.
 
-### Static search (cargo-like)
+### Finding packages
 
-There is no live search API. Discovery is fully static:
-
-- **CLI:** `dreamer search <query>` downloads `catalog.json` and matches against package **name**,
-  **description**, and **keywords** (case-insensitive substring) — the Dream equivalent of
-  `cargo search`.
-- **Browser:** [sps014.github.io/dream-registry](https://sps014.github.io/dream-registry/) filters
-  the same `catalog.json` client-side.
+- **CLI:** `dreamer search <query>` — matches package name, description, and keywords.
+- **Web:** [sps014.github.io/dream-registry](https://sps014.github.io/dream-registry/) — browse and copy install commands.
 
 The first published library is [`semver`](https://github.com/sps014/dream/tree/main/packages/semver)
 (`dreamer add semver`).
@@ -221,7 +216,7 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>] [--token <tok>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). |
-| `dreamer search <query>` | Search the registry catalog by name / description / keywords (static `catalog.json`). |
+| `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree` | Print the resolved dependency tree from `dream.lock`. |
 
 ### Native `dreamer pack`
