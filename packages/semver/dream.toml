@@ -1,6 +1,6 @@
 [package]
 name = "semver"
-version = "0.1.0"
+version = "0.1.1"
 type = "lib"
 edition = "2026"
 authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]

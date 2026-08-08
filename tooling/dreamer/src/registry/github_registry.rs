@@ -146,7 +146,25 @@ impl RegistryClient for GithubRegistry {
     }
 
     fn fetch_index(&self, package: &str) -> Result<Vec<IndexEntry>> {
-        self.http.fetch_index(package)
+        // Prefer the Contents API over `raw.githubusercontent.com`: the raw CDN can keep
+        // serving a pre-publish index for minutes, so `dreamer update` would miss new versions.
+        let path = format!("index/{}", package);
+        match self.get_file(&path)? {
+            None => Ok(Vec::new()),
+            Some(content) => {
+                let raw = content.decoded()?;
+                let text = String::from_utf8(raw)
+                    .with_context(|| format!("registry index {} is not UTF-8", path))?;
+                text.lines()
+                    .filter(|l| !l.trim().is_empty())
+                    .map(|l| {
+                        serde_json::from_str::<IndexEntry>(l).with_context(|| {
+                            format!("parsing registry index line from {}", path)
+                        })
+                    })
+                    .collect()
+            }
+        }
     }
 
     fn fetch_tarball(&self, entry: &IndexEntry, dest_file: &Path) -> Result<()> {

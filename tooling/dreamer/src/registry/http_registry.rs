@@ -44,7 +44,12 @@ impl RegistryClient for HttpRegistry {
 
     fn fetch_index(&self, package: &str) -> Result<Vec<IndexEntry>> {
         let url = format!("{}/index/{}", self.base, package);
-        let resp = ureq::get(&url).call();
+        // GitHub raw CDN can serve stale index bodies for several minutes after publish;
+        // ask for a revalidated response so `dreamer update` sees newly published versions.
+        let resp = ureq::get(&url)
+            .set("Cache-Control", "no-cache")
+            .set("Pragma", "no-cache")
+            .call();
         let resp = match resp {
             Ok(r) => r,
             Err(ureq::Error::Status(404, _)) => return Ok(Vec::new()),
