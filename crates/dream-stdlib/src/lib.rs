@@ -694,7 +694,10 @@ pub fn symbol_to_package() -> std::collections::HashMap<String, &'static str> {
     map
 }
 
-fn public_top_level_names(src: &str) -> Vec<String> {
+/// Public top-level declaration names in a Dream source string (for LSP auto-import).
+/// Only column-0 `public class|enum|interface|fun|extend|struct|union` decls; nested/indented
+/// members are ignored.
+pub fn public_top_level_names(src: &str) -> Vec<String> {
     let mut names = Vec::new();
     for line in src.lines() {
         let t = line.trim_start();

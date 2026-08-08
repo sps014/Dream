@@ -1721,7 +1721,7 @@ fun main(): void {
 }
 "#;
     let uri = Url::parse("file:///tmp/main.dream").unwrap();
-    let actions = auto_import_actions(&uri, src, "HttpClient");
+    let actions = auto_import_actions(&uri, src, "HttpClient", None);
     assert_eq!(actions.len(), 1);
     // Apply conceptually: insert should mention system.net
     assert!(!already_imports(src, "system.net"));
@@ -1740,7 +1740,7 @@ fn auto_import_skipped_when_already_imported() {
 
     let src = "import system.net;\nfun main(): void { let c = HttpClient(\"\"); }\n";
     let uri = Url::parse("file:///tmp/main.dream").unwrap();
-    let actions = auto_import_actions(&uri, src, "HttpClient");
+    let actions = auto_import_actions(&uri, src, "HttpClient", None);
     assert!(actions.is_empty());
 }
 
@@ -1751,7 +1751,7 @@ fn bootstrap_symbol_has_no_auto_import() {
 
     let src = "fun main(): void { let o = Option.None; }\n";
     let uri = Url::parse("file:///tmp/main.dream").unwrap();
-    let actions = auto_import_actions(&uri, src, "Option");
+    let actions = auto_import_actions(&uri, src, "Option", None);
     assert!(
         actions.is_empty(),
         "Option is bootstrap — no import quick fix"
@@ -2132,4 +2132,187 @@ fn line_char_to_offset(src: &str, line: u32, character: u32) -> usize {
         return offset + character as usize;
     }
     src.len()
+}
+
+/// Temp project with `dream_packages/semver` + `dream_packages/mathpkg` for LSP package tests.
+fn package_fixture_dir() -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "dream_lsp_pkg_fixture_{}_{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let semver_src = dir.join("dream_packages/semver/src");
+    let mathpkg_src = dir.join("dream_packages/mathpkg/src");
+    std::fs::create_dir_all(&semver_src).unwrap();
+    std::fs::create_dir_all(&mathpkg_src).unwrap();
+    std::fs::write(
+        semver_src.join("semver.dream"),
+        r#"
+public class SemVer {
+    public major: int;
+    public minor: int;
+
+    public constructor(major: int, minor: int) {
+        this.major = major;
+        this.minor = minor;
+    }
+
+    public fun bump(): SemVer {
+        return SemVer(this.major, this.minor + 1);
+    }
+}
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        mathpkg_src.join("ops.dream"),
+        r#"
+public fun add(a: int, b: int): int {
+    return a + b;
+}
+"#,
+    )
+    .unwrap();
+    dir
+}
+
+#[test]
+fn project_package_unloaded_completion_and_import_edit() {
+    use dream_lsp::code_actions::{import_text_edits, unloaded_import_completions};
+
+    let dir = package_fixture_dir();
+    let main_file = dir.join("main.dream");
+    let src = "fun main(): void {\n    \n}\n";
+    std::fs::write(&main_file, src).unwrap();
+    let path = main_file.to_str().unwrap();
+
+    let comps = unloaded_import_completions(src, Some(path));
+    assert!(
+        comps
+            .iter()
+            .any(|(n, pkg, d)| n == "SemVer" && pkg == "semver" && d.contains("import semver")),
+        "expected SemVer -> semver among unloaded completions, got {:?}",
+        comps
+            .iter()
+            .filter(|(n, ..)| n.contains("Sem") || n.contains("Ver"))
+            .collect::<Vec<_>>()
+    );
+    let edits = import_text_edits(src, "semver").expect("edits");
+    assert_eq!(edits.len(), 1);
+    assert!(edits[0].new_text.contains("import semver;"));
+
+    // Already-imported package excluded.
+    let with_import = "import semver;\nfun main(): void {\n    \n}\n";
+    let comps2 = unloaded_import_completions(with_import, Some(path));
+    assert!(
+        comps2.iter().all(|(n, ..)| n != "SemVer"),
+        "SemVer must not appear once semver is imported"
+    );
+}
+
+#[test]
+fn project_package_auto_import_action() {
+    use dream_lsp::code_actions::auto_import_actions;
+    use tower_lsp::lsp_types::Url;
+
+    let dir = package_fixture_dir();
+    let main_file = dir.join("main.dream");
+    let src = "fun main(): void { let v = SemVer(1, 2); }\n";
+    std::fs::write(&main_file, src).unwrap();
+    let path = main_file.to_str().unwrap();
+    let uri = Url::from_file_path(&main_file).unwrap();
+
+    let actions = auto_import_actions(&uri, src, "SemVer", Some(path));
+    assert_eq!(actions.len(), 1, "expected Import 'semver' quick fix");
+}
+
+#[test]
+fn project_package_import_path_completions() {
+    use dream_lsp::index::{Index, SymKind};
+
+    let dir = package_fixture_dir();
+    let main_src = "import |\n";
+    let main_file = dir.join("main.dream");
+    std::fs::write(&main_file, main_src.replace('|', "")).unwrap();
+    let path = main_file.to_str().unwrap();
+    let offset = main_src.find('|').unwrap();
+    let src = main_src.replace('|', "");
+
+    let index = Index::build(Some(path), &src);
+    let comps = index.completions(Some(path), &src, offset);
+    assert!(
+        comps
+            .iter()
+            .any(|(n, k, d, _)| n == "semver" && *k == SymKind::Module && d == "package"),
+        "expected semver package at import |, got {:?}",
+        comps
+            .iter()
+            .map(|(n, _, d, _)| format!("{n}/{d}"))
+            .collect::<Vec<_>>()
+    );
+
+    let main_src2 = "import mathpkg.|\n";
+    let offset2 = main_src2.find('|').unwrap();
+    let src2 = main_src2.replace('|', "");
+    std::fs::write(&main_file, &src2).unwrap();
+    let index2 = Index::build(Some(path), &src2);
+    let comps2 = index2.completions(Some(path), &src2, offset2);
+    assert!(
+        comps2
+            .iter()
+            .any(|(n, _, d, _)| n == "mathpkg.ops" && d == "package module"),
+        "expected mathpkg.ops after import mathpkg., got {:?}",
+        comps2
+            .iter()
+            .map(|(n, _, d, _)| format!("{n}/{d}"))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn project_package_symbols_after_import() {
+    use dream_lsp::index::Index;
+
+    let dir = package_fixture_dir();
+    let main_src = r#"
+import semver;
+
+fun main(): void {
+    let v = SemVer(1, 2);
+    v.|
+}
+"#;
+    let main_file = dir.join("main.dream");
+    let offset = main_src.find('|').unwrap();
+    let src = main_src.replace('|', "");
+    std::fs::write(&main_file, &src).unwrap();
+    let path = main_file.to_str().unwrap();
+
+    let index = Index::build(Some(path), &src);
+    assert!(
+        index.decls.iter().any(|d| d.name == "SemVer"),
+        "SemVer should be indexed after import semver"
+    );
+
+    let comps = index.completions(Some(path), &src, offset);
+    assert!(
+        comps.iter().any(|(n, ..)| n == "major" || n == "bump"),
+        "expected SemVer members after import, got {:?}",
+        comps.iter().map(|(n, ..)| n.clone()).collect::<Vec<_>>()
+    );
+
+    // Bare SemVer also completes in non-member context.
+    let bare_src = "import semver;\nfun main(): void {\n    Se|\n}\n";
+    let bare_offset = bare_src.find('|').unwrap();
+    let bare = bare_src.replace('|', "");
+    std::fs::write(&main_file, &bare).unwrap();
+    let index2 = Index::build(Some(path), &bare);
+    let comps2 = index2.completions(Some(path), &bare, bare_offset);
+    assert!(
+        comps2.iter().any(|(n, ..)| n == "SemVer"),
+        "expected SemVer in completions after import"
+    );
 }

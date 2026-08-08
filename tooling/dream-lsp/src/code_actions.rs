@@ -1,6 +1,10 @@
-//! Auto-import quick fixes and completion edits for missing `import system…;` lines.
+//! Auto-import quick fixes and completion edits for missing `import …;` lines
+//! (stdlib and installed `dream_packages/`).
 
-use dream_stdlib::symbol_to_package;
+use dream::driver::source_loader::find_dream_packages_dir;
+use dream_stdlib::{public_top_level_names, symbol_to_package};
+use std::collections::HashMap;
+use std::path::Path;
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Position as LspPosition, Range as LspRange,
     TextEdit, WorkspaceEdit,
@@ -139,17 +143,77 @@ pub fn unresolved_name_from_message(message: &str) -> Option<String> {
     None
 }
 
-/// Code actions offering to import the stdlib package that exports `name`.
+/// Maps public top-level symbols in installed `dream_packages/` to their import path
+/// (`semver`, `mathpkg.ops`, …). Mirrors compiler package resolution: entry file
+/// `src/<pkg>.dream` → bare `pkg`; other `src/<rest>.dream` → `pkg.rest`.
+pub fn project_symbol_to_package(file_path: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let parent_dir = Path::new(file_path)
+        .parent()
+        .unwrap_or_else(|| Path::new(""));
+    let Some(packages_dir) = find_dream_packages_dir(parent_dir) else {
+        return map;
+    };
+    let Ok(pkg_entries) = std::fs::read_dir(&packages_dir) else {
+        return map;
+    };
+    for pkg_entry in pkg_entries.flatten() {
+        if !pkg_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let pkg_name = pkg_entry.file_name().to_string_lossy().to_string();
+        let src_dir = pkg_entry.path().join("src");
+        if !src_dir.is_dir() {
+            continue;
+        }
+        let Ok(src_entries) = std::fs::read_dir(&src_dir) else {
+            continue;
+        };
+        for src_entry in src_entries.flatten() {
+            let path = src_entry.path();
+            let Some(stem) = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".dream"))
+            else {
+                continue;
+            };
+            let import_path = if stem == pkg_name {
+                pkg_name.clone()
+            } else {
+                format!("{}.{}", pkg_name, stem.replace('/', "."))
+            };
+            let Ok(src) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for name in public_top_level_names(&src) {
+                map.entry(name).or_insert_with(|| import_path.clone());
+            }
+        }
+    }
+    map
+}
+
+/// Resolve `name` to an importable package (stdlib first, then project packages).
+fn package_for_symbol(file_path: Option<&str>, name: &str) -> Option<String> {
+    if let Some(pkg) = symbol_to_package().get(name).copied() {
+        return Some(pkg.to_string());
+    }
+    file_path
+        .and_then(|p| project_symbol_to_package(p).get(name).cloned())
+}
+
+/// Code actions offering to import the package that exports `name`.
 pub fn auto_import_actions(
     uri: &tower_lsp::lsp_types::Url,
     text: &str,
     name: &str,
+    file_path: Option<&str>,
 ) -> Vec<CodeActionOrCommand> {
-    let map = symbol_to_package();
-    let Some(package) = map.get(name).copied() else {
+    let Some(package) = package_for_symbol(file_path, name) else {
         return Vec::new();
     };
-    let Some(edit) = import_edit(uri, text, package) else {
+    let Some(edit) = import_edit(uri, text, &package) else {
         return Vec::new();
     };
     vec![CodeActionOrCommand::CodeAction(CodeAction {
@@ -161,7 +225,48 @@ pub fn auto_import_actions(
     })]
 }
 
-/// Stdlib completion candidates not yet in scope (label, package, detail).
+/// Completion candidates not yet in scope (label, package, detail) from stdlib and
+/// installed project packages.
+pub fn unloaded_import_completions(
+    text: &str,
+    file_path: Option<&str>,
+) -> Vec<(String, String, String)> {
+    let imported = imported_packages(text);
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for (name, package) in symbol_to_package() {
+        if imported.contains(package) {
+            continue;
+        }
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        out.push((
+            name,
+            package.to_string(),
+            format!("(import {})", package),
+        ));
+    }
+
+    if let Some(path) = file_path {
+        for (name, package) in project_symbol_to_package(path) {
+            if imported.contains(&package) {
+                continue;
+            }
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            out.push((name, package.clone(), format!("(import {})", package)));
+        }
+    }
+
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+/// Stdlib-only unloaded completions (kept for existing tests). Prefer
+/// [`unloaded_import_completions`] for editor use.
 pub fn unloaded_stdlib_completions(text: &str) -> Vec<(String, &'static str, String)> {
     let imported = imported_packages(text);
     let map = symbol_to_package();

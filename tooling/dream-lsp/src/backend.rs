@@ -627,12 +627,12 @@ impl LanguageServer for Backend {
                 let existing: std::collections::HashSet<String> =
                     items.iter().map(|i| i.label.clone()).collect();
                 for (label, package, detail) in
-                    crate::code_actions::unloaded_stdlib_completions(&text)
+                    crate::code_actions::unloaded_import_completions(&text, file_path.as_deref())
                 {
                     if existing.contains(&label) {
                         continue;
                     }
-                    let additional = crate::code_actions::import_text_edits(&text, package);
+                    let additional = crate::code_actions::import_text_edits(&text, &package);
                     items.push(CompletionItem {
                         label,
                         kind: Some(CompletionItemKind::CLASS),
@@ -653,6 +653,7 @@ impl LanguageServer for Backend {
         let Some(text) = self.document_text(&key) else {
             return Ok(None);
         };
+        let file_path = Self::file_path_of(&uri);
         let mut actions = Vec::new();
         for diag in &params.context.diagnostics {
             let is_unresolved = diag
@@ -666,7 +667,12 @@ impl LanguageServer for Backend {
                 continue;
             }
             if let Some(name) = crate::code_actions::unresolved_name_from_message(&diag.message) {
-                actions.extend(crate::code_actions::auto_import_actions(&uri, &text, &name));
+                actions.extend(crate::code_actions::auto_import_actions(
+                    &uri,
+                    &text,
+                    &name,
+                    file_path.as_deref(),
+                ));
             }
         }
         // Also offer based on the word under the selection range when diagnostics are empty.
@@ -677,7 +683,12 @@ impl LanguageServer for Backend {
                 params.range.start.character,
             );
             if let Some(name) = word_at(&text, offset) {
-                actions.extend(crate::code_actions::auto_import_actions(&uri, &text, &name));
+                actions.extend(crate::code_actions::auto_import_actions(
+                    &uri,
+                    &text,
+                    &name,
+                    file_path.as_deref(),
+                ));
             }
         }
         if actions.is_empty() {

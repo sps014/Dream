@@ -14,27 +14,8 @@ use super::detail_belongs_to;
 use crate::code_actions::imported_packages;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream_abi::attributes::find_spec;
+use dream::driver::source_loader::find_dream_packages_dir;
 use dream_stdlib::{BOOTSTRAP_PACKAGES, STD_PACKAGES};
-
-/// Walks upward from `start_dir` looking for a `dream_packages/` directory (installed by the
-/// `dreamer` package manager), stopping without a match at the first `dream.toml` project root
-/// that has none yet. Mirrors `find_dream_packages_dir` in `src/driver/source_loader.rs` — kept
-/// as a separate copy since it's a few lines of pure filesystem-walking with no shared state, and
-/// duplicating it avoids making the LSP depend on a compiler-internal, non-`pub` helper.
-fn find_dream_packages_dir(start_dir: &std::path::Path) -> Option<std::path::PathBuf> {
-    let mut dir = Some(start_dir.to_path_buf());
-    while let Some(d) = dir {
-        let candidate = d.join("dream_packages");
-        if candidate.is_dir() {
-            return Some(candidate);
-        }
-        if d.join("dream.toml").is_file() {
-            return None;
-        }
-        dir = d.parent().map(std::path::Path::to_path_buf);
-    }
-    None
-}
 
 /// True when `offset` is in a `receiver.` / `receiver.partial` member-access position.
 /// Used by the LSP backend to avoid merging unloaded stdlib type completions into
@@ -171,10 +152,41 @@ fn import_path_completions(
         if let Some(packages_dir) = find_dream_packages_dir(parent_dir) {
             if let Ok(entries) = std::fs::read_dir(&packages_dir) {
                 for entry in entries.flatten() {
-                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with(partial) {
-                            push_module_completion(&mut out, name, "package", &imported);
+                    if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
+                    }
+                    let pkg_name = entry.file_name().to_string_lossy().to_string();
+                    // Bare package name: `import sem` / `import |`
+                    if pkg_name.starts_with(partial) {
+                        push_module_completion(&mut out, pkg_name.clone(), "package", &imported);
+                    }
+                    // Submodules: `import mathpkg.` / `import mathpkg.op`
+                    let pkg_prefix = format!("{}.", pkg_name);
+                    if partial.starts_with(&pkg_prefix) || partial == pkg_name {
+                        let src_dir = entry.path().join("src");
+                        if let Ok(src_entries) = std::fs::read_dir(&src_dir) {
+                            for src_entry in src_entries.flatten() {
+                                let Some(stem) = src_entry
+                                    .file_name()
+                                    .to_str()
+                                    .and_then(|n| n.strip_suffix(".dream").map(str::to_string))
+                                else {
+                                    continue;
+                                };
+                                // Entry file is imported as bare `pkg`, not `pkg.pkg`.
+                                if stem == pkg_name {
+                                    continue;
+                                }
+                                let full = format!("{}.{}", pkg_name, stem);
+                                if full.starts_with(partial) {
+                                    push_module_completion(
+                                        &mut out,
+                                        full,
+                                        "package module",
+                                        &imported,
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -321,22 +333,26 @@ impl Index {
 
     /// Applies call-site / receiver type arguments to a method detail that still mentions `T`
     /// (e.g. `GpuBuffer.alloc<float>` → `GpuBuffer<float>`, `read_at(): T[]` → `float[]`).
+    /// Method-level params (`dispatch<TIn, TOut>`) are handled only by
+    /// [`substitute_method_type_args`] — never via class-`T` synthesis, which would turn
+    /// `TIn` into `stringIn` when args are `int, string`.
     pub(crate) fn apply_type_args_to_detail(
         detail: &str,
         receiver_ty: Option<&str>,
         call_type_args: &[String],
     ) -> String {
         let mut out = detail.to_string();
+        let method_has_type_params = method_detail_has_type_params(detail);
         // Prefer an already-concrete receiver (`GpuBuffer<float>`).
         if let Some(recv) = receiver_ty {
             if recv.contains('<') {
                 out = Self::substitute_generic(&out, recv);
-            } else if !call_type_args.is_empty() {
+            } else if !call_type_args.is_empty() && !method_has_type_params {
                 // Bare `GpuBuffer.alloc<float>(…)`: synthesize `GpuBuffer<float>`.
                 let synthetic = format!("{}<{}>", type_base(recv), call_type_args.join(", "));
                 out = Self::substitute_generic(&out, &synthetic);
             }
-        } else if call_type_args.len() == 1 {
+        } else if call_type_args.len() == 1 && !method_has_type_params {
             out = substitute_type_param_t(&out, &call_type_args[0]);
         }
         if !call_type_args.is_empty() {
@@ -876,6 +892,15 @@ impl Index {
         }
         best.map(|(scope, _)| scope).unwrap_or(GLOBAL)
     }
+}
+
+/// True when a method detail declares type parameters before `(`, e.g.
+/// `async WebWorkerPool.dispatch<TIn, TOut>(…)`.
+fn method_detail_has_type_params(detail: &str) -> bool {
+    let Some(paren) = detail.find('(') else {
+        return false;
+    };
+    detail[..paren].rfind('<').is_some()
 }
 
 /// Parses call-site method type arguments after a method name token: `dispatch<int, string>(`.

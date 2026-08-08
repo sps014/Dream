@@ -98,7 +98,9 @@ fn resolve_package_import(base_dir: &Path, module_name: &str) -> Option<std::pat
 /// Walks upward from `start_dir` looking for a `dream_packages/` directory, stopping (without a
 /// match) at the first `dream.toml` project root that has none yet — e.g. before the first
 /// `dreamer install` — so resolution never wanders into an unrelated ancestor project's packages.
-fn find_dream_packages_dir(start_dir: &Path) -> Option<std::path::PathBuf> {
+/// Shared with the LSP so import-path completion and auto-import scan the same tree the compiler
+/// resolves against.
+pub fn find_dream_packages_dir(start_dir: &Path) -> Option<std::path::PathBuf> {
     let mut dir = Some(start_dir.to_path_buf());
     while let Some(d) = dir {
         let candidate = d.join("dream_packages");
