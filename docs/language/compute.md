@@ -42,7 +42,7 @@ runtime (`runtime/dream.js`) loads both and drives `navigator.gpu`.
 
 ## Simple sample: SAXPY
 
-[`sample/compute/saxpy.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/saxpy.dream)
+[`sample/compute/saxpy.dream`](https://github.com/sps014/dream/tree/main/sample/compute/saxpy.dream)
 — one kernel, one dispatch, readback:
 
 ```dream
@@ -75,7 +75,7 @@ cargo run -- run sample/compute/saxpy.dream
 
 ## Complex sample: reaction–diffusion
 
-[`sample/compute/life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life) —
+[`sample/compute/life/`](https://github.com/sps014/dream/tree/main/sample/compute/life) —
 Gray–Scott chemical simulation (not cellular automata): dual fields, multi-step
 `ComputePass`, texture paint.
 
@@ -127,7 +127,7 @@ cargo run -- sample/compute/life/life.dream
 
 ## Larger demo: fluid
 
-[`sample/fluid/`](https://github.com/sps014/Dream/tree/main/sample/fluid) — Jos Stam–style
+[`sample/fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid) — Jos Stam–style
 2D stable fluids on the GPU: `ComputePass` batches splat / advect / Jacobi project / decay /
 paint; the CPU only tracks mouse + frame.
 
@@ -260,14 +260,14 @@ let r = await Compute.run_shader(shader, [buf], 64, 1, 1);
 
 | Sample | Role |
 |--------|------|
-| [`sample/compute/saxpy.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/saxpy.dream) | Beginner — one kernel + readback |
-| [`sample/compute/gpu_ext.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/gpu_ext.dream) | API surface — `@readonly`, `ComputePass`, indirect |
-| [`sample/compute/life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life) | Complex — Gray–Scott reaction–diffusion |
-| [`sample/fluid/`](https://github.com/sps014/Dream/tree/main/sample/fluid) | Larger demo — interactive stable fluids |
+| [`sample/compute/saxpy.dream`](https://github.com/sps014/dream/tree/main/sample/compute/saxpy.dream) | Beginner — one kernel + readback |
+| [`sample/compute/gpu_ext.dream`](https://github.com/sps014/dream/tree/main/sample/compute/gpu_ext.dream) | API surface — `@readonly`, `ComputePass`, indirect |
+| [`sample/compute/life/`](https://github.com/sps014/dream/tree/main/sample/compute/life) | Complex — Gray–Scott reaction–diffusion |
+| [`sample/fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid) | Larger demo — interactive stable fluids |
 
 ## See also
 
 - [stdlib GPU](../stdlib/gpu.md)
-- Beginner: [`saxpy.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/saxpy.dream)
-- Complex: [`sample/compute/life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life)
-- Fluid: [`sample/fluid/`](https://github.com/sps014/Dream/tree/main/sample/fluid)
+- Beginner: [`saxpy.dream`](https://github.com/sps014/dream/tree/main/sample/compute/saxpy.dream)
+- Complex: [`sample/compute/life/`](https://github.com/sps014/dream/tree/main/sample/compute/life)
+- Fluid: [`sample/fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid)

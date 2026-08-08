@@ -10,8 +10,8 @@ Generators inspect declarations and either:
 
 You can write a tiny generator (a few dozen lines) or a complex one (a full markup
 compiler). Start with `@json` or the
-[`quote`](https://github.com/sps014/Dream/tree/main/sample/generators/quote) sample;
-study [`html`](https://github.com/sps014/Dream/tree/main/sample/generators/html) when you
+[`quote`](https://github.com/sps014/dream/tree/main/sample/generators/quote) sample;
+study [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html) when you
 need a real DSL. Helpers live in [`system.codegen`](../stdlib/codegen.md).
 
 ## Start here: `@json`
@@ -67,7 +67,7 @@ cargo run -- run sample/generators/quote/app.dream
 
 Expected stdout: `Hello generators`
 
-Full sample: [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote).
+Full sample: [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote).
 
 ### Register it
 
@@ -139,7 +139,7 @@ Stdout protocol strings the compile host understands. Print `ok_marker()` then e
 
 Use these instead of ad-hoc prefixes — the host only recognizes this protocol when applying replace lines or turning failures into `CompileError::Generator`.
 
-See the full harness in the [quote sample](https://github.com/sps014/Dream/tree/main/sample/generators/quote/harness.dream). API details: [CodeBuilder / GenHost](../stdlib/codegen.md).
+See the full harness in the [quote sample](https://github.com/sps014/dream/tree/main/sample/generators/quote/harness.dream). API details: [CodeBuilder / GenHost](../stdlib/codegen.md).
 
 ### How expand works
 
@@ -187,7 +187,7 @@ cargo run -- run sample/generators/html/app.dream
 ```
 
 HTML is **not** a language builtin. Expand is owned by
-[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html)
+[`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html)
 (Dream `HtmlCompiler` + `harness.dream`, registered via `@syntax_block("html")`). The host
 only snapshots sites and applies replace lines — no Rust markup parser. Protocol is the
 same as `quote`; the harness is larger because it parses tags and `{expr}` splices.
@@ -275,5 +275,5 @@ Full reference: [CodeBuilder](../stdlib/codegen.md).
 
 - [CodeBuilder](../stdlib/codegen.md) — `CodeBuilder`, `GenHost`, `GenResult`
 - [JSON](../stdlib/json.md) — builtin `@json` derive
-- Beginner sample: [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote)
-- Advanced sample: [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html)
+- Beginner sample: [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote)
+- Advanced sample: [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html)

@@ -2,7 +2,7 @@
 
 Functions cross the Dream/JavaScript boundary in both directions: hand a Dream function to JS, or call a JS function from Dream. The runtime wraps Dream function values as ordinary callable JS functions.
 
-**Only non-capturing functions may cross into JS.** A capturing lambda would lose its captured state at the boundary. The compiler rejects capturing callbacks — use a top-level `fun`, a captureless lambda, or module-level state instead (see the [music player sample](https://github.com/sps014/Dream/blob/main/sample/music_player/music_player.dream)).
+**Only non-capturing functions may cross into JS.** A capturing lambda would lose its captured state at the boundary. The compiler rejects capturing callbacks — use a top-level `fun`, a captureless lambda, or module-level state instead (see the [music player sample](https://github.com/sps014/dream/blob/main/sample/music_player/music_player.dream)).
 
 ## Dream to JS
 
@@ -70,4 +70,4 @@ Callback arguments and results follow the same conversion rules as ordinary exte
 
 ## Try it
 
-[`sample/interop/callbacks.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/callbacks.dream) runs both directions end to end, with its Node runner [`callbacks.mjs`](https://github.com/sps014/Dream/blob/main/sample/interop/callbacks.mjs).
+[`sample/interop/callbacks.dream`](https://github.com/sps014/dream/blob/main/sample/interop/callbacks.dream) runs both directions end to end, with its Node runner [`callbacks.mjs`](https://github.com/sps014/dream/blob/main/sample/interop/callbacks.mjs).

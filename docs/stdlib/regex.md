@@ -76,4 +76,4 @@ System.println(caps[1]);  // 2026
 
 **Not supported:** lookaround, backreferences (`\1`), named groups, `\p{...}`. Unsupported constructs parse best-effort without their special meaning.
 
-A runnable example: [`sample/interop/regex.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/regex.dream).
+A runnable example: [`sample/interop/regex.dream`](https://github.com/sps014/dream/blob/main/sample/interop/regex.dream).

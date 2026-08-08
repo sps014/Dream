@@ -141,7 +141,7 @@ await run("user.wasm", {
 });
 ```
 
-A complete example: [`sample/interop/async_fetch.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/async_fetch.dream).
+A complete example: [`sample/interop/async_fetch.dream`](https://github.com/sps014/dream/blob/main/sample/interop/async_fetch.dream).
 
 ## Limitations
 

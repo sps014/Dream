@@ -8,56 +8,49 @@ This page gets you from nothing to a running Dream program in a few minutes.
 ### macOS / Linux
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/Dream/install.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-irm https://sps014.github.io/Dream/install.ps1 | iex
+irm https://sps014.github.io/dream/install.ps1 | iex
 ```
 
-That installs `dream`, `dreamer`, and `dream-lsp` under `~/.dream/bin` and hooks your shell
-PATH (same layout as the contributor `use-toolchain.sh` script).
-
-Open a new terminal, then check:
+That installs `dream`, `dreamer`, and `dream-lsp` under `~/.dream/bin` and hooks your shell PATH.
+Open a **new terminal**, then:
 
 ```bash
 dream --help
 dreamer --help
 ```
 
-Pin a version with `DREAM_VERSION=0.1.0` before running the installer.
+Pin a version with `DREAM_VERSION=0.0.1` before running the installer.
 
-### Packages
+## Create and run a project
 
-Public packages live in [`sps014/dream-registry`](https://github.com/sps014/dream-registry)
-([browse](https://sps014.github.io/dream-registry/)). Try:
+```bash
+dreamer init hello
+cd hello
+dreamer run
+```
+
+`dreamer init` scaffolds `dream.toml`, `src/main.dream`, and a `.gitignore`. `dreamer run`
+compiles and executes on the native host.
+
+Add a registry package (optional):
 
 ```bash
 dreamer search semver
 dreamer add semver
 ```
 
+Browse packages at [sps014.github.io/dream-registry](https://sps014.github.io/dream-registry/).
 See [Package Manager](tooling/package-manager.md).
-
-### Building from source (contributors)
-
-Only needed if you are hacking on the compiler itself (requires [Rust](https://rustup.rs)):
-
-```bash
-git clone https://github.com/sps014/Dream
-cd Dream
-source ./use-toolchain.sh    # builds + links dream / dreamer / dream-lsp
-```
 
 ## Your first program
 
-```bash
-dreamer init hello && cd hello
-```
-
-Or create `hello.dream` yourself:
+After `dreamer init`, edit `src/main.dream` (or create `hello.dream` by hand):
 
 ```dream
 import system;
@@ -139,6 +132,16 @@ A few things to notice:
 - `let` declares a local; its type is inferred from the initializer.
 - `System.println` works on any type — `int`, `float`, `string`, `bool`, `char`, and your own classes.
 - Conditions are parenthesized: `if (n <= 1)`.
+
+## Building from source (contributors)
+
+Only needed if you are hacking on the compiler itself (requires [Rust](https://rustup.rs)):
+
+```bash
+git clone https://github.com/sps014/dream
+cd dream
+source ./use-toolchain.sh    # builds + links dream / dreamer / dream-lsp
+```
 
 ## Where to go next
 

@@ -63,7 +63,17 @@ jobs:
           cp "target/release/dream-lsp${EXT}" "$STAGE/"
           mkdir -p dist
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
-            (cd dist && zip -r "dream-${VERSION}-${{ matrix.target }}.zip" "dream-${VERSION}-${{ matrix.target }}")
+            # Windows runners have no `zip`; use PowerShell Compress-Archive.
+            if command -v powershell.exe >/dev/null 2>&1; then
+              powershell.exe -NoProfile -Command \
+                "Compress-Archive -Path 'dist/dream-${VERSION}-${{ matrix.target }}' -DestinationPath 'dist/dream-${VERSION}-${{ matrix.target }}.zip' -Force"
+            elif command -v pwsh >/dev/null 2>&1; then
+              pwsh -NoProfile -Command \
+                "Compress-Archive -Path 'dist/dream-${VERSION}-${{ matrix.target }}' -DestinationPath 'dist/dream-${VERSION}-${{ matrix.target }}.zip' -Force"
+            else
+              # Git for Windows / modern Windows ships bsdtar which can write .zip
+              tar -C dist -a -cf "dist/dream-${VERSION}-${{ matrix.target }}.zip" "dream-${VERSION}-${{ matrix.target }}"
+            fi
           else
             tar -C dist -czf "dist/dream-${VERSION}-${{ matrix.target }}.tar.gz" "dream-${VERSION}-${{ matrix.target }}"
           fi

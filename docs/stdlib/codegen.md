@@ -8,9 +8,9 @@ import system.codegen;
 
 Syntax DSLs are **not** part of this package — see
 [Source generators](../language/generators.md). Beginner sample:
-[`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote).
+[`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote).
 Advanced (markup parser + harness):
-[`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html).
+[`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html).
 
 
 ## Status
@@ -113,7 +113,7 @@ Generators discover work via `@generator` functions / attributes. The compile ho
 | Feature | Where |
 |---------|--------|
 | `@json` derive | [JSON](json.md) — compiler builtin |
-| Quote sample | [`sample/generators/quote/`](https://github.com/sps014/Dream/tree/main/sample/generators/quote) |
-| HTML sample | [`sample/generators/html/`](https://github.com/sps014/Dream/tree/main/sample/generators/html) |
+| Quote sample | [`sample/generators/quote/`](https://github.com/sps014/dream/tree/main/sample/generators/quote) |
+| HTML sample | [`sample/generators/html/`](https://github.com/sps014/dream/tree/main/sample/generators/html) |
 
 Full tutorial: [Source generators](../language/generators.md).

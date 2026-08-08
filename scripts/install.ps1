@@ -1,13 +1,13 @@
 # Install Dream toolchain (dream, dreamer, dream-lsp) from GitHub Releases.
 #
-#   irm https://sps014.github.io/Dream/install.ps1 | iex
+#   irm https://sps014.github.io/dream/install.ps1 | iex
 #
 # Env:
 #   $env:DREAM_VERSION  optional tag without leading v (default: latest)
 #   $env:DREAM_HOME     install prefix (default: $HOME\.dream)
 
 $ErrorActionPreference = "Stop"
-$Repo = if ($env:DREAM_REPO) { $env:DREAM_REPO } else { "sps014/Dream" }
+$Repo = if ($env:DREAM_REPO) { $env:DREAM_REPO } else { "sps014/dream" }
 $Prefix = if ($env:DREAM_HOME) { $env:DREAM_HOME } else { Join-Path $HOME ".dream" }
 $BinDir = Join-Path $Prefix "bin"
 
@@ -41,7 +41,7 @@ no Dream release found on https://github.com/$Repo/releases
 
 Publish a tagged release, or build from source with Rust:
   git clone https://github.com/$Repo.git
-  cd Dream
+  cd dream
   source ./use-toolchain.sh
 "@
 }

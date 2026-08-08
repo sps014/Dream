@@ -9,10 +9,10 @@ Samples (user-facing code in each README / file):
 
 | Sample | Role |
 |--------|------|
-| [`saxpy.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/saxpy.dream) | Beginner — one `@compute` + readback |
-| [`gpu_ext.dream`](https://github.com/sps014/Dream/tree/main/sample/compute/gpu_ext.dream) | Pass / indirect / `@readonly` |
-| [`life/`](https://github.com/sps014/Dream/tree/main/sample/compute/life) | Complex — Gray–Scott reaction–diffusion |
-| [`fluid/`](https://github.com/sps014/Dream/tree/main/sample/fluid) | Interactive stable fluids |
+| [`saxpy.dream`](https://github.com/sps014/dream/tree/main/sample/compute/saxpy.dream) | Beginner — one `@compute` + readback |
+| [`gpu_ext.dream`](https://github.com/sps014/dream/tree/main/sample/compute/gpu_ext.dream) | Pass / indirect / `@readonly` |
+| [`life/`](https://github.com/sps014/dream/tree/main/sample/compute/life) | Complex — Gray–Scott reaction–diffusion |
+| [`fluid/`](https://github.com/sps014/dream/tree/main/sample/fluid) | Interactive stable fluids |
 
 ## Device
 

@@ -1,7 +1,7 @@
 site_name: Dream
-site_url: https://sps014.github.io/Dream/
-repo_url: https://github.com/sps014/Dream
-repo_name: sps014/Dream
+site_url: https://sps014.github.io/dream/
+repo_url: https://github.com/sps014/dream
+repo_name: sps014/dream
 
 theme:
   name: material

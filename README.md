@@ -2,7 +2,38 @@
 
 A fast, statically typed language that compiles straight to WebAssembly. Syntax closer to Rust and TypeScript, automatic memory management via ARC (no GC pauses), zero-cost generics, and a batteries-included standard library — compiler written in Rust.
 
-**[Read the docs →](https://sps014.github.io/Dream/)** &nbsp;·&nbsp; [Getting Started](https://sps014.github.io/Dream/getting-started/) &nbsp;·&nbsp; [Language](https://sps014.github.io/Dream/language/variables/) &nbsp;·&nbsp; [JS interop](https://sps014.github.io/Dream/language/interop/) &nbsp;·&nbsp; [Compiler](https://sps014.github.io/Dream/compiler/)
+**[Read the docs →](https://sps014.github.io/dream/)** · [Getting Started](https://sps014.github.io/dream/getting-started/) · [Language](https://sps014.github.io/dream/language/variables/) · [JS interop](https://sps014.github.io/dream/language/interop/) · [Compiler](https://sps014.github.io/dream/compiler/)
+
+## Install
+
+macOS / Linux:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://sps014.github.io/dream/install.ps1 | iex
+```
+
+Then:
+
+```bash
+dreamer init hello && cd hello && dreamer run
+```
+
+That puts `dream`, `dreamer`, and `dream-lsp` on your PATH (`~/.dream/bin`). Full walkthrough:
+[Getting Started](https://sps014.github.io/dream/getting-started/).
+
+### Build from source (contributors)
+
+```bash
+git clone https://github.com/sps014/dream
+cd dream
+source ./use-toolchain.sh
+```
 
 ## A taste
 
@@ -40,7 +71,7 @@ fun main() {
 }
 ```
 
-Stdlib APIs live under `system.*` packages — `import system;` for console I/O, `import system.collections;` for `List`/`Map`/`Set`, and so on. Bootstrap types like `Option` and `Result` need no import. See [Imports](https://sps014.github.io/Dream/language/imports/).
+Stdlib APIs live under `system.*` packages — `import system;` for console I/O, `import system.collections;` for `List`/`Map`/`Set`, and so on. Bootstrap types like `Option` and `Result` need no import. See [Imports](https://sps014.github.io/dream/language/imports/).
 
 ## Language features
 
@@ -57,27 +88,6 @@ Stdlib APIs live under `system.*` packages — `import system;` for console I/O,
 
 Also: WASM-native output (`.wat` / `.wasm` + `.abi.json`), editor support (VS Code / LSP), and a Rust-hosted `dream run` path via wasmtime.
 
-## Install
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/Dream/install.sh | sh
-```
-
-```powershell
-irm https://sps014.github.io/Dream/install.ps1 | iex
-```
-
-That puts `dream`, `dreamer`, and `dream-lsp` on your PATH (`~/.dream/bin`). See
-[Getting Started](https://sps014.github.io/Dream/getting-started/).
-
-### Build from source (contributors)
-
-```bash
-git clone https://github.com/sps014/Dream
-cd Dream
-source ./use-toolchain.sh
-```
-
 ## Run a program
 
 ```bash
@@ -90,7 +100,7 @@ dream --runtime --web path/to/your/file.dream
 dream --runtime --node path/to/your/file.dream
 ```
 
-JS interop: [docs](https://sps014.github.io/Dream/language/interop/) · [`docs/language/interop.md`](docs/language/interop.md).
+JS interop: [docs](https://sps014.github.io/dream/language/interop/) · [`docs/language/interop.md`](docs/language/interop.md).
 
 ## Test
 

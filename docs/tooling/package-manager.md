@@ -3,7 +3,7 @@
 `dreamer` is Dream's package manager: it reads/writes the `dream.toml` project manifest, resolves
 dependencies into a `dream.lock` lockfile, materializes them into a project's `dream_packages/`
 directory, and wraps the `dream` compiler for `build`/`run`. It lives at
-[`tooling/dreamer`](https://github.com/sps014/Dream/tree/main/tooling/dreamer) as its own Rust
+[`tooling/dreamer`](https://github.com/sps014/dream/tree/main/tooling/dreamer) as its own Rust
 crate/binary, separate from the compiler itself.
 
 ## Installing `dreamer`
@@ -199,7 +199,7 @@ There is no live search API. Discovery is fully static:
 - **Browser:** [sps014.github.io/dream-registry](https://sps014.github.io/dream-registry/) filters
   the same `catalog.json` client-side.
 
-The first published library is [`semver`](https://github.com/sps014/Dream/tree/main/packages/semver)
+The first published library is [`semver`](https://github.com/sps014/dream/tree/main/packages/semver)
 (`dreamer add semver`).
 
 ## Dependency resolution

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Dream toolchain (dream, dreamer, dream-lsp) from GitHub Releases.
 #
-#   curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/Dream/install.sh | sh
+#   curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
 #
 # Env:
 #   DREAM_VERSION   optional tag without leading v (default: latest release)
@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-REPO="${DREAM_REPO:-sps014/Dream}"
+REPO="${DREAM_REPO:-sps014/dream}"
 PREFIX="${DREAM_HOME:-${HOME}/.dream}"
 BIN_DIR="${PREFIX}/bin"
 TMPDIR="${TMPDIR:-/tmp}"
@@ -69,7 +69,7 @@ error: no Dream release found on https://github.com/${REPO}/releases
 Publish a tagged release (v0.1.0+) with toolchain archives, or build from source:
 
   git clone https://github.com/${REPO}.git
-  cd Dream
+  cd dream
   source ./use-toolchain.sh
 EOF
   exit 1

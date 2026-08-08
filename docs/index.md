@@ -12,7 +12,7 @@ hide:
   </p>
   <div class="dream-hero-actions">
     <a href="getting-started/" class="md-button md-button--primary">Get Started</a>
-    <a href="https://github.com/sps014/Dream" class="md-button">GitHub</a>
+    <a href="https://github.com/sps014/dream" class="md-button">GitHub</a>
   </div>
 </div>
 

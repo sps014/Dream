@@ -301,4 +301,4 @@ System.println(e.code());  // ENOENT
 
 Factories: `not_found`, `permission_denied`, `other(path, msg)`, `exists`.
 
-A runnable example: [`sample/interop/file_io.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/file_io.dream).
+A runnable example: [`sample/interop/file_io.dream`](https://github.com/sps014/dream/blob/main/sample/interop/file_io.dream).

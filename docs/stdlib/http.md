@@ -282,4 +282,4 @@ switch (Url.parse("https://example.com/a")) {
 }
 ```
 
-A runnable example: [`sample/interop/http.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/http.dream).
+A runnable example: [`sample/interop/http.dream`](https://github.com/sps014/dream/blob/main/sample/interop/http.dream).

@@ -142,7 +142,7 @@ traps.
 
 ## Try it
 
-- [`sample/interop/js.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/js.dream)
-- [`sample/interop/slots.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/slots.dream)
-- [`sample/interop/structs.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/structs.dream)
-- [`sample/interop/async_js.dream`](https://github.com/sps014/Dream/blob/main/sample/interop/async_js.dream)
+- [`sample/interop/js.dream`](https://github.com/sps014/dream/blob/main/sample/interop/js.dream)
+- [`sample/interop/slots.dream`](https://github.com/sps014/dream/blob/main/sample/interop/slots.dream)
+- [`sample/interop/structs.dream`](https://github.com/sps014/dream/blob/main/sample/interop/structs.dream)
+- [`sample/interop/async_js.dream`](https://github.com/sps014/dream/blob/main/sample/interop/async_js.dream)
