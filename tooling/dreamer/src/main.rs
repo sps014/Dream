@@ -70,6 +70,9 @@ enum Cmd {
         /// Host to run when package.targets lists more than one (`native`, `web`, or `node`).
         #[arg(long, value_name = "HOST")]
         target: Option<String>,
+        /// Compile/run with the release profile (`target/release` + refreshed web/node aliases).
+        #[arg(long)]
+        release: bool,
         /// Extra arguments forwarded to the native program or `node run.mjs`.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -130,7 +133,11 @@ fn main() -> ExitCode {
         Cmd::Install => commands::install::run(&cwd),
         Cmd::Update { name } => commands::update::run(&cwd, name),
         Cmd::Build { release } => commands::build::run(&cwd, release),
-        Cmd::Run { target, args } => commands::run::run(&cwd, target, &args),
+        Cmd::Run {
+            target,
+            release,
+            args,
+        } => commands::run::run(&cwd, target, release, &args),
         Cmd::Publish { registry } => commands::publish::run(&cwd, registry),
         Cmd::Pack { targets } => commands::pack::run(&cwd, &targets),
         Cmd::Search { query } => commands::search::run(&cwd, &query),

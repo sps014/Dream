@@ -240,9 +240,9 @@ fn init_runtime_scaffolds_web_and_node_hosts() {
     assert!(gitignore.contains("target/"));
 
     let html = std::fs::read_to_string(project_dir.join("index.html")).unwrap();
-    assert!(html.contains("target/debug/main.web.runtime.js"));
+    assert!(html.contains("target/web/main.web.runtime.js"));
     let mjs = std::fs::read_to_string(project_dir.join("run.mjs")).unwrap();
-    assert!(mjs.contains("target/debug/main.node.runtime.js"));
+    assert!(mjs.contains("target/node/main.node.runtime.js"));
 }
 
 #[test]
@@ -277,8 +277,50 @@ fn init_lib_has_no_entry_and_run_rejects() {
     assert!(manifest.package.entry.is_none());
     assert!(project_dir.join("src").join("http_utils.dream").is_file());
 
-    let err = commands::run::run(&project_dir, None, &[]).unwrap_err();
+    let err = commands::run::run(&project_dir, None, false, &[]).unwrap_err();
     assert!(err.to_string().contains("not runnable"));
+}
+
+#[test]
+fn build_refreshes_web_and_node_aliases() {
+    prefer_workspace_dream();
+    if dreamer::dream_bin::locate().is_err() {
+        eprintln!("skipping: no `dream` compiler binary found on PATH or in target/");
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let project_dir = tmp.path().join("webapp");
+    commands::init::run(
+        &project_dir,
+        Some("webapp".to_string()),
+        Some("web,node".to_string()),
+        false,
+    )
+    .unwrap();
+
+    commands::build::run(&project_dir, false).unwrap();
+    assert!(project_dir.join("target/debug/main.wasm").is_file());
+    assert!(project_dir.join("target/web/main.wasm").is_file());
+    assert!(project_dir
+        .join("target/web/main.web.runtime.js")
+        .is_file());
+    assert!(project_dir
+        .join("target/node/main.node.runtime.js")
+        .is_file());
+    assert!(project_dir.join("target/node/main.wasm").is_file());
+
+    let debug_wasm = std::fs::read(project_dir.join("target/debug/main.wasm")).unwrap();
+    let web_wasm = std::fs::read(project_dir.join("target/web/main.wasm")).unwrap();
+    assert_eq!(debug_wasm, web_wasm);
+
+    commands::build::run(&project_dir, true).unwrap();
+    assert!(project_dir.join("target/release/main.wasm").is_file());
+    let release_wasm = std::fs::read(project_dir.join("target/release/main.wasm")).unwrap();
+    let web_wasm_after = std::fs::read(project_dir.join("target/web/main.wasm")).unwrap();
+    assert_eq!(
+        release_wasm, web_wasm_after,
+        "release build should refresh target/web from target/release"
+    );
 }
 
 #[test]

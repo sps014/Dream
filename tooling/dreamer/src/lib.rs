@@ -1,3 +1,4 @@
+pub mod artifact_alias;
 pub mod commands;
 pub mod dream_bin;
 pub mod fetch;

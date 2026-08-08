@@ -163,8 +163,8 @@ fn write_index_html(dir: &Path) -> Result<()> {
     <h1>Dream</h1>
     <p>Build with <code>dreamer build</code>, then open this page (or <code>dreamer run</code>).</p>
     <script type="module">
-      import { run } from "./target/debug/main.web.runtime.js";
-      await run("./target/debug/main.wasm");
+      import { run } from "./target/web/main.web.runtime.js";
+      await run("./target/web/main.wasm");
     </script>
   </body>
 </html>
@@ -178,8 +178,8 @@ fn write_run_mjs(dir: &Path) -> Result<()> {
     if path.exists() {
         return Ok(());
     }
-    let body = r#"import { run } from "./target/debug/main.node.runtime.js";
-await run("./target/debug/main.wasm");
+    let body = r#"import { run } from "./target/node/main.node.runtime.js";
+await run("./target/node/main.wasm");
 "#;
     std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
     Ok(())

@@ -75,6 +75,10 @@ default = "https://registry.dream-lang.org"    # overridable; also supports file
 - Package builds emit under `target/debug/` (default) or `target/release/` (`--release`), not beside
   sources. Bare `dream file.dream` compiles without a `dream.toml` still emit siblings next to the
   source file.
+- **Web/Node hosts use stable aliases** `target/web/` and `target/node/` (refreshed by
+  `dreamer build` / `dreamer run` from the active profile). Scaffolded `index.html` / `run.mjs`
+  always import those paths — no need to edit them when switching debug ↔ release. Existing
+  projects that hardcode `target/debug/…` should retarget once to `target/web/` / `target/node/`.
 - `[package].targets` is an optional list of hosts this project supports: `native` (wasmtime via
   `dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
   Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
@@ -167,13 +171,13 @@ registry version selection. Conflicting requirements produce a clear error namin
 
 | Command | Effect |
 |---|---|
-| `dreamer init [name] [--lib] [--runtime native,web,node] [--dir <path>]` | Scaffold `dream.toml` + source stub (`src/main.dream` for bins, `src/<name>.dream` for `--lib`), `.gitignore` (`dream_packages/`, `target/`), and (when `--runtime` includes them) `index.html` / `run.mjs` linked to `target/debug/*.(web\|node).runtime.js`. |
+| `dreamer init [name] [--lib] [--runtime native,web,node] [--dir <path>]` | Scaffold `dream.toml` + source stub (`src/main.dream` for bins, `src/<name>.dream` for `--lib`), `.gitignore` (`dream_packages/`, `target/`), and (when `--runtime` includes them) `index.html` / `run.mjs` linked to stable `target/web/` / `target/node/` aliases. |
 | `dreamer add <name> [--version <req>] [--path <dir>] [--git <url> [--tag/--branch/--rev <ref>]] [--dev]` | Add (or update) a dependency in `dream.toml`, then resolve and install. |
 | `dreamer remove <name>` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, forwards `--runtime --web` / `--node`. |
-| `dreamer run [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). Errors on `type = "lib"`. |
+| `dreamer build [--release]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
+| `dreamer run [--release] [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Errors on `type = "lib"`. |
 | `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>]` | Package source (`dream.toml` + `src/`) and publish it to a registry. |
 | `dreamer search <query>` | Search a registry for packages by name. |
@@ -205,10 +209,13 @@ if the compiler binary is installed outside a checkout). Libraries cannot be pac
 
 Per host:
 
-- **native** — `dream run <entry> [args…]` (wasmtime).
-- **node** — compile with `--runtime --node`, then `node run.mjs` from the project root.
-- **web** — compile with `--runtime --web`, then serve the project root and print
-  `http://127.0.0.1:<port>/index.html` (Ctrl-C to stop).
+- **native** — `dream run [--release] <entry> [args…]` (wasmtime).
+- **node** — compile with `--runtime --node` (refreshing `target/node/`), then `node run.mjs`.
+- **web** — compile with `--runtime --web` (refreshing `target/web/`), then serve the project root and
+  print `http://127.0.0.1:<port>/index.html` (Ctrl-C to stop).
+
+Use `dreamer run --release` (optionally with `--target`) so release artifacts feed the same stable
+alias paths the scaffolds already reference.
 
 ## Walkthrough
 

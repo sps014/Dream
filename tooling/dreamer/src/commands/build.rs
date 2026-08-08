@@ -1,3 +1,4 @@
+use crate::artifact_alias;
 use crate::manifest::{PackageType, RunTarget};
 use crate::workspace::Workspace;
 use anyhow::{bail, Result};
@@ -13,6 +14,9 @@ pub fn run(start_dir: &Path, release: bool) -> Result<()> {
 /// Compile the workspace root, optionally restricting JS runtime emission to `only`
 /// (used by `dreamer run` for a single selected host). When `only` is `None`, emit every
 /// JS host listed in `package.targets`.
+///
+/// After a successful compile that emitted web and/or node runtimes, refreshes
+/// `target/web/` and/or `target/node/` aliases from the active profile.
 pub fn compile_entry(
     workspace: &Workspace,
     release: bool,
@@ -75,6 +79,17 @@ pub fn compile_entry(
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;
     if !status.success() {
         bail!("build failed (exit code {:?})", status.code());
+    }
+
+    if want_web || want_node {
+        let stem = artifact_alias::entry_stem(&compile_root)?;
+        artifact_alias::refresh_host_aliases(
+            &workspace.root,
+            &stem,
+            release,
+            want_web,
+            want_node,
+        )?;
     }
     Ok(())
 }
