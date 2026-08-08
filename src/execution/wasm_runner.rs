@@ -14,7 +14,7 @@ thread_local! {
 }
 
 pub fn execute_wasm(wat_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    run_wasm(wat_path, false)?;
+    run_wasm_path(wat_path, false)?;
     Ok(())
 }
 
@@ -24,20 +24,30 @@ pub fn execute_wasm_capturing(wat_path: &str) -> Result<String, Box<dyn std::err
     PRINT_CAPTURE.with(|c| {
         *c.borrow_mut() = Some(String::new());
     });
-    let result = run_wasm(wat_path, true);
+    let result = run_wasm_path(wat_path, true);
     let captured = PRINT_CAPTURE.with(|c| c.borrow_mut().take().unwrap_or_default());
     result?;
     Ok(captured)
 }
 
-fn run_wasm(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
-    enable_ansi_support();
+/// Run a compiled module from raw wasm (or wat) bytes — used by `dream-runner` packed binaries.
+pub fn execute_wasm_bytes(wasm_or_wat: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    run_wasm_bytes(wasm_or_wat, false)?;
+    Ok(())
+}
+
+fn run_wasm_path(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
     let wat_content = fs::read_to_string(wat_path)?;
     let wasm_bytes = wat::parse_str(&wat_content)?;
+    run_wasm_bytes(&wasm_bytes, capturing)
+}
+
+fn run_wasm_bytes(wasm_bytes: &[u8], capturing: bool) -> Result<(), Box<dyn std::error::Error>> {
+    enable_ansi_support();
 
     // Make the module bytes available to `WebWorker` spawns on this thread (workers instantiate a
     // fresh copy of the same module).
-    set_worker_module(&wasm_bytes);
+    set_worker_module(wasm_bytes);
 
     // A recursive ARC release (e.g. dropping a long `Option<T>`-boxed linked list) chains one wasm
     // frame per node through both the struct's and its `Option` wrapper's release function, so the
@@ -46,7 +56,7 @@ fn run_wasm(wat_path: &str, capturing: bool) -> Result<(), Box<dyn std::error::E
     // and `SharedMemory` creation, needed since the module imports its linear memory as `shared`.
     let config = threaded_wasm_config();
     let engine = Engine::new(&config)?;
-    let module = Module::new(&engine, &wasm_bytes)?;
+    let module = Module::new(&engine, wasm_bytes)?;
 
     // One `SharedMemory` for this whole run, imported by the owner instance below and by every
     // `WebWorker` instance spawned afterward (`set_worker_runtime` hands the same engine + memory to

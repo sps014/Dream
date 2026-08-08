@@ -47,6 +47,38 @@ pub struct Backend {
     pending_diagnostics: Arc<DashMap<String, i32>>,
 }
 
+/// True when an enclosing `dream.toml` declares `type = "lib"` (no Run/Debug CodeLens).
+fn workspace_is_lib_package(file_path: &str) -> bool {
+    let mut dir = std::path::Path::new(file_path).parent().map(|p| p.to_path_buf());
+    while let Some(d) = dir {
+        let manifest = d.join("dream.toml");
+        if manifest.is_file() {
+            if let Ok(text) = std::fs::read_to_string(&manifest) {
+                // Match `[package]` then a `type = "lib"` / `type = 'lib'` line before the next table.
+                let mut in_package = false;
+                for line in text.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with('[') {
+                        in_package = trimmed == "[package]";
+                        continue;
+                    }
+                    if !in_package {
+                        continue;
+                    }
+                    if let Some(rest) = trimmed.strip_prefix("type") {
+                        let rest = rest.trim().trim_start_matches('=').trim();
+                        let val = rest.trim_matches('"').trim_matches('\'');
+                        return val == "lib";
+                    }
+                }
+            }
+            return false;
+        }
+        dir = d.parent().map(|p| p.to_path_buf());
+    }
+    false
+}
+
 impl Backend {
     pub fn new(client: Client) -> Backend {
         Backend {
@@ -756,8 +788,15 @@ impl LanguageServer for Backend {
         let Some(text) = self.document_text(&key) else {
             return Ok(None);
         };
+        let file_path = Self::file_path_of(&uri);
+        if file_path
+            .as_deref()
+            .is_some_and(workspace_is_lib_package)
+        {
+            return Ok(Some(Vec::new()));
+        }
         let line_index = LineIndex::new(&text);
-        let Some(idx) = self.index_for(&key, Self::file_path_of(&uri).as_deref()) else {
+        let Some(idx) = self.index_for(&key, file_path.as_deref()) else {
             return Ok(None);
         };
 

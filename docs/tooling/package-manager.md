@@ -44,10 +44,11 @@ or `pyproject.toml`:
 [package]
 name = "myapp"
 version = "0.1.0"
+type = "bin"                    # or "lib" (default: bin)
 edition = "2026"
 authors = ["Jane Doe <jane@example.com>"]
 description = "My Dream app"
-entry = "src/main.dream"        # compiler entry point, relative to this file
+entry = "src/main.dream"        # required for bin; forbidden for lib
 license = "MIT"
 targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
 
@@ -67,7 +68,13 @@ start = "dreamer run"
 default = "https://registry.dream-lang.org"    # overridable; also supports file:// for private/offline registries
 ```
 
-- `[package].entry` is the file `dreamer build`/`dreamer run` hand to the `dream` compiler.
+- `[package].type` is `bin` (default) or `lib`. Libraries omit `entry`, are not runnable (`dreamer run` /
+  `dreamer pack` error), and are typechecked via the conventional `src/<import_segment>.dream` root
+  (`http-utils` → `src/http_utils.dream`). Binaries require `entry` and a top-level `main`.
+- `[package].entry` is the file `dreamer build`/`dreamer run` hand to the `dream` compiler (**bin only**).
+- Package builds emit under `target/debug/` (default) or `target/release/` (`--release`), not beside
+  sources. Bare `dream file.dream` compiles without a `dream.toml` still emit siblings next to the
+  source file.
 - `[package].targets` is an optional list of hosts this project supports: `native` (wasmtime via
   `dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
   Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
@@ -160,16 +167,33 @@ registry version selection. Conflicting requirements produce a clear error namin
 
 | Command | Effect |
 |---|---|
-| `dreamer init [name] [--runtime native,web,node] [--dir <path>]` | Scaffold `dream.toml` + `src/main.dream`, a richer `.gitignore`, and (when `--runtime` includes them) `index.html` / `run.mjs` linked to selective `*.web.runtime.js` / `*.node.runtime.js`. |
+| `dreamer init [name] [--lib] [--runtime native,web,node] [--dir <path>]` | Scaffold `dream.toml` + source stub (`src/main.dream` for bins, `src/<name>.dream` for `--lib`), `.gitignore` (`dream_packages/`, `target/`), and (when `--runtime` includes them) `index.html` / `run.mjs` linked to `target/debug/*.(web\|node).runtime.js`. |
 | `dreamer add <name> [--version <req>] [--path <dir>] [--git <url> [--tag/--branch/--rev <ref>]] [--dev]` | Add (or update) a dependency in `dream.toml`, then resolve and install. |
 | `dreamer remove <name>` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
-| `dreamer build [--release]` | Install, then compile `[package].entry`. When `targets` includes `web` and/or `node`, forwards `--runtime --web` / `--node` so selective runtime siblings are emitted. |
-| `dreamer run [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). |
-| `dreamer publish [--registry <url>]` | Package the current project and publish it to a registry. |
+| `dreamer build [--release]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, forwards `--runtime --web` / `--node`. |
+| `dreamer run [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). Errors on `type = "lib"`. |
+| `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
+| `dreamer publish [--registry <url>]` | Package source (`dream.toml` + `src/`) and publish it to a registry. |
 | `dreamer search <query>` | Search a registry for packages by name. |
 | `dreamer tree` | Print the resolved dependency tree from `dream.lock`. |
+
+### Native `dreamer pack`
+
+Produces a single native executable per selected platform by embedding the release `.wasm` in the
+workspace `dream-runner` crate (wasmtime + the same host ABI as `dream run`).
+
+```bash
+dreamer pack                         # host → target/pack/<name>-<os>-<arch>
+dreamer pack --target linux-x64
+dreamer pack --target macos-arm64 --target windows-x64
+dreamer pack --target all            # linux/macos/windows × x64/arm64
+```
+
+Cross-compiling non-host triples requires `rustup target add <triple>` and a working linker; failures
+are reported (targets are never silently skipped). Pack needs the Dream workspace (set `DREAM_REPO`
+if the compiler binary is installed outside a checkout). Libraries cannot be packed.
 
 ### How `dreamer run` picks a host
 

@@ -12,7 +12,7 @@ use dream_syntax::nodes::Type;
 #[cfg(feature = "native")]
 use std::io::Write;
 #[cfg(feature = "native")]
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 #[cfg(feature = "native")]
 const HARNESS_SOURCE: &str = include_str!("json_gen_harness.dream");
@@ -444,54 +444,44 @@ fn lookup_json_error_span(
 
 #[cfg(feature = "native")]
 fn harness_wat_path() -> Result<String, String> {
-    static HARNESS: OnceLock<Result<String, String>> = OnceLock::new();
-    HARNESS
-        .get_or_init(|| {
-            // Fingerprint harness + generator Dream sources so a stdlib edit invalidates the cache.
-            let fingerprint = {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut h = DefaultHasher::new();
-                HARNESS_SOURCE.hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream")
-                    .hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream")
-                    .hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream")
-                    .hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream")
-                    .hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream")
-                    .hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream")
-                    .hash(&mut h);
-                include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream")
-                    .hash(&mut h);
-                h.finish()
-            };
-            let dir = std::env::temp_dir().join(format!("dream-json-gen-harness-{fingerprint:x}"));
-            std::fs::create_dir_all(&dir)
-                .map_err(|e| format!("@json generator: create harness dir: {e}"))?;
-            let src_path = dir.join("harness.dream");
-            let wat_path = dir.join("harness.wat");
-            if wat_path.is_file() {
-                return Ok(wat_path.to_string_lossy().into_owned());
-            }
-            std::fs::write(&src_path, HARNESS_SOURCE)
-                .map_err(|e| format!("@json generator: write harness source: {e}"))?;
-            let src = src_path.to_string_lossy().into_owned();
-            let out = wat_path.to_string_lossy().into_owned();
-            let compiler = crate::driver::compiler::Compiler::new(
-                crate::driver::compiler::Target::Wasm,
-            )
+    // Fingerprint harness + generator Dream sources so a stdlib edit invalidates the cache.
+    let fingerprint = {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        HARNESS_SOURCE.hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/json_generator.dream")
+            .hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_field.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_variant.dream")
+            .hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_type.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/json/gen_result.dream").hash(&mut h);
+        include_str!("../../../crates/dream-stdlib/src/system/codegen/codegen.dream").hash(&mut h);
+        h.finish()
+    };
+    let entry = super::current_entry_file();
+    let dir = super::manifest::harness_cache_dir(entry.as_deref(), "json-gen-harness", fingerprint);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("@json generator: create harness dir: {e}"))?;
+    let src_path = dir.join("harness.dream");
+    let wat_path = dir.join("harness.wat");
+    if wat_path.is_file() {
+        return Ok(wat_path.to_string_lossy().into_owned());
+    }
+    std::fs::write(&src_path, HARNESS_SOURCE)
+        .map_err(|e| format!("@json generator: write harness source: {e}"))?;
+    let src = src_path.to_string_lossy().into_owned();
+    let out = wat_path.to_string_lossy().into_owned();
+    let compiler =
+        crate::driver::compiler::Compiler::new(crate::driver::compiler::Target::Wasm)
             .with_skip_generators(true)
             .with_release(true);
-            compiler
-                .compile(&src, &out)
-                .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;
-            Ok(out)
-        })
-        .clone()
+    compiler
+        .compile(&src, &out)
+        .map_err(|e| format!("@json generator: failed to compile Dream harness: {e:?}"))?;
+    Ok(out)
 }
 
 #[cfg(feature = "native")]

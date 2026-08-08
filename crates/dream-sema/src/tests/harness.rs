@@ -6,6 +6,14 @@ use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
 
 pub(super) fn analyze_code(code: &str) -> DiagnosticBag {
+    analyze_code_with_crate_type(code, CrateType::Bin, None)
+}
+
+pub(super) fn analyze_code_with_crate_type(
+    code: &str,
+    crate_type: CrateType,
+    primary_file: Option<&str>,
+) -> DiagnosticBag {
     let mut diagnostics = DiagnosticBag::new(None);
     let lexer = Lexer::new(code.to_string());
     let arena = bumpalo::Bump::new();
@@ -13,7 +21,8 @@ pub(super) fn analyze_code(code: &str) -> DiagnosticBag {
 
     if let Ok(tree) = parser.parse() {
         let arena = bumpalo::Bump::new();
-        let mut analyzer = Analyzer::new(&tree, &arena);
+        let mut analyzer = Analyzer::new(&tree, &arena)
+            .with_crate_type(crate_type, primary_file.map(|s| s.to_string()));
         let _ = analyzer.analyze(&mut diagnostics);
     }
 

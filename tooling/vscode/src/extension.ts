@@ -285,6 +285,21 @@ function readManifestTargets(projectRoot: string): RuntimeTarget[] {
     return out;
 }
 
+/** Read `package.type` from dream.toml (`bin` default). */
+function readManifestPackageType(projectRoot: string): 'bin' | 'lib' {
+    const manifestPath = path.join(projectRoot, 'dream.toml');
+    try {
+        const text = fs.readFileSync(manifestPath, 'utf8');
+        const match = text.match(/^\s*type\s*=\s*["'](lib|bin)["']/m);
+        if (match?.[1] === 'lib') {
+            return 'lib';
+        }
+    } catch {
+        // ignore
+    }
+    return 'bin';
+}
+
 /**
  * Pick the host for `dreamer run` from dream.toml:
  * - empty targets → omit `--target` (dreamer defaults to native)
@@ -294,6 +309,12 @@ function readManifestTargets(projectRoot: string): RuntimeTarget[] {
 async function pickDreamerRunTarget(
     projectRoot: string
 ): Promise<{ targetArg: string; host: RuntimeTarget } | undefined> {
+    if (readManifestPackageType(projectRoot) === 'lib') {
+        vscode.window.showErrorMessage(
+            'Dream: this package is type = "lib" and is not runnable (use Build to typecheck).'
+        );
+        return undefined;
+    }
     const targets = readManifestTargets(projectRoot);
 
     if (targets.length === 0) {

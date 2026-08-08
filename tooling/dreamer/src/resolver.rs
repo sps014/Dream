@@ -414,14 +414,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let lib_dir = tmp.path().join("local-lib");
         std::fs::create_dir_all(lib_dir.join("src")).unwrap();
-        let lib_manifest = Manifest::new(
-            "local-lib".to_string(),
-            "0.2.0".to_string(),
-            "src/local-lib.dream".to_string(),
-        );
+        let lib_manifest = Manifest::new_lib("local-lib".to_string(), "0.2.0".to_string());
         lib_manifest
             .save(&lib_dir.join(MANIFEST_FILE_NAME))
             .unwrap();
+        std::fs::write(
+            lib_dir.join("src").join("local_lib.dream"),
+            "public fun answer(): int { return 42; }\n",
+        )
+        .unwrap();
 
         let app_dir = tmp.path().join("app");
         std::fs::create_dir_all(&app_dir).unwrap();

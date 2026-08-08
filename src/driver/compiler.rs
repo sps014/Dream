@@ -46,6 +46,8 @@ pub struct Compiler {
     /// When `true` (default), write sibling `.abi.json` for JS/`dream.js` interop. Native
     /// `run` / `debug-adapter` set this to `false` — wasmtime does not read the ABI.
     emit_abi: bool,
+    /// Library vs binary; libs reject a primary-file `main`.
+    crate_type: dream_sema::analyzer::CrateType,
 }
 
 impl Compiler {
@@ -58,6 +60,7 @@ impl Compiler {
             skip_generators: false,
             runtimes: Vec::new(),
             emit_abi: true,
+            crate_type: dream_sema::analyzer::CrateType::Bin,
         }
     }
 
@@ -122,6 +125,12 @@ impl Compiler {
     /// Disable for native `run` / `debug-adapter` where wasmtime links hosts in Rust.
     pub fn with_emit_abi(mut self, on: bool) -> Self {
         self.emit_abi = on;
+        self
+    }
+
+    /// Builder: `lib` rejects a top-level `main` in the primary file; `bin` is the default.
+    pub fn with_crate_type(mut self, crate_type: dream_sema::analyzer::CrateType) -> Self {
+        self.crate_type = crate_type;
         self
     }
 
@@ -219,7 +228,8 @@ impl Compiler {
             .collect();
         let mut analyzer = Analyzer::new(&ast, &arena)
             .with_file_modules(file_modules)
-            .with_aliased_imports(acc.aliased_imports);
+            .with_aliased_imports(acc.aliased_imports)
+            .with_crate_type(self.crate_type, Some(main_file_path.clone()));
         analyzer.set_debug_info(self.debug_info);
         // `analyze` reports each error into the bag and returns a typed failure once any error was
         // recorded, short-circuiting before code generation runs on a poisoned program.

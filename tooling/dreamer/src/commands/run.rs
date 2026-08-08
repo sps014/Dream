@@ -1,4 +1,4 @@
-use crate::manifest::{resolve_run_target, RunTarget};
+use crate::manifest::{resolve_run_target, PackageType, RunTarget};
 use crate::workspace::Workspace;
 use anyhow::{bail, Result};
 use std::path::Path;
@@ -7,6 +7,12 @@ use std::process::Command;
 pub fn run(start_dir: &Path, target: Option<String>, extra_args: &[String]) -> Result<()> {
     super::install::run(start_dir)?;
     let workspace = Workspace::discover(start_dir)?;
+    if workspace.manifest.package.package_type == PackageType::Lib {
+        bail!(
+            "package '{}' is type = \"lib\" and is not runnable (use dreamer build to typecheck)",
+            workspace.manifest.package.name
+        );
+    }
     let host = resolve_run_target(&workspace.manifest.package.targets, target.as_deref())?;
 
     match host {
@@ -18,9 +24,12 @@ pub fn run(start_dir: &Path, target: Option<String>, extra_args: &[String]) -> R
 
 fn run_native(workspace: &Workspace, extra_args: &[String]) -> Result<()> {
     let dream_bin = crate::dream_bin::locate()?;
+    let entry = workspace.compile_root_path()?;
     let status = Command::new(&dream_bin)
         .arg("run")
-        .arg(workspace.entry_path())
+        .arg("--crate-type")
+        .arg("bin")
+        .arg(&entry)
         .args(extra_args)
         .status()
         .map_err(|e| anyhow::anyhow!("running {}: {}", dream_bin.display(), e))?;

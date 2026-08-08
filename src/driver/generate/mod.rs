@@ -20,13 +20,40 @@ pub use syntax::{SyntaxKind, SyntaxNodeId, SyntaxTreeView};
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, StatementNode};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Error;
 
 use crate::driver::source_loader::ProgramAccumulator;
 
+thread_local! {
+    /// Compile-root path for the current `run_generators` call, so harness caches can land under
+    /// `target/generators/` when a `dream.toml` encloses the entry.
+    static CURRENT_ENTRY_FILE: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn current_entry_file() -> Option<String> {
+    CURRENT_ENTRY_FILE.with(|c| c.borrow().clone())
+}
+
 /// Runs the declaration + syntax generate passes.
 pub fn run_generators<'a>(
+    arena: &'a Bump,
+    acc: &mut ProgramAccumulator<'a>,
+    entry_file: &str,
+    diagnostics: &mut DiagnosticBag,
+) -> Result<(), Error> {
+    CURRENT_ENTRY_FILE.with(|c| {
+        *c.borrow_mut() = Some(entry_file.to_string());
+    });
+    let result = run_generators_inner(arena, acc, entry_file, diagnostics);
+    CURRENT_ENTRY_FILE.with(|c| {
+        *c.borrow_mut() = None;
+    });
+    result
+}
+
+fn run_generators_inner<'a>(
     arena: &'a Bump,
     acc: &mut ProgramAccumulator<'a>,
     entry_file: &str,

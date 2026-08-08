@@ -218,17 +218,16 @@ mod tests {
     }
 
     #[test]
-    fn locate_prefers_dream_home() {
+    fn locate_prefers_dream_bin() {
         let _guard = ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let name = if cfg!(windows) { "dream.exe" } else { "dream" };
         let path = tmp.path().join(name);
         std::fs::write(&path, b"").unwrap();
 
-        std::env::remove_var("DREAM_BIN");
-        std::env::set_var("DREAM_HOME", tmp.path());
+        std::env::set_var("DREAM_BIN", &path);
         let located = locate().unwrap();
-        std::env::remove_var("DREAM_HOME");
+        std::env::remove_var("DREAM_BIN");
         assert_eq!(located, path);
     }
 }

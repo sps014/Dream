@@ -36,6 +36,19 @@ fn file_path_string(file_path: &Option<Rc<str>>) -> Option<String> {
     file_path.as_ref().map(|p| p.to_string())
 }
 
+/// Compare compile-root and declaring-file paths without requiring both to be canonicalized.
+fn paths_equal(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    let pa = std::path::Path::new(a);
+    let pb = std::path::Path::new(b);
+    match (pa.canonicalize(), pb.canonicalize()) {
+        (Ok(ca), Ok(cb)) => ca == cb,
+        _ => pa.file_name() == pb.file_name() && pa.file_name().is_some(),
+    }
+}
+
 /// Reports `message` at `span` into the bag and returns the matching typed [`SemanticError`], so a
 /// failing analysis site can `return Err(report(diagnostics, msg, span))` in a single step. The
 /// pushed diagnostic is what the user sees; the returned error drives `?`-based short-circuiting of
@@ -453,7 +466,20 @@ pub struct Analyzer<'a> {
     type_ctx: TypeCtx,
     /// Interleaved HIR-emission state and the accumulated emitted functions.
     hir: hir_emit::HirEmit,
+    /// `lib` rejects a top-level `main` in the primary compilation file; `bin` (default) allows it.
+    crate_type: CrateType,
+    /// Absolute/relative path of the file passed as the compile root (for lib `main` checks).
+    primary_file: Option<String>,
 }
+
+/// Whether the compilation unit is a library or a binary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CrateType {
+    #[default]
+    Bin,
+    Lib,
+}
+
 impl<'a> Analyzer<'a> {
     pub fn new(tree: &'a SyntaxTree<'a>, arena: &'a Bump) -> Self {
         Self {
@@ -504,6 +530,8 @@ impl<'a> Analyzer<'a> {
             global_symbol_table: Rc::new(RefCell::new(SymbolTable::new(None))),
             type_ctx: TypeCtx::new(),
             hir: hir_emit::HirEmit::default(),
+            crate_type: CrateType::Bin,
+            primary_file: None,
         }
     }
 
@@ -535,6 +563,13 @@ impl<'a> Analyzer<'a> {
         aliased_imports: Vec<(String, String, SyntaxToken, String)>,
     ) -> Self {
         self.aliased_imports = aliased_imports;
+        self
+    }
+
+    /// Library vs binary compilation unit. Call before [`Self::analyze`].
+    pub fn with_crate_type(mut self, crate_type: CrateType, primary_file: Option<String>) -> Self {
+        self.crate_type = crate_type;
+        self.primary_file = primary_file;
         self
     }
 

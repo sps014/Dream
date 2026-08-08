@@ -2,7 +2,8 @@ use dream::driver::compiler::{Compiler, Target};
 use dream::driver::js_runtime::JsRuntimeTarget;
 use dream::driver::wasm_opt::OptLevel;
 use dream::execution::wasm_runner::execute_wasm;
-use std::path::Path;
+use dream_sema::analyzer::CrateType;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -29,8 +30,12 @@ fn main() -> ExitCode {
     let mut want_runtime = false;
     let mut want_web = false;
     let mut want_node = false;
+    let mut crate_type = CrateType::Bin;
+    let mut crate_type_explicit = false;
 
-    for arg in args.iter().skip(1) {
+    let mut i = 1;
+    while i < args.len() {
+        let arg = &args[i];
         if arg == "-v" || arg == "--verbose" {
             verbose = true;
         } else if arg == "--release" {
@@ -59,6 +64,31 @@ fn main() -> ExitCode {
             want_web = true;
         } else if arg == "--node" {
             want_node = true;
+        } else if arg == "--crate-type" {
+            i += 1;
+            let Some(val) = args.get(i) else {
+                error!("--crate-type requires lib or bin");
+                return ExitCode::FAILURE;
+            };
+            match val.as_str() {
+                "lib" => crate_type = CrateType::Lib,
+                "bin" => crate_type = CrateType::Bin,
+                other => {
+                    error!("unknown --crate-type '{}': expected lib or bin", other);
+                    return ExitCode::FAILURE;
+                }
+            }
+            crate_type_explicit = true;
+        } else if let Some(val) = arg.strip_prefix("--crate-type=") {
+            match val {
+                "lib" => crate_type = CrateType::Lib,
+                "bin" => crate_type = CrateType::Bin,
+                other => {
+                    error!("unknown --crate-type '{}': expected lib or bin", other);
+                    return ExitCode::FAILURE;
+                }
+            }
+            crate_type_explicit = true;
         } else if arg == "-O" || arg == "--optimize" {
             // No level given: default to `-Os` (optimize for size), matching the "smaller binary"
             // intent most users reach for this flag with. Also overrides `--release`'s default.
@@ -83,7 +113,9 @@ fn main() -> ExitCode {
         } else if !arg.starts_with('-') {
             file_name = Some(arg);
         }
+        i += 1;
     }
+    let _ = crate_type_explicit;
 
     if (release || optimize.is_some()) && !cfg!(feature = "wasm-opt") {
         error!(
@@ -148,17 +180,27 @@ fn main() -> ExitCode {
         .with_release(release)
         .with_debug_info(debug_info)
         .with_runtimes(runtimes)
-        .with_emit_abi(emit_abi);
+        .with_emit_abi(emit_abi)
+        .with_crate_type(crate_type);
     if let Some(level) = optimize {
         compiler = compiler.with_optimize(Some(level));
     }
-    let out_path = match get_path_from_file_path(file_name) {
+    let out_path = match get_path_from_file_path(file_name, release) {
         Some(path) => path,
         None => {
             error!("Invalid source file path: {}", file_name);
             return ExitCode::FAILURE;
         }
     };
+
+    if let Some(parent) = Path::new(&out_path).parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                error!("could not create output directory {}: {}", parent.display(), e);
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     match compiler.compile(file_name, &out_path) {
         Ok(_) => {
@@ -193,7 +235,7 @@ fn main() -> ExitCode {
 /// Prints CLI usage to stderr via the tracing subscriber's error channel.
 fn print_usage(program: &str) {
     error!(
-        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--runtime --web|--node] [run|debug-adapter] <file>",
+        "Usage: {} [-v|--verbose] [--release] [-g|--debug-info] [-O|--optimize[=LEVEL]] [--crate-type lib|bin] [--runtime --web|--node] [run|debug-adapter] <file>",
         program
     );
     error!("  -v, --verbose         Print progress information");
@@ -206,6 +248,7 @@ fn print_usage(program: &str) {
     error!(
         "  -O, --optimize[=LVL]  wasm-opt level (LVL: 0-4, s, z; default: s); overrides --release"
     );
+    error!("  --crate-type lib|bin  Library (no primary main) or binary (default: bin)");
     error!(
         "  --runtime             Emit tree-shaken *.(web|node).runtime.js (requires --web and/or --node)"
     );
@@ -224,12 +267,32 @@ fn print_usage(program: &str) {
     );
 }
 
-/// Derives the output `.wat` path that sits next to the given source file.
-/// Returns `None` if the path has no file stem or contains non-UTF-8 components.
-fn get_path_from_file_path(file_path: &str) -> Option<String> {
+/// Walk upward from a file's directory looking for `dream.toml`.
+fn find_project_root(file_path: &Path) -> Option<PathBuf> {
+    let mut dir = file_path.parent().map(Path::to_path_buf)?;
+    loop {
+        if dir.join("dream.toml").is_file() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Derives the output `.wat` path.
+///
+/// When a `dream.toml` encloses the source file, artifacts go under
+/// `target/debug/` or `target/release/` at the project root. Otherwise they sit beside the source.
+fn get_path_from_file_path(file_path: &str, release: bool) -> Option<String> {
     let path = Path::new(file_path);
     let file_stem = path.file_stem()?.to_str()?;
-    let parent = path.parent().unwrap_or_else(|| Path::new(""));
-    let result = parent.join(format!("{}.wat", file_stem));
+    let out_dir = if let Some(root) = find_project_root(path) {
+        let profile = if release { "release" } else { "debug" };
+        root.join("target").join(profile)
+    } else {
+        path.parent().unwrap_or_else(|| Path::new("")).to_path_buf()
+    };
+    let result = out_dir.join(format!("{}.wat", file_stem));
     Some(result.to_str()?.to_string())
 }

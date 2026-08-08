@@ -4,7 +4,7 @@
 
 use crate::fetch;
 use crate::lockfile::{LockedPackage, Lockfile, LOCKFILE_FILE_NAME};
-use crate::manifest::{import_segment, Manifest, MANIFEST_FILE_NAME};
+use crate::manifest::{import_segment, Manifest, PackageType, MANIFEST_FILE_NAME};
 use crate::registry::open_registry;
 use crate::resolver::{ResolvedPackage, ResolvedSource};
 use anyhow::{Context, Result};
@@ -46,8 +46,49 @@ impl Workspace {
         self.root.join(PACKAGES_DIR_NAME)
     }
 
-    pub fn entry_path(&self) -> PathBuf {
-        self.root.join(&self.manifest.package.entry)
+    /// Source file handed to the compiler for build/run/pack.
+    /// - `bin`: `[package].entry`
+    /// - `lib`: conventional `src/<import_segment>.dream`
+    pub fn compile_root_path(&self) -> Result<PathBuf> {
+        match self.manifest.package.package_type {
+            PackageType::Bin => {
+                let entry = self
+                    .manifest
+                    .package
+                    .entry
+                    .as_deref()
+                    .filter(|e| !e.trim().is_empty())
+                    .with_context(|| {
+                        format!(
+                            "package '{}' is missing entry",
+                            self.manifest.package.name
+                        )
+                    })?;
+                Ok(self.root.join(entry))
+            }
+            PackageType::Lib => {
+                let seg = import_segment(&self.manifest.package.name);
+                let path = self.root.join("src").join(format!("{}.dream", seg));
+                if !path.is_file() {
+                    anyhow::bail!(
+                        "library package '{}' expects {} (no entry field — use the conventional \
+                         library root)",
+                        self.manifest.package.name,
+                        path.display()
+                    );
+                }
+                Ok(path)
+            }
+        }
+    }
+
+    /// Deprecated name kept for call sites that mean the compile root.
+    pub fn entry_path(&self) -> Result<PathBuf> {
+        self.compile_root_path()
+    }
+
+    pub fn is_lib(&self) -> bool {
+        self.manifest.package.package_type == PackageType::Lib
     }
 
     pub fn save_manifest(&self) -> Result<()> {

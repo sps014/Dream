@@ -9,6 +9,30 @@ use std::path::{Path, PathBuf};
 
 pub const MANIFEST_FILE_NAME: &str = "dream.toml";
 
+/// Whether this package is a runnable application (`bin`) or a library (`lib`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PackageType {
+    #[default]
+    Bin,
+    Lib,
+}
+
+impl PackageType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PackageType::Bin => "bin",
+            PackageType::Lib => "lib",
+        }
+    }
+}
+
+impl std::fmt::Display for PackageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Hosts a Dream project may declare in `[package].targets`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RunTarget {
@@ -146,14 +170,19 @@ pub struct Manifest {
 pub struct PackageMeta {
     pub name: String,
     pub version: String,
+    /// `bin` (default) = runnable app; `lib` = library (no `entry`, not runnable).
+    #[serde(default, rename = "type")]
+    pub package_type: PackageType,
     #[serde(default)]
     pub edition: Option<String>,
     #[serde(default)]
     pub authors: Vec<String>,
     #[serde(default)]
     pub description: Option<String>,
-    /// Compiler entry point, relative to the manifest's directory (e.g. `src/main.dream`).
-    pub entry: String,
+    /// Compiler entry point for `bin` packages, relative to the manifest directory
+    /// (e.g. `src/main.dream`). Forbidden on `lib` packages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
     #[serde(default)]
     pub license: Option<String>,
     /// Optional host list (`native`, `web`, `node`). Empty means no preference — `dreamer run`
@@ -288,15 +317,38 @@ pub fn import_segment(package_name: &str) -> String {
 }
 
 impl Manifest {
+    /// Create a `bin` package manifest with the given entry point.
     pub fn new(name: String, version: String, entry: String) -> Self {
         Manifest {
             package: PackageMeta {
                 name,
                 version,
+                package_type: PackageType::Bin,
                 edition: None,
                 authors: Vec::new(),
                 description: None,
-                entry,
+                entry: Some(entry),
+                license: None,
+                targets: Vec::new(),
+            },
+            dependencies: BTreeMap::new(),
+            dev_dependencies: BTreeMap::new(),
+            scripts: BTreeMap::new(),
+            registries: BTreeMap::new(),
+        }
+    }
+
+    /// Create a `lib` package manifest (no entry).
+    pub fn new_lib(name: String, version: String) -> Self {
+        Manifest {
+            package: PackageMeta {
+                name,
+                version,
+                package_type: PackageType::Lib,
+                edition: None,
+                authors: Vec::new(),
+                description: None,
+                entry: None,
                 license: None,
                 targets: Vec::new(),
             },
@@ -324,6 +376,29 @@ impl Manifest {
                 self.package.name, self.package.version
             )
         })?;
+        match self.package.package_type {
+            PackageType::Bin => {
+                let entry = self.package.entry.as_deref().unwrap_or("").trim();
+                if entry.is_empty() {
+                    bail!(
+                        "package '{}' is type = \"bin\" and requires a non-empty entry \
+                         (e.g. entry = \"src/main.dream\")",
+                        self.package.name
+                    );
+                }
+            }
+            PackageType::Lib => {
+                if let Some(entry) = &self.package.entry {
+                    if !entry.trim().is_empty() {
+                        bail!(
+                            "package '{}' is type = \"lib\" and must not set entry \
+                             (libraries are imported via src/<name>.dream)",
+                            self.package.name
+                        );
+                    }
+                }
+            }
+        }
         let mut seen = Vec::new();
         for t in &self.package.targets {
             let parsed = RunTarget::parse(t)?;
@@ -425,6 +500,11 @@ mod tests {
 
         let loaded = Manifest::load(&path).unwrap();
         assert_eq!(loaded.package.name, "myapp");
+        assert_eq!(loaded.package.package_type, PackageType::Bin);
+        assert_eq!(
+            loaded.package.entry.as_deref(),
+            Some("src/main.dream")
+        );
         assert_eq!(loaded.dependencies.len(), 2);
         assert_eq!(
             loaded.dependencies.get("json-tools").unwrap().version_req(),
@@ -470,6 +550,32 @@ mod tests {
         manifest.save(&path).unwrap();
         let loaded = Manifest::load(&path).unwrap();
         assert_eq!(loaded.package.targets, vec!["native", "web"]);
+    }
+
+    #[test]
+    fn lib_rejects_entry_and_bin_requires_it() {
+        let mut lib = Manifest::new_lib("http-utils".into(), "0.1.0".into());
+        assert!(lib.validate().is_ok());
+        lib.package.entry = Some("src/main.dream".into());
+        assert!(lib.validate().is_err());
+
+        let mut bin = Manifest::new("myapp".into(), "0.1.0".into(), "src/main.dream".into());
+        assert!(bin.validate().is_ok());
+        bin.package.entry = None;
+        assert!(bin.validate().is_err());
+        bin.package.entry = Some(String::new());
+        assert!(bin.validate().is_err());
+    }
+
+    #[test]
+    fn round_trips_lib_without_entry() {
+        let manifest = Manifest::new_lib("http-utils".into(), "0.1.0".into());
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(MANIFEST_FILE_NAME);
+        manifest.save(&path).unwrap();
+        let loaded = Manifest::load(&path).unwrap();
+        assert_eq!(loaded.package.package_type, PackageType::Lib);
+        assert!(loaded.package.entry.is_none());
     }
 
     #[test]

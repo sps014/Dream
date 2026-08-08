@@ -243,7 +243,8 @@ fn parse_harness_output(output: &str) -> Result<Vec<(SyntaxNodeId, String)>, Har
 #[cfg(feature = "native")]
 fn harness_wat_path(harness_path: &Path) -> Result<String, String> {
     let fingerprint = harness_fingerprint(harness_path)?;
-    let dir = std::env::temp_dir().join(format!("dream-syntax-gen-{fingerprint:x}"));
+    let entry = super::current_entry_file();
+    let dir = super::manifest::harness_cache_dir(entry.as_deref(), "syntax-gen", fingerprint);
     std::fs::create_dir_all(&dir).map_err(|e| format!("syntax generator: create cache dir: {e}"))?;
     let wat_path = dir.join("harness.wat");
     if wat_path.is_file() {

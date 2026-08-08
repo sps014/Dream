@@ -16,7 +16,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Scaffold a new dream.toml + src/main.dream in the current (or given) directory.
+    /// Scaffold a new dream.toml + source stub in the current (or given) directory.
     Init {
         /// Project name; defaults to the directory name.
         name: Option<String>,
@@ -26,6 +26,9 @@ enum Cmd {
         /// Comma-separated hosts to declare in dream.toml and scaffold for (`native`, `web`, `node`).
         #[arg(long, value_name = "TARGETS")]
         runtime: Option<String>,
+        /// Scaffold a library package (`type = "lib"`, no entry / main).
+        #[arg(long)]
+        lib: bool,
     },
     /// Add a dependency to dream.toml, then resolve and install it.
     Add {
@@ -77,6 +80,12 @@ enum Cmd {
         #[arg(long)]
         registry: Option<String>,
     },
+    /// Build a native single-file executable embedding the project's release wasm.
+    Pack {
+        /// Pack triple (`linux-x64`, `macos-arm64`, …) or `all`. Repeatable; default = host.
+        #[arg(long = "target", value_name = "TRIPLE")]
+        targets: Vec<String>,
+    },
     /// Search a registry for packages by name.
     Search { query: String },
     /// Print the resolved dependency tree from dream.lock.
@@ -98,13 +107,14 @@ fn main() -> ExitCode {
             name,
             dir,
             runtime,
+            lib,
         } => {
             let dest = dir.unwrap_or(cwd);
             if let Err(e) = std::fs::create_dir_all(&dest) {
                 eprintln!("error: could not create {}: {}", dest.display(), e);
                 return ExitCode::FAILURE;
             }
-            commands::init::run(&dest, name, runtime)
+            commands::init::run(&dest, name, runtime, lib)
         }
         Cmd::Add {
             name,
@@ -122,6 +132,7 @@ fn main() -> ExitCode {
         Cmd::Build { release } => commands::build::run(&cwd, release),
         Cmd::Run { target, args } => commands::run::run(&cwd, target, &args),
         Cmd::Publish { registry } => commands::publish::run(&cwd, registry),
+        Cmd::Pack { targets } => commands::pack::run(&cwd, &targets),
         Cmd::Search { query } => commands::search::run(&cwd, &query),
         Cmd::Tree => commands::tree::run(&cwd),
     };

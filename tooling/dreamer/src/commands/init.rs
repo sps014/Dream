@@ -1,18 +1,18 @@
-use crate::manifest::{parse_target_list, validate_package_name, Manifest, RunTarget, MANIFEST_FILE_NAME};
+use crate::manifest::{
+    import_segment, parse_target_list, validate_package_name, Manifest, PackageType, RunTarget,
+    MANIFEST_FILE_NAME,
+};
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
-const GITIGNORE_ENTRIES: &[&str] = &[
-    "dream_packages/",
-    "*.wat",
-    "*.wasm",
-    "*.abi.json",
-    "*.runtime.js",
-    "*.wgsl",
-    "*.dbg.json",
-];
+const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/"];
 
-pub fn run(dir: &Path, name: Option<String>, runtime_spec: Option<String>) -> Result<()> {
+pub fn run(
+    dir: &Path,
+    name: Option<String>,
+    runtime_spec: Option<String>,
+    as_lib: bool,
+) -> Result<()> {
     let manifest_path = dir.join(MANIFEST_FILE_NAME);
     if manifest_path.exists() {
         bail!("{} already exists", manifest_path.display());
@@ -21,9 +21,19 @@ pub fn run(dir: &Path, name: Option<String>, runtime_spec: Option<String>) -> Re
     let name = name.unwrap_or_else(|| {
         dir.file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "myapp".to_string())
+            .unwrap_or_else(|| {
+                if as_lib {
+                    "mylib".to_string()
+                } else {
+                    "myapp".to_string()
+                }
+            })
     });
     validate_package_name(&name)?;
+
+    if as_lib && runtime_spec.is_some() {
+        bail!("--lib cannot be combined with --runtime (libraries are not runnable hosts)");
+    }
 
     let targets = match runtime_spec {
         Some(spec) => parse_target_list(&spec)?,
@@ -32,18 +42,41 @@ pub fn run(dir: &Path, name: Option<String>, runtime_spec: Option<String>) -> Re
 
     std::fs::create_dir_all(dir.join("src"))?;
 
-    let entry_rel = "src/main.dream";
-    let entry_path = dir.join(entry_rel);
-    if !entry_path.exists() {
-        std::fs::write(
-            &entry_path,
-            "import system;\n\nfun main() {\n    System.println(\"Hello from Dream!\");\n}\n",
-        )
-        .with_context(|| format!("writing {}", entry_path.display()))?;
+    let source_rel = if as_lib {
+        let seg = import_segment(&name);
+        format!("src/{}.dream", seg)
+    } else {
+        "src/main.dream".to_string()
+    };
+    let source_path = dir.join(&source_rel);
+    if !source_path.exists() {
+        let body = if as_lib {
+            format!(
+                "import system;\n\n// Library root for `import {};`\n\npublic fun hello(): string {{\n    return \"hello\";\n}}\n",
+                import_segment(&name)
+            )
+        } else {
+            "import system;\n\nfun main() {\n    System.println(\"Hello from Dream!\");\n}\n"
+                .to_string()
+        };
+        std::fs::write(&source_path, body)
+            .with_context(|| format!("writing {}", source_path.display()))?;
     }
 
-    let mut manifest = Manifest::new(name.clone(), "0.1.0".to_string(), entry_rel.to_string());
+    let mut manifest = if as_lib {
+        Manifest::new_lib(name.clone(), "0.1.0".to_string())
+    } else {
+        Manifest::new(name.clone(), "0.1.0".to_string(), source_rel.clone())
+    };
     manifest.package.targets = targets.iter().map(|t| t.as_str().to_string()).collect();
+    debug_assert_eq!(
+        manifest.package.package_type,
+        if as_lib {
+            PackageType::Lib
+        } else {
+            PackageType::Bin
+        }
+    );
     manifest.save(&manifest_path)?;
 
     write_gitignore(dir)?;
@@ -57,7 +90,7 @@ pub fn run(dir: &Path, name: Option<String>, runtime_spec: Option<String>) -> Re
 
     println!("Created Dream project '{}' at {}", name, dir.display());
     println!("  {}", manifest_path.display());
-    println!("  {}", entry_path.display());
+    println!("  {}", source_path.display());
     if targets.contains(&RunTarget::Web) {
         println!("  {}", dir.join("index.html").display());
     }
@@ -66,22 +99,27 @@ pub fn run(dir: &Path, name: Option<String>, runtime_spec: Option<String>) -> Re
     }
     println!();
     println!("Next steps:");
-    println!("  dreamer add <package>   # add a dependency");
-    println!("  dreamer build           # compile the entry point");
-    match targets.len() {
-        0 => println!("  dreamer run             # install deps and run (native)"),
-        1 => println!(
-            "  dreamer run             # run via {}",
-            targets[0].as_str()
-        ),
-        _ => {
-            println!("  dreamer run --target <{}>", {
-                targets
-                    .iter()
-                    .map(|t| t.as_str())
-                    .collect::<Vec<_>>()
-                    .join("|")
-            });
+    if as_lib {
+        println!("  dreamer build           # typecheck the library root");
+        println!("  # depend on this package from another project via path/registry");
+    } else {
+        println!("  dreamer add <package>   # add a dependency");
+        println!("  dreamer build           # compile the entry point");
+        match targets.len() {
+            0 => println!("  dreamer run             # install deps and run (native)"),
+            1 => println!(
+                "  dreamer run             # run via {}",
+                targets[0].as_str()
+            ),
+            _ => {
+                println!("  dreamer run --target <{}>", {
+                    targets
+                        .iter()
+                        .map(|t| t.as_str())
+                        .collect::<Vec<_>>()
+                        .join("|")
+                });
+            }
         }
     }
     Ok(())
@@ -125,8 +163,8 @@ fn write_index_html(dir: &Path) -> Result<()> {
     <h1>Dream</h1>
     <p>Build with <code>dreamer build</code>, then open this page (or <code>dreamer run</code>).</p>
     <script type="module">
-      import { run } from "./src/main.web.runtime.js";
-      await run("./src/main.wasm");
+      import { run } from "./target/debug/main.web.runtime.js";
+      await run("./target/debug/main.wasm");
     </script>
   </body>
 </html>
@@ -140,8 +178,8 @@ fn write_run_mjs(dir: &Path) -> Result<()> {
     if path.exists() {
         return Ok(());
     }
-    let body = r#"import { run } from "./src/main.node.runtime.js";
-await run("./src/main.wasm");
+    let body = r#"import { run } from "./target/debug/main.node.runtime.js";
+await run("./target/debug/main.wasm");
 "#;
     std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
     Ok(())

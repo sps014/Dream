@@ -112,7 +112,23 @@ impl<'a> Analyzer<'a> {
         }
         // The entry point is exported under the fixed name `main`. It may be declared as `main()`
         // or `main(args: string[])`, but not overloaded or given any other signature.
-        if self.function_table.is_overloaded("main") {
+        // Library crates reject a top-level `main` in the primary compilation file.
+        if self.crate_type == CrateType::Lib {
+            if let Ok(info) = self.function_table.get_function(&"main".to_string()) {
+                let in_primary = match (&info.declaring_file, &self.primary_file) {
+                    (Some(decl), Some(primary)) => paths_equal(decl.as_ref(), primary),
+                    _ => true,
+                };
+                if in_primary {
+                    diagnostics.report_error(
+                        "library crates must not declare a top-level 'main' \
+                         (use --crate-type bin for runnable programs)"
+                            .to_string(),
+                        None,
+                    );
+                }
+            }
+        } else if self.function_table.is_overloaded("main") {
             diagnostics.report_error("'main' cannot be overloaded".to_string(), None);
         } else if let Ok(info) = self.function_table.get_function(&"main".to_string()) {
             let ok = info.parameters.is_empty()
