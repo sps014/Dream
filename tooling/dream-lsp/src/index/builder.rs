@@ -13,7 +13,7 @@ use dream::syntax::nodes::{
 use dream::syntax::token::syntax_token::SyntaxToken;
 
 use super::{
-    base_struct, fn_value_type, method_detail, param_names, signature,
+    base_struct, detail_belongs_to, fn_value_type, method_detail, param_names, signature,
     type_base, Decl, Index, InlayHintOut, InlayKind, Ref, SymKind, GLOBAL,
 };
 
@@ -52,18 +52,12 @@ impl Builder {
     fn resolve_member_decl(&self, receiver_ty: Option<&str>, name: &str) -> Option<&Decl> {
         if let Some(ty) = receiver_ty {
             let base = type_base(ty);
-            let prefix = format!("{base}.");
-            // Prefer detail that starts with `Owner.` or `async Owner.`.
-            if let Some(d) = self.decls.iter().find(|d| {
+            // Prefer detail that starts with `Owner.` / `static Owner.` / …
+            return self.decls.iter().find(|d| {
                 d.name == name
                     && matches!(d.kind, SymKind::Field | SymKind::Method)
-                    && (d.detail.starts_with(&prefix)
-                        || d.detail.starts_with(&format!("async {prefix}"))
-                        || d.detail.starts_with(&format!("static {prefix}"))
-                        || d.detail.starts_with(&format!("static async {prefix}")))
-            }) {
-                return Some(d);
-            }
+                    && detail_belongs_to(&d.detail, base)
+            });
         }
         self.decls.iter().find(|d| {
             d.name == name && matches!(d.kind, SymKind::Field | SymKind::Method)

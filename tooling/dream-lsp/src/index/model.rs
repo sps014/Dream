@@ -162,6 +162,15 @@ pub(crate) fn detail_is_static_method(detail: &str) -> bool {
     detail.starts_with("static ")
 }
 
+/// True when `detail` is a member of `base` (`Owner.` / `async Owner.` / `static Owner.` / …).
+pub(crate) fn detail_belongs_to(detail: &str, base: &str) -> bool {
+    let prefix = format!("{base}.");
+    detail.starts_with(&prefix)
+        || detail.starts_with(&format!("async {prefix}"))
+        || detail.starts_with(&format!("static {prefix}"))
+        || detail.starts_with(&format!("static async {prefix}"))
+}
+
 fn param_list(func: &FunctionNode) -> String {
     func.parameters
         .iter()

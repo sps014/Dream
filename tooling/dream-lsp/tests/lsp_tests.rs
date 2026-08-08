@@ -151,6 +151,24 @@ fn js_type_and_static_member_completions() {
 }
 
 #[test]
+fn js_global_hover_is_not_regex_global() {
+    // `Regex` has a field `global: bool`. Hover on `js.global` must resolve the js static, not
+    // that unrelated field (regression: receiver `js` was not recognized as a Type).
+    let harness = TestHarness::new(
+        "fun main(): void {\n    let d = js.|global.document;\n}\n",
+    );
+    let hover = harness
+        .index()
+        .hover(&harness.src, harness.offset)
+        .expect("hover on js.global");
+    assert!(
+        hover.contents.contains("js.global") && !hover.contents.contains("Regex"),
+        "expected js.global hover, got {}",
+        hover.contents
+    );
+}
+
+#[test]
 fn option_local_member_completions() {
     let harness = TestHarness::new(
         "fun main(): void {\n    let o: Option<int> = Option.None;\n    o.|\n}\n",

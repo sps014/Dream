@@ -10,6 +10,7 @@ use super::{
     Index, Located, Ref, SymKind, GLOBAL,
 };
 use super::detail_is_static_method;
+use super::detail_belongs_to;
 use crate::code_actions::imported_packages;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
 use dream_abi::attributes::find_spec;
@@ -239,20 +240,17 @@ impl Index {
     }
 
     /// Resolves a field or method named `name`. When `receiver_ty` is known, prefer the member
-    /// whose `detail` is qualified by that type (`Owner.` / `async Owner.`) so same-named methods
-    /// on different types (e.g. `ComputePass.dispatch` vs `WebWorkerPool.dispatch`) disambiguate.
+    /// whose `detail` is qualified by that type (`Owner.` / `static Owner.` / …) so same-named
+    /// members on different types (e.g. `js.global` vs `Regex.global`) disambiguate. A known
+    /// receiver that has no matching member returns `None` — never a random same-named field.
     fn resolve_member(&self, receiver_ty: Option<&str>, name: &str) -> Option<&Decl> {
         if let Some(ty) = receiver_ty {
             let base = type_base(ty);
-            let prefix = format!("{base}.");
-            let async_prefix = format!("async {prefix}");
-            if let Some(d) = self.decls.iter().find(|d| {
+            return self.decls.iter().find(|d| {
                 d.name == name
                     && matches!(d.kind, SymKind::Field | SymKind::Method)
-                    && (d.detail.starts_with(&prefix) || d.detail.starts_with(&async_prefix))
-            }) {
-                return Some(d);
-            }
+                    && detail_belongs_to(&d.detail, base)
+            });
         }
         self.decls.iter().find(|d| {
             d.name == name
@@ -264,7 +262,8 @@ impl Index {
     }
 
     /// Type of a receiver identifier: variable/param type, or the bare type name itself when it
-    /// names a class/struct/interface/enum (static access `ComputePass.dispatch`).
+    /// names a class/struct/interface/enum/extend-target (static access `ComputePass.dispatch` /
+    /// `js.global`).
     fn receiver_type_name(&self, receiver: &str, scope: usize, before: usize) -> Option<String> {
         if let Some(ty) = self.variable_type(receiver, scope, before) {
             return Some(ty);
@@ -273,21 +272,16 @@ impl Index {
             d.name == receiver
                 && matches!(
                     d.kind,
-                    SymKind::Class | SymKind::Struct | SymKind::Interface | SymKind::Enum
+                    SymKind::Class
+                        | SymKind::Struct
+                        | SymKind::Interface
+                        | SymKind::Enum
+                        | SymKind::Type
                 )
         }) {
             return Some(receiver.to_string());
         }
         None
-    }
-
-    /// True when `detail` is a member of `base` (`Owner.` / `async Owner.` / `static Owner.` / …).
-    fn detail_belongs_to(detail: &str, base: &str) -> bool {
-        let prefix = format!("{base}.");
-        detail.starts_with(&prefix)
-            || detail.starts_with(&format!("async {prefix}"))
-            || detail.starts_with(&format!("static {prefix}"))
-            || detail.starts_with(&format!("static async {prefix}"))
     }
 
     /// Resolves an enum variant reference. When the receiver (the `Enum` in `Enum.Variant`) is
@@ -602,7 +596,7 @@ impl Index {
                     if let Some(ctor_decl) = self.decls.iter().find(|d| {
                         d.name == CONSTRUCTOR_NAME
                             && d.kind == SymKind::Method
-                            && Self::detail_belongs_to(&d.detail, name)
+                            && detail_belongs_to(&d.detail, name)
                     }) {
                         return Some(ctor_decl.clone());
                     }
@@ -614,7 +608,7 @@ impl Index {
             if let Some(decl) = self.decls.iter().find(|d| {
                 d.name == CONSTRUCTOR_NAME
                     && d.kind == SymKind::Method
-                    && Self::detail_belongs_to(&d.detail, name)
+                    && detail_belongs_to(&d.detail, name)
             }) {
                 return Some(decl.clone());
             }
@@ -771,7 +765,7 @@ impl Index {
                 d.kind == SymKind::Method
                     && d.name == member
                     && detail_is_static_method(&d.detail)
-                    && Self::detail_belongs_to(&d.detail, type_name)
+                    && detail_belongs_to(&d.detail, type_name)
             })
             .map(|d| d.detail.as_str())?;
         detail
@@ -830,7 +824,7 @@ impl Index {
             .filter(|d| {
                 matches!(d.kind, SymKind::Field | SymKind::Method)
                     && d.scope == GLOBAL
-                    && Self::detail_belongs_to(&d.detail, base)
+                    && detail_belongs_to(&d.detail, base)
                     && d.name != CONSTRUCTOR_NAME
                     && if static_only {
                         // Type-name access: only static methods (no fields / instance methods).
