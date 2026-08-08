@@ -8,6 +8,7 @@ pub fn run(
     start_dir: &Path,
     target: Option<String>,
     release: bool,
+    port: Option<u16>,
     extra_args: &[String],
 ) -> Result<()> {
     super::install::run(start_dir)?;
@@ -23,7 +24,7 @@ pub fn run(
     match host {
         RunTarget::Native => run_native(&workspace, release, extra_args),
         RunTarget::Node => run_node(&workspace, release, extra_args),
-        RunTarget::Web => run_web(&workspace, release),
+        RunTarget::Web => run_web(&workspace, release, port),
     }
 }
 
@@ -75,7 +76,7 @@ fn run_node(workspace: &Workspace, release: bool, extra_args: &[String]) -> Resu
     Ok(())
 }
 
-fn run_web(workspace: &Workspace, release: bool) -> Result<()> {
+fn run_web(workspace: &Workspace, release: bool, port: Option<u16>) -> Result<()> {
     let index = workspace.root.join("index.html");
     if !index.is_file() {
         bail!(
@@ -86,5 +87,6 @@ fn run_web(workspace: &Workspace, release: bool) -> Result<()> {
     }
 
     super::build::compile_entry(workspace, release, Some(RunTarget::Web))?;
-    crate::serve::serve_project(&workspace.root)
+    let port = port.unwrap_or(crate::serve::DEFAULT_WEB_PORT);
+    crate::serve::serve_project(&workspace.root, port)
 }

@@ -357,6 +357,16 @@ function ensureDreamTerminal(cwd?: string): vscode.Terminal {
     return runTerminal;
 }
 
+/** Interrupt a blocking `dreamer run` (web server) so a new Run can start in the same terminal. */
+async function interruptDreamTerminalIfBusy(): Promise<void> {
+    if (!runTerminal || runTerminal.exitStatus !== undefined) {
+        return;
+    }
+    // Ctrl-C — frees the terminal when a previous web server is still blocking.
+    runTerminal.sendText('\u0003', false);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+}
+
 /**
  * Run via `dreamer` when the workspace root has `dream.toml`; otherwise `dream run` /
  * compile-only for the open file. Debug stays native (DAP / wasmtime) elsewhere.
@@ -380,11 +390,12 @@ async function runProgramInTerminal(
             return;
         }
         const terminal = ensureDreamTerminal(projectRoot);
+        await interruptDreamTerminalIfBusy();
         const cmd = `${quotePath(dreamer.path)} run${picked.targetArg}`;
         terminal.sendText(`cd ${quotePath(projectRoot)} && ${cmd}`);
         if (picked.host === 'web') {
             vscode.window.showInformationMessage(
-                'Dream: dreamer is serving the web target (see terminal for the local URL).'
+                'Dream: serving at http://127.0.0.1:8787/index.html (see terminal).'
             );
         }
         return;

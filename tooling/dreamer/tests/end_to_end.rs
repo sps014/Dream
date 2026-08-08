@@ -277,7 +277,7 @@ fn init_lib_has_no_entry_and_run_rejects() {
     assert!(manifest.package.entry.is_none());
     assert!(project_dir.join("src").join("http_utils.dream").is_file());
 
-    let err = commands::run::run(&project_dir, None, false, &[]).unwrap_err();
+    let err = commands::run::run(&project_dir, None, false, None, &[]).unwrap_err();
     assert!(err.to_string().contains("not runnable"));
 }
 

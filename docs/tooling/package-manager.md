@@ -177,7 +177,7 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |
 | `dreamer build [--release]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
-| `dreamer run [--release] [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Errors on `type = "lib"`. |
+| `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
 | `dreamer publish [--registry <url>]` | Package source (`dream.toml` + `src/`) and publish it to a registry. |
 | `dreamer search <query>` | Search a registry for packages by name. |
@@ -211,8 +211,9 @@ Per host:
 
 - **native** — `dream run [--release] <entry> [args…]` (wasmtime).
 - **node** — compile with `--runtime --node` (refreshing `target/node/`), then `node run.mjs`.
-- **web** — compile with `--runtime --web` (refreshing `target/web/`), then serve the project root and
-  print `http://127.0.0.1:<port>/index.html` (Ctrl-C to stop).
+- **web** — compile with `--runtime --web` (refreshing `target/web/`), then serve the project root on
+  `http://127.0.0.1:8787/index.html` by default (colored log; Ctrl-C to stop). A later
+  `dreamer run --target web` restarts that server on the same port. Override with `--port`.
 
 Use `dreamer run --release` (optionally with `--target`) so release artifacts feed the same stable
 alias paths the scaffolds already reference.

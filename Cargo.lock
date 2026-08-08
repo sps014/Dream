@@ -866,6 +866,7 @@ dependencies = [
  "tiny_http",
  "toml 0.8.23",
  "ureq",
+ "yansi",
 ]
 
 [[package]]

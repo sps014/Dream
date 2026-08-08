@@ -73,6 +73,9 @@ enum Cmd {
         /// Compile/run with the release profile (`target/release` + refreshed web/node aliases).
         #[arg(long)]
         release: bool,
+        /// TCP port for `--target web` (default 8787). Reuses/restarts the previous project server.
+        #[arg(long, value_name = "PORT")]
+        port: Option<u16>,
         /// Extra arguments forwarded to the native program or `node run.mjs`.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -136,8 +139,9 @@ fn main() -> ExitCode {
         Cmd::Run {
             target,
             release,
+            port,
             args,
-        } => commands::run::run(&cwd, target, release, &args),
+        } => commands::run::run(&cwd, target, release, port, &args),
         Cmd::Publish { registry } => commands::publish::run(&cwd, registry),
         Cmd::Pack { targets } => commands::pack::run(&cwd, &targets),
         Cmd::Search { query } => commands::search::run(&cwd, &query),
