@@ -100,7 +100,11 @@ impl Builder {
                     d.name == id.text
                         && matches!(
                             d.kind,
-                            SymKind::Class | SymKind::Struct | SymKind::Interface | SymKind::Enum
+                            SymKind::Class
+                                | SymKind::Struct
+                                | SymKind::Interface
+                                | SymKind::Enum
+                                | SymKind::Type
                         )
                 }) {
                     Some(id.text.clone())
@@ -146,7 +150,17 @@ impl Builder {
             ExpressionNode::MemberAccess(recv, member) => {
                 let receiver_ty = self.receiver_type_of(recv, scope);
                 self.resolve_member_decl(receiver_ty.as_deref(), &member.text)
-                    .and_then(|d| d.ty.clone())
+                    .and_then(|d| {
+                        d.ty.clone().or_else(|| {
+                            // Methods often only store the signature in `detail`
+                            // (`static js.global(…): js`); recover the return type from there.
+                            if d.kind == SymKind::Method {
+                                d.detail.rfind(':').map(|i| d.detail[i + 1..].trim().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    })
             }
             ExpressionNode::FunctionCall(name, generic_args, _) => {
                 self.resolve(&name.text, scope, name.position.start)
@@ -379,6 +393,28 @@ impl Builder {
             }
         }
         for ext in &program.extends {
+            // Primitive / builtin extend targets (`js`, `object`, `int`, …) have no class/struct
+            // declaration of their own — register them as types so `js.` member completion works.
+            let target = ext.target.text.as_str();
+            if !self.decls.iter().any(|d| {
+                d.name == target
+                    && matches!(
+                        d.kind,
+                        SymKind::Class
+                            | SymKind::Struct
+                            | SymKind::Interface
+                            | SymKind::Enum
+                            | SymKind::Type
+                    )
+            }) {
+                self.push_decl(
+                    &ext.target,
+                    SymKind::Type,
+                    format!("type {target}"),
+                    GLOBAL,
+                    None,
+                );
+            }
             for method in &ext.methods {
                 let detail = method_detail(&ext.target.text, method);
                 self.push_decl(&method.name, SymKind::Method, detail, GLOBAL, None);

@@ -116,6 +116,41 @@ fun main(): void {
 }
 
 #[test]
+fn js_type_and_static_member_completions() {
+    // `js` comes from the bootstrap prelude via `extend js { … }` — no import needed.
+    let harness = TestHarness::new("fun main(): void {\n    |\n}\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    assert!(
+        comps.iter().any(|(n, kind, ..)| n == "js" && *kind == dream_lsp::index::SymKind::Type),
+        "expected bare `js` type completion, got {:?}",
+        comps
+            .iter()
+            .filter(|(n, ..)| n == "js")
+            .collect::<Vec<_>>()
+    );
+
+    let harness = TestHarness::new("fun main(): void {\n    js.|\n}\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"global")
+            && names.contains(&"global_this")
+            && names.contains(&"object")
+            && names.contains(&"array"),
+        "expected static js.* entry points on js., got {names:?}"
+    );
+
+    // `js.global.` is typed as `js` (property form / static return), so instance helpers appear.
+    let harness = TestHarness::new("fun main(): void {\n    js.global.|\n}\n");
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.iter().any(|n| n.starts_with("to_")),
+        "expected js instance helpers (to_*) on js.global., got {names:?}"
+    );
+}
+
+#[test]
 fn option_local_member_completions() {
     let harness = TestHarness::new(
         "fun main(): void {\n    let o: Option<int> = Option.None;\n    o.|\n}\n",

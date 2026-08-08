@@ -679,6 +679,25 @@ impl Index {
                 recv_start -= 1;
             }
             let receiver = &text[recv_start..recv_end];
+
+            // `Type.staticMember.` — e.g. `js.global.` — complete against the static
+            // member's return type (instance helpers on `js`), not the bare identifier.
+            if recv_start > 0 && bytes[recv_start - 1] == b'.' {
+                let mut k = recv_start - 1;
+                while k > 0 && bytes[k - 1] == b' ' {
+                    k -= 1;
+                }
+                let outer_end = k;
+                let mut outer_start = outer_end;
+                while outer_start > 0 && is_ident_byte(bytes[outer_start - 1]) {
+                    outer_start -= 1;
+                }
+                let outer = &text[outer_start..outer_end];
+                if let Some(ret_ty) = self.static_member_return_type(outer, receiver) {
+                    return self.members_of_struct(&ret_ty, /*static_only*/ false);
+                }
+            }
+
             return self.member_completions(receiver, scope, recv_start);
         }
 
@@ -697,7 +716,8 @@ impl Index {
                 | SymKind::Class
                 | SymKind::Struct
                 | SymKind::Interface
-                | SymKind::Enum => {
+                | SymKind::Enum
+                | SymKind::Type => {
                     out.push((
                         d.name.clone(),
                         d.kind,
@@ -728,6 +748,37 @@ impl Index {
         out
     }
 
+    /// Return type of a static method `Type.member` when both are indexed (e.g. `js.global` → `js`).
+    fn static_member_return_type(&self, type_name: &str, member: &str) -> Option<String> {
+        let is_type = self.decls.iter().any(|d| {
+            d.name == type_name
+                && matches!(
+                    d.kind,
+                    SymKind::Class
+                        | SymKind::Struct
+                        | SymKind::Interface
+                        | SymKind::Enum
+                        | SymKind::Type
+                )
+        });
+        if !is_type {
+            return None;
+        }
+        let detail = self
+            .decls
+            .iter()
+            .find(|d| {
+                d.kind == SymKind::Method
+                    && d.name == member
+                    && detail_is_static_method(&d.detail)
+                    && Self::detail_belongs_to(&d.detail, type_name)
+            })
+            .map(|d| d.detail.as_str())?;
+        detail
+            .rfind(':')
+            .map(|i| detail[i + 1..].trim().to_string())
+    }
+
     /// Members available on `receiver`, resolved by type. If `receiver` is a variable/parameter
     /// (including `this`) whose type is a known struct, only that struct's fields and methods are
     /// offered. If `receiver` names an enum, its members are offered. A bare class/struct name
@@ -752,11 +803,11 @@ impl Index {
             return self.members_of_struct(base, /*static_only*/ false);
         }
 
-        // A bare class/struct/interface name used as a receiver (e.g. static method access `Point.`).
+        // A bare class/struct/interface/type name used as a receiver (e.g. static `Point.` / `js.`).
         if self.decls.iter().any(|d| {
             matches!(
                 d.kind,
-                SymKind::Class | SymKind::Struct | SymKind::Interface
+                SymKind::Class | SymKind::Struct | SymKind::Interface | SymKind::Type
             ) && d.name == receiver
         }) {
             return self.members_of_struct(receiver, /*static_only*/ true);
