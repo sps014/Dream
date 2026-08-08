@@ -42,6 +42,25 @@ fn test_analyze_type_mismatch() {
 }
 
 #[test]
+fn test_array_literal_element_mismatch_points_at_element() {
+    let code = "fun main(): void { let xs: int[] = [1, \"nope\"]; }";
+    let diagnostics = analyze_code(code);
+    assert!(diagnostics.has_errors());
+    let d = diagnostics
+        .diagnostics
+        .iter()
+        .find(|d| d.message.contains("cannot convert from string to int"))
+        .expect("expected element type mismatch");
+    let span = d.span.expect("mismatch should carry a source span");
+    assert!(
+        span.col_no > 1,
+        "array element mismatch must not use the empty/fallback span (got line {} col {})",
+        span.line_no,
+        span.col_no
+    );
+}
+
+#[test]
 fn test_analyze_new_integer_widening_ok() {
     // The full widening lattice: narrower numeric values flow into wider numeric targets without
     // an explicit cast.

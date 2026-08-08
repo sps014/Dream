@@ -85,7 +85,8 @@ impl<'a> Analyzer<'a> {
                     let element_type =
                         self.analyze_expression(elem, parent_function, symbol_table, diagnostics)?;
                     elem_hirs.push(self.hir_take());
-                    self.compare_data_type(&first_type, &element_type, &empty_span(), diagnostics)?;
+                    let span = elem.position().unwrap_or(open.position);
+                    self.compare_data_type(&first_type, &element_type, &span, diagnostics)?;
                 }
                 self.current_expected_type = saved_expected;
 
@@ -120,7 +121,8 @@ impl<'a> Analyzer<'a> {
                     elem_hirs.push(self.hir_take());
                     self.current_expected_type = saved;
                     if let Some(es) = expected_elems.as_ref() {
-                        self.compare_data_type(&es[i], &ty, &empty_span(), diagnostics)?;
+                        let span = elem.position().unwrap_or_else(empty_span);
+                        self.compare_data_type(&es[i], &ty, &span, diagnostics)?;
                         elem_tys.push(es[i].clone());
                     } else {
                         elem_tys.push(ty);
