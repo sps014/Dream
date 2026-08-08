@@ -22,18 +22,25 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x64
+            rust_target: ""
             archive: tar.gz
           - os: ubuntu-24.04-arm
             target: linux-arm64
+            rust_target: ""
             archive: tar.gz
-          - os: macos-13
+          # Intel macOS: cross-compile from Apple Silicon. macos-13 runners often sit
+          # queued indefinitely on free/public repos.
+          - os: macos-latest
             target: macos-x64
+            rust_target: x86_64-apple-darwin
             archive: tar.gz
           - os: macos-latest
             target: macos-arm64
+            rust_target: ""
             archive: tar.gz
           - os: windows-latest
             target: windows-x64
+            rust_target: ""
             archive: zip
 
     runs-on: ${{ matrix.os }}
@@ -41,10 +48,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
 
       - name: Build release binaries
         shell: bash
-        run: cargo build --release -p dream -p dreamer -p dream-lsp
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ matrix.rust_target }}" ]]; then
+            cargo build --release -p dream -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+          else
+            cargo build --release -p dream -p dreamer -p dream-lsp
+          fi
 
       - name: Package archive
         shell: bash
@@ -58,9 +73,14 @@ jobs:
           if [[ "${{ matrix.target }}" == windows-* ]]; then
             EXT=".exe"
           fi
-          cp "target/release/dream${EXT}" "$STAGE/"
-          cp "target/release/dreamer${EXT}" "$STAGE/"
-          cp "target/release/dream-lsp${EXT}" "$STAGE/"
+          if [[ -n "${{ matrix.rust_target }}" ]]; then
+            BIN_DIR="target/${{ matrix.rust_target }}/release"
+          else
+            BIN_DIR="target/release"
+          fi
+          cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
+          cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
+          cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
           mkdir -p dist
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
             # Windows runners have no `zip`; use PowerShell Compress-Archive.
@@ -71,7 +91,6 @@ jobs:
               pwsh -NoProfile -Command \
                 "Compress-Archive -Path 'dist/dream-${VERSION}-${{ matrix.target }}' -DestinationPath 'dist/dream-${VERSION}-${{ matrix.target }}.zip' -Force"
             else
-              # Git for Windows / modern Windows ships bsdtar which can write .zip
               tar -C dist -a -cf "dist/dream-${VERSION}-${{ matrix.target }}.zip" "dream-${VERSION}-${{ matrix.target }}"
             fi
           else
