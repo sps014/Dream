@@ -1,0 +1,305 @@
+import system;
+import system.text;
+
+/// Semantic Version value (SemVer 2.0.0 core + prerelease/build).
+public class SemVer {
+    public major: int;
+    public minor: int;
+    public patch: int;
+    /// Dot-separated prerelease identifiers, or `""` when absent.
+    public prerelease: string;
+    /// Build metadata (ignored for precedence), or `""` when absent.
+    public build: string;
+
+    public constructor(major: int, minor: int, patch: int, prerelease: string, build: string) {
+        this.major = major;
+        this.minor = minor;
+        this.patch = patch;
+        this.prerelease = prerelease;
+        this.build = build;
+    }
+
+    /// Parses a SemVer string such as `1.2.3`, `1.2.3-alpha.1`, or `1.2.3+build`.
+    public static fun parse(s: string): Result<SemVer, string> {
+        let text = s.trim();
+        if (text.is_empty()) {
+            return Result.Err("empty version string");
+        }
+
+        let build = "";
+        let rest = text;
+        let plus = text.index_of('+');
+        switch (plus) {
+            Some(idx) => {
+                build = text.substring(idx + 1, text.length);
+                rest = text.substring(0, idx);
+                if (build.is_empty()) {
+                    return Result.Err("empty build metadata");
+                }
+            },
+            None => { },
+        }
+
+        let prerelease = "";
+        let core = rest;
+        let dash = rest.index_of('-');
+        switch (dash) {
+            Some(idx) => {
+                prerelease = rest.substring(idx + 1, rest.length);
+                core = rest.substring(0, idx);
+                if (prerelease.is_empty()) {
+                    return Result.Err("empty prerelease");
+                }
+            },
+            None => { },
+        }
+
+        let parts = core.split('.');
+        if (parts.length != 3) {
+            return Result.Err("version core must be major.minor.patch");
+        }
+        let major_r = SemVer._parse_num(parts[0], "major");
+        if (major_r.is_err()) {
+            return Result.Err(switch (major_r) { Ok(v) => "", Err(e) => e, });
+        }
+        let minor_r = SemVer._parse_num(parts[1], "minor");
+        if (minor_r.is_err()) {
+            return Result.Err(switch (minor_r) { Ok(v) => "", Err(e) => e, });
+        }
+        let patch_r = SemVer._parse_num(parts[2], "patch");
+        if (patch_r.is_err()) {
+            return Result.Err(switch (patch_r) { Ok(v) => "", Err(e) => e, });
+        }
+        let major = switch (major_r) { Ok(v) => v, Err(e) => 0, };
+        let minor = switch (minor_r) { Ok(v) => v, Err(e) => 0, };
+        let patch = switch (patch_r) { Ok(v) => v, Err(e) => 0, };
+        return Result.Ok(SemVer(major, minor, patch, prerelease, build));
+    }
+
+    @override
+    public fun to_string(): string {
+        let s = this.major.to_string() + "." + this.minor.to_string() + "." + this.patch.to_string();
+        if (!this.prerelease.is_empty()) {
+            s = s + "-" + this.prerelease;
+        }
+        if (!this.build.is_empty()) {
+            s = s + "+" + this.build;
+        }
+        return s;
+    }
+
+    /// Orders by precedence: −1 if `a < b`, 0 if equal, 1 if `a > b`. Build metadata is ignored.
+    public static fun compare(a: SemVer, b: SemVer): int {
+        if (a.major < b.major) { return 0 - 1; }
+        if (a.major > b.major) { return 1; }
+        if (a.minor < b.minor) { return 0 - 1; }
+        if (a.minor > b.minor) { return 1; }
+        if (a.patch < b.patch) { return 0 - 1; }
+        if (a.patch > b.patch) { return 1; }
+        let a_pre = a.prerelease.is_empty();
+        let b_pre = b.prerelease.is_empty();
+        if (a_pre && b_pre) {
+            return 0;
+        }
+        // Release > any prerelease with the same numeric triple.
+        if (a_pre) {
+            return 1;
+        }
+        if (b_pre) {
+            return 0 - 1;
+        }
+        return a.prerelease.compare(b.prerelease);
+    }
+
+    public fun eq(other: SemVer): bool {
+        return SemVer.compare(this, other) == 0;
+    }
+
+    public fun lt(other: SemVer): bool {
+        return SemVer.compare(this, other) < 0;
+    }
+
+    public fun lte(other: SemVer): bool {
+        return SemVer.compare(this, other) <= 0;
+    }
+
+    public fun gt(other: SemVer): bool {
+        return SemVer.compare(this, other) > 0;
+    }
+
+    public fun gte(other: SemVer): bool {
+        return SemVer.compare(this, other) >= 0;
+    }
+
+    /// Returns true when `version` satisfies `req`.
+    /// Supports exact versions, `^` / `~`, `>=` `>` `<=` `<`, and comma-separated AND lists.
+    public static fun satisfies(version: SemVer, req: string): bool {
+        let parts = req.split(',');
+        let i = 0;
+        while (i < parts.length) {
+            let clause = parts[i].trim();
+            if (!clause.is_empty()) {
+                if (!SemVer._satisfies_one(version, clause)) {
+                    return false;
+                }
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    static fun _parse_num(text: string, label: string): Result<int, string> {
+        if (text.is_empty()) {
+            return Result.Err("empty " + label);
+        }
+        if ((text.length > 1) && (text.char_at(0) == '0')) {
+            return Result.Err(label + " must not have leading zeros");
+        }
+        let i = 0;
+        while (i < text.length) {
+            let c = text.char_at(i);
+            if ((c < '0') || (c > '9')) {
+                return Result.Err("invalid " + label + " digit");
+            }
+            i = i + 1;
+        }
+        let parsed = int.parse(text);
+        return switch (parsed) {
+            Ok(v) => Result.Ok(v),
+            Err(e) => Result.Err("invalid " + label),
+        };
+    }
+
+    static fun _parse_partial(text: string): Result<SemVer, string> {
+        let t = text.trim();
+        if (t.is_empty()) {
+            return Result.Err("empty version in requirement");
+        }
+        // Strip leading `v` sometimes used in tags.
+        if (t.starts_with("v") && (t.length > 1)) {
+            t = t.substring(1, t.length);
+        }
+        let build = "";
+        let rest = t;
+        let plus = t.index_of('+');
+        switch (plus) {
+            Some(idx) => {
+                build = t.substring(idx + 1, t.length);
+                rest = t.substring(0, idx);
+            },
+            None => { },
+        }
+        let prerelease = "";
+        let core = rest;
+        let dash = rest.index_of('-');
+        switch (dash) {
+            Some(idx) => {
+                prerelease = rest.substring(idx + 1, rest.length);
+                core = rest.substring(0, idx);
+            },
+            None => { },
+        }
+        let parts = core.split('.');
+        if (parts.length < 1 || parts.length > 3) {
+            return Result.Err("invalid version in requirement");
+        }
+        let major_r = SemVer._parse_num(parts[0], "major");
+        if (major_r.is_err()) {
+            return Result.Err(switch (major_r) { Ok(v) => "", Err(e) => e, });
+        }
+        let major = switch (major_r) { Ok(v) => v, Err(e) => 0, };
+        let minor = 0;
+        let patch = 0;
+        if (parts.length >= 2) {
+            let minor_r = SemVer._parse_num(parts[1], "minor");
+            if (minor_r.is_err()) {
+                return Result.Err(switch (minor_r) { Ok(v) => "", Err(e) => e, });
+            }
+            minor = switch (minor_r) { Ok(v) => v, Err(e) => 0, };
+        }
+        if (parts.length >= 3) {
+            let patch_r = SemVer._parse_num(parts[2], "patch");
+            if (patch_r.is_err()) {
+                return Result.Err(switch (patch_r) { Ok(v) => "", Err(e) => e, });
+            }
+            patch = switch (patch_r) { Ok(v) => v, Err(e) => 0, };
+        }
+        return Result.Ok(SemVer(major, minor, patch, prerelease, build));
+    }
+
+    static fun _satisfies_one(version: SemVer, clause: string): bool {
+        if (clause.starts_with("^")) {
+            let base_r = SemVer._parse_partial(clause.substring(1, clause.length));
+            if (base_r.is_err()) {
+                return false;
+            }
+            let base = switch (base_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+            if (version.lt(base)) {
+                return false;
+            }
+            // Caret: allow changes that do not modify the left-most non-zero digit.
+            if (base.major > 0) {
+                return version.major == base.major;
+            }
+            if (base.minor > 0) {
+                return (version.major == 0) && (version.minor == base.minor);
+            }
+            return (version.major == 0) && (version.minor == 0) && (version.patch == base.patch);
+        }
+        if (clause.starts_with("~")) {
+            let base_r = SemVer._parse_partial(clause.substring(1, clause.length));
+            if (base_r.is_err()) {
+                return false;
+            }
+            let base = switch (base_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+            if (version.lt(base)) {
+                return false;
+            }
+            return (version.major == base.major) && (version.minor == base.minor);
+        }
+        if (clause.starts_with(">=")) {
+            let base_r = SemVer._parse_partial(clause.substring(2, clause.length));
+            if (base_r.is_err()) {
+                return false;
+            }
+            let base = switch (base_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+            return version.gte(base);
+        }
+        if (clause.starts_with("<=")) {
+            let base_r = SemVer._parse_partial(clause.substring(2, clause.length));
+            if (base_r.is_err()) {
+                return false;
+            }
+            let base = switch (base_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+            return version.lte(base);
+        }
+        if (clause.starts_with(">") && !clause.starts_with(">=")) {
+            let base_r = SemVer._parse_partial(clause.substring(1, clause.length));
+            if (base_r.is_err()) {
+                return false;
+            }
+            let base = switch (base_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+            return version.gt(base);
+        }
+        if (clause.starts_with("<") && !clause.starts_with("<=")) {
+            let base_r = SemVer._parse_partial(clause.substring(1, clause.length));
+            if (base_r.is_err()) {
+                return false;
+            }
+            let base = switch (base_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+            return version.lt(base);
+        }
+        let exact_r = SemVer.parse(clause);
+        if (exact_r.is_err()) {
+            // Allow partial exact like `1.2` meaning `1.2.0`.
+            let partial_r = SemVer._parse_partial(clause);
+            if (partial_r.is_err()) {
+                return false;
+            }
+            let base = switch (partial_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+            return version.eq(base);
+        }
+        let exact = switch (exact_r) { Ok(v) => v, Err(e) => SemVer(0, 0, 0, "", ""), };
+        return version.eq(exact);
+    }
+}

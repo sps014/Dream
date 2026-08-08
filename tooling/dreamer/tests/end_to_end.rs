@@ -54,10 +54,9 @@ fn publish_fixture_package(registry_dir: &Path, name: &str, version: &str, body_
     let entry = IndexEntry {
         name: name.to_string(),
         vers: version.to_string(),
-        deps: Vec::new(),
         cksum: checksum::sha256_of(&bytes),
         tarball: format!("dl/{}/{}-{}.tar.gz", name, name, version),
-        description: None,
+        ..Default::default()
     };
     registry.publish(&entry, &tarball_path).unwrap();
 }

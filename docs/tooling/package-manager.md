@@ -50,6 +50,7 @@ authors = ["Jane Doe <jane@example.com>"]
 description = "My Dream app"
 entry = "src/main.dream"        # required for bin; forbidden for lib
 license = "MIT"
+keywords = ["http", "json"]         # optional; used by dreamer search / catalog.json
 targets = ["native", "web"]     # optional hosts: native, web, node (omit = no preference)
 
 [dependencies]
@@ -65,7 +66,7 @@ test-utils = "0.4"
 start = "dreamer run"
 
 [registries]
-default = "https://registry.dream-lang.org"    # overridable; also supports file:// for private/offline registries
+default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 ```
 
 - `[package].type` is `bin` (default) or `lib`. Libraries omit `entry`, are not runnable (`dreamer run` /
@@ -106,7 +107,7 @@ version = 1
 [[package]]
 name = "json-tools"
 version = "0.3.1"
-source = "registry+https://registry.dream-lang.org"
+source = "registry+https://raw.githubusercontent.com/sps014/dream-registry/main"
 checksum = "sha256:9f2c...ab31"
 dependencies = []
 ```
@@ -150,16 +151,56 @@ A registry is a sparse index plus tarball storage. A plain directory works, serv
 Each line of `<base>/index/<name>` is a JSON object:
 
 ```json
-{"name":"json-tools","vers":"0.3.1","deps":[{"name":"buffer-utils","req":"^1.0"}],"cksum":"sha256:...","tarball":"dl/json-tools/json-tools-0.3.1.tar.gz","description":"JSON helpers"}
+{
+  "name": "json-tools",
+  "vers": "0.3.1",
+  "deps": [{"name": "buffer-utils", "req": "^1.0"}],
+  "cksum": "sha256:...",
+  "tarball": "dl/json-tools/json-tools-0.3.1.tar.gz",
+  "description": "JSON helpers",
+  "authors": ["Jane Doe <jane@example.com>"],
+  "license": "MIT",
+  "edition": "2026",
+  "type": "lib",
+  "targets": ["native", "web"],
+  "readme": "README.md",
+  "keywords": ["json", "parse"]
+}
 ```
 
-Optional endpoints for `dreamer search` / `dreamer publish` against HTTP registries:
+Fields beyond `name` / `vers` / `deps` / `cksum` / `tarball` are optional metadata copied from
+`dream.toml` at publish time. `readme` is an **archive-relative path** (e.g. `README.md`) pointing at
+the README packed into the tarball — the index never embeds README body text.
+`keywords` come from `[package].keywords` and feed static search.
+`catalog.json` stores the same discovery fields except `deps` / `cksum` / `tarball`.
 
-- `GET  <base>/search?q=<query>` → JSON array of index-entry objects
-- `POST <base>/api/v1/publish` → JSON body `{ "entry": <index-entry>, "tarball_base64": "..." }`
+Optional endpoints / files for `dreamer search` / `dreamer publish`:
 
-No production Dream registry is hosted yet. Point `[registries] default` at any location
-implementing the protocol above, including a `file://` directory for local or private use.
+- `GET  <base>/search?q=<query>` → JSON array of index-entry objects (dynamic registries)
+- `GET  <base>/catalog.json` → compact search catalog used when `/search` is absent (static/GitHub registries)
+- `POST <base>/api/v1/publish` → JSON body `{ "entry": <index-entry>, "tarball_base64": "..." }` (non-GitHub HTTP registries)
+
+The default public registry is the GitHub repo
+[`sps014/dream-registry`](https://github.com/sps014/dream-registry), served at
+`https://raw.githubusercontent.com/sps014/dream-registry/main`. Indexes live under `index/`,
+tarballs under `dl/` (separate trees). Max package tarball size is **10 MiB**.
+
+`dreamer publish` to that registry uses the GitHub Contents API (set `DREAM_REGISTRY_TOKEN` or
+`--token` with `contents:write`). Point `[registries] default` at any other `file://` or
+`http(s)://` location implementing the protocol above for private/offline use.
+
+### Static search (cargo-like)
+
+There is no live search API. Discovery is fully static:
+
+- **CLI:** `dreamer search <query>` downloads `catalog.json` and matches against package **name**,
+  **description**, and **keywords** (case-insensitive substring) — the Dream equivalent of
+  `cargo search`.
+- **Browser:** [sps014.github.io/dream-registry](https://sps014.github.io/dream-registry/) filters
+  the same `catalog.json` client-side.
+
+The first published library is [`semver`](https://github.com/sps014/Dream/tree/main/packages/semver)
+(`dreamer add semver`).
 
 ## Dependency resolution
 
@@ -179,8 +220,8 @@ registry version selection. Conflicting requirements produce a clear error namin
 | `dreamer build [--release]` | Install, then compile the package root (`entry` for bins; conventional lib root for libs) with `--crate-type`. Artifacts land in `target/debug` or `target/release`. When `targets` includes `web` and/or `node`, also refreshes `target/web/` / `target/node/` aliases from that profile. |
 | `dreamer run [--release] [--port <n>] [--target native\|web\|node] [-- <args>]` | Install, then run on the resolved host (see below). `--release` uses the release profile (and refreshes web/node aliases). Web serves on port **8787** by default (override with `--port`); a second run restarts the previous server on that port. Errors on `type = "lib"`. |
 | `dreamer pack [--target <os>-<arch>\|all]…` | Release-build a **bin** package and embed its `.wasm` in a native `dream-runner` host → `target/pack/<name>-<os>-<arch>[.exe]`. Default target is the host OS/arch. Distinct from registry `publish`. |
-| `dreamer publish [--registry <url>]` | Package source (`dream.toml` + `src/`) and publish it to a registry. |
-| `dreamer search <query>` | Search a registry for packages by name. |
+| `dreamer publish [--registry <url>] [--token <tok>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). |
+| `dreamer search <query>` | Search the registry catalog by name / description / keywords (static `catalog.json`). |
 | `dreamer tree` | Print the resolved dependency tree from `dream.lock`. |
 
 ### Native `dreamer pack`
@@ -256,8 +297,9 @@ dreamer tree
 # bump json-tools to the newest version satisfying dream.toml
 dreamer update json-tools
 
-# publish this project itself to a registry
-dreamer publish --registry https://registry.dream-lang.org
+# publish this project itself to the default GitHub registry
+dreamer publish
+# or: export DREAM_REGISTRY_TOKEN=ghp_... && dreamer publish --registry https://raw.githubusercontent.com/sps014/dream-registry/main
 ```
 
 ## Trying it end to end without a hosted registry

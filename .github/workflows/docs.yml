@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "docs/**"
+      - "scripts/install.sh"
+      - "scripts/install.ps1"
       - "mkdocs.yml"
       - "requirements-docs.txt"
       - ".github/workflows/docs.yml"
@@ -36,7 +38,10 @@ jobs:
         run: pip install -r requirements-docs.txt
 
       - name: Build docs
-        run: mkdocs build --strict
+        run: |
+          mkdocs build --strict
+          cp scripts/install.sh scripts/install.ps1 site/
+          chmod +x site/install.sh
 
       - uses: actions/upload-pages-artifact@v3
         with:

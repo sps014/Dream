@@ -86,7 +86,7 @@ fn extract_tarball(tarball: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Packages `project_dir` (its `dream.toml` plus every file under `src/`) into a `.tar.gz` at
+/// Packages `project_dir` (`dream.toml`, `src/`, and README if present) into a `.tar.gz` at
 /// `dest_tarball`, returning the raw bytes so the caller can compute a checksum before publishing.
 pub fn package_project(project_dir: &Path, dest_tarball: &Path) -> Result<Vec<u8>> {
     use flate2::write::GzEncoder;
@@ -106,7 +106,24 @@ pub fn package_project(project_dir: &Path, dest_tarball: &Path) -> Result<Vec<u8
     if src_dir.is_dir() {
         builder.append_dir_all("src", &src_dir)?;
     }
+
+    if let Some(readme_name) = find_readme_name(project_dir) {
+        let path = project_dir.join(&readme_name);
+        builder.append_path_with_name(&path, &readme_name)?;
+    }
+
     builder.into_inner()?.finish()?;
 
     std::fs::read(dest_tarball).context("re-reading packaged tarball to checksum it")
+}
+
+/// Preferred README filenames, first match wins. The returned name is stored as the registry
+/// `readme` link and packed into the published tarball.
+pub fn find_readme_name(project_dir: &Path) -> Option<String> {
+    for name in ["README.md", "README", "Readme.md", "readme.md"] {
+        if project_dir.join(name).is_file() {
+            return Some(name.to_string());
+        }
+    }
+    None
 }

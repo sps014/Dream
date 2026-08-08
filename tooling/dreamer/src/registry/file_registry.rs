@@ -5,7 +5,8 @@
 use super::checksum;
 use super::client::RegistryClient;
 use super::index::IndexEntry;
-use anyhow::{Context, Result};
+use super::{CatalogEntry, MAX_TARBALL_BYTES};
+use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 pub struct FileRegistry {
@@ -72,8 +73,11 @@ impl RegistryClient for FileRegistry {
         for entry in std::fs::read_dir(&index_dir)? {
             let entry = entry?;
             let name = entry.file_name().to_string_lossy().to_string();
-            if needle.is_empty() || name.to_lowercase().contains(&needle) {
-                if let Some(latest) = self.fetch_index(&name)?.pop() {
+            if name.starts_with('.') {
+                continue;
+            }
+            if let Some(latest) = self.fetch_index(&name)?.pop() {
+                if latest.matches_query(&needle) {
                     out.push(latest);
                 }
             }
@@ -83,11 +87,21 @@ impl RegistryClient for FileRegistry {
     }
 
     fn publish(&self, entry: &IndexEntry, tarball_path: &Path) -> Result<()> {
+        let bytes = std::fs::read(tarball_path)
+            .with_context(|| format!("reading tarball at {}", tarball_path.display()))?;
+        if bytes.len() > MAX_TARBALL_BYTES {
+            bail!(
+                "tarball is {} bytes; registry limit is {} bytes (10 MiB)",
+                bytes.len(),
+                MAX_TARBALL_BYTES
+            );
+        }
+
         let index_path = self.index_file(&entry.name);
         std::fs::create_dir_all(index_path.parent().unwrap())?;
         let mut existing = self.fetch_index(&entry.name)?;
         if existing.iter().any(|e| e.vers == entry.vers) {
-            anyhow::bail!(
+            bail!(
                 "{} {} is already published to {}",
                 entry.name,
                 entry.vers,
@@ -107,13 +121,33 @@ impl RegistryClient for FileRegistry {
 
         let dest = self.tarball_path(&entry.tarball);
         std::fs::create_dir_all(dest.parent().unwrap())?;
-        std::fs::copy(tarball_path, &dest).with_context(|| {
+        std::fs::write(&dest, &bytes).with_context(|| {
             format!(
-                "copying tarball {} to {}",
+                "writing tarball {} to {}",
                 tarball_path.display(),
                 dest.display()
             )
         })?;
+        self.update_catalog(entry)?;
+        Ok(())
+    }
+}
+
+impl FileRegistry {
+    fn update_catalog(&self, entry: &IndexEntry) -> Result<()> {
+        let path = self.base.join("catalog.json");
+        let mut catalog: Vec<CatalogEntry> = if path.is_file() {
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_default())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        catalog.retain(|c| c.name != entry.name);
+        catalog.push(CatalogEntry::from_index(entry));
+        catalog.sort_by(|a, b| a.name.cmp(&b.name));
+        let text = serde_json::to_string_pretty(&catalog).context("serializing catalog.json")?;
+        std::fs::write(&path, text + "\n")
+            .with_context(|| format!("writing catalog at {}", path.display()))?;
         Ok(())
     }
 }
@@ -142,10 +176,13 @@ mod tests {
         let entry = IndexEntry {
             name: "json-tools".to_string(),
             vers: "0.3.1".to_string(),
-            deps: Vec::new(),
             cksum,
             tarball: "dl/json-tools/json-tools-0.3.1.tar.gz".to_string(),
             description: Some("JSON helpers".to_string()),
+            authors: vec!["Ada".to_string()],
+            license: Some("MIT".to_string()),
+            package_type: Some("lib".to_string()),
+            ..Default::default()
         };
 
         registry.publish(&entry, &tarball_src).unwrap();
@@ -153,6 +190,16 @@ mod tests {
         let fetched = registry.fetch_index("json-tools").unwrap();
         assert_eq!(fetched.len(), 1);
         assert_eq!(fetched[0].vers, "0.3.1");
+        assert_eq!(fetched[0].authors, vec!["Ada".to_string()]);
+        assert_eq!(fetched[0].license.as_deref(), Some("MIT"));
+        assert_eq!(fetched[0].package_type.as_deref(), Some("lib"));
+
+        let catalog: Vec<crate::registry::CatalogEntry> = serde_json::from_str(
+            &std::fs::read_to_string(tmp.path().join("catalog.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog[0].authors, vec!["Ada".to_string()]);
 
         let dest = tmp.path().join("downloaded.tar.gz");
         registry.fetch_tarball(&fetched[0], &dest).unwrap();
@@ -169,10 +216,9 @@ mod tests {
         let entry = IndexEntry {
             name: "pkg".to_string(),
             vers: "1.0.0".to_string(),
-            deps: Vec::new(),
             cksum: checksum::sha256_of(b"original bytes"),
             tarball: "dl/pkg/pkg-1.0.0.tar.gz".to_string(),
-            description: None,
+            ..Default::default()
         };
         registry.publish(&entry, &tarball_src).unwrap();
 
@@ -192,10 +238,9 @@ mod tests {
         let entry = IndexEntry {
             name: "pkg".to_string(),
             vers: "1.0.0".to_string(),
-            deps: Vec::new(),
             cksum: checksum::sha256_of(b"bytes"),
             tarball: "dl/pkg/pkg-1.0.0.tar.gz".to_string(),
-            description: None,
+            ..Default::default()
         };
         registry.publish(&entry, &tarball_src).unwrap();
         assert!(registry.publish(&entry, &tarball_src).is_err());

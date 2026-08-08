@@ -1,16 +1,18 @@
 //! HTTP(S) sparse-index registry client. Talks to any static file server (or a purpose-built
-//! registry service) exposing the layout documented in `registry/mod.rs`, plus two optional
-//! dynamic endpoints used by `dreamer search`/`dreamer publish`:
+//! registry service) exposing the layout documented in `registry/mod.rs`, plus optional
+//! dynamic endpoints:
 //!
 //! - `GET  <base>/search?q=<query>`  -> JSON array of [`IndexEntry`]
+//! - `GET  <base>/catalog.json`      -> fallback search catalog for static registries
 //! - `POST <base>/api/v1/publish`    -> JSON body `{ "entry": IndexEntry, "tarball_base64": "..." }`
 //!
-//! No production registry implementing the dynamic endpoints is hosted yet; static-index reads
-//! (`fetch_index`/`fetch_tarball`) work against any plain HTTP file server.
+//! Static-index reads (`fetch_index`/`fetch_tarball`) work against any plain HTTP file server,
+//! including GitHub raw/Pages hosting.
 
 use super::checksum;
 use super::client::RegistryClient;
 use super::index::IndexEntry;
+use super::{CatalogEntry, MAX_TARBALL_BYTES};
 use anyhow::{bail, Context, Result};
 use std::io::Read;
 use std::path::Path;
@@ -81,20 +83,26 @@ impl RegistryClient for HttpRegistry {
 
     fn search(&self, query: &str) -> Result<Vec<IndexEntry>> {
         let url = format!("{}/search?q={}", self.base, urlencode(query));
-        match ureq::get(&url).call() {
-            Ok(resp) => {
-                let text = resp.into_string().unwrap_or_default();
-                Ok(serde_json::from_str(&text).unwrap_or_default())
+        if let Ok(resp) = ureq::get(&url).call() {
+            let text = resp.into_string().unwrap_or_default();
+            if let Ok(entries) = serde_json::from_str::<Vec<IndexEntry>>(&text) {
+                return Ok(entries);
             }
-            // Registries without a search endpoint simply can't be searched remotely.
-            Err(_) => Ok(Vec::new()),
         }
+        self.search_catalog(query)
     }
 
     fn publish(&self, entry: &IndexEntry, tarball_path: &Path) -> Result<()> {
         use base64::Engine;
         let bytes = std::fs::read(tarball_path)
             .with_context(|| format!("reading tarball at {}", tarball_path.display()))?;
+        if bytes.len() > MAX_TARBALL_BYTES {
+            bail!(
+                "tarball is {} bytes; registry limit is {} bytes (10 MiB)",
+                bytes.len(),
+                MAX_TARBALL_BYTES
+            );
+        }
         let body = serde_json::json!({
             "entry": entry,
             "tarball_base64": base64::engine::general_purpose::STANDARD.encode(&bytes),
@@ -104,6 +112,38 @@ impl RegistryClient for HttpRegistry {
             .send_json(body)
             .with_context(|| format!("publishing to {}", url))?;
         Ok(())
+    }
+}
+
+impl HttpRegistry {
+    fn search_catalog(&self, query: &str) -> Result<Vec<IndexEntry>> {
+        let url = format!("{}/catalog.json", self.base);
+        let resp = match ureq::get(&url).call() {
+            Ok(r) => r,
+            Err(_) => return Ok(Vec::new()),
+        };
+        let text = resp.into_string().unwrap_or_default();
+        let catalog: Vec<CatalogEntry> = serde_json::from_str(&text).unwrap_or_default();
+        let needle = query.to_lowercase();
+        let mut out: Vec<IndexEntry> = catalog
+            .into_iter()
+            .filter(|c| c.matches_query(&needle))
+            .map(|c| IndexEntry {
+                name: c.name,
+                vers: c.vers,
+                description: c.description,
+                authors: c.authors,
+                license: c.license,
+                edition: c.edition,
+                package_type: c.package_type,
+                targets: c.targets,
+                readme: c.readme,
+                keywords: c.keywords,
+                ..Default::default()
+            })
+            .collect();
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(out)
     }
 }
 

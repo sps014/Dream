@@ -19,9 +19,27 @@ pub fn run(start_dir: &Path, query: &str) -> Result<()> {
         return Ok(());
     }
     for entry in results {
-        match entry.description {
-            Some(desc) => println!("{} = \"{}\"  # {}", entry.name, entry.vers, desc),
-            None => println!("{} = \"{}\"", entry.name, entry.vers),
+        match entry.description.as_deref() {
+            Some(desc) if !desc.is_empty() => {
+                println!("{} = \"{}\"    # {}", entry.name, entry.vers, desc);
+            }
+            _ => println!("{} = \"{}\"", entry.name, entry.vers),
+        }
+        let mut meta = Vec::new();
+        if let Some(ty) = entry.package_type.as_deref() {
+            meta.push(format!("type={}", ty));
+        }
+        if let Some(license) = entry.license.as_deref() {
+            meta.push(format!("license={}", license));
+        }
+        if !entry.authors.is_empty() {
+            meta.push(format!("authors={}", entry.authors.join(", ")));
+        }
+        if !entry.keywords.is_empty() {
+            meta.push(format!("keywords={}", entry.keywords.join(", ")));
+        }
+        if !meta.is_empty() {
+            println!("    {}", meta.join(" · "));
         }
     }
     Ok(())

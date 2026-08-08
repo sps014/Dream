@@ -57,25 +57,37 @@ Stdlib APIs live under `system.*` packages — `import system;` for console I/O,
 
 Also: WASM-native output (`.wat` / `.wasm` + `.abi.json`), editor support (VS Code / LSP), and a Rust-hosted `dream run` path via wasmtime.
 
-## Build
+## Install
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/Dream/install.sh | sh
+```
+
+```powershell
+irm https://sps014.github.io/Dream/install.ps1 | iex
+```
+
+That puts `dream`, `dreamer`, and `dream-lsp` on your PATH (`~/.dream/bin`). See
+[Getting Started](https://sps014.github.io/Dream/getting-started/).
+
+### Build from source (contributors)
 
 ```bash
 git clone https://github.com/sps014/Dream
 cd Dream
-cargo build --release
+source ./use-toolchain.sh
 ```
-
-The compiler binary lands at `target/release/dream`.
 
 ## Run a program
 
 ```bash
-cargo run -- run path/to/your/file.dream   # compile and execute (native host)
-cargo run -- path/to/your/file.dream       # compile to .wat / .wasm / .abi.json
+dreamer init hello && cd hello && dreamer run
+dream run path/to/your/file.dream          # compile and execute (native host)
+dream path/to/your/file.dream              # compile to .wat / .wasm / .abi.json
 
 # Tree-shaken JS host for browser or Node (optional)
-cargo run -- --runtime --web path/to/your/file.dream
-cargo run -- --runtime --node path/to/your/file.dream
+dream --runtime --web path/to/your/file.dream
+dream --runtime --node path/to/your/file.dream
 ```
 
 JS interop: [docs](https://sps014.github.io/Dream/language/interop/) · [`docs/language/interop.md`](docs/language/interop.md).

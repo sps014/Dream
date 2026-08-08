@@ -85,6 +85,9 @@ enum Cmd {
         /// Registry base URL; defaults to [registries] default in dream.toml.
         #[arg(long)]
         registry: Option<String>,
+        /// Publish token (GitHub Contents API). Falls back to DREAM_REGISTRY_TOKEN / GITHUB_TOKEN.
+        #[arg(long)]
+        token: Option<String>,
     },
     /// Build a native single-file executable embedding the project's release wasm.
     Pack {
@@ -142,7 +145,7 @@ fn main() -> ExitCode {
             port,
             args,
         } => commands::run::run(&cwd, target, release, port, &args),
-        Cmd::Publish { registry } => commands::publish::run(&cwd, registry),
+        Cmd::Publish { registry, token } => commands::publish::run(&cwd, registry, token),
         Cmd::Pack { targets } => commands::pack::run(&cwd, &targets),
         Cmd::Search { query } => commands::search::run(&cwd, &query),
         Cmd::Tree => commands::tree::run(&cwd),

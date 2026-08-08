@@ -117,10 +117,9 @@ impl Workspace {
                     let entry = crate::registry::IndexEntry {
                         name: pkg.name.clone(),
                         vers: pkg.version.clone(),
-                        deps: Vec::new(),
                         cksum: checksum.clone(),
                         tarball: tarball.clone(),
-                        description: None,
+                        ..Default::default()
                     };
                     let client = open_registry(url);
                     fetch::fetch_and_extract(client.as_ref(), &entry)?

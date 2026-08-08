@@ -185,6 +185,9 @@ pub struct PackageMeta {
     pub entry: Option<String>,
     #[serde(default)]
     pub license: Option<String>,
+    /// Search keywords published into the registry catalog (`dreamer search` / catalog.json).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
     /// Optional host list (`native`, `web`, `node`). Empty means no preference — `dreamer run`
     /// defaults to native wasmtime execution.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -329,6 +332,7 @@ impl Manifest {
                 description: None,
                 entry: Some(entry),
                 license: None,
+                keywords: Vec::new(),
                 targets: Vec::new(),
             },
             dependencies: BTreeMap::new(),
@@ -350,6 +354,7 @@ impl Manifest {
                 description: None,
                 entry: None,
                 license: None,
+                keywords: Vec::new(),
                 targets: Vec::new(),
             },
             dependencies: BTreeMap::new(),

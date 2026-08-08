@@ -1,0 +1,9 @@
+[package]
+name = "semver"
+version = "0.1.0"
+type = "lib"
+edition = "2026"
+authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
+description = "Parse, compare, and match Semantic Versioning (SemVer) requirements"
+license = "MIT"
+keywords = ["semver", "version", "versioning", "cargo"]

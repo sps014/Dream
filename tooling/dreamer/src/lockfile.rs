@@ -78,7 +78,7 @@ mod tests {
         LockedPackage {
             name: name.to_string(),
             version: version.to_string(),
-            source: "registry+https://registry.dream-lang.org".to_string(),
+            source: "registry+https://raw.githubusercontent.com/sps014/dream-registry/main".to_string(),
             checksum: Some("sha256:abc".to_string()),
             dependencies: Vec::new(),
         }

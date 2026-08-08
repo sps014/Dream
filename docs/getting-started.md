@@ -1,24 +1,63 @@
 # Getting Started
 
 This page gets you from nothing to a running Dream program in a few minutes.
-
-## Prerequisites
-
-You only need [Rust](https://rustup.rs) installed. The Dream compiler builds with `cargo`.
+**No Rust install required** for normal use — install prebuilt binaries like rustup.
 
 ## Install
+
+### macOS / Linux
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/Dream/install.sh | sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://sps014.github.io/Dream/install.ps1 | iex
+```
+
+That installs `dream`, `dreamer`, and `dream-lsp` under `~/.dream/bin` and hooks your shell
+PATH (same layout as the contributor `use-toolchain.sh` script).
+
+Open a new terminal, then check:
+
+```bash
+dream --help
+dreamer --help
+```
+
+Pin a version with `DREAM_VERSION=0.1.0` before running the installer.
+
+### Packages
+
+Public packages live in [`sps014/dream-registry`](https://github.com/sps014/dream-registry)
+([browse](https://sps014.github.io/dream-registry/)). Try:
+
+```bash
+dreamer search semver
+dreamer add semver
+```
+
+See [Package Manager](tooling/package-manager.md).
+
+### Building from source (contributors)
+
+Only needed if you are hacking on the compiler itself (requires [Rust](https://rustup.rs)):
 
 ```bash
 git clone https://github.com/sps014/Dream
 cd Dream
-cargo build --release
+source ./use-toolchain.sh    # builds + links dream / dreamer / dream-lsp
 ```
-
-The compiler binary lands at `target/release/dream`. You can call that path directly, or use `cargo run --` while developing (the examples below use `cargo run`).
 
 ## Your first program
 
-Create `hello.dream`:
+```bash
+dreamer init hello && cd hello
+```
+
+Or create `hello.dream` yourself:
 
 ```dream
 import system;
@@ -31,7 +70,9 @@ fun main() {
 Run it:
 
 ```bash
-cargo run -- run hello.dream
+dreamer run
+# or, without a dream.toml project:
+dream run hello.dream
 ```
 
 ```
@@ -40,21 +81,27 @@ Hello, world!
 
 `import system;` loads the console / process package so `System.println` is available. Other stdlib surfaces use their own packages (`system.collections`, `system.net`, …) — see [Imports](language/imports.md#standard-library-packages). The editor can insert these for you via an auto-import quick fix.
 
-The `run` subcommand compiles to WebAssembly and executes your program under the native host. To compile without running:
+Compile without running:
 
 ```bash
-cargo run -- hello.dream
+dream hello.dream
 ```
 
 That writes `.wat`, `.wasm`, and `.abi.json` next to your source.
 
 ### Running in the browser or Node
 
-Use the shared host in [`runtime/dream.js`](https://github.com/sps014/Dream/blob/main/runtime/dream.js), or emit a smaller per-program host with `--runtime`:
+```bash
+dreamer init hello --runtime web,node && cd hello
+dreamer run --target web
+dreamer run --target node
+```
+
+Or with the compiler directly:
 
 ```bash
-cargo run -- --runtime --web hello.dream    # hello.web.runtime.js for the browser
-cargo run -- --runtime --node hello.dream   # hello.node.runtime.js for Node ≥ 18
+dream --runtime --web hello.dream    # hello.web.runtime.js for the browser
+dream --runtime --node hello.dream   # hello.node.runtime.js for Node ≥ 18
 ```
 
 ```javascript
@@ -102,3 +149,4 @@ A few things to notice:
 - [Collections](stdlib/collections.md) — `List<T>`, `Map<K, V>`, and `Set<T>` (`import system.collections;`).
 - [GPU](stdlib/gpu.md) — WebGPU via `import system.gpu;` (see also [Compute shaders](language/compute.md)).
 - [Imports](language/imports.md) — file imports and `system.*` packages.
+- [Package Manager](tooling/package-manager.md) — `dreamer`, registries, and `semver`.

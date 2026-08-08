@@ -333,7 +333,7 @@ mod tests {
                 .collect(),
             cksum: crate::registry::checksum::sha256_of(b"unused in resolver tests"),
             tarball: format!("dl/{}/{}-{}.tar.gz", name, name, vers),
-            description: None,
+            ..Default::default()
         };
         registry.publish(&entry, &tarball_src).unwrap();
     }
