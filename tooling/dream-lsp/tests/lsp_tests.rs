@@ -186,6 +186,113 @@ fn option_local_member_completions() {
 }
 
 #[test]
+fn switch_arm_completions_for_result() {
+    let harness = TestHarness::new(
+        r#"
+fun f(r: Result<int, string>): void {
+    switch (r) {
+        |
+    }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"Ok") && names.contains(&"Err"),
+        "expected Result variants Ok/Err in switch arm, got {names:?}"
+    );
+    assert!(
+        !names.contains(&"fun") && !names.contains(&"let"),
+        "switch arm must not dump keywords: {names:?}"
+    );
+}
+
+#[test]
+fn switch_arm_completions_for_union() {
+    let harness = TestHarness::new(
+        r#"
+enum Shape {
+    Circle(radius: float),
+    Rect(width: float, height: float),
+    Empty,
+}
+fun area(s: Shape): float {
+    return switch (s) {
+        |
+    };
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"Circle") && names.contains(&"Rect") && names.contains(&"Empty"),
+        "expected Shape variants in switch arm, got {names:?}"
+    );
+}
+
+#[test]
+fn switch_arm_completions_partial_filter() {
+    let harness = TestHarness::new(
+        r#"
+fun f(r: Result<int, string>): void {
+    switch (r) {
+        O|
+    }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"Ok") && !names.contains(&"Err"),
+        "partial O should keep Ok only, got {names:?}"
+    );
+}
+
+#[test]
+fn switch_case_completions_for_plain_enum() {
+    let harness = TestHarness::new(
+        r#"
+enum Color { Red, Green, Blue }
+fun f(c: Color): void {
+    switch (c) {
+        case |
+    }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        names.contains(&"Color.Red")
+            && names.contains(&"Color.Green")
+            && names.contains(&"Color.Blue"),
+        "expected qualified Color.* after case, got {names:?}"
+    );
+}
+
+#[test]
+fn switch_arm_body_skips_variant_completions() {
+    let harness = TestHarness::new(
+        r#"
+fun f(r: Result<int, string>): void {
+    switch (r) {
+        Ok(v) => |
+    }
+}
+"#,
+    );
+    let comps = harness.index().completions(None, &harness.src, harness.offset);
+    let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
+    assert!(
+        !names.contains(&"Ok") && !names.contains(&"Err"),
+        "after => must not suggest variants, got {names:?}"
+    );
+}
+
+#[test]
 fn result_inferred_from_gpu_try_init_member_completions() {
     let harness = TestHarness::new(
         "import system.gpu;\nasync fun main(): void {\n    let a = await Gpu.try_init();\n    a.|\n}\n",

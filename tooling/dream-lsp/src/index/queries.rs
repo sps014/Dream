@@ -33,6 +33,11 @@ pub fn is_member_completion_context(text: &str, offset: usize) -> bool {
     i > 0 && bytes[i - 1] == b'.'
 }
 
+/// True when completion is inside a switch arm pattern / `case` label (enum variants only).
+pub fn is_switch_arm_completion_context(text: &str, offset: usize) -> bool {
+    switch_arm_subject(text, offset).is_some()
+}
+
 /// If `offset` is inside an unquoted `import <path>` statement, returns
 /// `(path_start_byte, partial_path)` where `partial_path` is the text from the path start to
 /// the cursor (e.g. `""`, `system`, `system.`). Outside import context returns `None` so
@@ -673,6 +678,11 @@ impl Index {
                 .collect();
         }
 
+        // Pattern-matching / `case` switch arms: suggest variants of the subject enum/union.
+        if let Some(subject) = switch_arm_subject(text, offset) {
+            return self.switch_arm_completions(&subject, scope, offset, text, offset);
+        }
+
         // Detect `receiver.<partial>` by scanning back over an identifier and a dot.
         let mut i = offset;
         while i > 0 && is_ident_byte(bytes[i - 1]) {
@@ -874,6 +884,78 @@ impl Index {
             .collect()
     }
 
+    /// Variants for a switch arm, filtered by any partial identifier already typed.
+    fn switch_arm_completions(
+        &self,
+        subject: &str,
+        scope: usize,
+        before: usize,
+        text: &str,
+        offset: usize,
+    ) -> Vec<(String, SymKind, String, Option<String>)> {
+        let Some(enum_name) = self.switch_subject_enum_name(subject, scope, before) else {
+            return Vec::new();
+        };
+        let mut out = self.members_of_enum(&enum_name);
+        // C-style `case Color.|` is handled by member completion; after bare `case ` offer
+        // qualified `Enum.Variant` labels so integer enums match documented syntax.
+        if switch_arm_is_c_style_case(text, offset)
+            && self
+                .decls
+                .iter()
+                .any(|d| d.kind == SymKind::Enum && d.name == enum_name)
+        {
+            // Prefer qualified labels when the enum looks like a plain int enum (no payload
+            // variants in detail). Payload unions keep bare `Ok` / `Circle` names.
+            let has_payload = out.iter().any(|(_, _, detail, _)| detail.contains('('));
+            if !has_payload {
+                out = out
+                    .into_iter()
+                    .map(|(name, kind, detail, doc)| {
+                        (format!("{enum_name}.{name}"), kind, detail, doc)
+                    })
+                    .collect();
+            }
+        }
+        let partial = partial_ident_before(text, offset);
+        if !partial.is_empty() {
+            out.retain(|(name, ..)| name.starts_with(&partial) || name.contains(&format!(".{partial}")));
+        }
+        out
+    }
+
+    /// Resolve `switch (subject)` to the bare enum/union type name (`Result`, `Shape`, …).
+    fn switch_subject_enum_name(
+        &self,
+        subject: &str,
+        scope: usize,
+        before: usize,
+    ) -> Option<String> {
+        let subject = subject.trim();
+        // Prefer the variable/parameter type when the subject is an identifier.
+        if subject.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            if let Some(ty) = self.variable_type(subject, scope, before) {
+                let base = type_base(&ty).to_string();
+                if self
+                    .decls
+                    .iter()
+                    .any(|d| d.kind == SymKind::Enum && d.name == base)
+                {
+                    return Some(base);
+                }
+            }
+            // Bare type name used as subject (unusual but valid).
+            if self
+                .decls
+                .iter()
+                .any(|d| d.kind == SymKind::Enum && d.name == subject)
+            {
+                return Some(subject.to_string());
+            }
+        }
+        None
+    }
+
     /// The function scope whose body span contains `offset`, or [`GLOBAL`].
     fn enclosing_scope(&self, offset: usize) -> usize {
         // Parameters/locals of a function share its scope id and are appended in source order,
@@ -892,6 +974,157 @@ impl Index {
         }
         best.map(|(scope, _)| scope).unwrap_or(GLOBAL)
     }
+}
+
+/// Subject expression of the enclosing `switch (…)` when `offset` is in an arm pattern
+/// (before `=>`) or a C-style `case` label. Returns `None` in arm bodies / outside switch.
+fn switch_arm_subject(text: &str, offset: usize) -> Option<String> {
+    let bytes = text.as_bytes();
+    let offset = offset.min(bytes.len());
+
+    // Find the `{` that opens the switch body containing `offset`.
+    let mut i = offset;
+    let mut brace_depth = 0i32;
+    let mut body_open = None;
+    while i > 0 {
+        i -= 1;
+        match bytes[i] {
+            b'}' => brace_depth += 1,
+            b'{' => {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                } else {
+                    body_open = Some(i);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let body_open = body_open?;
+
+    // `switch (…) {` — walk back over `)` and extract the subject, then require `switch`.
+    let mut j = body_open;
+    while j > 0 && (bytes[j - 1] == b' ' || bytes[j - 1] == b'\t' || bytes[j - 1] == b'\n') {
+        j -= 1;
+    }
+    if j == 0 || bytes[j - 1] != b')' {
+        return None;
+    }
+    let close_paren = j - 1;
+    let mut paren_depth = 1i32;
+    let mut k = close_paren;
+    while k > 0 {
+        k -= 1;
+        match bytes[k] {
+            b')' => paren_depth += 1,
+            b'(' => {
+                paren_depth -= 1;
+                if paren_depth == 0 {
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if paren_depth != 0 {
+        return None;
+    }
+    let open_paren = k;
+    let subject = text[open_paren + 1..close_paren].trim().to_string();
+    if subject.is_empty() {
+        return None;
+    }
+
+    let mut sw = open_paren;
+    while sw > 0 && (bytes[sw - 1] == b' ' || bytes[sw - 1] == b'\t' || bytes[sw - 1] == b'\n') {
+        sw -= 1;
+    }
+    if sw < 6 || &text[sw - 6..sw] != "switch" {
+        return None;
+    }
+    if sw > 6 && is_ident_byte(bytes[sw - 7]) {
+        return None;
+    }
+
+    // From body `{` to cursor: if we're past a `=>` at brace/paren depth 0 of this arm, we're
+    // in the arm body — don't offer variants there.
+    if arm_slice_past_arrow(&text[body_open + 1..offset]) {
+        return None;
+    }
+
+    Some(subject)
+}
+
+/// True when `slice` (text from switch `{` to cursor) has already crossed a pattern `=>`
+/// into the current arm's body.
+fn arm_slice_past_arrow(slice: &str) -> bool {
+    let bytes = slice.as_bytes();
+    let mut paren = 0i32;
+    let mut brace = 0i32;
+    let mut bracket = 0i32;
+    let mut i = 0usize;
+    let mut last_arrow = None;
+    while i + 1 < bytes.len() {
+        match bytes[i] {
+            b'(' => paren += 1,
+            b')' => paren -= 1,
+            b'{' => brace += 1,
+            b'}' => brace -= 1,
+            b'[' => bracket += 1,
+            b']' => bracket -= 1,
+            b'=' if paren == 0 && brace == 0 && bracket == 0 && bytes[i + 1] == b'>' => {
+                last_arrow = Some(i);
+                i += 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    let Some(arrow) = last_arrow else {
+        return false;
+    };
+    // After `=>`, a comma at depth 0 starts a new arm — if the cursor is after such a comma,
+    // we're in the next pattern again.
+    let after = &bytes[arrow + 2..];
+    let mut paren = 0i32;
+    let mut brace = 0i32;
+    let mut bracket = 0i32;
+    let mut saw_comma = false;
+    for &b in after {
+        match b {
+            b'(' => paren += 1,
+            b')' => paren -= 1,
+            b'{' => brace += 1,
+            b'}' => brace -= 1,
+            b'[' => bracket += 1,
+            b']' => bracket -= 1,
+            b',' if paren == 0 && brace == 0 && bracket == 0 => saw_comma = true,
+            _ => {}
+        }
+    }
+    !saw_comma
+}
+
+fn switch_arm_is_c_style_case(text: &str, offset: usize) -> bool {
+    let bytes = text.as_bytes();
+    let mut i = offset.min(bytes.len());
+    while i > 0 && is_ident_byte(bytes[i - 1]) {
+        i -= 1;
+    }
+    while i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t') {
+        i -= 1;
+    }
+    i >= 4 && &text[i - 4..i] == "case" && (i == 4 || !is_ident_byte(bytes[i - 5]))
+}
+
+fn partial_ident_before(text: &str, offset: usize) -> String {
+    let bytes = text.as_bytes();
+    let mut i = offset.min(bytes.len());
+    while i > 0 && is_ident_byte(bytes[i - 1]) {
+        i -= 1;
+    }
+    text[i..offset.min(bytes.len())].to_string()
 }
 
 /// True when a method detail declares type parameters before `(`, e.g.

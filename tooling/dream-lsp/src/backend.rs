@@ -621,6 +621,7 @@ impl LanguageServer for Backend {
             // name/arg context.
             if import_replace.is_none()
                 && !index::is_member_completion_context(&text, offset)
+                && !index::is_switch_arm_completion_context(&text, offset)
                 && !in_attr_name
                 && !in_attr_args
             {
